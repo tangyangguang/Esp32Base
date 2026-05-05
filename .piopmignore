@@ -1,0 +1,12 @@
+design-history/
+design-history/**
+ESP32BASE_DOCUMENTATION_REVIEW*.md
+**/.DS_Store
+**/.pio/
+**/.pioenvs/
+**/.piolibdeps/
+**/.cache/
+idf_component.yml
+idf_component.yml.orig
+**/idf_component.yml
+**/idf_component.yml.orig

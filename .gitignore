@@ -18,6 +18,8 @@ Debug/
 managed_components/
 sdkconfig.old
 sdkconfig.defaults
+idf_component.yml
+idf_component.yml.orig
 .espressif/
 
 # 编译输出文件（所有层级）

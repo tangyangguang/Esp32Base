@@ -2,62 +2,299 @@
 
 ## 1. 总体结构
 
-`Esp32Base` 采用一个入口、四个能力模块的结构：
+`Esp32Base` 采用 5 层架构：
 
 ```text
+Application
+  ↓
 Esp32Base
-├── Esp32BaseConfig
-├── Esp32BaseNetwork
-├── Esp32BaseWeb
-└── Esp32BaseRuntime
+  ↓
+Layer 4: Update
+  ↓
+Layer 3: Web
+  ↓
+Layer 2: Network
+  ↓
+Layer 1: Runtime
+  ↓
+Layer 0: Core
+  ↓
+Arduino ESP32 Core / ESP-IDF
 ```
 
-应用项目只需要在 `setup()` 中调用 `Esp32Base::begin()`，在 `loop()` 中持续调用 `Esp32Base::handle()`。
+依赖只能从高层指向低层。
 
-## 2. 初始化顺序
+不允许：
 
-`Esp32Base::begin()` 的初始化顺序是：
+- 低层依赖高层。
+- 同层互相强依赖。
+- 循环依赖。
+
+## 2. Layer 0: Core
+
+模块：
+
+- `Esp32BaseLog`
+- `Esp32BaseConfig`
+- `Esp32BaseSystem`
+
+职责：
+
+- 编译期日志过滤。
+- NVS 小配置。
+- deferred write。
+- `flushAll()`。
+- heap / min heap / flash / reset reason / wake reason / uptime。
+- 统一 restart。
+- 重启日志环。
+
+Core 是唯一永远启用的层。
+
+Core 不包含 Event Bus。Bus 是 Runtime 可选模块。
+
+## 3. Layer 1: Runtime
+
+模块：
+
+- `Esp32BaseBus`
+- `Esp32BaseWatchdog`
+- `Esp32BaseSleep`
+- `Esp32BaseFs`
+- `Esp32BaseFileLog`
+- `Esp32BaseHealth`
+
+职责：
+
+- loop-task-only 同步事件总线。
+- Task Watchdog。
+- Sleep。
+- LittleFS。
+- 文件日志 sink，依赖 Fs，通过 Core Log 的 line sink 接收日志。
+- 健康诊断。
+
+Runtime 只依赖 Core。
+
+`Esp32BaseLog` 仍属于 Core，只负责 Serial、格式化和 sink 分发，不包含 LittleFS。文件日志由 Runtime 的 `Esp32BaseFileLog` 承担，避免 Core 依赖 FS。
+
+## 4. Layer 2: Network
+
+模块：
+
+- `Esp32BaseWiFi`
+- `Esp32BaseDns`
+- `Esp32BaseNtp`
+- `Esp32BaseMdns`
+
+职责：
+
+- WiFi STA / AP 状态机。
+- Captive Portal DNS。
+- NTP。
+- mDNS。
+
+Network 可使用 Bus，但不强依赖 Bus。
+
+## 5. Layer 3: Web
+
+公开模块：
+
+- `Esp32BaseWeb`
+
+内部模块：
+
+- status handler group。
+- WiFi handler group。
+- captive portal handler group。
+- JSON / HTML helper group。
+- OTA route hooks，如启用 Update。
+
+职责：
+
+- Arduino `WebServer`。
+- Basic Auth。
+- 路由表。
+- 状态 API。
+- WiFi 配网页面和 API。
+- JSON helper。
+
+Web 依赖 WiFi。
+
+Web 启动条件：
 
 ```text
-日志
-Config / NVS
-Runtime / LittleFS / Reset 诊断
-Network / WiFi / NTP / mDNS
-Web / 内置路由 / 应用路由 / OTA
+WiFi connected OR WiFi config_portal
 ```
 
-WiFi 连接、NTP 同步和 mDNS 启动都不会阻塞 `begin()`。
+## 6. Layer 4: Update
 
-## 3. 主循环职责
+公开模块：
 
-`Esp32Base::handle()` 每轮处理：
+- `Esp32BaseOta`
+
+内部 handler group：
+
+- Web OTA route hooks。
+- OTA upload progress API hooks。
+- OTA auth binding hooks。
+
+职责：
+
+- OTA 状态机。
+- SHA256。
+- Watchdog 联动。
+- Config flush pause。
+- rollback。
+- Web OTA 路由。
+
+Update 依赖 WiFi + Web。
+
+## 7. 统一入口
+
+`Esp32Base` 负责：
+
+- 固件信息。
+- hostname。
+- profile 字符串。
+- `begin()`。
+- `handle()`。
+- 延迟启动。
+- 启动诊断。
+- 资源日志。
+
+`Esp32Base` 不负责：
+
+- WiFi 凭证保存细节。
+- Web 路由实现。
+- OTA 写入细节。
+- 文件 API。
+- Watchdog 配置细节。
+- Sleep wake source 细节。
+
+## 8. begin 顺序
+
+`Esp32Base::begin()` 固定顺序：
+
+1. Log
+2. Config
+3. System
+4. Bus，如启用
+5. Fs，如启用
+6. Watchdog，如启用
+7. Sleep，如启用
+8. Health，如启用
+9. WiFi，如启用
+10. 标记 ready
+
+`begin()` 不等待网络相关状态。
+
+## 9. begin 失败策略
+
+Core 失败：
+
+- Log / Config / System 失败视为不可恢复。
+- 记录错误。
+- `begin()` 返回 false，由应用决定是否 halt 或进入降级流程。
+
+可选模块失败：
+
+- 默认不 halt。
+- 记录错误。
+- 标记模块 failed。
+- 继续启动其他不依赖它的模块。
+
+严格模式：
+
+```cpp
+ESP32BASE_STRICT_OPTIONAL_BEGIN=0
+```
+
+设为 `1` 时，可选模块失败会使 `begin()` 失败。
+
+## 10. handle 顺序
+
+`Esp32Base::handle()` 固定顺序：
+
+1. 如果 OTA 正在上传，跳过 Config deferred flush。
+2. 否则 Config deferred flush，一轮最多一条。
+3. WiFi handle。
+4. Captive DNS handle。
+5. 条件启动 Web。
+6. 条件启动 NTP。
+7. 条件启动 mDNS。
+8. 条件启动 OTA。
+9. Web handle。
+10. OTA handle，包含 mark-valid timeout 检查。
+11. Health handle。
+12. Watchdog feed。
+13. 一次性启动诊断日志。
+
+LittleFS 当前没有 maintenance 任务，不在 handle 中做额外维护。
+
+## 11. 生命周期
+
+所有重启必须走：
+
+```cpp
+Esp32BaseSystem::restart(const char* reason);
+```
+
+所有 deep sleep 必须走：
+
+```cpp
+Esp32BaseSleep::deepSleep(...);
+```
+
+流程：
+
+1. 发布生命周期事件，如 Bus 启用。
+2. 写重启日志环。
+3. `Esp32BaseConfig::flushAll()`。
+4. 输出最后诊断。
+5. 处理 Watchdog。
+6. 执行底层 restart / sleep。
+
+禁止模块内部直接调用：
+
+- `ESP.restart()`
+- `esp_restart()`
+- `esp_deep_sleep_start()`
+
+例外：`Esp32BaseSystem` 是 restart 的唯一底层执行点，`Esp32BaseSleep` 是 deep sleep 的唯一底层执行点；其他模块必须通过这两个生命周期入口间接触发。
+
+## 12. 目录结构
+
+最终源码结构：
 
 ```text
-Config deferred flush
-Network 状态机
-WebServer handleClient
-Runtime Watchdog feed
-一次性启动诊断
+src/
+├── Esp32Base.h
+├── Esp32Base.cpp
+├── Esp32BaseProfile.h
+├── core/
+├── runtime/
+├── network/
+├── web/
+└── update/
 ```
 
-应用自己的业务逻辑可以放在 `loop()` 中，但必须持续调用 `Esp32Base::handle()`。
+不提供全局短别名头文件，避免 `Log`、`Config`、`Web` 等名字污染应用全局命名空间。
 
-## 4. 模块边界
+## 13. Profile Unity Implementation
 
-`Esp32BaseConfig` 只处理小型 NVS key/value，不做配置 UI。
+Core 使用标准 `.cpp` 编译单元，始终参与编译。
 
-`Esp32BaseNetwork` 同时负责 WiFi、NTP 和 mDNS，不拆独立公开类。
+可选模块使用 `.inc` 实现文件，并且只由 `Esp32Base.cpp` 在 profile 条件成立时包含：
 
-`Esp32BaseWeb` 负责内置 Web、认证、状态 API、WiFi 设置 API、OTA 和应用扩展路由。OTA 不单独暴露模块，避免认证边界重复。
+```cpp
+#if ESP32BASE_ENABLE_WIFI
+#include "network/Esp32BaseWiFi.inc"
+#endif
+```
 
-`Esp32BaseRuntime` 负责系统资源、Watchdog、deep sleep、restart 和 LittleFS 基础文件能力，不做完整文件管理器。
+这个模型的目标是：
 
-## 5. 可靠性约束
+- 关闭模块不进入编译单元。
+- 避免构建系统把可选模块实现当作独立 `.cpp` 编译。
+- 让 profile 裁剪结果可以通过构建日志和 map 文件直接验证。
 
-- WiFi 不阻塞连接。
-- NTP 不阻塞同步。
-- Web Auth 默认开启。
-- OTA 受 Web Auth 保护。
-- Restart 和 deep sleep 前 flush config。
-- Watchdog 默认不启用，由应用显式启用。
-- LittleFS 挂载失败不会阻塞启动，但文件 API 会返回失败。
+`.inc` 文件不得被应用直接 include，也不得声明公开 API；公开 API 只放在对应 `.h` 文件中。

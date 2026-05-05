@@ -1,275 +1,148 @@
-# Esp32Base 设计说明
+# 设计说明
 
-## 1. 项目定位
+## 1. 项目目标
 
-`Esp32Base` 是面向 ESP32 系列、基于 Arduino Core 的应用基础库。
+`Esp32Base` 是 ESP32 系列应用项目的基础运行底座，目标是一次构建出成熟、稳定、资源可控的基础库。
 
-目标芯片：
+本轮重构不考虑历史兼容性。旧代码、旧示例、旧文档已归档到 `design-history/`，仅作为历史参考，不作为实现约束。
 
-- ESP32
-- ESP32-S3
-- ESP32-C3
+最终目标：
 
-这是一个全新项目。原 `EspBase` 只作为经验参考，新项目不保持旧 API 兼容，不提供迁移层，也不再包含 ESP8266 分支。
+- 为 ESP32 / ESP32-S3 / ESP32-C3 提供统一基础能力。
+- 让只使用部分能力的应用真正节省 Flash、RAM 和启动资源。
+- 用少量 profile 覆盖真实设备常见组合。
+- 所有重模块可编译期裁剪。
+- 以可靠 OTA、配置落盘、配网体验和长时间运行稳定性为核心质量标准。
 
-`Esp32Base` 的定位是：
+## 2. 设计原则
 
-```text
-ESP32 应用基础运行底座
-```
+### 2.1 Core 最小化
 
-不是：
+Core 只包含：
 
-```text
-Web 管理平台
-物联网云框架
-大型组件系统
-跨平台 HAL
-```
+- 日志
+- NVS 小配置
+- 系统诊断和生命周期
 
-## 2. 已确认的设计决策
+Core 不包含：
 
-- 应用自定义 Web 页面和 API 可以在 `Esp32Base::begin()` 前或后注册。
-- 如果没有保存 WiFi 凭证，Network 模块应自动进入 AP 配置模式。
-- Web Basic Auth 默认开启。开发默认账号密码为 `admin` / `admin123`，并允许用宏覆盖。
-- 库内部 NVS 数据使用 `esp32base` namespace。应用可以使用自己的短 namespace，但不能使用 `esp32base`。
-- Phase 1 只实现入口、内部日志、NVS 配置、Runtime 系统信息、启动诊断和 PlatformIO basic 样例。
-
-## 3. 功能边界
-
-第一版最终必须包含：
-
-- 内部日志
-- 系统信息与资源诊断
-- NVS 配置
-- WiFi STA 自动连接
-- 无凭证时 AP 配置模式
-- Web 基础服务
-- Web OTA
-- NTP 对时
-- mDNS
-- LittleFS 基础文件读写
+- Event Bus
+- WiFi
+- Web
+- OTA
+- LittleFS
 - Watchdog
-- Deep sleep / restart
-- 应用自定义 Web 页面/API
+- Sleep
 
-第一版不做：
+原因：极简应用不应为无用静态表、WiFi 栈、WebServer、Update、LittleFS 付资源成本。
 
-- MQTT
-- HTTP Client 业务封装
-- 蓝牙
-- ESP-NOW
-- 文件日志
-- 通用任务队列
-- 复杂 Scheduler
-- 完整文件管理器
+### 2.2 Profile 优先，底层宏可覆盖
+
+普通用户通过 profile 选择场景。
+
+高级用户可用 `ESP32BASE_ENABLE_*` 精细覆盖 profile 默认值。
+
+规则：
+
+- profile 先展开默认值。
+- 用户显式 `ESP32BASE_ENABLE_*` 优先。
+- 展开结束后执行依赖检查。
+- 无效组合编译时报错。
+
+### 2.3 状态机和延迟启动
+
+`begin()` 不阻塞等待：
+
+- WiFi 连接
+- NTP 同步
+- mDNS 启动
+- Web 启动
+- OTA ready
+
+这些能力由 `handle()` 按依赖条件推进。
+
+### 2.4 量产可靠性优先
+
+必须闭环：
+
+- restart / sleep 前 `flushAll()`
+- OTA SHA256
+- OTA rollback
+- OTA Watchdog remove / restore
+- OTA 期间暂停 NVS deferred flush
+- Captive Portal DNS
+- LittleFS 挂载失败不 halt
+- NVS namespace/key 长度校验
+- Arduino Core 2.x / 3.x 兼容
+- ESP32-C3 差异
+
+### 2.5 发布后架构冻结
+
+本库目标是一次定型。文档评审和实施完成后，只接受：
+
+- bug fix
+- Arduino Core 兼容性维护
+- 芯片适配修正
+- 文档修正
+- 测试补充
+
+不再做大规模架构重构。
+
+## 3. 明确不做
+
+- ESP8266 支持
+- 跨芯片 HAL
+- MQTT 封装
+- HTTP Client 封装
 - WebSocket
 - HTTPS
 - 多用户权限
-- 大型前端页面、图表、主题或 SPA
+- 复杂 Scheduler
 - 云平台绑定
-- HAL 抽象
+- 大型 Web 管理平台
+- 大型前端 SPA
+- 模板 policy 架构
+- 静态模块注册表
 
-## 4. 公开模块
+文件日志作为 Runtime/FS 可选模块提供，不属于 Core。启用 FS 的 profile 默认开启文件日志；CORE 不为 LittleFS 或文件日志付成本。
 
-公开 API 收敛为 5 个类：
+## 4. 质量目标
 
-```text
-Esp32Base
-├── Esp32BaseConfig
-├── Esp32BaseNetwork
-├── Esp32BaseWeb
-└── Esp32BaseRuntime
-```
+### 4.1 资源目标
 
-`Esp32Base` 是唯一推荐初始化入口，负责模块初始化顺序、固件信息、hostname、启动诊断、`begin()` 和 `handle()`。
+必须证明：
 
-`Esp32BaseConfig` 负责 NVS key/value 配置、写前比较、延迟写入，以及 restart / deep sleep 前 flush。
+- CORE 不链接 WiFi / WebServer / Update / LittleFS。
+- NET 不链接 WebServer / Update。
+- WEB 不链接 Update。
+- 关闭 Bus / Fs / Health 不产生静态对象。
 
-`Esp32BaseNetwork` 负责 WiFi、NTP 和 mDNS。这三个能力不拆成独立公开类，避免状态和 API 分散。
+证明方式：
 
-`Esp32BaseWeb` 负责 WebServer、Basic Auth、WiFi 设置页、OTA、状态 API，以及应用自定义页面/API 注册。OTA 属于 Web 模块，认证边界只有一处。
+- PlatformIO 编译。
+- map 文件检查。
+- `text / data / bss` 记录。
+- 实机 free heap / min heap 记录。
 
-`Esp32BaseRuntime` 负责 reset reason、wake reason、资源快照、restart、deep sleep、Watchdog 和最小 LittleFS 文件能力。
+### 4.2 可靠性目标
 
-## 5. 命名规范
+发布前必须验证：
 
-公开类：
+- OTA 中途断电不变砖。
+- OTA 后未 mark valid 可回滚。
+- OTA SHA256 错误不切换分区。
+- NVS 写满不崩溃。
+- LittleFS 挂载失败不影响其他模块。
+- Captive Portal 在主流系统可用。
+- WiFi 断线后可恢复。
+- ESP32-C3 单核重负载不误触 watchdog。
 
-```text
-Esp32Base
-Esp32BaseConfig
-Esp32BaseNetwork
-Esp32BaseWeb
-Esp32BaseRuntime
-```
+## 5. 发布冻结条件
 
-宏：
+只有满足以下条件才冻结第一版发布：
 
-```text
-ESP32BASE_LOG_LEVEL
-ESP32BASE_WEB_MAX_APP_ROUTES
-ESP32BASE_CONFIG_PENDING_MAX
-ESP32BASE_FILE_READ_MAX
-ESP32BASE_HOSTNAME_LEN
-ESP32BASE_WEB_AUTH_USER
-ESP32BASE_WEB_AUTH_PASS
-```
-
-日志 tag：
-
-```text
-Esp32Base
-BaseCfg
-BaseNet
-BaseWeb
-BaseRun
-```
-
-保留 NVS namespace：
-
-```text
-esp32base
-```
-
-应用业务不要使用 `esp32base` namespace。
-
-## 6. 目录规范
-
-正式文档统一放在 `docs/` 目录下，并且所有文档文件名前面都加编号。
-
-所有样例程序都使用 PlatformIO 项目格式，至少包含：
-
-```text
-platformio.ini
-src/main.cpp
-```
-
-推荐结构：
-
-```text
-Esp32Base/
-├── library.json
-├── README.md
-├── docs/
-│   ├── 00_design.md
-│   ├── 01_architecture.md
-│   ├── 02_api.md
-│   ├── 03_web_extension.md
-│   ├── 04_memory_budget.md
-│   └── 05_diagnostics.md
-├── examples/
-│   ├── basic/
-│   ├── wifi_network/
-│   ├── wifi_web_ota/
-│   ├── custom_web/
-│   └── sleep_watchdog/
-└── src/
-    ├── Esp32Base.h
-    ├── Esp32Base.cpp
-    ├── Esp32BaseConfig.h
-    ├── Esp32BaseConfig.cpp
-    ├── Esp32BaseNetwork.h
-    ├── Esp32BaseNetwork.cpp
-    ├── Esp32BaseWeb.h
-    ├── Esp32BaseWeb.cpp
-    ├── Esp32BaseRuntime.h
-    └── Esp32BaseRuntime.cpp
-```
-
-## 7. 初始化流程
-
-`Esp32Base::begin()`：
-
-```text
-Serial log
-System info snapshot
-Config/NVS
-Runtime begin
-Network begin
-Web begin
-Ready
-```
-
-`begin()` 不等待 WiFi 连接，不阻塞 NTP 同步。
-
-`Esp32Base::handle()`：
-
-```text
-Config flush one pending write
-Network handle
-Web handleClient
-Runtime handle
-One-shot startup diagnostics
-```
-
-## 8. 分阶段计划
-
-Phase 1：
-
-- `Esp32Base`
-- 内部日志宏
-- `Esp32BaseConfig`
-- `Esp32BaseRuntime` system info / restart / heap
-- 启动诊断
-- PlatformIO `examples/basic`
-- 编译 ESP32 / ESP32-S3 / ESP32-C3
-
-Phase 2：
-
-- WiFi STA
-- 保存 WiFi 凭证
-- 无凭证时 AP 配置模式
-- NTP
-- mDNS
-
-Phase 3：
-
-- WebServer
-- Basic Auth
-- WiFi 设置页
-- OTA 页面/API
-- 状态 API
-- 应用在 `begin()` 前后都可注册页面/API
-
-Phase 4：
-
-- Watchdog
-- Deep sleep
-- LittleFS 基础文件能力
-- PlatformIO `examples/runtime_tools`
-
-Phase 5：
-
-- 实机内存与可靠性压测
-
-## 9. 资源目标
-
-ESP32 DevKit、无 PSRAM 的目标：
-
-| 场景 | 目标 free heap |
-| --- | --- |
-| 仅启动核心模块 | >= 250KB |
-| WiFi 已连接，Web 已启动 | >= 210KB |
-| Web 页面/API 活跃 | >= 180KB |
-| OTA 上传中最低值 | >= 120KB |
-| LittleFS 小文件操作中 | >= 170KB |
-| 全功能示例启动后 | >= 170KB |
-
-硬约束：
-
-- 第一版不依赖 PSRAM。
-- 栈上临时缓冲默认不超过 1KB。
-- Web 响应使用分段输出，避免大 `String` 拼接。
-- 路由表和队列使用固定容量。
-- 容量固定或通过宏配置。
-
-## 10. 可靠性规则
-
-- WiFi 重连不阻塞主循环。
-- NTP 同步不阻塞主循环。
-- OTA 必须经过 Web Auth。
-- OTA 期间必须喂狗或暂停 Watchdog。
-- Restart 和 deep sleep 前必须 flush config。
-- NVS 写入前比较旧值，未变化不 commit。
-- 延迟配置写入每次 `handle()` 最多提交一条。
+- docs 与代码全部评审通过。
+- Profile 集合冻结。
+- 公开 API 契约冻结。
+- 编译矩阵与核心裁剪验证通过。
+- 发布检查清单冻结。

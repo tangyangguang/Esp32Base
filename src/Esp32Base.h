@@ -1,28 +1,45 @@
-#ifndef ESP32_BASE_H
-#define ESP32_BASE_H
+#pragma once
 
-#include <stddef.h>
+#include "Esp32BaseProfile.h"
+#include "core/Esp32BaseLog.h"
+#include "core/Esp32BaseConfig.h"
+#include "core/Esp32BaseSystem.h"
 
-#include "Esp32BaseConfig.h"
-#include "Esp32BaseLog.h"
-#include "Esp32BaseNetwork.h"
-#include "Esp32BaseRuntime.h"
-#include "Esp32BaseWeb.h"
-
-#ifndef ESP32BASE_HOSTNAME_LEN
-#define ESP32BASE_HOSTNAME_LEN 32
+#if ESP32BASE_ENABLE_BUS
+#include "runtime/Esp32BaseBus.h"
 #endif
-
-#ifndef ESP32BASE_FIRMWARE_NAME_LEN
-#define ESP32BASE_FIRMWARE_NAME_LEN 32
+#if ESP32BASE_ENABLE_WATCHDOG
+#include "runtime/Esp32BaseWatchdog.h"
 #endif
-
-#ifndef ESP32BASE_FIRMWARE_VERSION_LEN
-#define ESP32BASE_FIRMWARE_VERSION_LEN 16
+#if ESP32BASE_ENABLE_SLEEP
+#include "runtime/Esp32BaseSleep.h"
 #endif
-
-#ifndef ESP32BASE_FIRMWARE_BUILD_LEN
-#define ESP32BASE_FIRMWARE_BUILD_LEN 24
+#if ESP32BASE_ENABLE_FS
+#include "runtime/Esp32BaseFs.h"
+#endif
+#if ESP32BASE_ENABLE_FILELOG
+#include "runtime/Esp32BaseFileLog.h"
+#endif
+#if ESP32BASE_ENABLE_HEALTH
+#include "runtime/Esp32BaseHealth.h"
+#endif
+#if ESP32BASE_ENABLE_WIFI
+#include "network/Esp32BaseWiFi.h"
+#endif
+#if ESP32BASE_ENABLE_DNS
+#include "network/Esp32BaseDns.h"
+#endif
+#if ESP32BASE_ENABLE_NTP
+#include "network/Esp32BaseNtp.h"
+#endif
+#if ESP32BASE_ENABLE_MDNS
+#include "network/Esp32BaseMdns.h"
+#endif
+#if ESP32BASE_ENABLE_WEB
+#include "web/Esp32BaseWeb.h"
+#endif
+#if ESP32BASE_ENABLE_OTA
+#include "update/Esp32BaseOta.h"
 #endif
 
 class Esp32Base {
@@ -31,30 +48,17 @@ public:
     static void handle();
 
     static void setFirmwareInfo(const char* name, const char* version, const char* build = nullptr);
-    static void setHostname(const char* hostname);
-    static const char* hostname();
-
     static const char* firmwareName();
     static const char* firmwareVersion();
     static const char* firmwareBuild();
 
+    static void setHostname(const char* hostname);
+    static const char* hostname();
+
+    static const char* profileName();
     static bool isReady();
     static const char* lastError();
 
     static void logStartupConfig();
     static void logResources();
-
-private:
-    static void copyText(const char* in, char* out, size_t len);
-    static bool fail(const char* message);
-
-    static bool _ready;
-    static bool _startupLogged;
-    static const char* _lastError;
-    static char _hostname[ESP32BASE_HOSTNAME_LEN];
-    static char _firmwareName[ESP32BASE_FIRMWARE_NAME_LEN];
-    static char _firmwareVersion[ESP32BASE_FIRMWARE_VERSION_LEN];
-    static char _firmwareBuild[ESP32BASE_FIRMWARE_BUILD_LEN];
 };
-
-#endif

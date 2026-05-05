@@ -1,0 +1,24 @@
+#pragma once
+
+#include <Arduino.h>
+#include <stdint.h>
+
+class Esp32BaseSystem {
+public:
+    static bool begin();
+    static bool isReady();
+
+    static uint32_t freeHeap();
+    static uint32_t minFreeHeap();
+    static uint32_t totalHeap();
+    static uint32_t flashSize();
+    static uint32_t uptimeMs();
+
+    static const char* resetReason();
+    static const char* wakeReason();
+
+    static void restart(const char* reason);
+
+    static bool appendRestartLog(const char* reason);
+    static uint8_t restartLogCount();
+};
