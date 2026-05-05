@@ -149,7 +149,7 @@ ESP32-C3 4MB 要控制 Web/OTA/Fs 组合的体积。
 | Target | 分区表 | OTA app slot | 当前代表 FULL firmware.bin | 余量 |
 | --- | --- | ---: | ---: | ---: |
 | ESP32 4MB, Core 2.x | `partitions/esp32-4mb-ota-balanced.csv` | 1310720 | 909936 | 400784 |
-| ESP32 4MB, Core 3.x | `partitions/esp32-4mb-ota-balanced.csv` | 1310720 | 1109808 | 200912 |
+| ESP32 4MB, Core 3.x | `partitions/esp32-4mb-ota-balanced.csv` | 1310720 | 1124528 | 186192 |
 | ESP32-S3 8MB, Core 2.x | `partitions/esp32-s3-8mb-ota-balanced.csv` | 2359296 | 862096 | 1497200 |
 | ESP32-C3 4MB, Core 2.x | `partitions/esp32-c3-4mb-ota-balanced.csv` | 1310720 | 934160 | 376560 |
 
@@ -179,8 +179,8 @@ ESP32 4MB + Arduino Core 3.x 的 FULL 余量已经明显收窄。应用若继续
 | ESP32-S3 FULL, Core 2.x | 862096 | 703966 | 22580 | 28744 | 639619 | 134164 |
 | ESP32-C3 CORE, Core 2.x | 272608 | 204964 | 7496 | 6864 | 159682 | 45288 |
 | ESP32-C3 FULL, Core 2.x | 934160 | 766414 | 15580 | 29432 | 711758 | 117752 |
-| ESP32 CORE, Core 3.x | 302912 | 206067 | 16977 | 5808 | 143956 | 78428 |
-| ESP32 FULL, Core 3.x | 1109808 | 893487 | 25666 | 29048 | 803928 | 189224 |
+| ESP32 CORE, Core 3.x | 303136 | 206147 | 16977 | 5816 | 144036 | 78572 |
+| ESP32 FULL, Core 3.x | 1124528 | 902019 | 25714 | 30208 | 812460 | 195360 |
 
 ## 8. 实机资源记录表
 
