@@ -7,6 +7,10 @@
 #define ESP32BASE_HEALTH_TICK_INTERVAL_MS 30000
 #endif
 
+#ifndef ESP32BASE_HEALTH_LOOP_WARN_MS
+#define ESP32BASE_HEALTH_LOOP_WARN_MS 3000
+#endif
+
 class Esp32BaseHealth {
 public:
     static constexpr const char* EVENT_TICK = "health.tick";

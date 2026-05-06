@@ -7,9 +7,7 @@
 #include "../core/Esp32BaseConfig.h"
 #include "../core/Esp32BaseLog.h"
 
-#define ESP32BASE_INCLUDE_LITTLEFS <LittleFS.h>
-#include ESP32BASE_INCLUDE_LITTLEFS
-#undef ESP32BASE_INCLUDE_LITTLEFS
+#include <LittleFS.h>
 
 #include <string.h>
 

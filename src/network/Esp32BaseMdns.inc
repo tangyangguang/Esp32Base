@@ -6,9 +6,7 @@
 #include "../Esp32Base.h"
 #include "../core/Esp32BaseLog.h"
 
-#define ESP32BASE_INCLUDE_ESPMDNS <ESPmDNS.h>
-#include ESP32BASE_INCLUDE_ESPMDNS
-#undef ESP32BASE_INCLUDE_ESPMDNS
+#include <ESPmDNS.h>
 
 namespace {
 bool g_mdnsRunning = false;

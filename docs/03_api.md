@@ -405,9 +405,31 @@ public:
     static constexpr const char* EVENT_STOPPED = "web.stopped";
 
     enum Method : uint8_t {
+        METHOD_UNKNOWN,
         METHOD_GET,
         METHOD_POST,
         METHOD_ANY
+    };
+
+    enum HomeMode : uint8_t {
+        HOME_ESP32BASE,
+        HOME_APP,
+        HOME_COMBINED
+    };
+
+    enum SystemNavMode : uint8_t {
+        SYSTEM_NAV_TOP,
+        SYSTEM_NAV_BOTTOM,
+        SYSTEM_NAV_SECTION
+    };
+
+    enum BuiltinPage : uint8_t {
+        BUILTIN_HOME,
+        BUILTIN_WIFI,
+        BUILTIN_OTA,
+        BUILTIN_LOGS,
+        BUILTIN_REBOOT,
+        BUILTIN_SYSTEM
     };
 
     using Handler = void (*)();
@@ -422,12 +444,34 @@ public:
     static void setAuthEnabled(bool enabled);
 
     static bool addRoute(const char* path, Method method, Handler handler);
-    static bool addPage(const char* path, Handler handler);
+    static bool addPage(const char* path, const char* title, Handler handler);
     static bool addApi(const char* path, Handler handler);
+    static bool addNavItem(const char* path, const char* title);
+
+    static bool setDeviceName(const char* name);
+    static bool setHomePath(const char* path);
+    static void setHomeMode(HomeMode mode);
+    static void setSystemNavMode(SystemNavMode mode);
+    static bool setBuiltinLabel(BuiltinPage page, const char* label);
+
+    static Method currentMethod();
+    static bool isMethod(Method method);
+    static const char* currentMethodName();
 
     static bool hasParam(const char* name);
     static bool getParam(const char* name, char* out, size_t len);
     static bool getRequestBody(char* out, size_t len);
+
+    static void sendHeader(const char* title = nullptr);
+    static void sendFooter();
+    static bool beginResponse(int code, const char* contentType, const char* filename = nullptr);
+    static bool beginText(int code);
+    static bool beginCsv(int code, const char* filename = nullptr);
+    static void endResponse();
+    static void sendChunk(const char* text);
+    static void sendBytes(const uint8_t* data, size_t len);
+    static void writeHtmlEscaped(const char* text);
+    static void writeCsvEscaped(const char* text);
 
     static void sendText(int code, const char* text);
     static void sendHtml(int code, const char* html);
@@ -445,6 +489,21 @@ Route 缓冲机制：
 - Web 未启动时缓存。
 - Web 启动时一次性注册。
 - Web 已启动时立即注册。
+- `addPage()` 注册业务页面并默认进入业务导航；`addNavItem()` 可把应用已有路由加入业务导航但不注册 handler。
+- `addPage(path, title, handler)` 必须由应用显式提供短标题，例如 `Fan`、`Config`。
+- title 最大可见长度为 23 字节；空 title 返回 false。
+- `addRoute()` 和 `addApi()` 不进入业务入口列表，避免 API 或隐藏路由污染导航。
+- `setDeviceName()` 设置导航品牌和默认标题；`setHomePath()` 设置业务首页路径。
+- `setHomeMode(HOME_ESP32BASE)` 保持基础库首页默认行为；`HOME_APP` 让 `/` 和 `/esp32base` 优先进入业务首页；`HOME_COMBINED` 让 `/` 进入业务首页，并保留 `/esp32base` 为融合首页。
+- `setSystemNavMode()` 控制基础功能入口位置：顶部、底部或底部紧凑系统工具区；`SYSTEM_NAV_SECTION` 会把系统入口作为小字链接与 `Free heap` 放在同一 footer 区域，窄屏可自然换行。
+- `setBuiltinLabel()` 覆盖内置导航标签，可用于中文本地化。
+- `METHOD_ANY` 用于同一路径 GET/POST 复用；应用 handler 内可用 `currentMethod()`、`isMethod()` 或 `currentMethodName()` 判断当前请求方法。
+- `currentMethod()` 仅在 handler 上下文中返回实际方法：GET 为 `METHOD_GET`，POST 为 `METHOD_POST`；handler 外或未知方法返回 `METHOD_UNKNOWN`。
+- `isMethod(METHOD_ANY)` 在有效 handler 请求中返回 true；`METHOD_ANY` 不作为实际请求方法返回。
+- `beginResponse(code, contentType, filename)` 开始通用 chunked 响应，后续使用 `sendChunk()` 输出文本或 `sendBytes()` 输出二进制块，最后必须调用 `endResponse()`。
+- `beginText(code)` 等价于 `text/plain; charset=utf-8` chunked 响应；`beginCsv(code, filename)` 等价于 `text/csv; charset=utf-8`，filename 非空时发送 `Content-Disposition: attachment`。
+- `beginResponse()` / `beginText()` / `beginCsv()` 只能在 handler 请求上下文中成功；handler 外、contentType 为空或超过 63 字节、filename 含不安全字符时返回 false 并记录 WARN。
+- CSV 字段必须用 `writeCsvEscaped()` 输出，避免逗号、换行或双引号破坏导出格式。
 - `beginJson(code)` 的状态码必须在 `endJson()` 发送时保留。
 
 内置页面交互要求：
@@ -553,6 +612,8 @@ public:
     static bool writeBytes(const char* path, const uint8_t* data, size_t len);
     static bool readBytes(const char* path, uint8_t* out, size_t maxLen, size_t* readLen);
     static bool appendBytes(const char* path, const uint8_t* data, size_t len);
+    static bool readBytesAt(const char* path, uint32_t offset, uint8_t* out, size_t maxLen, size_t* readLen);
+    static bool writeBytesAt(const char* path, uint32_t offset, const uint8_t* data, size_t len);
 
     // metadata
     static bool removeFile(const char* path);
@@ -585,4 +646,19 @@ public:
 
 FS 未成功 `begin()` 时，文件和目录操作返回失败，容量查询返回 0，不隐式格式化文件系统。
 
+Offset binary API 用于业务二进制定长记录、分页读取和环形覆盖写入，不要求业务 include `LittleFS.h` 或 Arduino `File`：
+
+- `readBytesAt()` 打开已存在文件并从 `offset` 读取最多 `maxLen` 字节，实际读取长度写入 `readLen`；读到 EOF 前允许短读并返回 true。
+- `readBytesAt()` 在 FS 未 ready、path 非绝对路径、文件不存在、out 为空或 `offset > fileSize` 时返回 false；失败时 `readLen` 为 0。`offset == fileSize` 返回 true 且读取 0 字节。
+- `writeBytesAt()` 只覆盖已存在文件中的现有字节，不隐式创建文件、不扩展文件、不填洞；FS 未 ready、path 非绝对路径、文件不存在、data 为空但 len 非 0、`offset + len > fileSize` 或底层写失败时返回 false。
+- 需要固定容量环形文件时，应用可先用 `writeBytes()` 或分块 `appendBytes()` 初始化文件，再用 `writeBytesAt()` 覆盖记录槽位。
+
 Health 仅负责周期性采样、loop 周期统计和发布 `health.tick` 事件。heap、reset reason、WiFi state、FS state 等详情通过对应模块查询，Health 不重复包装所有字段。
+
+Health tick 日志策略：
+
+- 每个 tick 窗口内统计一次最大 loop 间隔。
+- 未超过 `ESP32BASE_HEALTH_LOOP_WARN_MS` 时，以 DEBUG 输出 `tick loopMax=...`。
+- 超过阈值时，以 WARN 输出 `loop_slow loopMax=... threshold=...`。
+- 默认 WARN 阈值为 3000ms，避免普通 Web 请求造成健康日志刷屏，同时能及时暴露明显卡顿；业务项目可按控制实时性要求覆盖为 1000/2000/5000ms。
+- `loopPeriodMaxMs()` 仍返回启动以来最大 loop 间隔，不随 tick 窗口清零。

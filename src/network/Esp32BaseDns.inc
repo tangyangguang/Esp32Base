@@ -5,12 +5,8 @@
 #include "Esp32BaseDns.h"
 #include "Esp32BaseWiFi.h"
 
-#define ESP32BASE_INCLUDE_DNSSERVER <DNSServer.h>
-#include ESP32BASE_INCLUDE_DNSSERVER
-#undef ESP32BASE_INCLUDE_DNSSERVER
-#define ESP32BASE_INCLUDE_WIFI <WiFi.h>
-#include ESP32BASE_INCLUDE_WIFI
-#undef ESP32BASE_INCLUDE_WIFI
+#include <DNSServer.h>
+#include <WiFi.h>
 
 namespace {
 DNSServer g_dnsServer;

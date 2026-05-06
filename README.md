@@ -95,10 +95,13 @@ Profile 是默认组合，用户仍可用 `ESP32BASE_ENABLE_*` 精细覆盖。�
 
 文件日志是 Runtime/FS 能力，不属于 Core。`CORE` 和默认 `NET` 不链接 LittleFS；`RUNTIME`、`NET_RUNTIME`、`WEB_RUNTIME`、`FULL` 默认可用文件日志。
 
+`Esp32BaseFs` 对业务暴露文本、二进制、追加、目录和容量 API，并提供 `readBytesAt()` / `writeBytesAt()` 按偏移读写能力。业务可通过这些 API 实现二进制定长日志分页读取和环形覆盖写入，不需要 include `LittleFS.h` 或 Arduino `File`。
+
 ## 文档入口
 
 建议按顺序阅读：
 
+0. [能力变更记录](CHANGELOG.md)
 1. [设计说明](docs/00_design.md)
 2. [架构说明](docs/01_architecture.md)
 3. [Profile 与裁剪](docs/02_profiles.md)

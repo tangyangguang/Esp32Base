@@ -20,34 +20,46 @@
 #include "../update/Esp32BaseOta.h"
 #endif
 
-#define ESP32BASE_INCLUDE_WEBSERVER <WebServer.h>
-#include ESP32BASE_INCLUDE_WEBSERVER
-#undef ESP32BASE_INCLUDE_WEBSERVER
+#include <WebServer.h>
 #include <stdlib.h>
 #include <string.h>
 
 namespace {
 struct Route {
     char path[48];
+    char title[24];
     Esp32BaseWeb::Method method;
     Esp32BaseWeb::Handler handler;
+    bool appPage;
     bool registered;
+};
+
+struct NavItem {
+    char path[48];
+    char title[24];
 };
 
 WebServer g_server(80);
 Route g_routes[ESP32BASE_WEB_MAX_ROUTES];
+NavItem g_navItems[ESP32BASE_WEB_MAX_NAV_ITEMS];
 const char* g_headerKeys[] = {"X-Sha256", "X-Firmware-Size"};
 bool g_webReady = false;
 bool g_authEnabled = true;
 bool g_authSetByApp = false;
 char g_authUser[32] = "admin";
 char g_authPass[32] = "admin";
-String g_webJson;
-int g_webJsonCode = 200;
+char g_deviceName[32] = "Esp32Base";
+char g_homePath[48] = "";
+Esp32BaseWeb::HomeMode g_homeMode = Esp32BaseWeb::HOME_ESP32BASE;
+Esp32BaseWeb::SystemNavMode g_systemNavMode = Esp32BaseWeb::SYSTEM_NAV_TOP;
+char g_builtinLabels[6][16] = {"Home", "WiFi", "OTA", "Logs", "Reboot", "System"};
 char g_chunkBuffer[512];
 size_t g_chunkUsed = 0;
 char g_activeUri[48] = "";
-char g_activeMethod[5] = "";
+Esp32BaseWeb::Method g_currentMethod = Esp32BaseWeb::METHOD_UNKNOWN;
+Esp32BaseWeb::Method g_lastRequestMethod = Esp32BaseWeb::METHOD_UNKNOWN;
+bool g_requestContextActive = false;
+bool g_responseActive = false;
 
 static const char WEB_HEAD[] PROGMEM =
     "<meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
@@ -57,13 +69,195 @@ static const char WEB_HEAD[] PROGMEM =
     "a,button,input[type=submit],input[type=button]{background:#2678c8;color:#fff;padding:7px 12px;text-decoration:none;border:0;border-radius:3px;cursor:pointer;margin:2px 2px 2px 0}"
     "input:not([type=submit]):not([type=button]){width:100%;padding:7px;margin:4px 0 12px;border:1px solid #ccc;border-radius:3px;box-sizing:border-box}"
     "nav{margin-bottom:14px;border-bottom:1px solid #eee;padding-bottom:8px}"
+    "nav .brand{background:#444}"
+    "details{margin:14px 0}summary{cursor:pointer;color:#2678c8}"
     "nav a{font-size:.88em}.ok{color:green}.err{color:#c33}.info{color:#777;font-size:.86em;margin-top:16px}"
+    ".footerbar{margin-top:18px;padding-top:8px;border-top:1px solid #eee;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;color:#777;font-size:.78em}"
+    ".syslinks{min-width:0;flex:1 1 auto;display:flex;flex-wrap:wrap;gap:4px;align-items:center}"
+    ".syslinks a{font-size:1em;line-height:1.35;padding:3px 7px;margin:0;background:#f1f5f9;color:#2678c8}"
+    ".heap{flex:0 0 auto;margin-left:auto;white-space:nowrap;text-align:right;font-size:1em}"
+    "@media(max-width:520px){.footerbar{gap:6px 10px;font-size:.76em;align-items:flex-start}.syslinks a{padding:3px 6px}}"
+    "@media(max-width:360px){.heap{margin-left:0;text-align:left}}"
     "pre{white-space:pre;overflow-x:auto;word-break:normal;font-size:.82em;background:#f7f7f7;padding:8px}"
     "</style>"
     "<script>function once(f){if(f.dataset.busy)return false;f.dataset.busy=1;var b=f.querySelector('[type=submit]');if(b)b.disabled=true;return true;}</script>";
 
 void flushChunkBuffer();
 void markRequest();
+void sendChunk(const char* text);
+void sendEscapedHtmlChunk(const char* text);
+
+Esp32BaseWeb::Method fromHttpMethod(HTTPMethod method) {
+    switch (method) {
+        case HTTP_GET: return Esp32BaseWeb::METHOD_GET;
+        case HTTP_POST: return Esp32BaseWeb::METHOD_POST;
+        default: return Esp32BaseWeb::METHOD_UNKNOWN;
+    }
+}
+
+const char* methodName(Esp32BaseWeb::Method method) {
+    switch (method) {
+        case Esp32BaseWeb::METHOD_GET: return "GET";
+        case Esp32BaseWeb::METHOD_POST: return "POST";
+        case Esp32BaseWeb::METHOD_ANY: return "ANY";
+        case Esp32BaseWeb::METHOD_UNKNOWN:
+        default: return "UNKNOWN";
+    }
+}
+
+bool validHeaderValue(const char* value, size_t maxLen) {
+    if (!value || !value[0]) {
+        return false;
+    }
+    const size_t len = strlen(value);
+    if (len > maxLen) {
+        return false;
+    }
+    for (const char* p = value; *p; ++p) {
+        const uint8_t c = static_cast<uint8_t>(*p);
+        if (c < 0x20 || c == 0x7f) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool validDownloadFilename(const char* filename) {
+    if (!filename || !filename[0] || strlen(filename) > 63) {
+        return false;
+    }
+    for (const char* p = filename; *p; ++p) {
+        const char c = *p;
+        const bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                        (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-';
+        if (!ok) {
+            return false;
+        }
+    }
+    return true;
+}
+
+uint8_t appPageCount() {
+    uint8_t count = 0;
+    for (uint8_t i = 0; i < ESP32BASE_WEB_MAX_ROUTES; ++i) {
+        if (g_routes[i].handler && g_routes[i].appPage) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+uint8_t navItemCount() {
+    uint8_t count = 0;
+    for (uint8_t i = 0; i < ESP32BASE_WEB_MAX_NAV_ITEMS; ++i) {
+        if (g_navItems[i].path[0]) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+bool navPathExists(const char* path) {
+    if (!path || !path[0]) {
+        return false;
+    }
+    for (uint8_t i = 0; i < ESP32BASE_WEB_MAX_NAV_ITEMS; ++i) {
+        if (g_navItems[i].path[0] && strcmp(g_navItems[i].path, path) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+uint8_t appNavCount() {
+    uint8_t count = navItemCount();
+    for (uint8_t i = 0; i < ESP32BASE_WEB_MAX_ROUTES; ++i) {
+        if (g_routes[i].handler && g_routes[i].appPage && !navPathExists(g_routes[i].path)) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+const char* configuredHomePath() {
+    if (g_homePath[0]) {
+        return g_homePath;
+    }
+    for (uint8_t i = 0; i < ESP32BASE_WEB_MAX_NAV_ITEMS; ++i) {
+        if (g_navItems[i].path[0]) {
+            return g_navItems[i].path;
+        }
+    }
+    for (uint8_t i = 0; i < ESP32BASE_WEB_MAX_ROUTES; ++i) {
+        if (g_routes[i].handler && g_routes[i].appPage) {
+            return g_routes[i].path;
+        }
+    }
+    return "/esp32base";
+}
+
+bool useAppHome() {
+    return g_homeMode == Esp32BaseWeb::HOME_APP && strcmp(configuredHomePath(), "/esp32base") != 0;
+}
+
+void sendLink(const char* path, const char* title, bool paragraph) {
+    sendChunk(paragraph ? "<p><a href='" : "<a href='");
+    sendEscapedHtmlChunk(path);
+    sendChunk("'>");
+    sendEscapedHtmlChunk(title);
+    sendChunk(paragraph ? "</a></p>" : "</a>");
+}
+
+void sendAppLinks(bool paragraph) {
+    const char* home = configuredHomePath();
+    for (uint8_t i = 0; i < ESP32BASE_WEB_MAX_NAV_ITEMS; ++i) {
+        if (g_navItems[i].path[0] && (paragraph || strcmp(g_navItems[i].path, home) != 0)) {
+            sendLink(g_navItems[i].path, g_navItems[i].title, paragraph);
+        }
+    }
+    for (uint8_t i = 0; i < ESP32BASE_WEB_MAX_ROUTES; ++i) {
+        if (!g_routes[i].handler || !g_routes[i].appPage || navPathExists(g_routes[i].path)) {
+            continue;
+        }
+        if (!paragraph && strcmp(g_routes[i].path, home) == 0) {
+            continue;
+        }
+        sendLink(g_routes[i].path, g_routes[i].title[0] ? g_routes[i].title : g_routes[i].path, paragraph);
+    }
+}
+
+void sendSystemLinks(bool paragraph) {
+    sendLink("/esp32base", g_builtinLabels[Esp32BaseWeb::BUILTIN_HOME], paragraph);
+    sendLink("/esp32base/wifi", g_builtinLabels[Esp32BaseWeb::BUILTIN_WIFI], paragraph);
+#if ESP32BASE_ENABLE_OTA
+    sendLink("/esp32base/ota", g_builtinLabels[Esp32BaseWeb::BUILTIN_OTA], paragraph);
+#endif
+    sendLink("/esp32base/logs", g_builtinLabels[Esp32BaseWeb::BUILTIN_LOGS], paragraph);
+    sendLink("/esp32base/reboot", g_builtinLabels[Esp32BaseWeb::BUILTIN_REBOOT], paragraph);
+}
+
+void sendMainNav() {
+    sendChunk("<nav><a class='brand' href='");
+    sendEscapedHtmlChunk(configuredHomePath());
+    sendChunk("'>");
+    sendEscapedHtmlChunk(g_deviceName);
+    sendChunk("</a>");
+    if (g_homeMode != Esp32BaseWeb::HOME_ESP32BASE) {
+        sendAppLinks(false);
+    }
+    if (g_systemNavMode == Esp32BaseWeb::SYSTEM_NAV_TOP) {
+        sendSystemLinks(false);
+    }
+    sendChunk("</nav>");
+}
+
+void sendSystemNavSection() {
+    if (g_systemNavMode == Esp32BaseWeb::SYSTEM_NAV_BOTTOM) {
+        sendChunk("<nav>");
+        sendSystemLinks(false);
+        sendChunk("</nav>");
+    }
+}
 
 void formatReadableBytes(uint64_t bytes, char* out, size_t len) {
     if (!out || len == 0) {
@@ -128,14 +322,43 @@ bool isAuthenticated() {
 }
 
 void registerRoute(Route& route) {
-    g_server.on(route.path, toHttpMethod(route.method), route.handler);
+    Route* routePtr = &route;
+    g_server.on(route.path, toHttpMethod(route.method), [routePtr]() {
+        g_requestContextActive = true;
+        markRequest();
+        if (routePtr->handler) {
+            routePtr->handler();
+        }
+        g_responseActive = false;
+        g_requestContextActive = false;
+        g_currentMethod = Esp32BaseWeb::METHOD_UNKNOWN;
+    });
     route.registered = true;
 }
 
-void beginChunked(int code, const char* contentType) {
+bool beginResponse(int code, const char* contentType, const char* filename) {
+    if (!g_requestContextActive) {
+        ESP32BASE_LOG_W("web", "begin_response outside request");
+        return false;
+    }
+    if (!validHeaderValue(contentType, 63)) {
+        ESP32BASE_LOG_W("web", "begin_response invalid content_type");
+        return false;
+    }
+    if (filename && filename[0]) {
+        if (!validDownloadFilename(filename)) {
+            ESP32BASE_LOG_W("web", "begin_response invalid filename");
+            return false;
+        }
+        char disposition[96];
+        snprintf(disposition, sizeof(disposition), "attachment; filename=\"%s\"", filename);
+        g_server.sendHeader("Content-Disposition", disposition);
+    }
     g_chunkUsed = 0;
+    g_responseActive = true;
     g_server.setContentLength(CONTENT_LENGTH_UNKNOWN);
     g_server.send(code, contentType, "");
+    return true;
 }
 
 void flushChunkBuffer() {
@@ -149,6 +372,10 @@ void flushChunkBuffer() {
 
 void sendChunk(const char* text) {
     if (!text) {
+        return;
+    }
+    if (!g_responseActive) {
+        ESP32BASE_LOG_W("web", "send_chunk outside response");
         return;
     }
     while (*text) {
@@ -167,13 +394,23 @@ void sendChunk(const char* text) {
     }
 }
 
-void endChunked() {
+void endResponse() {
+    if (!g_responseActive) {
+        ESP32BASE_LOG_W("web", "end_response outside response");
+        return;
+    }
     flushChunkBuffer();
     g_server.sendContent("");
+    g_responseActive = false;
 }
 
 void markRequest() {
-    strlcpy(g_activeMethod, g_server.method() == HTTP_POST ? "POST" : "GET", sizeof(g_activeMethod));
+    const Esp32BaseWeb::Method method = fromHttpMethod(g_server.method());
+    g_lastRequestMethod = method;
+    g_requestContextActive = true;
+    if (g_requestContextActive) {
+        g_currentMethod = method;
+    }
     strlcpy(g_activeUri, g_server.uri().c_str(), sizeof(g_activeUri));
 }
 
@@ -255,7 +492,9 @@ void handleStatus() {
     if (!ensureAuth()) {
         return;
     }
-    beginChunked(200, "application/json");
+    if (!beginResponse(200, "application/json", nullptr)) {
+        return;
+    }
     sendChunk("{\"firmware\":{\"name\":\"");
     sendEscapedJsonChunk(Esp32Base::firmwareName());
     sendChunk("\",\"version\":\"");
@@ -277,7 +516,7 @@ void handleStatus() {
     sendChunk("\",\"connected\":");
     sendChunk(Esp32BaseWiFi::isConnected() ? "true" : "false");
     sendChunk("}}");
-    endChunked();
+    endResponse();
 }
 
 void handleChip() {
@@ -285,7 +524,9 @@ void handleChip() {
     if (!ensureAuth()) {
         return;
     }
-    beginChunked(200, "application/json");
+    if (!beginResponse(200, "application/json", nullptr)) {
+        return;
+    }
     sendChunk("{\"freeHeap\":");
     sendBytesJsonChunk(Esp32BaseSystem::freeHeap());
     sendChunk(",\"minFreeHeap\":");
@@ -299,7 +540,7 @@ void handleChip() {
     sendChunk("\",\"wakeReason\":\"");
     sendEscapedJsonChunk(Esp32BaseSystem::wakeReason());
     sendChunk("\"}");
-    endChunked();
+    endResponse();
 }
 
 void handleFirmware() {
@@ -307,7 +548,9 @@ void handleFirmware() {
     if (!ensureAuth()) {
         return;
     }
-    beginChunked(200, "application/json");
+    if (!beginResponse(200, "application/json", nullptr)) {
+        return;
+    }
     sendChunk("{\"name\":\"");
     sendEscapedJsonChunk(Esp32Base::firmwareName());
     sendChunk("\",\"version\":\"");
@@ -315,7 +558,7 @@ void handleFirmware() {
     sendChunk("\",\"build\":\"");
     sendEscapedJsonChunk(Esp32Base::firmwareBuild());
     sendChunk("\"}");
-    endChunked();
+    endResponse();
 }
 
 void handleWifiPage() {
@@ -328,7 +571,7 @@ void handleWifiPage() {
     Esp32BaseConfig::getStr("eb_wifi", "ssid", ssid, sizeof(ssid), Esp32BaseWiFi::ssid());
     Esp32BaseConfig::getStr("eb_wifi", "pass", password, sizeof(password), "");
 
-    Esp32BaseWeb::sendHeader("WiFi");
+    Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_WIFI]);
     if (g_server.hasArg("saved")) {
         sendChunk("<p class=ok>Saved. Credentials updated and connection started.</p>");
     } else if (g_server.hasArg("error")) {
@@ -390,8 +633,10 @@ void handleRebootPage() {
     if (!ensureAuth()) {
         return;
     }
-    Esp32BaseWeb::sendHeader("Reboot");
-    sendChunk("<h2>Reboot</h2><p>Are you sure you want to reboot the device?</p><form method='post' action='/esp32base/reboot' onsubmit=\"return confirm('Reboot device now?')&&once(this)\"><input type='submit' value='Confirm Reboot' style='background:#c33'> <a href='/esp32base'>Cancel</a></form>");
+    Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_REBOOT]);
+    sendChunk("<h2>");
+    sendEscapedHtmlChunk(g_builtinLabels[Esp32BaseWeb::BUILTIN_REBOOT]);
+    sendChunk("</h2><p>Are you sure you want to reboot the device?</p><form method='post' action='/esp32base/reboot' onsubmit=\"return confirm('Reboot device now?')&&once(this)\"><input type='submit' value='Confirm Reboot' style='background:#c33'> <a href='/esp32base'>Cancel</a></form>");
     Esp32BaseWeb::sendFooter();
 }
 
@@ -413,7 +658,8 @@ void handleCaptiveProbe() {
 }
 
 void handleRootRedirect() {
-    g_server.sendHeader("Location", "/esp32base", true);
+    const char* location = g_homeMode == Esp32BaseWeb::HOME_ESP32BASE ? "/esp32base" : configuredHomePath();
+    g_server.sendHeader("Location", location, true);
     g_server.send(302, "text/plain", "");
 }
 
@@ -443,7 +689,7 @@ void handleOtaPage() {
     if (!ensureAuth()) {
         return;
     }
-    Esp32BaseWeb::sendHeader("OTA");
+    Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_OTA]);
     sendChunk("<h2>OTA Update</h2><form id='f'><input id='fw' type='file' name='firmware' accept='.bin' required><input id='sha' placeholder='SHA256 optional' maxlength='64'><input type='submit' value='Upload Firmware'></form><progress id='p' value='0' max='100' style='width:100%;display:none'></progress><p id='s'></p>");
     sendChunk("<script>function h(n){var u=['B','KB','MB','GB'],i=0,x=n;while(x>=1024&&i<u.length-1){x/=1024;i++;}return n+' bytes ('+(i?x.toFixed(2):x)+' '+u[i]+')';}document.getElementById('f').onsubmit=function(e){e.preventDefault();if(this.dataset.busy)return false;this.dataset.busy=1;var f=document.getElementById('fw').files[0],st=document.getElementById('s'),pg=document.getElementById('p'),b=this.querySelector('[type=submit]');if(!f){this.dataset.busy='';return false;}var d=new FormData();d.append('firmware',f,f.name);var x=new XMLHttpRequest();if(b)b.disabled=true;pg.style.display='block';st.textContent='Uploading 0%';x.upload.onprogress=function(ev){if(ev.lengthComputable){var p=Math.floor(ev.loaded*100/ev.total);pg.value=p;st.textContent='Uploading '+p+'% '+h(ev.loaded)+' / '+h(ev.total);}};x.onload=function(){st.textContent=(x.status==200?x.responseText:('Upload failed: HTTP '+x.status+' '+x.responseText));if(x.status!=200){document.getElementById('f').dataset.busy='';if(b)b.disabled=false;}};x.onerror=function(){st.textContent='Upload failed: network error';document.getElementById('f').dataset.busy='';if(b)b.disabled=false;};x.open('POST','/esp32base/ota');x.setRequestHeader('X-Firmware-Size',String(f.size));var s=document.getElementById('sha').value;if(s)x.setRequestHeader('X-Sha256',s);x.send(d);return false;};</script>");
     Esp32BaseWeb::sendFooter();
@@ -496,7 +742,9 @@ void handleOtaApi() {
     if (!ensureAuth()) {
         return;
     }
-    beginChunked(200, "application/json");
+    if (!beginResponse(200, "application/json", nullptr)) {
+        return;
+    }
     sendChunk("{\"status\":");
     sendIntChunk(static_cast<int>(Esp32BaseOta::status()));
     sendChunk(",\"progress\":");
@@ -508,7 +756,7 @@ void handleOtaApi() {
     sendChunk(",\"error\":\"");
     sendEscapedJsonChunk(Esp32BaseOta::lastError());
     sendChunk("\"}");
-    endChunked();
+    endResponse();
 }
 #endif
 
@@ -517,8 +765,18 @@ void handleRoot() {
     if (!ensureAuth()) {
         return;
     }
-    Esp32BaseWeb::sendHeader("Home");
-    sendChunk("<h2>Esp32Base</h2><p>Ready</p>");
+    if (useAppHome()) {
+        redirectSeeOther(configuredHomePath());
+        return;
+    }
+    Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_HOME]);
+    sendChunk("<h2>");
+    sendEscapedHtmlChunk(g_deviceName);
+    sendChunk("</h2><p>Ready</p>");
+    if (g_homeMode == Esp32BaseWeb::HOME_ESP32BASE && appNavCount() > 0) {
+        sendChunk("<h2>Application</h2>");
+        sendAppLinks(true);
+    }
     Esp32BaseWeb::sendFooter();
 }
 
@@ -545,8 +803,10 @@ void handleLogsPage() {
     if (!ensureAuth()) {
         return;
     }
-    Esp32BaseWeb::sendHeader("Logs");
-    sendChunk("<h2>Logs</h2>");
+    Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_LOGS]);
+    sendChunk("<h2>");
+    sendEscapedHtmlChunk(g_builtinLabels[Esp32BaseWeb::BUILTIN_LOGS]);
+    sendChunk("</h2>");
 #if ESP32BASE_ENABLE_FILELOG
     sendChunk("<form method='post' action='/esp32base/logs/clear' onsubmit=\"return confirm('Clear log files?')&&once(this)\"><input type='submit' value='Clear Log' style='background:#c33'></form>");
     if (!Esp32BaseFileLog::isEnabled()) {
@@ -657,16 +917,22 @@ bool Esp32BaseWeb::begin() {
 void Esp32BaseWeb::handle() {
     if (g_webReady) {
         g_activeUri[0] = '\0';
-        g_activeMethod[0] = '\0';
+        g_currentMethod = METHOD_UNKNOWN;
+        g_lastRequestMethod = METHOD_UNKNOWN;
+        g_requestContextActive = false;
+        g_responseActive = false;
         const uint32_t start = millis();
         g_server.handleClient();
         const uint32_t elapsed = millis() - start;
         if (elapsed > 250UL) {
             ESP32BASE_LOG_W("web", "slow_request method=%s uri=%s elapsed=%lu ms",
-                            g_activeMethod[0] ? g_activeMethod : "?",
+                            methodName(g_lastRequestMethod),
                             g_activeUri[0] ? g_activeUri : "(unknown)",
                             static_cast<unsigned long>(elapsed));
         }
+        g_requestContextActive = false;
+        g_currentMethod = METHOD_UNKNOWN;
+        g_responseActive = false;
     }
 }
 
@@ -705,14 +971,17 @@ bool Esp32BaseWeb::verifyAuth() {
 }
 
 bool Esp32BaseWeb::addRoute(const char* path, Method method, Handler handler) {
-    if (!path || path[0] != '/' || !handler || strlen(path) >= sizeof(g_routes[0].path)) {
+    if (!path || path[0] != '/' || !handler || strlen(path) >= sizeof(g_routes[0].path) ||
+        (method != METHOD_GET && method != METHOD_POST && method != METHOD_ANY)) {
         return false;
     }
     for (uint8_t i = 0; i < ESP32BASE_WEB_MAX_ROUTES; ++i) {
         if (!g_routes[i].handler) {
             strlcpy(g_routes[i].path, path, sizeof(g_routes[i].path));
+            g_routes[i].title[0] = '\0';
             g_routes[i].method = method;
             g_routes[i].handler = handler;
+            g_routes[i].appPage = false;
             if (g_webReady) {
                 registerRoute(g_routes[i]);
             }
@@ -722,12 +991,98 @@ bool Esp32BaseWeb::addRoute(const char* path, Method method, Handler handler) {
     return false;
 }
 
-bool Esp32BaseWeb::addPage(const char* path, Handler handler) {
-    return addRoute(path, METHOD_GET, handler);
+bool Esp32BaseWeb::addPage(const char* path, const char* title, Handler handler) {
+    if (!path || path[0] != '/' || !title || !title[0] || !handler ||
+        strlen(path) >= sizeof(g_routes[0].path) || strlen(title) >= sizeof(g_routes[0].title)) {
+        return false;
+    }
+    for (uint8_t i = 0; i < ESP32BASE_WEB_MAX_ROUTES; ++i) {
+        if (!g_routes[i].handler) {
+            strlcpy(g_routes[i].path, path, sizeof(g_routes[i].path));
+            strlcpy(g_routes[i].title, title, sizeof(g_routes[i].title));
+            g_routes[i].method = METHOD_GET;
+            g_routes[i].handler = handler;
+            g_routes[i].appPage = true;
+            if (g_webReady) {
+                registerRoute(g_routes[i]);
+            }
+            ESP32BASE_LOG_I("web", "app_page_registered path=%s title=%s", g_routes[i].path, g_routes[i].title);
+            return true;
+        }
+    }
+    return false;
 }
 
 bool Esp32BaseWeb::addApi(const char* path, Handler handler) {
     return addRoute(path, METHOD_ANY, handler);
+}
+
+bool Esp32BaseWeb::addNavItem(const char* path, const char* title) {
+    if (!path || path[0] != '/' || !title || !title[0] ||
+        strlen(path) >= sizeof(g_navItems[0].path) || strlen(title) >= sizeof(g_navItems[0].title)) {
+        return false;
+    }
+    for (uint8_t i = 0; i < ESP32BASE_WEB_MAX_NAV_ITEMS; ++i) {
+        if (!g_navItems[i].path[0]) {
+            strlcpy(g_navItems[i].path, path, sizeof(g_navItems[i].path));
+            strlcpy(g_navItems[i].title, title, sizeof(g_navItems[i].title));
+            ESP32BASE_LOG_I("web", "nav_item_registered path=%s title=%s", g_navItems[i].path, g_navItems[i].title);
+            return true;
+        }
+    }
+    return false;
+}
+
+bool Esp32BaseWeb::setDeviceName(const char* name) {
+    if (!name || !name[0] || strlen(name) >= sizeof(g_deviceName)) {
+        return false;
+    }
+    strlcpy(g_deviceName, name, sizeof(g_deviceName));
+    return true;
+}
+
+bool Esp32BaseWeb::setHomePath(const char* path) {
+    if (!path || path[0] != '/' || strlen(path) >= sizeof(g_homePath)) {
+        return false;
+    }
+    strlcpy(g_homePath, path, sizeof(g_homePath));
+    return true;
+}
+
+void Esp32BaseWeb::setHomeMode(HomeMode mode) {
+    if (mode == HOME_ESP32BASE || mode == HOME_APP || mode == HOME_COMBINED) {
+        g_homeMode = mode;
+    }
+}
+
+void Esp32BaseWeb::setSystemNavMode(SystemNavMode mode) {
+    if (mode == SYSTEM_NAV_TOP || mode == SYSTEM_NAV_BOTTOM || mode == SYSTEM_NAV_SECTION) {
+        g_systemNavMode = mode;
+    }
+}
+
+bool Esp32BaseWeb::setBuiltinLabel(BuiltinPage page, const char* label) {
+    if (page > BUILTIN_SYSTEM || !label || !label[0] || strlen(label) >= sizeof(g_builtinLabels[0])) {
+        return false;
+    }
+    strlcpy(g_builtinLabels[page], label, sizeof(g_builtinLabels[page]));
+    return true;
+}
+
+Esp32BaseWeb::Method Esp32BaseWeb::currentMethod() {
+    return g_requestContextActive ? g_currentMethod : METHOD_UNKNOWN;
+}
+
+bool Esp32BaseWeb::isMethod(Method method) {
+    const Method current = currentMethod();
+    if (method == METHOD_ANY) {
+        return current != METHOD_UNKNOWN;
+    }
+    return current == method;
+}
+
+const char* Esp32BaseWeb::currentMethodName() {
+    return methodName(currentMethod());
 }
 
 bool Esp32BaseWeb::hasParam(const char* name) {
@@ -751,33 +1106,87 @@ bool Esp32BaseWeb::getRequestBody(char* out, size_t len) {
 }
 
 void Esp32BaseWeb::sendHeader(const char* title) {
-    beginChunked(200, "text/html; charset=utf-8");
+    if (!beginResponse(200, "text/html; charset=utf-8", nullptr)) {
+        return;
+    }
     sendChunk("<!doctype html><html><head><title>");
-    sendEscapedHtmlChunk(title ? title : "Esp32Base");
+    sendEscapedHtmlChunk(title ? title : g_deviceName);
     sendChunk("</title>");
     sendProgmem(WEB_HEAD);
-    sendChunk("</head><body><nav><a href='/esp32base'>Home</a><a href='/esp32base/wifi'>WiFi</a>");
-#if ESP32BASE_ENABLE_OTA
-    sendChunk("<a href='/esp32base/ota'>OTA</a>");
-#endif
-    sendChunk("<a href='/esp32base/logs'>Logs</a><a href='/esp32base/reboot'>Reboot</a></nav>");
+    sendChunk("</head><body>");
+    sendMainNav();
 }
 
 void Esp32BaseWeb::sendFooter() {
     char heap[48];
     formatReadableBytes(Esp32BaseSystem::freeHeap(), heap, sizeof(heap));
-    sendChunk("<div class=info>Free heap: ");
-    sendEscapedHtmlChunk(heap);
-    sendChunk("</div></body></html>");
-    endChunked();
+    if (g_systemNavMode == Esp32BaseWeb::SYSTEM_NAV_SECTION) {
+        sendChunk("<footer class='footerbar'><span class='syslinks'>");
+        sendSystemLinks(false);
+        sendChunk("</span><span class='heap'>Free heap: ");
+        sendEscapedHtmlChunk(heap);
+        sendChunk("</span></footer></body></html>");
+    } else {
+        sendSystemNavSection();
+        sendChunk("<div class=info>Free heap: ");
+        sendEscapedHtmlChunk(heap);
+        sendChunk("</div></body></html>");
+    }
+    endResponse();
+}
+
+bool Esp32BaseWeb::beginResponse(int code, const char* contentType, const char* filename) {
+    return ::beginResponse(code, contentType, filename);
+}
+
+bool Esp32BaseWeb::beginText(int code) {
+    return beginResponse(code, "text/plain; charset=utf-8", nullptr);
+}
+
+bool Esp32BaseWeb::beginCsv(int code, const char* filename) {
+    return beginResponse(code, "text/csv; charset=utf-8", filename);
+}
+
+void Esp32BaseWeb::endResponse() {
+    ::endResponse();
 }
 
 void Esp32BaseWeb::sendChunk(const char* text) {
     ::sendChunk(text);
 }
 
+void Esp32BaseWeb::sendBytes(const uint8_t* data, size_t len) {
+    if (!data && len > 0) {
+        ESP32BASE_LOG_W("web", "send_bytes invalid data");
+        return;
+    }
+    if (!g_responseActive) {
+        ESP32BASE_LOG_W("web", "send_bytes outside response");
+        return;
+    }
+    flushChunkBuffer();
+    if (len > 0) {
+        g_server.sendContent(reinterpret_cast<const char*>(data), len);
+    }
+}
+
 void Esp32BaseWeb::writeHtmlEscaped(const char* text) {
     sendEscapedHtmlChunk(text);
+}
+
+void Esp32BaseWeb::writeCsvEscaped(const char* text) {
+    sendChunk("\"");
+    if (text) {
+        for (const char* p = text; *p; ++p) {
+            if (*p == '"') {
+                sendChunk("\"\"");
+            } else {
+                char one[2] = {*p, '\0'};
+                sendChunk(one);
+            }
+        }
+    }
+    sendChunk("\"");
 }
 
 void Esp32BaseWeb::sendText(int code, const char* text) {
@@ -797,39 +1206,22 @@ void Esp32BaseWeb::redirectSeeOther(const char* url) {
 }
 
 void Esp32BaseWeb::beginJson(int code) {
-    g_webJsonCode = code;
-    g_webJson = "{";
+    if (!beginResponse(code, "application/json", nullptr)) {
+        return;
+    }
+    sendChunk("{");
 }
 
 void Esp32BaseWeb::writeJsonEscaped(const char* text) {
     if (!text) {
         return;
     }
-    for (const char* p = text; *p; ++p) {
-        switch (*p) {
-            case '"': g_webJson += "\\\""; break;
-            case '\\': g_webJson += "\\\\"; break;
-            case '\n': g_webJson += "\\n"; break;
-            case '\r': g_webJson += "\\r"; break;
-            case '\t': g_webJson += "\\t"; break;
-            default:
-                if (static_cast<uint8_t>(*p) < 0x20) {
-                    char buf[7];
-                    snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned>(*p));
-                    g_webJson += buf;
-                } else {
-                    g_webJson += *p;
-                }
-                break;
-        }
-    }
+    sendEscapedJsonChunk(text);
 }
 
 void Esp32BaseWeb::endJson() {
-    g_webJson += "}";
-    g_server.send(g_webJsonCode, "application/json", g_webJson);
-    g_webJson = "";
-    g_webJsonCode = 200;
+    sendChunk("}");
+    endResponse();
 }
 
 #endif

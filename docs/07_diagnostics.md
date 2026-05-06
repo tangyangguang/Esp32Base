@@ -186,7 +186,10 @@ CI 应覆盖核心矩阵，release 前执行完整矩阵。
 - FULL profile，ESP32 / ESP32-S3 / ESP32-C3 各一台。
 - 每秒 1 次 NVS deferred 写。
 - 每 10 分钟 1 次 Web 状态查询。
-- 每 30 秒 1 次 health.tick。
+- 每 30 秒 1 次 `health.tick` bus 事件。
+- Health tick 未超过 loop 阈值时只输出 DEBUG 日志，不污染 INFO 文件日志。
+- Health tick 窗口内最大 loop 间隔超过 `ESP32BASE_HEALTH_LOOP_WARN_MS` 时输出 WARN。
+- `ESP32BASE_HEALTH_LOOP_WARN_MS` 默认 3000ms；高实时性业务可自行降到 1000/2000ms，长操作较多的应用可升到 5000ms。
 - 至少包含一次路由器断电 5 分钟后恢复。
 - 监控 min heap、reset count、loop max period、WiFi 自动重连成功率、NVS pending 积压。
 - 任意意外重启、卡死、heap 持续退化或重连失败均视为不通过。

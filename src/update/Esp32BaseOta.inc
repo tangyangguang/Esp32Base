@@ -20,9 +20,7 @@
 #include "../runtime/Esp32BaseWatchdog.h"
 #endif
 
-#define ESP32BASE_INCLUDE_UPDATE <Update.h>
-#include ESP32BASE_INCLUDE_UPDATE
-#undef ESP32BASE_INCLUDE_UPDATE
+#include <Update.h>
 #include <esp_ota_ops.h>
 #include <mbedtls/sha256.h>
 #if __has_include(<mbedtls/version.h>)

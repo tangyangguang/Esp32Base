@@ -61,6 +61,7 @@
 - WEB 不链接 Update。
 - FS 关闭时 FileLog 不拉入 LittleFS。
 - 关闭 Bus/Fs/Health 不产生静态对象。
+- 外部最小应用仅 `#include <Esp32Base.h>` 并启用 FULL profile 时，不额外声明 framework 内置库也必须编译通过。
 
 ## 6. OTA 检查
 
@@ -135,6 +136,8 @@
 - 读写删文件正常。
 - 二进制读写正常。
 - append 正常。
+- `readBytesAt()` 支持分页读取，文件不存在和 offset 越界返回失败，EOF 短读返回实际长度。
+- `writeBytesAt()` 支持已有文件固定位置覆盖，文件不存在和写越界返回失败，不隐式扩展文件。
 - listDir / mkdir / rmdir 正常。
 - FS 失败不影响 WiFi/Web。
 
@@ -162,6 +165,10 @@
 - Logs clear POST + confirm + once + 303。
 - FS/FileLog 不可用时 Logs 页面显示 unavailable。
 - 日志内容 HTML escape。
+- 默认 Web 首页和导航开箱可用。
+- 业务优先导航可设置 device name、home path、home mode、system nav mode。
+- `addPage()` / `addNavItem()` 注册的业务入口进入业务导航且不重复业务首页入口。
+- 内置 Home/WiFi/OTA/Logs/Reboot 标签可覆盖，用于本地化。
 - 重启按钮二次确认。
 - 自定义路由 begin 前注册。
 - 自定义路由 Web ready 后注册。
@@ -189,7 +196,8 @@
 - ESP32 / ESP32-S3 / ESP32-C3 各一台。
 - 高频 deferred NVS 写入。
 - 周期 Web 状态查询。
-- 周期 health.tick。
+- 周期 `health.tick` bus 事件。
+- Health tick 默认只输出 DEBUG；超过 loop 阈值才输出 WARN。
 - 路由器掉电恢复。
 - 周期读取 Logs 页面。
 - 无意外重启、卡死、heap 持续退化或重连失败。

@@ -98,6 +98,12 @@ OTA 额外要求：
 - `Esp32BaseWeb::addRoute()` 写入静态路由表。
 - Web 启动时把缓存路由注册到 `WebServer`。
 - Web 已 ready 时，新增路由立即注册。
+- `METHOD_ANY` 路由进入应用 handler 前会先建立请求上下文，应用不需要直接访问底层 `WebServer`。
+- handler 内 `Esp32BaseWeb::currentMethod()` 可区分 `METHOD_GET` / `METHOD_POST`；handler 外返回 `METHOD_UNKNOWN`。
+- `addPage()` 注册业务页面并进入业务导航；`addNavItem()` 只注册导航项，不注册路由。
+- `setHomeMode()` 控制 `/` 和 `/esp32base` 的首页模型：基础库首页、业务首页优先或融合首页。
+- `setSystemNavMode()` 控制 WiFi、OTA、Logs、Reboot 等基础功能入口在顶部、底部或底部紧凑系统工具区展示。
+- `setBuiltinLabel()` 可覆盖 Home/WiFi/OTA/Logs/Reboot 标签，用于应用统一本地化。
 
 默认容量：
 
@@ -199,6 +205,83 @@ Esp32BaseWeb::writeHtmlEscaped(text);
 Esp32BaseWeb::sendFooter();
 ```
 
+通用 chunked 响应：
+
+```cpp
+void handleCsvApi() {
+    if (!Esp32BaseWeb::checkAuth()) {
+        return;
+    }
+    if (!Esp32BaseWeb::beginCsv(200, "records.csv")) {
+        return;
+    }
+    Esp32BaseWeb::sendChunk("id,name\r\n");
+    Esp32BaseWeb::sendChunk("1,");
+    Esp32BaseWeb::writeCsvEscaped("zone-a");
+    Esp32BaseWeb::sendChunk("\r\n");
+    Esp32BaseWeb::endResponse();
+}
+```
+
+- `beginResponse(code, contentType, filename)` 可输出 CSV、JSONL、HTML 片段或二进制下载等自定义响应；文本用 `sendChunk()`，二进制块用 `sendBytes()`。
+- `contentType` 必须非空且不超过 63 字节；`filename` 仅允许字母、数字、`.`、`_`、`-`，非法时返回 false。
+- handler 外调用 begin/end chunked 响应会安全失败或 no-op，并记录 WARN。
+- JSON 可继续使用 `sendJson()` 一次性输出，或使用 `beginJson()` / `sendChunk()` / `writeJsonEscaped()` / `endJson()` 分块输出。
+
+业务入口：
+
+```cpp
+Esp32BaseWeb::addPage("/fan", "Fan", handleFanPage);
+Esp32BaseWeb::addPage("/config", "Config", handleConfigPage);
+```
+
+`addPage()` 注册的业务页面进入业务导航；应用必须显式提供短标题。`addApi()` 和低层 `addRoute()` 不进入业务入口列表。
+
+业务优先导航：
+
+```cpp
+Esp32BaseWeb::setDeviceName("Faucet");
+Esp32BaseWeb::setHomePath("/status");
+Esp32BaseWeb::setHomeMode(Esp32BaseWeb::HOME_COMBINED);
+Esp32BaseWeb::setSystemNavMode(Esp32BaseWeb::SYSTEM_NAV_SECTION);
+Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_HOME, "系统");
+Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_WIFI, "网络");
+Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_LOGS, "日志");
+Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_REBOOT, "重启");
+Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_SYSTEM, "系统工具");
+Esp32BaseWeb::addPage("/status", "状态", handleStatusPage);
+Esp32BaseWeb::addPage("/config", "配置", handleConfigPage);
+```
+
+- `HOME_ESP32BASE`：默认模式，`/` 跳转 `/esp32base`，基础库首页可列出业务入口。
+- `HOME_APP`：`/` 和 `/esp32base` 优先跳转业务首页，基础功能通过系统导航入口访问。
+- `HOME_COMBINED`：`/` 跳转业务首页，`/esp32base` 使用同一套导航框架展示设备融合首页。
+- 配置业务首页后，导航品牌链接指向业务首页，业务主导航不会重复显示同一个首页入口。
+- `SYSTEM_NAV_SECTION` 会在页面底部以小字系统入口与 `Free heap` 同行展示；窄屏下系统入口可自然换行，避免遮挡和横向滚动。
+- 基础库页面复用同一套导航框架，业务页和系统页保持一致入口结构。
+
+同一路径 API 分流：
+
+```cpp
+void handleConfigApi() {
+    if (!Esp32BaseWeb::checkAuth()) {
+        return;
+    }
+    if (Esp32BaseWeb::isMethod(Esp32BaseWeb::METHOD_GET)) {
+        Esp32BaseWeb::sendJson(200, "{\"ok\":true}");
+        return;
+    }
+    if (Esp32BaseWeb::isMethod(Esp32BaseWeb::METHOD_POST)) {
+        // save posted config
+        Esp32BaseWeb::redirectSeeOther("/config?saved=1");
+        return;
+    }
+    Esp32BaseWeb::sendText(405, "method not allowed");
+}
+
+Esp32BaseWeb::addRoute("/api/faucet/config", Esp32BaseWeb::METHOD_ANY, handleConfigApi);
+```
+
 ## 8. JSON 输出
 
 必须 escape：
@@ -223,9 +306,13 @@ Esp32BaseWeb::sendFooter();
 
 ```cpp
 Esp32BaseWeb::beginJson(200);
+Esp32BaseWeb::sendChunk("\"name\":\"");
 Esp32BaseWeb::writeJsonEscaped(text);
+Esp32BaseWeb::sendChunk("\"");
 Esp32BaseWeb::endJson();
 ```
+
+`beginJson()` / `endJson()` 输出最外层 `{}`，中间使用 `sendChunk()` 拼接结构、`writeJsonEscaped()` 输出字符串值。
 
 ## 9. WiFi 配网状态机
 

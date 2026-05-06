@@ -10,9 +10,7 @@
 #include "../runtime/Esp32BaseBus.h"
 #endif
 
-#define ESP32BASE_INCLUDE_WIFI <WiFi.h>
-#include ESP32BASE_INCLUDE_WIFI
-#undef ESP32BASE_INCLUDE_WIFI
+#include <WiFi.h>
 #include <string.h>
 
 #ifndef ESP32BASE_WIFI_CONNECT_TIMEOUT_MS

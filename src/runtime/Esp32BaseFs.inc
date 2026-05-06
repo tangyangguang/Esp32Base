@@ -5,9 +5,7 @@
 #include "Esp32BaseFs.h"
 #include "../core/Esp32BaseLog.h"
 
-#define ESP32BASE_INCLUDE_LITTLEFS <LittleFS.h>
-#include ESP32BASE_INCLUDE_LITTLEFS
-#undef ESP32BASE_INCLUDE_LITTLEFS
+#include <LittleFS.h>
 
 namespace {
 bool g_fsReady = false;
@@ -85,6 +83,48 @@ bool Esp32BaseFs::readBytes(const char* path, uint8_t* out, size_t maxLen, size_
 
 bool Esp32BaseFs::appendBytes(const char* path, const uint8_t* data, size_t len) {
     return writeMode(path, data, len, "a");
+}
+
+bool Esp32BaseFs::readBytesAt(const char* path, uint32_t offset, uint8_t* out, size_t maxLen, size_t* readLen) {
+    if (readLen) {
+        *readLen = 0;
+    }
+    if (!g_fsReady || !validPath(path) || !out) {
+        return false;
+    }
+    File file = LittleFS.open(path, "r");
+    if (!file) {
+        return false;
+    }
+    const size_t size = file.size();
+    if (offset > size || !file.seek(offset, SeekSet)) {
+        file.close();
+        return false;
+    }
+    const size_t n = maxLen ? file.read(out, maxLen) : 0;
+    file.close();
+    if (readLen) {
+        *readLen = n;
+    }
+    return true;
+}
+
+bool Esp32BaseFs::writeBytesAt(const char* path, uint32_t offset, const uint8_t* data, size_t len) {
+    if (!g_fsReady || !validPath(path) || (!data && len > 0)) {
+        return false;
+    }
+    File file = LittleFS.open(path, "r+");
+    if (!file) {
+        return false;
+    }
+    const size_t size = file.size();
+    if (offset > size || len > size - offset || !file.seek(offset, SeekSet)) {
+        file.close();
+        return false;
+    }
+    const size_t written = len ? file.write(data, len) : 0;
+    file.close();
+    return written == len;
 }
 
 bool Esp32BaseFs::removeFile(const char* path) {

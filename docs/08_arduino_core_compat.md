@@ -166,6 +166,10 @@ platformio run -d examples/basic -e esp32_full_arduino3 -j 1
 platformio run -d examples/basic -e esp32_core_arduino3 -j 1
 ```
 
+外部应用通过 `lib_deps = file:///.../Esp32Base` 引用本库时，FULL / FS / Web / OTA profile 必须能由本库自行触发 PlatformIO LDF 发现 Arduino ESP32 内置库，不要求业务代码额外 include `LittleFS.h`、`WiFi.h`、`WebServer.h` 或 `Update.h`。
+
+本库的可选实现文件使用直接 framework include 给 LDF 提供依赖线索。PlatformIO 可能会为 CORE 外部应用构建一些未链接的 framework archive；裁剪验收以最终 ELF/map 是否链接 WiFi/WebServer/Update/LittleFS 符号为准。
+
 如需同时验证 Core 2.x 与 Core 3.x，记录首次失败时应区分：
 
 - 编译、链接、符号或 API 错误：按源码兼容问题处理。
