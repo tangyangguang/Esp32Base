@@ -183,7 +183,7 @@ Logs 页面：
 - FS/FileLog 不可用时显示 `File log: unavailable`。
 - 读取日志内容前必须调用 `Esp32BaseFileLog::flush()`。
 - 显示 enabled、path、file level、rotate files、buffer used/total、flush interval、max per file、max total、每段大小。
-- 页面顶部以标签展示所有 segment，顺序为 `current-0`、`history-1`、`history-2` 到最旧 history。
+- 页面顶部以标签展示所有 segment，顺序为 `current-0`、`history-1`、`history-2` 到最旧 history；标签里的大小只显示 KB/MB/B 人性化值，不重复 raw bytes。
 - 默认显示 `current-0`；可通过 `?segment=N` 查看单个历史文件，非法或越界 segment 回落到 `current-0`。
 - 日志内容必须 HTML escape。
 - 清空日志只接受 POST，表单使用 `confirm()` 和 `once(form)`，成功后 303 redirect。

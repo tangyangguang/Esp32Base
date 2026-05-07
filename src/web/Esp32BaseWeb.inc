@@ -1219,7 +1219,7 @@ void sendLogSegmentTabs(uint8_t selected) {
     sendChunk("<div class='tabs'>");
     for (uint8_t i = 0; i < Esp32BaseFileLog::rotateFiles(); ++i) {
         logSegmentTitle(i, title, sizeof(title));
-        Esp32BaseLog::formatBytes(Esp32BaseFileLog::segmentSize(i), sizeBuf, sizeof(sizeBuf));
+        formatReadableBytes(Esp32BaseFileLog::segmentSize(i), sizeBuf, sizeof(sizeBuf));
         snprintf(line, sizeof(line), "<a%s href='/esp32base/logs?segment=%u'>",
                  i == selected ? " class='active'" : "",
                  static_cast<unsigned>(i));
