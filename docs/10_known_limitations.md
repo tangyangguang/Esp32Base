@@ -6,7 +6,7 @@
 
 - Web 使用 HTTP Basic Auth，不提供 HTTPS。
 - Basic Auth 明文传输，只用于降低误操作风险，不抵御同一局域网内的嗅探、MITM 或主动攻击。
-- Web Auth 密码不在日志、HTML、JSON 或 API 响应中明文输出；持久化时只保存 salted SHA-256 摘要。
+- Web Auth 密码不在 HTML、JSON 或 API 响应中明文输出；持久化时只保存 salted SHA-256 摘要；`INFO` 日志会明文输出 Web 用户名和密码。
 - OTA 只提供上传认证和 SHA256 完整性校验，不提供固件加密、签名信任链或差分升级。
 - OTA 与 Web Auth 配置解耦；关闭 Web Auth 时 OTA 仍可访问，但没有密码保护，风险由应用和用户自行承担。
 - Web 配置页面在用户通过 Basic Auth 后会回显当前 WiFi 密码，这是运维查看当前配置所需。该回显与日志的 INFO 级密码屏蔽策略分别考虑；生产固件应避免在公共网络环境下打开配置页。
@@ -76,8 +76,8 @@
 
 - Core Log 只输出 Serial 和可选 sink callback，不依赖 FS。
 - 文件日志由 Runtime/FS 的 `Esp32BaseFileLog` 提供；CORE 和默认 NET 不具备文件日志能力。
-- `DEBUG` / `VERBOSE` 级别允许明文输出 WiFi 密码和 Web 密码，用于现场调试。
-- `INFO` 及以下不输出明文密码。
+- `INFO` 日志明文输出 WiFi 名称/密码和 Web Auth 用户名/密码，用于业务接入和现场调试。
+- 日志访问权限由应用和部署环境控制。
 - 用户 sink callback 同步执行，不得长时间阻塞。
 
 ## 11. 发布后演进边界

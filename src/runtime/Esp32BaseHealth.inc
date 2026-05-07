@@ -13,14 +13,17 @@ namespace {
 bool g_healthReady = false;
 uint32_t g_healthLastHandleMs = 0;
 uint32_t g_healthLastTickMs = 0;
+uint32_t g_healthLastDebugLogMs = 0;
 uint32_t g_healthLoopPeriodMaxMs = 0;
 uint32_t g_healthTickLoopPeriodMaxMs = 0;
+uint32_t g_healthDebugLoopPeriodMaxMs = 0;
 }
 
 bool Esp32BaseHealth::begin() {
     g_healthReady = true;
     g_healthLastHandleMs = millis();
     g_healthLastTickMs = g_healthLastHandleMs;
+    g_healthLastDebugLogMs = g_healthLastHandleMs;
     return true;
 }
 
@@ -44,7 +47,16 @@ void Esp32BaseHealth::handle() {
                             static_cast<unsigned long>(g_healthTickLoopPeriodMaxMs),
                             static_cast<unsigned long>(ESP32BASE_HEALTH_LOOP_WARN_MS));
         } else {
-            ESP32BASE_LOG_D("health", "tick loopMax=%lu ms", static_cast<unsigned long>(g_healthTickLoopPeriodMaxMs));
+            if (g_healthTickLoopPeriodMaxMs > g_healthDebugLoopPeriodMaxMs) {
+                g_healthDebugLoopPeriodMaxMs = g_healthTickLoopPeriodMaxMs;
+            }
+#if ESP32BASE_HEALTH_DEBUG_LOG_INTERVAL_MS > 0
+            if (now - g_healthLastDebugLogMs >= ESP32BASE_HEALTH_DEBUG_LOG_INTERVAL_MS) {
+                g_healthLastDebugLogMs = now;
+                ESP32BASE_LOG_D("health", "tick loopMax=%lu ms", static_cast<unsigned long>(g_healthDebugLoopPeriodMaxMs));
+                g_healthDebugLoopPeriodMaxMs = 0;
+            }
+#endif
         }
         g_healthTickLoopPeriodMaxMs = 0;
 #if ESP32BASE_ENABLE_BUS

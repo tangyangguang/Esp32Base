@@ -137,7 +137,7 @@ public:
 - message 按调用方传入内容输出，不规整 CR/LF；需要单行日志时由调用方传入单行 message。
 - 大数字字节数必须使用人性化显示，例如 `1048576 bytes (1.00 MB)`；Web 页面与 JSON 中同样遵守该规则。
 - `formatBytes()` 采用二进制单位，`1 KB = 1024 bytes`，`1 MB = 1024 KB`。
-- WiFi 密码、Web 密码等敏感配置允许在 `DEBUG` 或 `VERBOSE` 级别明文输出，便于现场调试；`INFO` 及以下不输出明文密码。
+- WiFi 名称/密码、Web Auth 用户名/密码在 `INFO` 日志中明文输出，这是本库用于业务接入和现场调试的设计。
 - sink callback 在日志调用现场同步执行，用户 sink 不得长时间阻塞。
 
 ### 3.4 Esp32BaseFileLog
@@ -359,7 +359,7 @@ WiFi 凭证和重连策略：
 - 只有显式 `clearCredentials()`、`startConfigPortal()` 或应用自定义策略，才能进入 AP/config portal。
 - `clearCredentials()` 只清空库管理的 WiFi 凭证，不立即触发重连、断线或 portal。
 - `connect(..., persist=true)` 必须先同步写入 NVS 保存凭证，写入失败时返回 false 且不切换连接；这是显式配置提交的可靠性取舍，避免页面提交后立即重启导致新凭证丢失。
-- `DEBUG/VERBOSE` 日志允许明文输出 SSID 和密码。
+- `INFO` 日志明文输出 SSID 和密码，便于业务接入和现场调试。
 - 进入 deep sleep 后 STA、AP、DNS、Web 均不可用；唤醒相当于新一轮启动，按凭证状态恢复网络。
 - 默认无限重试，`FAILED` 状态在默认配置下不出现。
 - 仅当应用显式设置有限 maxRetries 且全部用尽，才进入 `FAILED`。
@@ -521,11 +521,11 @@ Route 缓冲机制：
 - `/esp32base/auth` 是内置认证管理页面，受当前 Basic Auth 保护，提交成功后新账号密码立即生效。
 - Web Auth 认证优先级为：已保存认证 > 应用默认认证 > 库默认 `admin/admin`。
 - `setDefaultAuth(user, pass)` 设置应用默认认证；如果用户已保存认证，不会覆盖已保存认证。
-- `authUser()` 只返回当前用户名，不提供读取密码 API。
+- `authUser()` 只返回当前用户名，不提供读取密码 API；已保存认证的明文密码不会持久化。
 - `verifyAuth(user, pass)` 校验显式传入的账号密码；无参 `verifyAuth()` 仍表示当前请求是否已认证。
 - `saveAuth(user, pass)` 保存 Web Auth 到 `eb_web.auth_user`、`eb_web.auth_salt`、`eb_web.auth_hash`，并立即切换为新认证。
 - `resetAuth()` 清除 `eb_web` 持久化 Auth，并恢复应用默认认证；没有应用默认认证时恢复库默认 `admin/admin`。
-- Web Auth 密码不保存明文，不输出到日志、HTML、JSON 或 API 响应；日志只记录安全审计信息。
+- Web Auth 密码不保存明文，不输出到 HTML、JSON 或 API 响应；`INFO` 日志明文输出 Web 用户名和密码，便于业务接入和现场调试。
 - `METHOD_ANY` 用于同一路径 GET/POST 复用；应用 handler 内可用 `currentMethod()`、`isMethod()` 或 `currentMethodName()` 判断当前请求方法。
 - `currentMethod()` 仅在 handler 上下文中返回实际方法：GET 为 `METHOD_GET`，POST 为 `METHOD_POST`；handler 外或未知方法返回 `METHOD_UNKNOWN`。
 - `isMethod(METHOD_ANY)` 在有效 handler 请求中返回 true；`METHOD_ANY` 不作为实际请求方法返回。
@@ -692,7 +692,8 @@ Health 仅负责周期性采样、loop 周期统计和发布 `health.tick` 事�
 Health tick 日志策略：
 
 - 每个 tick 窗口内统计一次最大 loop 间隔。
-- 未超过 `ESP32BASE_HEALTH_LOOP_WARN_MS` 时，以 DEBUG 输出 `tick loopMax=...`。
+- 未超过 `ESP32BASE_HEALTH_LOOP_WARN_MS` 时，默认每 30 分钟以 DEBUG 输出一次 `tick loopMax=...`，其中 `loopMax` 是这段 DEBUG 日志周期内普通 tick 窗口的最大值。
 - 超过阈值时，以 WARN 输出 `loop_slow loopMax=... threshold=...`。
 - 默认 WARN 阈值为 3000ms，避免普通 Web 请求造成健康日志刷屏，同时能及时暴露明显卡顿；业务项目可按控制实时性要求覆盖为 1000/2000/5000ms。
+- `ESP32BASE_HEALTH_DEBUG_LOG_INTERVAL_MS` 默认 1800000ms；设为 0 可关闭普通 DEBUG tick 日志，不影响 WARN 慢循环日志。
 - `loopPeriodMaxMs()` 仍返回启动以来最大 loop 间隔，不随 tick 窗口清零。

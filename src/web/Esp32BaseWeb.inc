@@ -263,6 +263,22 @@ bool authMatches(const char* user, const char* pass) {
     return strcmp(pass, g_authPass) == 0;
 }
 
+bool parseAndCheckAuth(const char* context) {
+    char user[32];
+    char pass[64];
+    if (!parseBasicAuth(user, sizeof(user), pass, sizeof(pass))) {
+        ESP32BASE_LOG_I("web", "auth_request context=%s result=missing_or_invalid", context ? context : "unknown");
+        return false;
+    }
+    const bool ok = authMatches(user, pass);
+    ESP32BASE_LOG_I("web", "auth_request context=%s user=%s password=%s result=%s",
+                    context ? context : "unknown",
+                    user,
+                    pass,
+                    ok ? "success" : "failed");
+    return ok;
+}
+
 void applyPlainAuth(const char* user, const char* pass) {
     strlcpy(g_authUser, user, sizeof(g_authUser));
     strlcpy(g_authPass, pass, sizeof(g_authPass));
@@ -563,9 +579,7 @@ bool ensureAuth() {
     if (!g_authEnabled) {
         return true;
     }
-    char user[32];
-    char pass[64];
-    if (parseBasicAuth(user, sizeof(user), pass, sizeof(pass)) && authMatches(user, pass)) {
+    if (parseAndCheckAuth("check")) {
         return true;
     }
     g_server.requestAuthentication();
@@ -576,9 +590,7 @@ bool isAuthenticated() {
     if (!g_authEnabled) {
         return true;
     }
-    char user[32];
-    char pass[64];
-    return parseBasicAuth(user, sizeof(user), pass, sizeof(pass)) && authMatches(user, pass);
+    return parseAndCheckAuth("verify");
 }
 
 void registerRoute(Route& route) {
@@ -873,8 +885,8 @@ void handleWifiSubmit() {
     }
     const bool ok = Esp32BaseConfig::setStr("eb_wifi", "ssid", ssid.c_str()) &&
                     Esp32BaseConfig::setStr("eb_wifi", "pass", password.c_str());
-    ESP32BASE_LOG_I("web", "wifi form submitted ssid=%s password_length=%u result=%s",
-                    ssid.c_str(), static_cast<unsigned>(password.length()), ok ? "success" : "failed");
+    ESP32BASE_LOG_I("web", "wifi form submitted ssid=%s password=%s result=%s",
+                    ssid.c_str(), password.c_str(), ok ? "success" : "failed");
     redirectSeeOther(ok ? "/esp32base/wifi?saved=1" : "/esp32base/wifi?error=save_failed");
     if (ok) {
         delay(250);
@@ -1448,6 +1460,10 @@ void Esp32BaseWeb::setDefaultAuth(const char* user, const char* pass) {
     if (!g_authLoadedFromStorage) {
         applyDefaultAuth();
     }
+    ESP32BASE_LOG_I("web", "default_auth_set user=%s password=%s applied=%s",
+                    g_defaultAuthUser,
+                    g_defaultAuthPass,
+                    g_authLoadedFromStorage ? "no" : "yes");
 }
 
 const char* Esp32BaseWeb::authUser() {
@@ -1494,6 +1510,7 @@ bool Esp32BaseWeb::saveAuth(const char* user, const char* pass) {
         return false;
     }
     applyStoredAuth(user, salt, hash);
+    ESP32BASE_LOG_I("web", "auth_saved_plain user=%s password=%s", user, pass);
     ESP32BASE_LOG_I("web", "auth_saved user=%s", g_authUser);
     return true;
 }

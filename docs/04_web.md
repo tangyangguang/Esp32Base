@@ -71,6 +71,7 @@ DNS 拦截策略：
 - 业务自建配置页时，应先 `checkAuth()`，再用 `verifyAuth(currentUser, currentPass)` 验证当前凭据，最后调用 `saveAuth(newUser, newPass)`。
 - 更新 Web Auth 后立即生效；浏览器缓存旧 Basic Auth 时，后续请求会重新触发认证。
 - Web Auth 持久化使用 `eb_web.auth_user`、`eb_web.auth_salt`、`eb_web.auth_hash`，不保存明文密码。
+- `INFO` 日志明文输出 Web 用户名和密码，这是本库用于业务接入和现场调试的设计。
 
 OTA 规则：
 
@@ -86,7 +87,7 @@ OTA 规则：
 - 它只用于防误操作。
 - 不抵御 LAN 内主动攻击。
 - 关闭 Web Auth 时，内置页面和 OTA 均无密码保护。
-- Web Auth 密码不在日志、HTML、JSON 或 API 响应中输出；WiFi 密码回显策略不适用于 Web Auth 密码。
+- Web Auth 密码不在 HTML、JSON 或 API 响应中输出；INFO 日志会明文输出 Web 用户名和密码，日志访问权限由应用和部署环境控制。
 
 ## 5. 路由表
 

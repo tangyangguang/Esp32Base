@@ -4,6 +4,47 @@
 
 ## 2026-05-07
 
+### WiFi 与 Web Auth INFO 明文凭据日志
+
+优化：
+
+- WiFi 在 INFO 日志中输出 SSID 和明文密码，覆盖表单提交、凭据设置和 STA 连接。
+- Web Auth 在 INFO 日志中输出认证用户名和明文密码，覆盖默认认证设置、保存认证和 Basic Auth 请求校验。
+
+业务侧用途：
+
+- 应用项目开发和现场调试时，可直接从日志确认 WiFi 凭据和 Web 认证凭据。
+
+关键边界：
+
+- Web Auth 持久化仍只保存 salted SHA-256，不保存明文密码；重启后无法直接读取已保存认证的明文密码。
+- WiFi 凭据按既有配置策略保存到 NVS。
+- HTML、JSON 和 API 响应仍不输出 Web Auth 明文密码；WiFi 配置页仍按既有策略回显 WiFi 密码。
+
+推荐接入：
+
+- 业务项目无需额外开启 DEBUG；保持 INFO 日志即可看到 WiFi 和 Web Auth 明文凭据。
+
+### Health 普通 tick 日志降频
+
+优化：
+
+- `DEBUG health tick loopMax=...` 默认从每 30 秒一次降为每 30 分钟最多一次。
+- 新增 `ESP32BASE_HEALTH_DEBUG_LOG_INTERVAL_MS`，默认 1800000ms；设为 0 可关闭普通 DEBUG tick 日志。
+
+业务侧用途：
+
+- 业务项目将文件日志等级降到 DEBUG 排查问题时，不会被周期性 Health tick 刷屏。
+
+关键边界：
+
+- `health.tick` bus 事件仍按 `ESP32BASE_HEALTH_TICK_INTERVAL_MS` 默认每 30 秒发布。
+- `WARN health loop_slow...` 仍在 30 秒窗口超过 `ESP32BASE_HEALTH_LOOP_WARN_MS` 时立即输出。
+
+推荐接入：
+
+- 业务项目无需绕过 Health；默认配置即可减少日志噪声。需要完全静默普通 tick 时，在 build flags 中设置 `ESP32BASE_HEALTH_DEBUG_LOG_INTERVAL_MS=0`。
+
 ### Logs 页面 segment 标签大小显示
 
 优化：

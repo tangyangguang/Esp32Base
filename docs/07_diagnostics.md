@@ -187,9 +187,10 @@ CI 应覆盖核心矩阵，release 前执行完整矩阵。
 - 每秒 1 次 NVS deferred 写。
 - 每 10 分钟 1 次 Web 状态查询。
 - 每 30 秒 1 次 `health.tick` bus 事件。
-- Health tick 未超过 loop 阈值时只输出 DEBUG 日志，不污染 INFO 文件日志。
+- Health tick 未超过 loop 阈值时，默认每 30 分钟最多输出 1 条 DEBUG 日志，不污染 INFO 文件日志，也避免 DEBUG 文件日志刷屏。
 - Health tick 窗口内最大 loop 间隔超过 `ESP32BASE_HEALTH_LOOP_WARN_MS` 时输出 WARN。
 - `ESP32BASE_HEALTH_LOOP_WARN_MS` 默认 3000ms；高实时性业务可自行降到 1000/2000ms，长操作较多的应用可升到 5000ms。
+- `ESP32BASE_HEALTH_DEBUG_LOG_INTERVAL_MS` 默认 1800000ms；设为 0 可关闭普通 DEBUG tick 日志。
 - 至少包含一次路由器断电 5 分钟后恢复。
 - 监控 min heap、reset count、loop max period、WiFi 自动重连成功率、NVS pending 积压。
 - 任意意外重启、卡死、heap 持续退化或重连失败均视为不通过。
@@ -228,7 +229,7 @@ CI 应覆盖核心矩阵，release 前执行完整矩阵。
 - NTP 对时成功后输出实际时间、当前 uptime、推算 boot wall time。
 - WiFi 连接、断开、重连 backoff、进入/退出 config portal 都必须有清晰日志。
 - 文件日志默认 WARN，现场调试示例可设为 INFO。
-- `DEBUG/VERBOSE` 级别可明文输出密码，`INFO` 及以下不输出明文密码。
+- `INFO` 日志明文输出 WiFi 名称/密码和 Web Auth 用户名/密码，便于业务接入和现场调试。
 
 ## 6. 运行诊断
 
@@ -250,6 +251,7 @@ Health 模块记录：
 
 ```cpp
 ESP32BASE_HEALTH_TICK_INTERVAL_MS=30000
+ESP32BASE_HEALTH_DEBUG_LOG_INTERVAL_MS=1800000
 ```
 
 ## 7. 故障诊断
