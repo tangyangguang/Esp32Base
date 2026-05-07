@@ -157,14 +157,20 @@ bool Esp32BaseFs::listDir(const char* path, ListCallback cb, void* user) {
         return false;
     }
     File root = LittleFS.open(path);
-    if (!root || !root.isDirectory()) {
+    if (!root) {
+        return false;
+    }
+    if (!root.isDirectory()) {
+        root.close();
         return false;
     }
     File file = root.openNextFile();
     while (file) {
         cb(file.name(), file.size(), file.isDirectory(), user);
+        file.close();
         file = root.openNextFile();
     }
+    root.close();
     return true;
 }
 

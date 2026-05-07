@@ -9,6 +9,8 @@
 #include <string.h>
 
 namespace {
+constexpr size_t CONFIG_STRING_MAX_VISIBLE_LEN = 3999;
+
 enum PendingType : uint8_t {
     PENDING_EMPTY = 0,
     PENDING_INT,
@@ -31,6 +33,7 @@ bool g_paused = false;
 bool g_auditEnabled = false;
 bool g_readAuditEnabled = false;
 PendingItem g_pending[ESP32BASE_CONFIG_PENDING_MAX];
+char g_stringScratch[CONFIG_STRING_MAX_VISIBLE_LEN + 1];
 
 bool validName(const char* value) {
     if (!value) {
@@ -48,6 +51,47 @@ bool namespaceExists(const char* ns) {
         return true;
     }
     return false;
+}
+
+bool readStoredString(const char* ns, const char* key, char* out, size_t len, bool* found) {
+    if (found) {
+        *found = false;
+    }
+    if (!out || len == 0) {
+        return false;
+    }
+    out[0] = '\0';
+
+    nvs_handle_t handle = 0;
+    const esp_err_t openErr = nvs_open(ns, NVS_READONLY, &handle);
+    if (openErr == ESP_ERR_NVS_NOT_FOUND) {
+        return true;
+    }
+    if (openErr != ESP_OK) {
+        return false;
+    }
+
+    size_t required = 0;
+    esp_err_t err = nvs_get_str(handle, key, nullptr, &required);
+    if (err == ESP_ERR_NVS_NOT_FOUND) {
+        nvs_close(handle);
+        return true;
+    }
+    if (err != ESP_OK || required == 0 || required > len) {
+        nvs_close(handle);
+        return false;
+    }
+
+    err = nvs_get_str(handle, key, out, &required);
+    nvs_close(handle);
+    if (err != ESP_OK) {
+        out[0] = '\0';
+        return false;
+    }
+    if (found) {
+        *found = true;
+    }
+    return true;
 }
 
 int findPending(const char* ns, const char* key) {
@@ -163,22 +207,22 @@ bool Esp32BaseConfig::isReady() {
 }
 
 bool Esp32BaseConfig::setStr(const char* ns, const char* key, const char* value) {
-    if (!validName(ns) || !validName(key) || !value || strlen(value) > 3999) {
+    if (!validName(ns) || !validName(key) || !value || strlen(value) > CONFIG_STRING_MAX_VISIBLE_LEN) {
         return false;
     }
-    Preferences prefs;
-    if (!prefs.begin(ns, false)) {
-        return false;
-    }
-    const bool hadOld = prefs.isKey(key);
-    const String oldValue = hadOld ? prefs.getString(key, "") : String();
-    if (hadOld && oldValue == value) {
-        prefs.end();
+    bool hadOld = false;
+    const bool readOk = readStoredString(ns, key, g_stringScratch, sizeof(g_stringScratch), &hadOld);
+    if (readOk && hadOld && strcmp(g_stringScratch, value) == 0) {
         if (g_auditEnabled) {
             ESP32BASE_LOG_I("config", "audit op=setStr ns=%s key=%s changed=no result=skipped", ns, key);
         }
         clearPendingKey(ns, key);
         return true;
+    }
+
+    Preferences prefs;
+    if (!prefs.begin(ns, false)) {
+        return false;
     }
     const size_t written = prefs.putString(key, value);
     const bool ok = value[0] == '\0' ? prefs.isKey(key) : written > 0;
@@ -203,20 +247,16 @@ bool Esp32BaseConfig::getStr(const char* ns, const char* key, char* out, size_t 
         return true;
     }
 
-    if (!namespaceExists(ns)) {
+    bool found = false;
+    if (!readStoredString(ns, key, g_stringScratch, sizeof(g_stringScratch), &found)) {
         esp32base_internal::copySafe(out, len, def ? def : "");
         return false;
     }
-
-    Preferences prefs;
-    if (!prefs.begin(ns, true)) {
+    if (found) {
+        esp32base_internal::copySafe(out, len, g_stringScratch);
+    } else {
         esp32base_internal::copySafe(out, len, def ? def : "");
-        return false;
     }
-    const bool found = prefs.isKey(key);
-    const String value = found ? prefs.getString(key, def ? def : "") : String(def ? def : "");
-    prefs.end();
-    esp32base_internal::copySafe(out, len, value.c_str());
     if (g_readAuditEnabled) {
         ESP32BASE_LOG_I("config", "audit op=getStr ns=%s key=%s found=%s value=%s", ns, key, found ? "yes" : "no", out);
     }
@@ -457,6 +497,7 @@ bool Esp32BaseConfig::clearLibraryNamespaces() {
     ok = clearNamespace("eb_wifi") && ok;
     ok = clearNamespace("eb_sys") && ok;
     ok = clearNamespace("eb_log") && ok;
+    ok = clearNamespace("eb_web") && ok;
     return ok;
 }
 

@@ -11,6 +11,10 @@
 #define ESP32BASE_NTP_DAYLIGHT_OFFSET_SEC 0L
 #endif
 
+#ifndef ESP32BASE_NTP_SYNC_MIN_EPOCH
+#define ESP32BASE_NTP_SYNC_MIN_EPOCH 1700000000UL
+#endif
+
 class Esp32BaseNtp {
 public:
     static bool begin();

@@ -82,7 +82,8 @@
 - 有凭证但连接失败时保持 STA，不自动开 AP。
 - 提交新 WiFi 凭证必须同步保存；保存失败不切换 STA。
 - INFO 日志不输出明文密码；DEBUG/VERBOSE 可用于现场调试。
-- OTA route 只有应用显式 `setAuth()` 后才注册；未授权不得调用 `Update.begin()`。
+- OTA route 按 profile/OTA 编译条件注册，不依赖应用是否设置默认认证。
+- Web Auth 开启时 OTA 复用 Basic Auth，未授权不得调用 `Update.begin()`；Web Auth 关闭时 OTA 无密码保护。
 - 提供 SHA256 时必须先校验通过，再调用 `Update.end(true)`。
 - OTA 上传期间暂停普通 deferred flush，移除/恢复 Task WDT，关闭/恢复 WiFi power save。
 - OTA success 必须通过 `Esp32BaseSystem::restart("ota success")` 重启。

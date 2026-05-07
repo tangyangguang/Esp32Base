@@ -198,6 +198,7 @@ CI 应覆盖核心矩阵，release 前执行完整矩阵。
 
 启动日志必须包含：
 
+- boot session 计数。
 - profile。
 - enabled modules。
 - firmware info。
@@ -215,9 +216,14 @@ CI 应覆盖核心矩阵，release 前执行完整矩阵。
 
 日志要求：
 
+- FileLog 初始化后必须输出 boot session 诊断块，使用 `boot` tag，包含 `boot_count`、reset/wake reason 及中文说明、固件、版本、build、profile、hostname、heap、flash；字段必须拆成多条短日志，避免单行超过日志缓冲导致截断。
+- `boot_count` 是 `uint32_t` 启动会话计数，上电、手动复位、`ESP.restart()`、Watchdog、OTA 重启、deep sleep 唤醒都计入；不能把它解释为单纯上电次数。
+- `reset_reason` 表示本次复位/启动来源；`wake_reason` 仅表示 sleep 唤醒来源，普通上电或普通复位时为 `undefined` 是正常状态；`reset_desc` / `wake_desc` 输出中文简明解释。
+- restart/deep sleep 生命周期 reason 仍由 `Esp32BaseSystem::appendRestartLog()` / `restartLogCount()` 记录，与 `boot_count` 分开看。
 - 启动日志按 begin 顺序输出，便于定位失败模块。
 - NTP 对时前日志时间戳使用启动后毫秒数，例如 `[42442]`；对时后切换为绝对日期时间。
 - NTP 默认按 UTC+8 输出本地时间，应用可通过 `ESP32BASE_NTP_GMT_OFFSET_SEC` / `ESP32BASE_NTP_DAYLIGHT_OFFSET_SEC` 覆盖。
+- NTP 同步判断默认要求 epoch >= `ESP32BASE_NTP_SYNC_MIN_EPOCH`，默认值为 `1700000000UL`。
 - 字节数同时显示 raw bytes 与 KB/MB。
 - NTP 对时成功后输出实际时间、当前 uptime、推算 boot wall time。
 - WiFi 连接、断开、重连 backoff、进入/退出 config portal 都必须有清晰日志。

@@ -6,7 +6,7 @@ OTA 是 FULL profile 的核心能力，必须按量产可靠性设计。
 
 OTA 不只是 Web 上传文件，还包括：
 
-- 认证。
+- 复用 Web Auth。
 - SHA256。
 - Watchdog 联动。
 - Config deferred flush pause。
@@ -19,16 +19,11 @@ OTA 依赖：
 
 - WiFi connected。
 - Web ready。
-- Web Auth enabled。
-- 应用显式调用过 `Esp32BaseWeb::setAuth()`。
 
-如果未显式设置 auth：
+OTA route 按 profile/OTA 编译条件注册，不依赖应用是否设置默认认证，也不依赖 Web Auth 是否开启。
 
-- OTA route 不注册。
-- 输出 error。
-- `/esp32base/ota` 不可用。
-
-OTA 上传页不再叠加第二套认证，只复用 Web Basic Auth。
+- Web Auth 开启时，OTA 页面和上传接口复用 Web Basic Auth。
+- Web Auth 关闭时，OTA 页面和上传接口不要求认证，风险由应用和用户自行承担。
 
 ## 3. 状态机
 
@@ -218,8 +213,8 @@ ESP32BASE_OTA_MARK_VALID_TIMEOUT_MS=30000
 
 ## 11. 必测场景
 
-- 未授权上传，不调用 `Update.begin()`。
-- 未调用 `setAuth()`，OTA route 不注册。
+- Web Auth 开启时，未授权上传不调用 `Update.begin()`。
+- Web Auth 关闭时，OTA route 仍可访问。
 - SHA256 错误，上传失败且不切换分区。
 - OTA 中途断电 30% / 70% / 99%。
 - OTA 后未 mark valid，确认回滚。

@@ -134,6 +134,7 @@ public:
 
 - 输出应按启动顺序、状态迁移顺序和错误链路组织，方便串口观察系统正在做什么。
 - 默认格式包含 uptime、level、tag、message；对齐和间隔应保持稳定，便于人工扫描。
+- message 按调用方传入内容输出，不规整 CR/LF；需要单行日志时由调用方传入单行 message。
 - 大数字字节数必须使用人性化显示，例如 `1048576 bytes (1.00 MB)`；Web 页面与 JSON 中同样遵守该规则。
 - `formatBytes()` 采用二进制单位，`1 KB = 1024 bytes`，`1 MB = 1024 KB`。
 - WiFi 密码、Web 密码等敏感配置允许在 `DEBUG` 或 `VERBOSE` 级别明文输出，便于现场调试；`INFO` 及以下不输出明文密码。
@@ -177,7 +178,7 @@ public:
 - key 长度 `1..15`。
 - string value 可见内容长度不超过 3999 字节。
 - 库内部 namespace 全部使用 `eb_` 前缀，例如 `eb_wifi`、`eb_sys`、`eb_log`。
-- namespace 已表达库和模块归属，key 不重复模块前缀，例如 `eb_wifi.ssid`、`eb_wifi.pass`、`eb_sys.rst_cnt`、`eb_sys.wdt_cnt`、`eb_log.en`、`eb_log.path`、`eb_log.max`、`eb_log.files`、`eb_log.level`。
+- namespace 已表达库和模块归属，key 不重复模块前缀，例如 `eb_wifi.ssid`、`eb_wifi.pass`、`eb_sys.rst_cnt`、`eb_sys.wdt_cnt`、`eb_log.en`、`eb_log.path`、`eb_log.max`、`eb_log.files`、`eb_log.level`、`eb_web.auth_user`、`eb_web.auth_salt`、`eb_web.auth_hash`。
 - 应用不得使用 `eb_` 前缀，避免被库维护 API 清理。
 
 建议 API：
@@ -226,6 +227,7 @@ deferred 语义：
 - `getXxx()` 必须先查 pending 队列，未命中再读 NVS，因此 set 后立即 get 总是返回最新值。
 - `getStr()` 找不到 key 时返回 false，并把默认值写入输出缓冲；`getInt()` / `getBool()` 找不到 key 时返回默认值。
 - NVS 读取必须先判断 key 是否存在，避免 Arduino `Preferences` 在缺 key 时输出底层 `NOT_FOUND` 噪音。
+- 字符串读取和写前比较使用固定 scratch buffer，不使用 Arduino `String` 拼接或读取，减少配置高频读取造成的 heap 碎片风险。
 - 同一 namespace/key 的 pending 写入会合并为最新值，不重复占用多条 pending。
 - OTA 上传期间只暂停 deferred flush；`getXxx()`、`pendingCount()`、`flushAll()` 和 `clearLibraryNamespaces()` 仍按各自语义工作。
 - `clearLibraryNamespaces()` 只清理库内部 `eb_` 前缀 namespace，不清理业务 namespace。
@@ -247,9 +249,12 @@ public:
     static uint32_t totalHeap();
     static uint32_t flashSize();
     static uint32_t uptimeMs();
+    static uint32_t bootCount();
 
     static const char* resetReason();
+    static const char* resetReasonText();
     static const char* wakeReason();
+    static const char* wakeReasonText();
 
     static void restart(const char* reason);
 
@@ -257,6 +262,12 @@ public:
     static uint8_t restartLogCount();
 };
 ```
+
+`bootCount()` 返回无符号启动会话计数，存储在 `eb_sys.boot_cnt`，使用 `uint32_t` 语义每次固件启动加 1。上电、手动复位、`ESP.restart()`、Watchdog、OTA 重启、deep sleep 唤醒都会计入；具体启动原因通过 `resetReason()` / `wakeReason()` 判断。
+
+`resetReason()` 表示芯片本次为什么复位或重新启动，例如 `poweron`、`software`、`task_wdt`、`deep_sleep`。`resetReasonText()` 返回对应中文说明，例如 `上电启动`、`软件重启`、`看门狗复位`。
+
+`wakeReason()` 只表示从 sleep 唤醒的来源，例如 `timer`、`ext0`、`gpio`；普通上电或普通复位没有 sleep 唤醒来源，因此返回 `undefined` 是正常状态。`wakeReasonText()` 返回对应中文说明，其中 `undefined` 对应 `非睡眠唤醒`。
 
 `restartLogCount()` 返回库维护的重启/休眠生命周期日志计数，存储在 `eb_sys.rst_cnt`，最大饱和为 255。库内部保留最近 4 条 reason 作为诊断环。
 
@@ -269,6 +280,7 @@ public:
 - `publish()` 只能在 Arduino loop 任务调用。
 - `begin()` 记录 loop task handle。
 - `publish()` 检查当前 task，不匹配则返回 false；开启 `ESP32BASE_BUS_STRICT_TASK_CHECK=1` 时 assert。
+- `publish()` 先快照本次匹配的订阅者，再调用 callback；callback 中允许 `unsubscribe()`，已取消的后续订阅不会在本次 publish 中继续收到事件，新订阅不会收到当前正在发布的事件。
 
 事件常量规则：
 
@@ -387,6 +399,8 @@ public:
 
 NTP 默认使用 UTC+8，即 `ESP32BASE_NTP_GMT_OFFSET_SEC=(8L * 3600L)`、`ESP32BASE_NTP_DAYLIGHT_OFFSET_SEC=0L`；应用可在 include 前用宏覆盖。
 
+`isTimeSynced()` 默认要求当前 epoch >= `ESP32BASE_NTP_SYNC_MIN_EPOCH`，该宏默认 `1700000000UL`，避免把明显未同步或异常回退的时间误判为已同步。
+
 NTP 对时成功日志必须包含：
 
 - 当前实际日期时间。
@@ -429,7 +443,8 @@ public:
         BUILTIN_OTA,
         BUILTIN_LOGS,
         BUILTIN_REBOOT,
-        BUILTIN_SYSTEM
+        BUILTIN_SYSTEM,
+        BUILTIN_AUTH
     };
 
     using Handler = void (*)();
@@ -438,10 +453,15 @@ public:
     static void handle();
     static bool isReady();
 
-    static void setAuth(const char* user, const char* pass);
+    static void setDefaultAuth(const char* user, const char* pass);
+    static const char* authUser();
     static bool isAuthEnabled();
-    static bool isAuthSetByApplication();
     static void setAuthEnabled(bool enabled);
+    static bool checkAuth();
+    static bool verifyAuth();
+    static bool verifyAuth(const char* user, const char* pass);
+    static bool saveAuth(const char* user, const char* pass);
+    static bool resetAuth();
 
     static bool addRoute(const char* path, Method method, Handler handler);
     static bool addPage(const char* path, const char* title, Handler handler);
@@ -497,6 +517,15 @@ Route 缓冲机制：
 - `setHomeMode(HOME_ESP32BASE)` 保持基础库首页默认行为；`HOME_APP` 让 `/` 和 `/esp32base` 优先进入业务首页；`HOME_COMBINED` 让 `/` 进入业务首页，并保留 `/esp32base` 为融合首页。
 - `setSystemNavMode()` 控制基础功能入口位置：顶部、底部或底部紧凑系统工具区；`SYSTEM_NAV_SECTION` 会把系统入口作为小字链接与 `Free heap` 放在同一 footer 区域，窄屏可自然换行。
 - `setBuiltinLabel()` 覆盖内置导航标签，可用于中文本地化。
+- `/esp32base` 系统页展示固件、profile、hostname、uptime、boot count、reset/wake reason 及中文说明、heap、flash，以及当前 profile 可用的 WiFi、FS、FileLog、NTP、OTA 状态。
+- `/esp32base/auth` 是内置认证管理页面，受当前 Basic Auth 保护，提交成功后新账号密码立即生效。
+- Web Auth 认证优先级为：已保存认证 > 应用默认认证 > 库默认 `admin/admin`。
+- `setDefaultAuth(user, pass)` 设置应用默认认证；如果用户已保存认证，不会覆盖已保存认证。
+- `authUser()` 只返回当前用户名，不提供读取密码 API。
+- `verifyAuth(user, pass)` 校验显式传入的账号密码；无参 `verifyAuth()` 仍表示当前请求是否已认证。
+- `saveAuth(user, pass)` 保存 Web Auth 到 `eb_web.auth_user`、`eb_web.auth_salt`、`eb_web.auth_hash`，并立即切换为新认证。
+- `resetAuth()` 清除 `eb_web` 持久化 Auth，并恢复应用默认认证；没有应用默认认证时恢复库默认 `admin/admin`。
+- Web Auth 密码不保存明文，不输出到日志、HTML、JSON 或 API 响应；日志只记录安全审计信息。
 - `METHOD_ANY` 用于同一路径 GET/POST 复用；应用 handler 内可用 `currentMethod()`、`isMethod()` 或 `currentMethodName()` 判断当前请求方法。
 - `currentMethod()` 仅在 handler 上下文中返回实际方法：GET 为 `METHOD_GET`，POST 为 `METHOD_POST`；handler 外或未知方法返回 `METHOD_UNKNOWN`。
 - `isMethod(METHOD_ANY)` 在有效 handler 请求中返回 true；`METHOD_ANY` 不作为实际请求方法返回。
@@ -512,6 +541,7 @@ Route 缓冲机制：
 - WiFi 配置提交必须校验 SSID 非空、密码非空；空值不得提交。
 - 重启按钮必须有二次确认，可用浏览器端 JavaScript 实现。
 - 页面和 API 中的字节数必须同时提供 raw bytes 与 KB/MB 人性化展示。
+- `sendHeader()` 输出的默认 input 样式只覆盖文本类控件；checkbox、radio、file、range、color、hidden 等非文本控件不被拉伸成文本输入框。
 
 ## 10. Esp32BaseOta
 
@@ -584,6 +614,8 @@ public:
 };
 ```
 
+`Esp32BaseWatchdog::begin(timeoutMs)` 要求 `timeoutMs >= 1000`；更小值返回 false 并输出 WARN，避免 Arduino ESP32 2.x 下秒级 WDT 参数被截断为 0。
+
 `begin()` 是轻量初始化，只记录 Sleep 模块进入统一生命周期管理，不配置任何默认 wake source。
 
 `deepSleepSeconds()` / `deepSleepUs()` 不是 IDF deep sleep API 的 thin wrapper。它们必须走统一生命周期流程：
@@ -645,6 +677,8 @@ public:
 ```
 
 FS 未成功 `begin()` 时，文件和目录操作返回失败，容量查询返回 0，不隐式格式化文件系统。
+
+`listDir()` 遍历目录时会在每次 callback 后显式关闭当前 `File`，避免长目录遍历时积累底层句柄。
 
 Offset binary API 用于业务二进制定长记录、分页读取和环形覆盖写入，不要求业务 include `LittleFS.h` 或 Arduino `File`：
 

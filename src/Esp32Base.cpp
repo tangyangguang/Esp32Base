@@ -25,6 +25,32 @@ bool optionalOk(bool ok, const char* module) {
     return true;
 #endif
 }
+
+void logBootSessionStart() {
+    ESP32BASE_LOG_I("boot", "============================================================");
+    ESP32BASE_LOG_I("boot",
+                    "BOOT SESSION START boot_count=%lu",
+                    static_cast<unsigned long>(Esp32BaseSystem::bootCount()));
+    ESP32BASE_LOG_I("boot",
+                    "reset_reason=%s reset_desc=%s wake_reason=%s wake_desc=%s",
+                    Esp32BaseSystem::resetReason(),
+                    Esp32BaseSystem::resetReasonText(),
+                    Esp32BaseSystem::wakeReason(),
+                    Esp32BaseSystem::wakeReasonText());
+    ESP32BASE_LOG_I("boot",
+                    "firmware=%s version=%s build=%s profile=%s hostname=%s",
+                    Esp32Base::firmwareName(),
+                    Esp32Base::firmwareVersion(),
+                    Esp32Base::firmwareBuild()[0] ? Esp32Base::firmwareBuild() : "-",
+                    Esp32Base::profileName(),
+                    Esp32Base::hostname());
+    ESP32BASE_LOG_I("boot",
+                    "free_heap=%lu min_heap=%lu flash=%lu",
+                    static_cast<unsigned long>(Esp32BaseSystem::freeHeap()),
+                    static_cast<unsigned long>(Esp32BaseSystem::minFreeHeap()),
+                    static_cast<unsigned long>(Esp32BaseSystem::flashSize()));
+    ESP32BASE_LOG_I("boot", "============================================================");
+}
 }
 
 bool Esp32Base::begin() {
@@ -66,6 +92,7 @@ bool Esp32Base::begin() {
 #endif
 
     g_ready = true;
+    logBootSessionStart();
     ESP32BASE_LOG_I("base", "begin complete profile=%s", profileName());
     return true;
 }
@@ -114,7 +141,7 @@ void Esp32Base::handle() {
     }
 #endif
 #if ESP32BASE_ENABLE_OTA
-    if (Esp32BaseWeb::isReady() && Esp32BaseWeb::isAuthSetByApplication() && !Esp32BaseOta::isReady()) {
+    if (Esp32BaseWeb::isReady() && !Esp32BaseOta::isReady()) {
         Esp32BaseOta::begin();
     }
 #endif

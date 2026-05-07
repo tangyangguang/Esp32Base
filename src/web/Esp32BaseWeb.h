@@ -49,7 +49,8 @@ public:
         BUILTIN_OTA,
         BUILTIN_LOGS,
         BUILTIN_REBOOT,
-        BUILTIN_SYSTEM
+        BUILTIN_SYSTEM,
+        BUILTIN_AUTH
     };
 
     using Handler = void (*)();
@@ -58,12 +59,15 @@ public:
     static void handle();
     static bool isReady();
 
-    static void setAuth(const char* user, const char* pass);
+    static void setDefaultAuth(const char* user, const char* pass);
+    static const char* authUser();
     static bool isAuthEnabled();
-    static bool isAuthSetByApplication();
     static void setAuthEnabled(bool enabled);
     static bool checkAuth();
     static bool verifyAuth();
+    static bool verifyAuth(const char* user, const char* pass);
+    static bool saveAuth(const char* user, const char* pass);
+    static bool resetAuth();
 
     static bool addRoute(const char* path, Method method, Handler handler);
     static bool addPage(const char* path, const char* title, Handler handler);

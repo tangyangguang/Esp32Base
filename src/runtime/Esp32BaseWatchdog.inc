@@ -16,6 +16,10 @@ uint32_t g_lifetimeResetCount = 0;
 }
 
 bool Esp32BaseWatchdog::begin(uint32_t timeoutMs) {
+    if (timeoutMs < 1000U) {
+        ESP32BASE_LOG_W("watchdog", "invalid timeout_ms=%lu min=1000", static_cast<unsigned long>(timeoutMs));
+        return false;
+    }
     if (wasWatchdogReset()) {
         g_lifetimeResetCount = static_cast<uint32_t>(Esp32BaseConfig::getInt("eb_sys", "wdt_cnt", 0)) + 1U;
         Esp32BaseConfig::setInt("eb_sys", "wdt_cnt", static_cast<int32_t>(g_lifetimeResetCount));

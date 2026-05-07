@@ -132,7 +132,7 @@ void handleRecordsCsv() {
 - 可声明业务页面是设备主界面，基础库 WiFi、OTA、Logs、Reboot 是系统工具。
 - 可设置 `/` 和 `/esp32base` 使用基础库首页、业务首页优先或融合首页。
 - 可把系统工具放在顶部、底部或底部紧凑系统工具区。
-- 可覆盖 Home/WiFi/OTA/Logs/Reboot 标签，适配中文业务项目。
+- 可覆盖 Home/WiFi/OTA/Logs/Reboot/Auth 标签，适配中文业务项目。
 
 关键行为：
 
@@ -158,3 +158,68 @@ Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_SYSTEM, "系统工具");
 Esp32BaseWeb::addPage("/status", "状态", handleStatusPage);
 Esp32BaseWeb::addPage("/config", "配置", handleConfigPage);
 ```
+
+### Web input style scope
+
+优化：
+
+- `sendHeader()` 输出的基础 CSS 不再使用过宽的 `input:not([type=submit]):not([type=button])` 选择器。
+- 默认输入框样式仅作用于文本类 input：未声明 type 的 input、`text`、`password`、`number`、`email`、`url`、`tel`、`search`。
+- `checkbox`、`radio`、`file`、`range`、`color`、`hidden` 等非文本控件保持浏览器原生尺寸和行为。
+
+业务侧用途：
+
+- 业务页面复用 `Esp32BaseWeb::sendHeader()` / `sendFooter()` 时，可以直接使用 checkbox/radio 表单项，不需要写高优先级 CSS 覆盖基础库样式。
+- 内置页面未来新增非文本控件时，也不会被默认文本输入框样式污染。
+
+推荐接入：
+
+```html
+<label><input type="checkbox" name="beep" value="1"> 蜂鸣器</label>
+<label><input type="radio" name="mode" value="auto"> 自动</label>
+```
+
+### Runtime/Core robustness cleanup
+
+优化：
+
+- `Esp32BaseFs::listDir()` 遍历目录时显式关闭每个 `File` 句柄，并在非目录路径上关闭 root 句柄后返回 false，避免目录遍历积累底层文件句柄。
+- `Esp32BaseNtp::isTimeSynced()` 不再使用旧的硬编码 `1600000000` 阈值，新增 `ESP32BASE_NTP_SYNC_MIN_EPOCH`，默认 `1700000000UL`。
+- `Esp32BaseWatchdog::begin(timeoutMs)` 明确要求 `timeoutMs >= 1000`；更小值返回 false 并记录 WARN，避免 Arduino ESP32 2.x 下秒级参数被截断为 0。
+- `Esp32BaseBus::publish()` 先快照本次匹配订阅，再调用 callback；callback 内允许 `unsubscribe()`，已取消的后续订阅不会继续收到当前事件，新订阅不会收到当前正在发布的事件。
+- `Esp32BaseConfig` 字符串读取和写前比较不再使用 Arduino `String`，改用固定 scratch buffer 和 NVS 字符串读取，减少配置读取造成的 heap 碎片风险。
+- `Esp32BaseSystem::restart()` 和 `Esp32BaseSleep::deepSleepUs()` 去除冗余的前置 `Esp32BaseFileLog::flush()`，保留记录 restart/sleep 日志后的最终 flush。
+- `docs/01_architecture.md` 的 begin/handle 顺序补充 FileLog 位置，与当前代码一致。
+
+业务侧影响：
+
+- 目录列举、事件订阅变更、NTP 同步判断、Watchdog 参数和 Config 字符串读取的边界行为更明确。
+- 应用如覆盖 NTP 同步判断，可在 include 前定义 `ESP32BASE_NTP_SYNC_MIN_EPOCH`。
+
+### Web system page and log viewer diagnostics
+
+优化：
+
+- `/esp32base` 系统页不再只显示 `Ready`，改为展示固件、profile、hostname、uptime、boot count、reset/wake reason、heap、flash，以及当前 profile 可用的 WiFi/IP/RSSI、FS、FileLog、NTP、OTA 状态。
+- Logs 页面改为单文件展示，默认显示最新 `current-0`，可通过顶部标签切换 `history-1`、`history-2` 等历史文件，避免多个日志文件都有内容时页面过大。
+- Logs 页面保留所有 history/current segment 标签和大小，包括 0 字节文件，便于准确判断轮转文件状态。
+- Logs 页面只做 HTML escape，不折叠、不省略、不规整空白行，页面展示忠实反映文件内容。
+- Core Log 不再规整 message 中的 CR/LF；库内部需要单行日志时由调用点传入单行 message。
+- 新增 boot session 启动诊断块，FileLog 初始化后输出 `boot` tag 多行短日志，包含 `boot_count`、reset/wake reason 及中文说明、固件、版本、build、profile、hostname、heap、flash，避免单行过长被日志缓冲截断。
+- 新增 `Esp32BaseSystem::bootCount()`，返回 `uint32_t` 启动会话计数；NVS 使用 unsigned key `eb_sys.boot_cnt` 存储，每次固件启动加 1。
+- 新增 `Esp32BaseSystem::resetReasonText()` / `wakeReasonText()`，Web 系统页和 `/esp32base/api/status` 同时输出 reason 原始值与中文说明。
+- 新增 Web Basic Auth 配置管理能力：`setDefaultAuth()`、`authUser()`、`verifyAuth(user, pass)`、`saveAuth()`、`resetAuth()`。
+- Web Auth 认证优先级明确为：已保存认证 > 应用默认认证 > 库默认 `admin/admin`；`setDefaultAuth()` 不覆盖用户已保存认证。
+- 新增内置 `/esp32base/auth` 认证管理页面，并加入系统工具导航；`BUILTIN_AUTH` 可用于本地化标签，中文推荐“认证”。
+- Web Auth 可持久化到 `eb_web.auth_user`、`eb_web.auth_salt`、`eb_web.auth_hash`，密码不保存明文，只保存 salted SHA-256 摘要。
+- Web Auth 更新后立即生效；浏览器缓存旧 Basic Auth 时，后续请求会重新触发认证。
+- OTA 与 Auth 配置解耦：OTA route 按 profile/OTA 编译条件注册；Web Auth 开启时受 Basic Auth 保护，Web Auth 关闭时无密码保护。
+- `clearLibraryNamespaces()` 会清理 `eb_web`，恢复出厂时同步清除持久化 Web Auth。
+
+业务侧用途：
+
+- 业务项目访问 `/esp32base` 可以直接看到设备基础状态，不需要另写基础诊断页。
+- 现场查看日志时，日志页更容易判断轮转文件顺序、空 segment 和异常空白来源。
+- 业务项目可用 `bootCount()` 判断固件累计启动会话次数，并结合 `resetReason()` / `wakeReason()` 判断本次启动来源。
+- 业务项目可直接链接 `/esp32base/auth`，让用户修改设备认证账号/密码，不需要自行保存基础库鉴权数据。
+- 业务项目可每次启动调用 `setDefaultAuth()` 提供设备默认认证，用户保存过认证后基础库会优先使用已保存认证。

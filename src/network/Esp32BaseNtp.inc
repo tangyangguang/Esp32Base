@@ -38,7 +38,7 @@ bool Esp32BaseNtp::isStarted() {
 
 bool Esp32BaseNtp::isTimeSynced() {
     time_t now = time(nullptr);
-    const bool synced = now > 1600000000;
+    const bool synced = now >= static_cast<time_t>(ESP32BASE_NTP_SYNC_MIN_EPOCH);
     if (synced && !g_loggedSync) {
         char actual[32];
         formatTime(actual, sizeof(actual), "%Y-%m-%d %H:%M:%S");

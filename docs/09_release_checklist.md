@@ -67,8 +67,8 @@
 
 必须通过：
 
-- 未认证不能写 flash。
-- 未调用 `setAuth()` 时 OTA route 不注册。
+- Web Auth 开启时，未认证不能写 flash。
+- Web Auth 关闭时，OTA route 仍注册且无密码保护。
 - SHA256 正确路径成功。
 - SHA256 错误路径失败。
 - `Update.end(true)` 只在 SHA256 通过后调用。
@@ -168,7 +168,7 @@
 - 默认 Web 首页和导航开箱可用。
 - 业务优先导航可设置 device name、home path、home mode、system nav mode。
 - `addPage()` / `addNavItem()` 注册的业务入口进入业务导航且不重复业务首页入口。
-- 内置 Home/WiFi/OTA/Logs/Reboot 标签可覆盖，用于本地化。
+- 内置 Home/WiFi/OTA/Logs/Reboot/Auth 标签可覆盖，用于本地化。
 - 重启按钮二次确认。
 - 自定义路由 begin 前注册。
 - 自定义路由 Web ready 后注册。

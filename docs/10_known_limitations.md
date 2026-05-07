@@ -6,8 +6,9 @@
 
 - Web 使用 HTTP Basic Auth，不提供 HTTPS。
 - Basic Auth 明文传输，只用于降低误操作风险，不抵御同一局域网内的嗅探、MITM 或主动攻击。
+- Web Auth 密码不在日志、HTML、JSON 或 API 响应中明文输出；持久化时只保存 salted SHA-256 摘要。
 - OTA 只提供上传认证和 SHA256 完整性校验，不提供固件加密、签名信任链或差分升级。
-- 生产固件必须由应用显式设置 Web 认证信息；未显式设置时 OTA route 不注册。
+- OTA 与 Web Auth 配置解耦；关闭 Web Auth 时 OTA 仍可访问，但没有密码保护，风险由应用和用户自行承担。
 - Web 配置页面在用户通过 Basic Auth 后会回显当前 WiFi 密码，这是运维查看当前配置所需。该回显与日志的 INFO 级密码屏蔽策略分别考虑；生产固件应避免在公共网络环境下打开配置页。
 
 ## 2. Web 边界
@@ -35,6 +36,7 @@
 ## 5. 存储边界
 
 - Config 后端为 ESP32 NVS，只适合小配置，不适合大量数据或高频日志。
+- Config 字符串 API 支持最大 3999 字节可见内容，并使用固定 scratch buffer 读取和比较，避免 Arduino `String` 造成 heap 碎片；它仍然不适合大量数据或高频日志。
 - NVS 写满时 set API 返回 false，库不自动删除业务数据。
 - `clearLibraryNamespaces()` 只清理 `eb_` 前缀的库 namespace。
 - 应用不得使用 `eb_` 前缀作为自己的 NVS namespace。

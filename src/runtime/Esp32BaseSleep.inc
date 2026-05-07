@@ -28,9 +28,6 @@ bool Esp32BaseSleep::deepSleepSeconds(uint32_t seconds) {
 bool Esp32BaseSleep::deepSleepUs(uint64_t us) {
     Esp32BaseSystem::appendRestartLog("deep_sleep");
     Esp32BaseConfig::flushAll();
-#if ESP32BASE_ENABLE_FILELOG
-    Esp32BaseFileLog::flush();
-#endif
     ESP32BASE_LOG_I("sleep", "enter deep sleep: %llu us", static_cast<unsigned long long>(us));
 #if ESP32BASE_ENABLE_FILELOG
     Esp32BaseFileLog::flush();

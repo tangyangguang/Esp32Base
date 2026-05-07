@@ -179,11 +179,12 @@ Update 依赖 WiFi + Web。
 3. System
 4. Bus，如启用
 5. Fs，如启用
-6. Watchdog，如启用
-7. Sleep，如启用
-8. Health，如启用
-9. WiFi，如启用
-10. 标记 ready
+6. FileLog，如启用
+7. Watchdog，如启用
+8. Sleep，如启用
+9. Health，如启用
+10. WiFi，如启用
+11. 标记 ready
 
 `begin()` 不等待网络相关状态。
 
@@ -216,17 +217,18 @@ ESP32BASE_STRICT_OPTIONAL_BEGIN=0
 
 1. 如果 OTA 正在上传，跳过 Config deferred flush。
 2. 否则 Config deferred flush，一轮最多一条。
-3. WiFi handle。
-4. Captive DNS handle。
-5. 条件启动 Web。
-6. 条件启动 NTP。
-7. 条件启动 mDNS。
-8. 条件启动 OTA。
-9. Web handle。
-10. OTA handle，包含 mark-valid timeout 检查。
-11. Health handle。
-12. Watchdog feed。
-13. 一次性启动诊断日志。
+3. FileLog handle，如启用。
+4. WiFi handle。
+5. Captive DNS handle。
+6. 条件启动 Web。
+7. 条件启动 NTP。
+8. 条件启动 mDNS。
+9. 条件启动 OTA。
+10. Web handle。
+11. OTA handle，包含 mark-valid timeout 检查。
+12. Health handle。
+13. Watchdog feed。
+14. 一次性启动诊断日志。
 
 LittleFS 当前没有 maintenance 任务，不在 handle 中做额外维护。
 

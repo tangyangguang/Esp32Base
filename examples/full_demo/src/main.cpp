@@ -90,25 +90,47 @@ void runSelfTest() {
     uint8_t pass = 0;
     uint8_t total = 0;
 #define RUN_SELFTEST(method, path, body, auth, code, contains) do { ++total; if (selfTestRequest(method, path, body, auth, code, contains)) ++pass; } while (0)
+#define RUN_BOOL(expr) do { ++total; if (expr) ++pass; } while (0)
     RUN_SELFTEST("GET", "/esp32base/api/status", nullptr, false, 401, "Unauthorized");
     RUN_SELFTEST("GET", "/esp32base/api/status", nullptr, true, 200, "\"profile\":\"FULL\"");
     RUN_SELFTEST("GET", "/esp32base/api/chip", nullptr, true, 200, "\"flash\"");
     RUN_SELFTEST("GET", "/esp32base/api/firmware", nullptr, true, 200, "\"full-demo\"");
     RUN_SELFTEST("GET", "/esp32base/api/ota", nullptr, true, 200, "\"progress\"");
-    RUN_SELFTEST("GET", "/", nullptr, true, 302, "Location: /esp32base");
+    RUN_SELFTEST("GET", "/", nullptr, true, 302, "Location: /dashboard");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "<title>System</title>");
+    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Firmware</th>");
+    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Uptime</th>");
+    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "WiFi</th>");
     RUN_SELFTEST("GET", "/esp32base/wifi", nullptr, true, 200, "<title>Network</title>");
     RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "File log: <b>enabled</b>");
+    RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "class='active'>current-0");
+    RUN_SELFTEST("GET", "/esp32base/logs?segment=1", nullptr, true, 200, "class='active'>history-1");
+    RUN_SELFTEST("GET", "/esp32base/logs?segment=99", nullptr, true, 200, "class='active'>current-0");
+    RUN_SELFTEST("GET", "/esp32base/auth", nullptr, true, 200, "<title>Auth</title>");
+    RUN_SELFTEST("GET", "/esp32base/auth", nullptr, true, 200, "type='password'");
+    RUN_SELFTEST("GET", "/esp32base/auth", nullptr, true, 200, "Confirm new auth password");
+    RUN_SELFTEST("GET", "/esp32base/auth", nullptr, true, 200, "New passwords do not match");
     RUN_SELFTEST("GET", "/esp32base/ota", nullptr, true, 200, "<title>Update</title>");
     RUN_SELFTEST("GET", "/esp32base/reboot", nullptr, true, 200, "<title>Restart</title>");
     RUN_SELFTEST("GET", "/dashboard", nullptr, true, 200, "<title>Dashboard</title>");
     RUN_SELFTEST("GET", "/control", nullptr, true, 200, "<title>Control</title>");
+    RUN_SELFTEST("GET", "/control", nullptr, true, 200, "type='checkbox'");
+    RUN_SELFTEST("GET", "/control", nullptr, true, 200, "type='radio'");
     RUN_SELFTEST("GET", "/api/control", nullptr, true, 200, "\"method\":\"GET\"");
     RUN_SELFTEST("GET", "/api/csv", nullptr, true, 200, "Content-Type: text/csv");
     RUN_SELFTEST("GET", "/api/csv", nullptr, true, 200, "Content-Disposition: attachment");
     RUN_SELFTEST("POST", "/api/control", "value=selftest", true, 303, "Location: /control?saved=1");
     RUN_SELFTEST("GET", "/dashboard", nullptr, true, 200, "Stored value: selftest");
     RUN_SELFTEST("POST", "/esp32base/logs/clear", nullptr, true, 303, "Location: /esp32base/logs?cleared=1");
+    RUN_BOOL(Esp32BaseWeb::verifyAuth("admin", "admin"));
+    RUN_BOOL(Esp32BaseWeb::saveAuth("selftest_user", "selftestPass1"));
+    RUN_BOOL(Esp32BaseWeb::verifyAuth("selftest_user", "selftestPass1"));
+    Esp32BaseWeb::setDefaultAuth("admin", "admin");
+    RUN_BOOL(!Esp32BaseWeb::verifyAuth("admin", "admin"));
+    RUN_BOOL(Esp32BaseWeb::verifyAuth("selftest_user", "selftestPass1"));
+    RUN_BOOL(Esp32BaseWeb::resetAuth());
+    RUN_BOOL(Esp32BaseWeb::verifyAuth("admin", "admin"));
+#undef RUN_BOOL
 #undef RUN_SELFTEST
     if (wdtRemoved) {
         Esp32BaseWatchdog::restoreCurrentTaskAfterLongOperation();
@@ -139,7 +161,7 @@ void handleControl() {
         return;
     }
     Esp32BaseWeb::sendHeader("Control");
-    Esp32BaseWeb::sendChunk("<h2>Control</h2><form method='post' action='/api/control' onsubmit='return once(this)'>Value<input name='value' maxlength='48'><input type='submit' value='Save'></form>");
+    Esp32BaseWeb::sendChunk("<h2>Control</h2><form method='post' action='/api/control' onsubmit='return once(this)'>Value<input name='value' maxlength='48'>Limit<input type='number' name='limit' min='0' max='100' value='50'>PIN<input type='password' name='pin' maxlength='8' autocomplete='off'><p><label><input type='checkbox' name='enabled' value='1'> Enabled</label></p><p><label><input type='radio' name='mode' value='auto' checked> Auto</label> <label><input type='radio' name='mode' value='manual'> Manual</label></p><input type='submit' value='Save'></form>");
 #if ESP32BASE_ENABLE_SLEEP
     Esp32BaseWeb::sendChunk("<form method='post' action='/api/control' onsubmit=\"return confirm('Enter deep sleep?')&&once(this)\"><input type='hidden' name='sleep' value='1'><input type='submit' value='Deep Sleep 10s' style='background:#c33'></form>");
 #endif
@@ -208,7 +230,7 @@ void handleCsvApi() {
 void setup() {
     Esp32Base::setFirmwareInfo("full-demo", "0.1.0");
     Esp32Base::setHostname("esp32base-full");
-    Esp32BaseWeb::setAuth("admin", "admin");
+    Esp32BaseWeb::setDefaultAuth("admin", "admin");
     Esp32BaseWeb::setDeviceName("Full Demo");
     Esp32BaseWeb::setHomePath("/dashboard");
     Esp32BaseWeb::setHomeMode(Esp32BaseWeb::HOME_COMBINED);

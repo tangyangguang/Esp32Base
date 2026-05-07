@@ -17,12 +17,27 @@ struct Subscription {
     void* user;
 };
 
+struct PublishTarget {
+    Esp32BaseBus::SubscriptionId id;
+    Esp32BaseBus::Callback cb;
+    void* user;
+};
+
 TaskHandle_t g_loopTask = nullptr;
 Subscription g_subs[ESP32BASE_BUS_MAX_SUBSCRIBERS];
 Esp32BaseBus::SubscriptionId g_nextId = 1;
 
 bool matchEvent(const char* pattern, const char* event) {
     return pattern && event && strcmp(pattern, event) == 0;
+}
+
+bool subscriptionStillActive(Esp32BaseBus::SubscriptionId id, Esp32BaseBus::Callback cb) {
+    for (uint8_t i = 0; i < ESP32BASE_BUS_MAX_SUBSCRIBERS; ++i) {
+        if (g_subs[i].id == id && g_subs[i].cb == cb) {
+            return true;
+        }
+    }
+    return false;
 }
 }
 
@@ -62,9 +77,16 @@ bool Esp32BaseBus::publish(const char* event, const char* data) {
         return false;
     }
 
+    PublishTarget targets[ESP32BASE_BUS_MAX_SUBSCRIBERS];
+    uint8_t targetCount = 0;
     for (uint8_t i = 0; i < ESP32BASE_BUS_MAX_SUBSCRIBERS; ++i) {
         if (g_subs[i].id != 0 && matchEvent(g_subs[i].event, event)) {
-            g_subs[i].cb(event, data ? data : "", g_subs[i].user);
+            targets[targetCount++] = PublishTarget{g_subs[i].id, g_subs[i].cb, g_subs[i].user};
+        }
+    }
+    for (uint8_t i = 0; i < targetCount; ++i) {
+        if (subscriptionStillActive(targets[i].id, targets[i].cb)) {
+            targets[i].cb(event, data ? data : "", targets[i].user);
         }
     }
     return true;

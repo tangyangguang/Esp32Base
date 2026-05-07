@@ -13,9 +13,12 @@ public:
     static uint32_t totalHeap();
     static uint32_t flashSize();
     static uint32_t uptimeMs();
+    static uint32_t bootCount();
 
     static const char* resetReason();
+    static const char* resetReasonText();
     static const char* wakeReason();
+    static const char* wakeReasonText();
 
     static void restart(const char* reason);
 

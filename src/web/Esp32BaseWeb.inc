@@ -9,8 +9,14 @@
 #include "../core/Esp32BaseConfig.h"
 #include "../network/Esp32BaseWiFi.h"
 
+#if ESP32BASE_ENABLE_FS
+#include "../runtime/Esp32BaseFs.h"
+#endif
 #if ESP32BASE_ENABLE_FILELOG
 #include "../runtime/Esp32BaseFileLog.h"
+#endif
+#if ESP32BASE_ENABLE_NTP
+#include "../network/Esp32BaseNtp.h"
 #endif
 
 #if ESP32BASE_ENABLE_BUS
@@ -21,6 +27,10 @@
 #endif
 
 #include <WebServer.h>
+#include <Preferences.h>
+#include <esp_random.h>
+#include <mbedtls/base64.h>
+#include <mbedtls/sha256.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -42,17 +52,23 @@ struct NavItem {
 WebServer g_server(80);
 Route g_routes[ESP32BASE_WEB_MAX_ROUTES];
 NavItem g_navItems[ESP32BASE_WEB_MAX_NAV_ITEMS];
-const char* g_headerKeys[] = {"X-Sha256", "X-Firmware-Size"};
+const char* g_headerKeys[] = {"Authorization", "X-Sha256", "X-Firmware-Size"};
 bool g_webReady = false;
 bool g_authEnabled = true;
-bool g_authSetByApp = false;
+bool g_defaultAuthSet = false;
+bool g_authLoadedFromStorage = false;
+char g_defaultAuthUser[32] = "admin";
+char g_defaultAuthPass[64] = "admin";
 char g_authUser[32] = "admin";
-char g_authPass[32] = "admin";
+char g_authPass[64] = "admin";
+char g_authSalt[33] = "";
+char g_authHash[65] = "";
+bool g_authHasHash = false;
 char g_deviceName[32] = "Esp32Base";
 char g_homePath[48] = "";
 Esp32BaseWeb::HomeMode g_homeMode = Esp32BaseWeb::HOME_ESP32BASE;
 Esp32BaseWeb::SystemNavMode g_systemNavMode = Esp32BaseWeb::SYSTEM_NAV_TOP;
-char g_builtinLabels[6][16] = {"Home", "WiFi", "OTA", "Logs", "Reboot", "System"};
+char g_builtinLabels[7][16] = {"Home", "WiFi", "OTA", "Logs", "Reboot", "System", "Auth"};
 char g_chunkBuffer[512];
 size_t g_chunkUsed = 0;
 char g_activeUri[48] = "";
@@ -67,7 +83,7 @@ static const char WEB_HEAD[] PROGMEM =
     "body{font-family:sans-serif;padding:12px;max-width:760px;margin:auto}"
     "h1,h2{margin:0 0 12px}"
     "a,button,input[type=submit],input[type=button]{background:#2678c8;color:#fff;padding:7px 12px;text-decoration:none;border:0;border-radius:3px;cursor:pointer;margin:2px 2px 2px 0}"
-    "input:not([type=submit]):not([type=button]){width:100%;padding:7px;margin:4px 0 12px;border:1px solid #ccc;border-radius:3px;box-sizing:border-box}"
+    "input:not([type]),input[type=text],input[type=password],input[type=number],input[type=email],input[type=url],input[type=tel],input[type=search]{width:100%;padding:7px;margin:4px 0 12px;border:1px solid #ccc;border-radius:3px;box-sizing:border-box}"
     "nav{margin-bottom:14px;border-bottom:1px solid #eee;padding-bottom:8px}"
     "nav .brand{background:#444}"
     "details{margin:14px 0}summary{cursor:pointer;color:#2678c8}"
@@ -78,6 +94,8 @@ static const char WEB_HEAD[] PROGMEM =
     ".heap{flex:0 0 auto;margin-left:auto;white-space:nowrap;text-align:right;font-size:1em}"
     "@media(max-width:520px){.footerbar{gap:6px 10px;font-size:.76em;align-items:flex-start}.syslinks a{padding:3px 6px}}"
     "@media(max-width:360px){.heap{margin-left:0;text-align:left}}"
+    ".kv{border-collapse:collapse;width:100%;margin:8px 0 14px}.kv th,.kv td{border-bottom:1px solid #eee;padding:6px 4px;text-align:left;vertical-align:top}.kv th{width:34%;color:#666;font-weight:400}"
+    ".tabs{display:flex;flex-wrap:wrap;gap:4px;margin:8px 0 10px}.tabs a{font-size:.82em;padding:4px 8px;margin:0;background:#eef4fb;color:#2678c8}.tabs a.active{background:#2678c8;color:#fff}"
     "pre{white-space:pre;overflow-x:auto;word-break:normal;font-size:.82em;background:#f7f7f7;padding:8px}"
     "</style>"
     "<script>function once(f){if(f.dataset.busy)return false;f.dataset.busy=1;var b=f.querySelector('[type=submit]');if(b)b.disabled=true;return true;}</script>";
@@ -104,6 +122,224 @@ const char* methodName(Esp32BaseWeb::Method method) {
         default: return "UNKNOWN";
     }
 }
+
+bool validAuthUser(const char* value) {
+    if (!value) {
+        return false;
+    }
+    const size_t len = strlen(value);
+    if (len == 0 || len >= sizeof(g_authUser)) {
+        return false;
+    }
+    for (const char* p = value; *p; ++p) {
+        const uint8_t c = static_cast<uint8_t>(*p);
+        if (c <= 0x20 || c >= 0x7f || c == ':') {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool validAuthPass(const char* value) {
+    if (!value) {
+        return false;
+    }
+    const size_t len = strlen(value);
+    if (len == 0 || len > 63) {
+        return false;
+    }
+    for (const char* p = value; *p; ++p) {
+        const uint8_t c = static_cast<uint8_t>(*p);
+        if (c <= 0x20 || c >= 0x7f) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void authBytesToHex(const uint8_t* bytes, size_t len, char* out, size_t outLen) {
+    static const char HEX_DIGITS[] = "0123456789abcdef";
+    if (!bytes || !out || outLen < len * 2U + 1U) {
+        return;
+    }
+    for (size_t i = 0; i < len; ++i) {
+        out[i * 2U] = HEX_DIGITS[(bytes[i] >> 4) & 0x0f];
+        out[i * 2U + 1U] = HEX_DIGITS[bytes[i] & 0x0f];
+    }
+    out[len * 2U] = '\0';
+}
+
+bool validHexString(const char* value, size_t expectedLen) {
+    if (!value || strlen(value) != expectedLen) {
+        return false;
+    }
+    for (const char* p = value; *p; ++p) {
+        const char c = *p;
+        const bool hex = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+        if (!hex) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool makeAuthSalt(char* out, size_t len) {
+    if (!out || len < 33) {
+        return false;
+    }
+    uint8_t bytes[16];
+    for (uint8_t i = 0; i < sizeof(bytes); i += 4) {
+        const uint32_t value = esp_random();
+        bytes[i] = static_cast<uint8_t>(value & 0xff);
+        bytes[i + 1] = static_cast<uint8_t>((value >> 8) & 0xff);
+        bytes[i + 2] = static_cast<uint8_t>((value >> 16) & 0xff);
+        bytes[i + 3] = static_cast<uint8_t>((value >> 24) & 0xff);
+    }
+    authBytesToHex(bytes, sizeof(bytes), out, len);
+    return out[0] != '\0';
+}
+
+bool hashAuthPassword(const char* salt, const char* pass, char* out, size_t len) {
+    if (!validHexString(salt, 32) || !validAuthPass(pass) || !out || len < 65) {
+        return false;
+    }
+    char input[98];
+    snprintf(input, sizeof(input), "%s:%s", salt, pass);
+    uint8_t digest[32];
+    mbedtls_sha256_context ctx;
+    mbedtls_sha256_init(&ctx);
+    if (mbedtls_sha256_starts_ret(&ctx, 0) != 0 ||
+        mbedtls_sha256_update_ret(&ctx, reinterpret_cast<const unsigned char*>(input), strlen(input)) != 0 ||
+        mbedtls_sha256_finish_ret(&ctx, digest) != 0) {
+        mbedtls_sha256_free(&ctx);
+        return false;
+    }
+    mbedtls_sha256_free(&ctx);
+    authBytesToHex(digest, sizeof(digest), out, len);
+    return out[0] != '\0';
+}
+
+bool parseBasicAuth(char* user, size_t userLen, char* pass, size_t passLen) {
+    if (!user || userLen == 0 || !pass || passLen == 0) {
+        return false;
+    }
+    user[0] = '\0';
+    pass[0] = '\0';
+    const String header = g_server.header("Authorization");
+    if (!header.startsWith("Basic ") || header.length() > 180) {
+        return false;
+    }
+    const char* encoded = header.c_str() + 6;
+    uint8_t decoded[128];
+    size_t decodedLen = 0;
+    if (mbedtls_base64_decode(decoded, sizeof(decoded) - 1U, &decodedLen,
+                              reinterpret_cast<const unsigned char*>(encoded), strlen(encoded)) != 0) {
+        return false;
+    }
+    decoded[decodedLen] = '\0';
+    char* colon = strchr(reinterpret_cast<char*>(decoded), ':');
+    if (!colon) {
+        return false;
+    }
+    *colon = '\0';
+    const char* decodedUser = reinterpret_cast<char*>(decoded);
+    const char* decodedPass = colon + 1;
+    if (strlen(decodedUser) >= userLen || strlen(decodedPass) >= passLen) {
+        return false;
+    }
+    strlcpy(user, decodedUser, userLen);
+    strlcpy(pass, decodedPass, passLen);
+    return true;
+}
+
+bool authMatches(const char* user, const char* pass) {
+    if (!user || !pass || strcmp(user, g_authUser) != 0) {
+        return false;
+    }
+    if (g_authHasHash) {
+        char hash[65];
+        return hashAuthPassword(g_authSalt, pass, hash, sizeof(hash)) && strcmp(hash, g_authHash) == 0;
+    }
+    return strcmp(pass, g_authPass) == 0;
+}
+
+void applyPlainAuth(const char* user, const char* pass) {
+    strlcpy(g_authUser, user, sizeof(g_authUser));
+    strlcpy(g_authPass, pass, sizeof(g_authPass));
+    g_authSalt[0] = '\0';
+    g_authHash[0] = '\0';
+    g_authHasHash = false;
+    g_authLoadedFromStorage = false;
+}
+
+void applyDefaultAuth() {
+    applyPlainAuth(g_defaultAuthSet ? g_defaultAuthUser : "admin",
+                   g_defaultAuthSet ? g_defaultAuthPass : "admin");
+}
+
+void applyStoredAuth(const char* user, const char* salt, const char* hash) {
+    strlcpy(g_authUser, user, sizeof(g_authUser));
+    g_authPass[0] = '\0';
+    strlcpy(g_authSalt, salt, sizeof(g_authSalt));
+    strlcpy(g_authHash, hash, sizeof(g_authHash));
+    g_authHasHash = true;
+    g_authLoadedFromStorage = true;
+}
+
+bool loadStoredAuth() {
+    char user[32];
+    char salt[33];
+    char hash[65];
+    Preferences prefs;
+    if (!prefs.begin("eb_web", true)) {
+        return false;
+    }
+    const size_t userLen = prefs.getString("auth_user", user, sizeof(user));
+    const size_t saltLen = prefs.getString("auth_salt", salt, sizeof(salt));
+    const size_t hashLen = prefs.getString("auth_hash", hash, sizeof(hash));
+    prefs.end();
+    if (userLen == 0 || saltLen == 0 || hashLen == 0) {
+        return false;
+    }
+    if (!validAuthUser(user) || !validHexString(salt, 32) || !validHexString(hash, 64)) {
+        ESP32BASE_LOG_W("web", "auth_load_failed reason=invalid_storage");
+        return false;
+    }
+    applyStoredAuth(user, salt, hash);
+    ESP32BASE_LOG_I("web", "auth_loaded user=%s", g_authUser);
+    return true;
+}
+
+bool saveStoredAuth(const char* user, const char* salt, const char* hash) {
+    Preferences prefs;
+    if (!prefs.begin("eb_web", false)) {
+        return false;
+    }
+    const bool ok = prefs.putString("auth_user", user) > 0 &&
+                    prefs.putString("auth_salt", salt) > 0 &&
+                    prefs.putString("auth_hash", hash) > 0;
+    if (!ok) {
+        prefs.remove("auth_user");
+        prefs.remove("auth_salt");
+        prefs.remove("auth_hash");
+    }
+    prefs.end();
+    return ok;
+}
+
+#if ESP32BASE_ENABLE_OTA
+const char* otaStatusName(Esp32BaseOta::Status status) {
+    switch (status) {
+        case Esp32BaseOta::IDLE: return "IDLE";
+        case Esp32BaseOta::READY: return "READY";
+        case Esp32BaseOta::UPLOADING: return "UPLOADING";
+        case Esp32BaseOta::VERIFYING: return "VERIFYING";
+        case Esp32BaseOta::SUCCESS: return "SUCCESS";
+        case Esp32BaseOta::FAILED: return "FAILED";
+        default: return "UNKNOWN";
+    }
+}
+#endif
 
 bool validHeaderValue(const char* value, size_t maxLen) {
     if (!value || !value[0]) {
@@ -208,6 +444,22 @@ void sendLink(const char* path, const char* title, bool paragraph) {
     sendChunk(paragraph ? "</a></p>" : "</a>");
 }
 
+void sendInfoRowStart(const char* label) {
+    sendChunk("<tr><th>");
+    sendEscapedHtmlChunk(label);
+    sendChunk("</th><td>");
+}
+
+void sendInfoRowEnd() {
+    sendChunk("</td></tr>");
+}
+
+void sendInfoRow(const char* label, const char* value) {
+    sendInfoRowStart(label);
+    sendEscapedHtmlChunk(value && value[0] ? value : "-");
+    sendInfoRowEnd();
+}
+
 void sendAppLinks(bool paragraph) {
     const char* home = configuredHomePath();
     for (uint8_t i = 0; i < ESP32BASE_WEB_MAX_NAV_ITEMS; ++i) {
@@ -229,6 +481,7 @@ void sendAppLinks(bool paragraph) {
 void sendSystemLinks(bool paragraph) {
     sendLink("/esp32base", g_builtinLabels[Esp32BaseWeb::BUILTIN_HOME], paragraph);
     sendLink("/esp32base/wifi", g_builtinLabels[Esp32BaseWeb::BUILTIN_WIFI], paragraph);
+    sendLink("/esp32base/auth", g_builtinLabels[Esp32BaseWeb::BUILTIN_AUTH], paragraph);
 #if ESP32BASE_ENABLE_OTA
     sendLink("/esp32base/ota", g_builtinLabels[Esp32BaseWeb::BUILTIN_OTA], paragraph);
 #endif
@@ -310,7 +563,9 @@ bool ensureAuth() {
     if (!g_authEnabled) {
         return true;
     }
-    if (g_server.authenticate(g_authUser, g_authPass)) {
+    char user[32];
+    char pass[64];
+    if (parseBasicAuth(user, sizeof(user), pass, sizeof(pass)) && authMatches(user, pass)) {
         return true;
     }
     g_server.requestAuthentication();
@@ -318,7 +573,12 @@ bool ensureAuth() {
 }
 
 bool isAuthenticated() {
-    return !g_authEnabled || g_server.authenticate(g_authUser, g_authPass);
+    if (!g_authEnabled) {
+        return true;
+    }
+    char user[32];
+    char pass[64];
+    return parseBasicAuth(user, sizeof(user), pass, sizeof(pass)) && authMatches(user, pass);
 }
 
 void registerRoute(Route& route) {
@@ -511,6 +771,15 @@ void handleStatus() {
     sendBytesJsonChunk(Esp32BaseSystem::minFreeHeap());
     sendChunk("},\"flash\":");
     sendBytesJsonChunk(Esp32BaseSystem::flashSize());
+    sendChunk(",\"resetReason\":\"");
+    sendEscapedJsonChunk(Esp32BaseSystem::resetReason());
+    sendChunk("\",\"resetReasonText\":\"");
+    sendEscapedJsonChunk(Esp32BaseSystem::resetReasonText());
+    sendChunk("\",\"wakeReason\":\"");
+    sendEscapedJsonChunk(Esp32BaseSystem::wakeReason());
+    sendChunk("\",\"wakeReasonText\":\"");
+    sendEscapedJsonChunk(Esp32BaseSystem::wakeReasonText());
+    sendChunk("\"");
     sendChunk(",\"wifi\":{\"state\":\"");
     sendEscapedJsonChunk(Esp32BaseWiFi::stateName());
     sendChunk("\",\"connected\":");
@@ -537,8 +806,12 @@ void handleChip() {
     sendBytesJsonChunk(Esp32BaseSystem::flashSize());
     sendChunk(",\"resetReason\":\"");
     sendEscapedJsonChunk(Esp32BaseSystem::resetReason());
+    sendChunk("\",\"resetReasonText\":\"");
+    sendEscapedJsonChunk(Esp32BaseSystem::resetReasonText());
     sendChunk("\",\"wakeReason\":\"");
     sendEscapedJsonChunk(Esp32BaseSystem::wakeReason());
+    sendChunk("\",\"wakeReasonText\":\"");
+    sendEscapedJsonChunk(Esp32BaseSystem::wakeReasonText());
     sendChunk("\"}");
     endResponse();
 }
@@ -772,7 +1045,108 @@ void handleRoot() {
     Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_HOME]);
     sendChunk("<h2>");
     sendEscapedHtmlChunk(g_deviceName);
-    sendChunk("</h2><p>Ready</p>");
+    sendChunk("</h2><table class='kv'>");
+    sendInfoRowStart("Firmware");
+    sendEscapedHtmlChunk(Esp32Base::firmwareName());
+    sendChunk(" ");
+    sendEscapedHtmlChunk(Esp32Base::firmwareVersion());
+    if (Esp32Base::firmwareBuild()[0]) {
+        sendChunk(" <span class='info'>");
+        sendEscapedHtmlChunk(Esp32Base::firmwareBuild());
+        sendChunk("</span>");
+    }
+    sendInfoRowEnd();
+    sendInfoRow("Profile", Esp32Base::profileName());
+    sendInfoRow("Hostname", Esp32Base::hostname());
+    char value[96];
+    Esp32BaseLog::formatUptime(Esp32BaseSystem::uptimeMs(), value, sizeof(value));
+    sendInfoRow("Uptime", value);
+    snprintf(value, sizeof(value), "%lu", static_cast<unsigned long>(Esp32BaseSystem::bootCount()));
+    sendInfoRow("Boot count", value);
+    sendInfoRowStart("Reset reason");
+    sendEscapedHtmlChunk(Esp32BaseSystem::resetReason());
+    sendChunk(" / ");
+    sendEscapedHtmlChunk(Esp32BaseSystem::resetReasonText());
+    sendInfoRowEnd();
+    sendInfoRowStart("Wake reason");
+    sendEscapedHtmlChunk(Esp32BaseSystem::wakeReason());
+    sendChunk(" / ");
+    sendEscapedHtmlChunk(Esp32BaseSystem::wakeReasonText());
+    sendInfoRowEnd();
+    char freeHeap[48];
+    char minHeap[48];
+    char totalHeap[48];
+    char flash[48];
+    Esp32BaseLog::formatBytes(Esp32BaseSystem::freeHeap(), freeHeap, sizeof(freeHeap));
+    Esp32BaseLog::formatBytes(Esp32BaseSystem::minFreeHeap(), minHeap, sizeof(minHeap));
+    Esp32BaseLog::formatBytes(Esp32BaseSystem::totalHeap(), totalHeap, sizeof(totalHeap));
+    Esp32BaseLog::formatBytes(Esp32BaseSystem::flashSize(), flash, sizeof(flash));
+    snprintf(value, sizeof(value), "free %s, min %s, total %s", freeHeap, minHeap, totalHeap);
+    sendInfoRow("Heap", value);
+    sendInfoRow("Flash", flash);
+#if ESP32BASE_ENABLE_WIFI
+    sendInfoRowStart("WiFi");
+    sendEscapedHtmlChunk(Esp32BaseWiFi::stateName());
+    if (Esp32BaseWiFi::ssid()[0]) {
+        sendChunk(" / ");
+        sendEscapedHtmlChunk(Esp32BaseWiFi::ssid());
+    }
+    if (Esp32BaseWiFi::isConnected()) {
+        char ip[24];
+        if (Esp32BaseWiFi::ip(ip, sizeof(ip))) {
+            sendChunk("<br>IP ");
+            sendEscapedHtmlChunk(ip);
+        }
+        snprintf(value, sizeof(value), "<br>RSSI %ld dBm / power save %s",
+                 static_cast<long>(Esp32BaseWiFi::rssi()), Esp32BaseWiFi::powerSave() ? "on" : "off");
+        sendChunk(value);
+    }
+    sendInfoRowEnd();
+#endif
+#if ESP32BASE_ENABLE_FS
+    if (Esp32BaseFs::isReady()) {
+        char used[48];
+        char total[48];
+        char freeBytes[48];
+        Esp32BaseLog::formatBytes(Esp32BaseFs::usedBytes(), used, sizeof(used));
+        Esp32BaseLog::formatBytes(Esp32BaseFs::totalBytes(), total, sizeof(total));
+        Esp32BaseLog::formatBytes(Esp32BaseFs::freeBytes(), freeBytes, sizeof(freeBytes));
+        snprintf(value, sizeof(value), "used %s, free %s, total %s", used, freeBytes, total);
+        sendInfoRow("FS", value);
+    } else {
+        sendInfoRow("FS", "unavailable");
+    }
+#endif
+#if ESP32BASE_ENABLE_FILELOG
+    sendInfoRowStart("File log");
+    sendEscapedHtmlChunk(Esp32BaseFileLog::isEnabled() ? "enabled" : "disabled");
+    if (Esp32BaseFileLog::isEnabled()) {
+        char sizeBuf[48];
+        Esp32BaseLog::formatBytes(Esp32BaseFileLog::size(), sizeBuf, sizeof(sizeBuf));
+        sendChunk("<br>");
+        sendEscapedHtmlChunk(Esp32BaseFileLog::path());
+        sendChunk(" / ");
+        sendEscapedHtmlChunk(Esp32BaseFileLog::levelName());
+        sendChunk(" / current ");
+        sendEscapedHtmlChunk(sizeBuf);
+    }
+    sendInfoRowEnd();
+#endif
+#if ESP32BASE_ENABLE_NTP
+    const uint32_t epoch = Esp32BaseNtp::timestamp();
+    const bool synced = epoch >= ESP32BASE_NTP_SYNC_MIN_EPOCH;
+    sendInfoRowStart("Time");
+    sendEscapedHtmlChunk(Esp32BaseNtp::isStarted() ? (synced ? "synced" : "pending") : "not started");
+    if (synced && Esp32BaseNtp::formatTime(value, sizeof(value), "%Y-%m-%d %H:%M:%S")) {
+        sendChunk("<br>");
+        sendEscapedHtmlChunk(value);
+    }
+    sendInfoRowEnd();
+#endif
+#if ESP32BASE_ENABLE_OTA
+    sendInfoRow("OTA", otaStatusName(Esp32BaseOta::status()));
+#endif
+    sendChunk("</table>");
     if (g_homeMode == Esp32BaseWeb::HOME_ESP32BASE && appNavCount() > 0) {
         sendChunk("<h2>Application</h2>");
         sendAppLinks(true);
@@ -781,7 +1155,30 @@ void handleRoot() {
 }
 
 #if ESP32BASE_ENABLE_FILELOG
-void sendLogEscapedChunk(const char* data, size_t len, void*) {
+uint8_t selectedLogSegment() {
+    if (!g_server.hasArg("segment")) {
+        return 0;
+    }
+    const String raw = g_server.arg("segment");
+    if (raw.length() == 0 || raw.length() > 3) {
+        return 0;
+    }
+    uint16_t value = 0;
+    for (size_t i = 0; i < raw.length(); ++i) {
+        const char c = raw.charAt(i);
+        if (c < '0' || c > '9') {
+            return 0;
+        }
+        value = static_cast<uint16_t>(value * 10U + static_cast<uint16_t>(c - '0'));
+    }
+    if (value >= Esp32BaseFileLog::rotateFiles()) {
+        return 0;
+    }
+    return static_cast<uint8_t>(value);
+}
+
+void sendLogEscapedChunk(const char* data, size_t len, void* user) {
+    (void)user;
     char one[2] = {0, 0};
     for (size_t i = 0; i < len; ++i) {
         switch (data[i]) {
@@ -795,6 +1192,44 @@ void sendLogEscapedChunk(const char* data, size_t len, void*) {
                 break;
         }
     }
+}
+
+void sendLogSegment(uint8_t index, const char* title) {
+    sendChunk("\n\n----- ");
+    sendEscapedHtmlChunk(title);
+    sendChunk(" -----\n");
+    Esp32BaseFileLog::streamSegment(index, sendLogEscapedChunk);
+}
+
+void logSegmentTitle(uint8_t index, char* out, size_t len) {
+    if (!out || len == 0) {
+        return;
+    }
+    if (index == 0) {
+        snprintf(out, len, "current-0");
+        return;
+    }
+    snprintf(out, len, "history-%u", static_cast<unsigned>(index));
+}
+
+void sendLogSegmentTabs(uint8_t selected) {
+    char title[16];
+    char sizeBuf[48];
+    char line[160];
+    sendChunk("<div class='tabs'>");
+    for (uint8_t i = 0; i < Esp32BaseFileLog::rotateFiles(); ++i) {
+        logSegmentTitle(i, title, sizeof(title));
+        Esp32BaseLog::formatBytes(Esp32BaseFileLog::segmentSize(i), sizeBuf, sizeof(sizeBuf));
+        snprintf(line, sizeof(line), "<a%s href='/esp32base/logs?segment=%u'>",
+                 i == selected ? " class='active'" : "",
+                 static_cast<unsigned>(i));
+        sendChunk(line);
+        sendEscapedHtmlChunk(title);
+        sendChunk(" ");
+        sendEscapedHtmlChunk(sizeBuf);
+        sendChunk("</a>");
+    }
+    sendChunk("</div>");
 }
 #endif
 
@@ -838,14 +1273,13 @@ void handleLogsPage() {
         snprintf(line, sizeof(line), "%s%u=%s", i == static_cast<int8_t>(Esp32BaseFileLog::rotateFiles()) - 1 ? "" : ", ", static_cast<unsigned>(i), sizeBuf);
         sendChunk(line);
     }
-    sendChunk("</p><pre>");
-    for (int8_t i = static_cast<int8_t>(Esp32BaseFileLog::rotateFiles()) - 1; i >= 1; --i) {
-        snprintf(line, sizeof(line), "\n\n----- history-%u -----\n", static_cast<unsigned>(i));
-        sendChunk(line);
-        Esp32BaseFileLog::streamSegment(static_cast<uint8_t>(i), sendLogEscapedChunk);
-    }
-    sendChunk("\n\n----- current-0 -----\n");
-    Esp32BaseFileLog::streamSegment(0, sendLogEscapedChunk);
+    const uint8_t selectedSegment = selectedLogSegment();
+    sendChunk("</p>");
+    sendLogSegmentTabs(selectedSegment);
+    sendChunk("<pre>");
+    char selectedTitle[16];
+    logSegmentTitle(selectedSegment, selectedTitle, sizeof(selectedTitle));
+    sendLogSegment(selectedSegment, selectedTitle);
     sendChunk("</pre>");
 #else
     sendChunk("<p>File log: <b>unavailable</b></p>");
@@ -865,11 +1299,76 @@ void handleLogsClear() {
     redirectSeeOther("/esp32base/logs?error=unavailable");
 #endif
 }
+
+void handleAuthPage() {
+    markRequest();
+    if (!ensureAuth()) {
+        return;
+    }
+    Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_AUTH]);
+    sendChunk("<h2>");
+    sendEscapedHtmlChunk(g_builtinLabels[Esp32BaseWeb::BUILTIN_AUTH]);
+    sendChunk("</h2>");
+    if (g_server.hasArg("saved")) {
+        sendChunk("<p class='ok'>Auth updated. Use the new credentials on the next auth prompt.</p>");
+    } else if (g_server.hasArg("error")) {
+        sendChunk("<p class='err'>Auth update failed: ");
+        sendEscapedHtmlChunk(g_server.arg("error").c_str());
+        sendChunk("</p>");
+    }
+    sendChunk("<form method='post' action='/esp32base/auth' onsubmit=\"var f=this;function v(n){return f.elements[n].value.trim();}if(!v('current_user')||!v('current_pass')||!v('new_user')||!v('new_pass')||!v('confirm_pass')){alert('All auth fields are required');return false;}if(v('new_pass')!=v('confirm_pass')){alert('New passwords do not match');return false;}return once(this)\">");
+    sendChunk("Current auth user<input name='current_user' maxlength='31' required value='");
+    sendEscapedHtmlChunk(g_authUser);
+    sendChunk("'>");
+    sendChunk("Current auth password<input type='password' name='current_pass' maxlength='63' autocomplete='current-password' required>");
+    sendChunk("New auth user<input name='new_user' maxlength='31' required value='");
+    sendEscapedHtmlChunk(g_authUser);
+    sendChunk("'>");
+    sendChunk("New auth password<input type='password' name='new_pass' maxlength='63' autocomplete='new-password' required>");
+    sendChunk("Confirm new auth password<input type='password' name='confirm_pass' maxlength='63' autocomplete='new-password' required>");
+    sendChunk("<input type='submit' value='Save Auth'></form>");
+    Esp32BaseWeb::sendFooter();
+}
+
+void handleAuthSubmit() {
+    markRequest();
+    if (!ensureAuth()) {
+        return;
+    }
+    char currentUser[32];
+    char currentPass[64];
+    char newUser[32];
+    char newPass[64];
+    char confirmPass[64];
+    strlcpy(currentUser, g_server.arg("current_user").c_str(), sizeof(currentUser));
+    strlcpy(currentPass, g_server.arg("current_pass").c_str(), sizeof(currentPass));
+    strlcpy(newUser, g_server.arg("new_user").c_str(), sizeof(newUser));
+    strlcpy(newPass, g_server.arg("new_pass").c_str(), sizeof(newPass));
+    strlcpy(confirmPass, g_server.arg("confirm_pass").c_str(), sizeof(confirmPass));
+    if (!Esp32BaseWeb::verifyAuth(currentUser, currentPass)) {
+        ESP32BASE_LOG_W("web", "auth_update_failed reason=current_auth");
+        redirectSeeOther("/esp32base/auth?error=current_auth");
+        return;
+    }
+    if (strcmp(newPass, confirmPass) != 0) {
+        ESP32BASE_LOG_W("web", "auth_update_failed reason=confirm");
+        redirectSeeOther("/esp32base/auth?error=confirm");
+        return;
+    }
+    if (!Esp32BaseWeb::saveAuth(newUser, newPass)) {
+        redirectSeeOther("/esp32base/auth?error=invalid_or_storage");
+        return;
+    }
+    redirectSeeOther("/esp32base/auth?saved=1");
+}
 }
 
 bool Esp32BaseWeb::begin() {
     if (g_webReady) {
         return true;
+    }
+    if (!loadStoredAuth()) {
+        applyDefaultAuth();
     }
     g_server.collectHeaders(g_headerKeys, sizeof(g_headerKeys) / sizeof(g_headerKeys[0]));
     g_server.on("/", HTTP_GET, handleRootRedirect);
@@ -883,6 +1382,8 @@ bool Esp32BaseWeb::begin() {
     g_server.on("/esp32base/api/wifi/clear", HTTP_POST, handleWifiClear);
     g_server.on("/esp32base/logs", HTTP_GET, handleLogsPage);
     g_server.on("/esp32base/logs/clear", HTTP_POST, handleLogsClear);
+    g_server.on("/esp32base/auth", HTTP_GET, handleAuthPage);
+    g_server.on("/esp32base/auth", HTTP_POST, handleAuthSubmit);
     g_server.on("/esp32base/reboot", HTTP_GET, handleRebootPage);
     g_server.on("/esp32base/reboot", HTTP_POST, handleRebootPost);
     g_server.on("/esp32base/api/restart", HTTP_POST, handleRestart);
@@ -891,13 +1392,9 @@ bool Esp32BaseWeb::begin() {
     g_server.on("/ncsi.txt", HTTP_GET, handleCaptiveProbe);
     g_server.on("/favicon.ico", HTTP_GET, handleNoContent);
 #if ESP32BASE_ENABLE_OTA
-    if (isAuthSetByApplication()) {
-        g_server.on("/esp32base/ota", HTTP_GET, handleOtaPage);
-        g_server.on("/esp32base/ota", HTTP_POST, handleOtaUploadDone, handleOtaUpload);
-        g_server.on("/esp32base/api/ota", HTTP_GET, handleOtaApi);
-    } else {
-        ESP32BASE_LOG_E("web", "OTA route not registered: application auth not set");
-    }
+    g_server.on("/esp32base/ota", HTTP_GET, handleOtaPage);
+    g_server.on("/esp32base/ota", HTTP_POST, handleOtaUploadDone, handleOtaUpload);
+    g_server.on("/esp32base/api/ota", HTTP_GET, handleOtaApi);
 #endif
     for (uint8_t i = 0; i < ESP32BASE_WEB_MAX_ROUTES; ++i) {
         if (g_routes[i].handler && !g_routes[i].registered) {
@@ -940,22 +1437,25 @@ bool Esp32BaseWeb::isReady() {
     return g_webReady;
 }
 
-void Esp32BaseWeb::setAuth(const char* user, const char* pass) {
-    if (user && user[0]) {
-        strlcpy(g_authUser, user, sizeof(g_authUser));
+void Esp32BaseWeb::setDefaultAuth(const char* user, const char* pass) {
+    if (!validAuthUser(user) || !validAuthPass(pass)) {
+        ESP32BASE_LOG_W("web", "set_default_auth_failed reason=invalid");
+        return;
     }
-    if (pass && pass[0]) {
-        strlcpy(g_authPass, pass, sizeof(g_authPass));
+    strlcpy(g_defaultAuthUser, user, sizeof(g_defaultAuthUser));
+    strlcpy(g_defaultAuthPass, pass, sizeof(g_defaultAuthPass));
+    g_defaultAuthSet = true;
+    if (!g_authLoadedFromStorage) {
+        applyDefaultAuth();
     }
-    g_authSetByApp = true;
+}
+
+const char* Esp32BaseWeb::authUser() {
+    return g_authUser;
 }
 
 bool Esp32BaseWeb::isAuthEnabled() {
     return g_authEnabled;
-}
-
-bool Esp32BaseWeb::isAuthSetByApplication() {
-    return g_authSetByApp;
 }
 
 void Esp32BaseWeb::setAuthEnabled(bool enabled) {
@@ -968,6 +1468,41 @@ bool Esp32BaseWeb::checkAuth() {
 
 bool Esp32BaseWeb::verifyAuth() {
     return isAuthenticated();
+}
+
+bool Esp32BaseWeb::verifyAuth(const char* user, const char* pass) {
+    return authMatches(user, pass);
+}
+
+bool Esp32BaseWeb::saveAuth(const char* user, const char* pass) {
+    if (!validAuthUser(user)) {
+        ESP32BASE_LOG_W("web", "auth_update_failed reason=invalid_user");
+        return false;
+    }
+    if (!validAuthPass(pass)) {
+        ESP32BASE_LOG_W("web", "auth_update_failed reason=invalid_password");
+        return false;
+    }
+    char salt[33];
+    char hash[65];
+    if (!makeAuthSalt(salt, sizeof(salt)) || !hashAuthPassword(salt, pass, hash, sizeof(hash))) {
+        ESP32BASE_LOG_W("web", "auth_update_failed reason=hash_failed");
+        return false;
+    }
+    if (!saveStoredAuth(user, salt, hash)) {
+        ESP32BASE_LOG_W("web", "auth_update_failed reason=storage_failed");
+        return false;
+    }
+    applyStoredAuth(user, salt, hash);
+    ESP32BASE_LOG_I("web", "auth_saved user=%s", g_authUser);
+    return true;
+}
+
+bool Esp32BaseWeb::resetAuth() {
+    const bool ok = Esp32BaseConfig::clearNamespace("eb_web");
+    applyDefaultAuth();
+    ESP32BASE_LOG_I("web", "auth_reset");
+    return ok;
 }
 
 bool Esp32BaseWeb::addRoute(const char* path, Method method, Handler handler) {
@@ -1062,7 +1597,7 @@ void Esp32BaseWeb::setSystemNavMode(SystemNavMode mode) {
 }
 
 bool Esp32BaseWeb::setBuiltinLabel(BuiltinPage page, const char* label) {
-    if (page > BUILTIN_SYSTEM || !label || !label[0] || strlen(label) >= sizeof(g_builtinLabels[0])) {
+    if (page > BUILTIN_AUTH || !label || !label[0] || strlen(label) >= sizeof(g_builtinLabels[0])) {
         return false;
     }
     strlcpy(g_builtinLabels[page], label, sizeof(g_builtinLabels[page]));

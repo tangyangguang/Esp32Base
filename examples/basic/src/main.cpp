@@ -5,7 +5,7 @@ void setup() {
     Esp32Base::setFirmwareInfo("basic", "0.1.0");
     Esp32Base::setHostname("esp32base-basic");
 #if ESP32BASE_ENABLE_WEB
-    Esp32BaseWeb::setAuth("admin", "admin");
+    Esp32BaseWeb::setDefaultAuth("admin", "admin");
 #endif
     Esp32Base::begin();
 #if ESP32BASE_ENABLE_FILELOG

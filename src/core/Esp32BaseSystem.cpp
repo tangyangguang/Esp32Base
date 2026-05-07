@@ -9,11 +9,13 @@
 #include "../runtime/Esp32BaseFileLog.h"
 #endif
 
+#include <Preferences.h>
 #include <esp_system.h>
 #include <esp_sleep.h>
 
 namespace {
 bool g_ready = false;
+uint32_t g_bootCount = 0;
 uint8_t g_restartLogCount = 0;
 
 constexpr uint8_t RESTART_LOG_CAPACITY = 4;
@@ -35,6 +37,23 @@ const char* resetReasonName(esp_reset_reason_t reason) {
     }
 }
 
+const char* resetReasonText(esp_reset_reason_t reason) {
+    switch (reason) {
+        case ESP_RST_POWERON: return "上电启动";
+        case ESP_RST_EXT: return "外部复位";
+        case ESP_RST_SW: return "软件重启";
+        case ESP_RST_PANIC: return "异常崩溃";
+        case ESP_RST_INT_WDT:
+        case ESP_RST_TASK_WDT:
+        case ESP_RST_WDT: return "看门狗复位";
+        case ESP_RST_DEEPSLEEP: return "深度睡眠唤醒";
+        case ESP_RST_BROWNOUT: return "电压跌落复位";
+        case ESP_RST_SDIO: return "SDIO复位";
+        case ESP_RST_UNKNOWN:
+        default: return "未知复位原因";
+    }
+}
+
 const char* wakeReasonName(esp_sleep_wakeup_cause_t cause) {
     switch (cause) {
         case ESP_SLEEP_WAKEUP_EXT0: return "ext0";
@@ -52,9 +71,39 @@ const char* wakeReasonName(esp_sleep_wakeup_cause_t cause) {
         default: return "undefined";
     }
 }
+
+const char* wakeReasonText(esp_sleep_wakeup_cause_t cause) {
+    switch (cause) {
+        case ESP_SLEEP_WAKEUP_EXT0: return "EXT0外部唤醒";
+        case ESP_SLEEP_WAKEUP_EXT1: return "EXT1外部唤醒";
+        case ESP_SLEEP_WAKEUP_TIMER: return "定时器唤醒";
+        case ESP_SLEEP_WAKEUP_TOUCHPAD: return "触摸唤醒";
+        case ESP_SLEEP_WAKEUP_ULP: return "ULP唤醒";
+#if defined(ESP_SLEEP_WAKEUP_GPIO)
+        case ESP_SLEEP_WAKEUP_GPIO: return "GPIO唤醒";
+#endif
+#if defined(ESP_SLEEP_WAKEUP_UART)
+        case ESP_SLEEP_WAKEUP_UART: return "UART唤醒";
+#endif
+        case ESP_SLEEP_WAKEUP_UNDEFINED:
+        default: return "非睡眠唤醒";
+    }
+}
 }
 
 bool Esp32BaseSystem::begin() {
+    Preferences prefs;
+    if (prefs.begin("eb_sys", false)) {
+        const uint32_t previousBootCount = prefs.getUInt("boot_cnt", 0);
+        g_bootCount = previousBootCount + 1U;
+        if (prefs.putUInt("boot_cnt", g_bootCount) == 0) {
+            ESP32BASE_LOG_W("system", "boot_count save failed");
+        }
+        prefs.end();
+    } else {
+        g_bootCount = 0;
+        ESP32BASE_LOG_W("system", "boot_count storage unavailable");
+    }
     g_restartLogCount = static_cast<uint8_t>(Esp32BaseConfig::getInt("eb_sys", "rst_cnt", 0));
     g_ready = true;
     return true;
@@ -92,20 +141,29 @@ uint32_t Esp32BaseSystem::uptimeMs() {
     return millis();
 }
 
+uint32_t Esp32BaseSystem::bootCount() {
+    return g_bootCount;
+}
+
 const char* Esp32BaseSystem::resetReason() {
     return resetReasonName(esp_reset_reason());
+}
+
+const char* Esp32BaseSystem::resetReasonText() {
+    return ::resetReasonText(esp_reset_reason());
 }
 
 const char* Esp32BaseSystem::wakeReason() {
     return wakeReasonName(esp_sleep_get_wakeup_cause());
 }
 
+const char* Esp32BaseSystem::wakeReasonText() {
+    return ::wakeReasonText(esp_sleep_get_wakeup_cause());
+}
+
 void Esp32BaseSystem::restart(const char* reason) {
     appendRestartLog(reason ? reason : "restart");
     Esp32BaseConfig::flushAll();
-#if ESP32BASE_ENABLE_FILELOG
-    Esp32BaseFileLog::flush();
-#endif
     ESP32BASE_LOG_W("system", "restart: %s", reason ? reason : "");
 #if ESP32BASE_ENABLE_FILELOG
     Esp32BaseFileLog::flush();

@@ -65,14 +65,18 @@ DNS 拦截策略：
 
 - Web Auth 开启。
 - 默认开发账号密码可以存在。
-- 生产固件应在 `Esp32Base::begin()` 前调用 `Esp32BaseWeb::setAuth()`。
+- 应用可在 `Esp32Base::begin()` 前调用 `Esp32BaseWeb::setDefaultAuth()` 设置默认认证。
+- 认证优先级为：已保存认证 > 应用默认认证 > 库默认 `admin/admin`。
+- 业务项目需要允许用户修改认证账号/密码时，优先链接内置 `/esp32base/auth` 认证管理页面。
+- 业务自建配置页时，应先 `checkAuth()`，再用 `verifyAuth(currentUser, currentPass)` 验证当前凭据，最后调用 `saveAuth(newUser, newPass)`。
+- 更新 Web Auth 后立即生效；浏览器缓存旧 Basic Auth 时，后续请求会重新触发认证。
+- Web Auth 持久化使用 `eb_web.auth_user`、`eb_web.auth_salt`、`eb_web.auth_hash`，不保存明文密码。
 
-OTA 额外要求：
+OTA 规则：
 
-- 应用必须显式调用 `Esp32BaseWeb::setAuth()`。
-- `Esp32BaseWeb::isAuthSetByApplication()` 必须为 true。
-- 否则 OTA route 不注册。
-- OTA 上传页不再叠加第二套认证，只复用 Web Basic Auth。
+- OTA route 按 profile/OTA 编译条件注册，不依赖 `setDefaultAuth()` 或持久化认证。
+- Web Auth 开启时，OTA 页面和上传接口复用 Web Basic Auth。
+- Web Auth 关闭时，OTA 页面和上传接口不要求认证，风险由应用和用户自行承担。
 
 不使用“密码是否等于默认字符串”作为唯一判断。
 
@@ -81,7 +85,8 @@ OTA 额外要求：
 - HTTP Basic Auth 明文传输。
 - 它只用于防误操作。
 - 不抵御 LAN 内主动攻击。
-- 生产固件必须显式设置认证信息。
+- 关闭 Web Auth 时，内置页面和 OTA 均无密码保护。
+- Web Auth 密码不在日志、HTML、JSON 或 API 响应中输出；WiFi 密码回显策略不适用于 Web Auth 密码。
 
 ## 5. 路由表
 
@@ -103,7 +108,7 @@ OTA 额外要求：
 - `addPage()` 注册业务页面并进入业务导航；`addNavItem()` 只注册导航项，不注册路由。
 - `setHomeMode()` 控制 `/` 和 `/esp32base` 的首页模型：基础库首页、业务首页优先或融合首页。
 - `setSystemNavMode()` 控制 WiFi、OTA、Logs、Reboot 等基础功能入口在顶部、底部或底部紧凑系统工具区展示。
-- `setBuiltinLabel()` 可覆盖 Home/WiFi/OTA/Logs/Reboot 标签，用于应用统一本地化。
+- `setBuiltinLabel()` 可覆盖 Home/WiFi/OTA/Logs/Reboot/Auth 标签，用于应用统一本地化。
 
 默认容量：
 
@@ -127,6 +132,8 @@ Web:
 - `POST /esp32base/wifi`
 - `POST /esp32base/api/wifi`
 - `POST /esp32base/api/wifi/clear`
+- `GET /esp32base/auth`
+- `POST /esp32base/auth`
 
 OTA:
 
@@ -176,14 +183,22 @@ Logs 页面：
 - FS/FileLog 不可用时显示 `File log: unavailable`。
 - 读取日志内容前必须调用 `Esp32BaseFileLog::flush()`。
 - 显示 enabled、path、file level、rotate files、buffer used/total、flush interval、max per file、max total、每段大小。
-- 以 history/current 顺序展示日志内容。
+- 页面顶部以标签展示所有 segment，顺序为 `current-0`、`history-1`、`history-2` 到最旧 history。
+- 默认显示 `current-0`；可通过 `?segment=N` 查看单个历史文件，非法或越界 segment 回落到 `current-0`。
 - 日志内容必须 HTML escape。
 - 清空日志只接受 POST，表单使用 `confirm()` 和 `once(form)`，成功后 303 redirect。
+- 日志正文一次只展示一个 segment，并输出当前 segment 标题，包括 0 字节文件。
+- 日志内容只做 HTML escape，不折叠、不省略、不规整空白行，页面展示应忠实反映文件内容。
 
 状态页/API：
 
 - heap、flash、FS、OTA 大数字字节数必须包含 raw bytes 和人性化格式。
 - JSON 字段建议同时提供 `bytes` 和 `human`，避免前端重复实现单位转换。
+
+系统首页：
+
+- `/esp32base` 展示固件、profile、hostname、uptime、boot count、reset/wake reason 及中文说明、heap、flash、WiFi/IP/RSSI、FS、FileLog、NTP、OTA 等当前 profile 可用信息。
+- 未启用的模块不显示对应行，避免非 FULL profile 引入额外依赖。
 
 页面风格：
 
@@ -191,6 +206,8 @@ Logs 页面：
 - 移动端友好。
 - 顶部导航。
 - 简洁按钮和表单。
+- 默认输入框样式只作用于文本类输入，例如未声明 type 的 input、text、password、number、email、url、tel、search。
+- checkbox、radio、file、range、color、hidden 等非文本控件保持浏览器原生尺寸和行为，业务页面不需要额外覆盖基础 CSS。
 - 统一 `.ok`、`.err`、`.info` 状态样式。
 - 危险操作统一二次确认。
 - POST 成功优先 303 redirect。
@@ -259,6 +276,8 @@ Esp32BaseWeb::addPage("/config", "配置", handleConfigPage);
 - 配置业务首页后，导航品牌链接指向业务首页，业务主导航不会重复显示同一个首页入口。
 - `SYSTEM_NAV_SECTION` 会在页面底部以小字系统入口与 `Free heap` 同行展示；窄屏下系统入口可自然换行，避免遮挡和横向滚动。
 - 基础库页面复用同一套导航框架，业务页和系统页保持一致入口结构。
+- `/esp32base` 系统页展示固件、profile、hostname、uptime、boot count、reset/wake reason 及中文说明、heap、flash，以及当前 profile 可用的 WiFi、FS、FileLog、NTP、OTA 状态。
+- `/esp32base/api/status` 保留 `resetReason` / `wakeReason` 原始字段，并提供 `resetReasonText` / `wakeReasonText` 中文说明字段。
 
 同一路径 API 分流：
 
