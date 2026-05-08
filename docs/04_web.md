@@ -193,7 +193,8 @@ Logs 页面：
 
 状态页/API：
 
-- heap、flash、FS、OTA 大数字字节数必须包含 raw bytes 和人性化格式。
+- 内置系统首页的 heap、flash、FS、FileLog 容量只显示 KB/MB/B 人性化格式，不重复 raw bytes。
+- OTA 进度和 API 大数字字节数可继续包含 raw bytes 和人性化格式。
 - JSON 字段建议同时提供 `bytes` 和 `human`，避免前端重复实现单位转换。
 
 系统首页：

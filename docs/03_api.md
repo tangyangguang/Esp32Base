@@ -401,6 +401,12 @@ NTP 默认使用 UTC+8，即 `ESP32BASE_NTP_GMT_OFFSET_SEC=(8L * 3600L)`、`ESP3
 
 `isTimeSynced()` 默认要求当前 epoch >= `ESP32BASE_NTP_SYNC_MIN_EPOCH`，该宏默认 `1700000000UL`，避免把明显未同步或异常回退的时间误判为已同步。
 
+NTP 日志策略：
+
+- `isTimeSynced()` 是状态查询，不代表发生了一次 NTP 同步尝试；未同步状态不输出周期性 WARN/DEBUG。
+- `ntp_client_started` 和对时成功日志使用 INFO。
+- 只有接入明确的单次同步失败事件时，才应为该失败事件输出 WARN。
+
 NTP 对时成功日志必须包含：
 
 - 当前实际日期时间。
@@ -517,7 +523,7 @@ Route 缓冲机制：
 - `setHomeMode(HOME_ESP32BASE)` 保持基础库首页默认行为；`HOME_APP` 让 `/` 和 `/esp32base` 优先进入业务首页；`HOME_COMBINED` 让 `/` 进入业务首页，并保留 `/esp32base` 为融合首页。
 - `setSystemNavMode()` 控制基础功能入口位置：顶部、底部或底部紧凑系统工具区；`SYSTEM_NAV_SECTION` 会把系统入口作为小字链接与 `Free heap` 放在同一 footer 区域，窄屏可自然换行。
 - `setBuiltinLabel()` 覆盖内置导航标签，可用于中文本地化。
-- `/esp32base` 系统页展示固件、profile、hostname、uptime、boot count、reset/wake reason 及中文说明、heap、flash，以及当前 profile 可用的 WiFi、FS、FileLog、NTP、OTA 状态。
+- `/esp32base` 系统页展示固件、profile、hostname、uptime、boot count、reset/wake reason 及中文说明、heap、flash，以及当前 profile 可用的 WiFi、FS、FileLog、NTP、OTA 状态；页面容量值只显示 KB/MB/B 人性化格式。
 - `/esp32base/auth` 是内置认证管理页面，受当前 Basic Auth 保护，提交成功后新账号密码立即生效。
 - Web Auth 认证优先级为：已保存认证 > 应用默认认证 > 库默认 `admin/admin`。
 - `setDefaultAuth(user, pass)` 设置应用默认认证；如果用户已保存认证，不会覆盖已保存认证。

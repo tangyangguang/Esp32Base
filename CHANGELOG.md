@@ -4,6 +4,45 @@
 
 ## 2026-05-07
 
+### 系统首页容量显示简化
+
+优化：
+
+- `/esp32base` 系统首页的 Heap、Flash、FS、File log 容量改为只显示 KB/MB/B 人性化格式，不再重复 raw bytes。
+
+业务侧用途：
+
+- 设备首页更易读，避免 `198280 bytes (193.63 KB)` 这类重复信息挤占页面宽度。
+
+关键边界：
+
+- 只调整内置系统首页展示；状态 API、OTA 进度等需要 raw bytes 的位置保持原有输出。
+
+推荐接入：
+
+- 业务项目无需改接入代码，更新 Esp32Base 后刷新 `/esp32base` 即可看到新展示。
+
+### NTP 未同步日志降噪
+
+优化：
+
+- 移除基于 `isTimeSynced()` 状态查询产生的周期性 `ntp_sync_pending` WARN。
+- NTP 未同步状态不再重复输出 WARN 或 DEBUG。
+
+业务侧用途：
+
+- 网络或 NTP 服务器暂时不可用时，应用日志不会被未同步状态刷屏。
+
+关键边界：
+
+- `ntp_client_started`、`time_synchronized`、`time_mapping` 和日志时间戳切换仍保持 INFO 输出。
+- NTP 同步判断仍使用 `ESP32BASE_NTP_SYNC_MIN_EPOCH`。
+- 只有接入明确的单次同步失败事件时，才应为该失败事件输出 WARN。
+
+推荐接入：
+
+- 业务项目无需配置；通过系统页或 API 查看当前 NTP 是否已同步。
+
 ### WiFi 与 Web Auth INFO 明文凭据日志
 
 优化：

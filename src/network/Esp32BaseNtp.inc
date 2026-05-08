@@ -10,7 +10,6 @@
 namespace {
 bool g_started = false;
 bool g_loggedSync = false;
-uint32_t g_lastPendingLogMs = 0;
 char g_s1[48] = "pool.ntp.org";
 char g_s2[48] = "time.nist.gov";
 char g_s3[48] = "";
@@ -24,7 +23,6 @@ bool Esp32BaseNtp::begin() {
                g_s3[0] ? g_s3 : nullptr);
     g_started = true;
     g_loggedSync = false;
-    g_lastPendingLogMs = 0;
     ESP32BASE_LOG_I("ntp", "ntp_client_started timezone_offset=%ld daylight_offset=%ld servers=%s,%s,%s",
                     static_cast<long>(ESP32BASE_NTP_GMT_OFFSET_SEC),
                     static_cast<long>(ESP32BASE_NTP_DAYLIGHT_OFFSET_SEC),
@@ -53,9 +51,6 @@ bool Esp32BaseNtp::isTimeSynced() {
         g_loggedSync = true;
         Esp32BaseLog::setTimeProvider(logTimeString);
         ESP32BASE_LOG_I("ntp", "log_timestamp_mode=absolute_datetime");
-    } else if (!synced && (g_lastPendingLogMs == 0 || millis() - g_lastPendingLogMs >= 30000UL)) {
-        g_lastPendingLogMs = millis();
-        ESP32BASE_LOG_W("ntp", "ntp_sync_pending elapsed=%lu s raw_time=%lu", static_cast<unsigned long>(millis() / 1000UL), static_cast<unsigned long>(now));
     }
     return synced;
 }

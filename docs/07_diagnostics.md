@@ -225,6 +225,7 @@ CI 应覆盖核心矩阵，release 前执行完整矩阵。
 - NTP 对时前日志时间戳使用启动后毫秒数，例如 `[42442]`；对时后切换为绝对日期时间。
 - NTP 默认按 UTC+8 输出本地时间，应用可通过 `ESP32BASE_NTP_GMT_OFFSET_SEC` / `ESP32BASE_NTP_DAYLIGHT_OFFSET_SEC` 覆盖。
 - NTP 同步判断默认要求 epoch >= `ESP32BASE_NTP_SYNC_MIN_EPOCH`，默认值为 `1700000000UL`。
+- NTP 未同步状态不输出周期性 WARN/DEBUG；只有明确的单次同步失败事件才应输出 WARN。
 - 字节数同时显示 raw bytes 与 KB/MB。
 - NTP 对时成功后输出实际时间、当前 uptime、推算 boot wall time。
 - WiFi 连接、断开、重连 backoff、进入/退出 config portal 都必须有清晰日志。

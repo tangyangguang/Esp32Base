@@ -1089,10 +1089,10 @@ void handleRoot() {
     char minHeap[48];
     char totalHeap[48];
     char flash[48];
-    Esp32BaseLog::formatBytes(Esp32BaseSystem::freeHeap(), freeHeap, sizeof(freeHeap));
-    Esp32BaseLog::formatBytes(Esp32BaseSystem::minFreeHeap(), minHeap, sizeof(minHeap));
-    Esp32BaseLog::formatBytes(Esp32BaseSystem::totalHeap(), totalHeap, sizeof(totalHeap));
-    Esp32BaseLog::formatBytes(Esp32BaseSystem::flashSize(), flash, sizeof(flash));
+    formatReadableBytes(Esp32BaseSystem::freeHeap(), freeHeap, sizeof(freeHeap));
+    formatReadableBytes(Esp32BaseSystem::minFreeHeap(), minHeap, sizeof(minHeap));
+    formatReadableBytes(Esp32BaseSystem::totalHeap(), totalHeap, sizeof(totalHeap));
+    formatReadableBytes(Esp32BaseSystem::flashSize(), flash, sizeof(flash));
     snprintf(value, sizeof(value), "free %s, min %s, total %s", freeHeap, minHeap, totalHeap);
     sendInfoRow("Heap", value);
     sendInfoRow("Flash", flash);
@@ -1120,9 +1120,9 @@ void handleRoot() {
         char used[48];
         char total[48];
         char freeBytes[48];
-        Esp32BaseLog::formatBytes(Esp32BaseFs::usedBytes(), used, sizeof(used));
-        Esp32BaseLog::formatBytes(Esp32BaseFs::totalBytes(), total, sizeof(total));
-        Esp32BaseLog::formatBytes(Esp32BaseFs::freeBytes(), freeBytes, sizeof(freeBytes));
+        formatReadableBytes(Esp32BaseFs::usedBytes(), used, sizeof(used));
+        formatReadableBytes(Esp32BaseFs::totalBytes(), total, sizeof(total));
+        formatReadableBytes(Esp32BaseFs::freeBytes(), freeBytes, sizeof(freeBytes));
         snprintf(value, sizeof(value), "used %s, free %s, total %s", used, freeBytes, total);
         sendInfoRow("FS", value);
     } else {
@@ -1134,7 +1134,7 @@ void handleRoot() {
     sendEscapedHtmlChunk(Esp32BaseFileLog::isEnabled() ? "enabled" : "disabled");
     if (Esp32BaseFileLog::isEnabled()) {
         char sizeBuf[48];
-        Esp32BaseLog::formatBytes(Esp32BaseFileLog::size(), sizeBuf, sizeof(sizeBuf));
+        formatReadableBytes(Esp32BaseFileLog::size(), sizeBuf, sizeof(sizeBuf));
         sendChunk("<br>");
         sendEscapedHtmlChunk(Esp32BaseFileLog::path());
         sendChunk(" / ");
