@@ -4,6 +4,23 @@
 
 ## 2026-05-08
 
+### 内置 Web 页面视觉统一
+
+优化：
+
+- 内置 Web 默认正文从 14px 提升到 16px，标题层级统一为 24px / 21px / 18px。
+- 页面最大宽度提升到 1040px，顶部导航、正文 panel 和底部系统入口使用一致的设备控制台布局。
+- Status、WiFi、Auth、OTA、Logs、Tools 页面统一使用 `h1` 页面标题、白色 panel、简洁按钮、文本输入框和中性色配色。
+- Tools 页面把标题、说明和危险操作按钮收进同一个 panel，避免标题和操作区域错位。
+- 页面标题改为独立 header panel，与正文 panel 的内边距和视觉起点对齐。
+- Logs 页面移除清空按钮，只负责查看日志；`Clear logs` 维护动作移到 Tools 页面。
+- Logs 页面输出大日志时周期性 yield/feed Watchdog，降低长日志请求触发看门狗的风险。
+
+关键边界：
+
+- 只调整内置默认 HTML/CSS，不新增主题系统或配置 API。
+- 业务项目仍可通过 `setHeadExtraCallback()` 注入 CSS 覆盖默认视觉。
+
 ### 快速命令行 Web OTA
 
 新增：

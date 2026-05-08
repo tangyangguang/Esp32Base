@@ -180,6 +180,7 @@ Tools 维护页：
 - 重启按钮必须有二次确认，并通过统一 lifecycle restart 执行；POST 响应必须替换浏览器历史到 GET URL，避免刷新重复提交。
 - 重启和格式化等危险操作必须分组显示，避免按钮与下一项标题贴得太近。
 - 启用 FS 的 profile 显示 `Format LittleFS`，该操作会删除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth 或 NVS 配置。
+- 启用 FileLog 的 profile 显示 `Clear logs`，清空日志只接受 POST，表单使用 `confirm()` 和 `once(form)`，成功后回到 Tools 页面显示结果。
 - 格式化 FS 是显式 POST 操作；执行前 flush 文件日志，成功后重新 mount FS，并重新加载文件日志配置；成功提示应明确显示在 Tools 页面，同时输出 WARN 级维护日志记录请求、format/mount/FileLog reload 结果。重启请求同样输出 WARN 级维护日志。
 - 普通 `GET` 页面慢请求只输出 DEBUG；`POST` 等操作慢请求继续输出 WARN。
 - API 层仍建议要求 POST，不使用 GET 触发重启。
@@ -203,9 +204,10 @@ Logs 页面：
 - 页面顶部以标签展示所有 segment，顺序为 `current-0`、`history-1`、`history-2` 到最旧 history；标签里的大小只显示 KB/MB/B 人性化值，不重复 raw bytes。
 - 默认显示 `current-0`；可通过 `?segment=N` 查看单个历史文件，非法或越界 segment 回落到 `current-0`。
 - 日志内容必须 HTML escape。
-- 清空日志只接受 POST，表单使用 `confirm()` 和 `once(form)`，成功后 303 redirect。
+- 清空日志入口位于 Tools 页面；Logs 页面只负责查看日志。
 - 日志正文一次只展示一个 segment，并输出当前 segment 标题，包括 0 字节文件。
 - 日志内容只做 HTML escape，不折叠、不省略、不规整空白行，页面展示应忠实反映文件内容。
+- 日志正文流式输出期间必须周期性 yield/feed Watchdog，避免大日志页面长请求触发看门狗。
 
 状态页/API：
 
@@ -220,10 +222,11 @@ Logs 页面：
 
 页面风格：
 
-- 单栏布局。
-- 移动端友好。
-- 顶部导航。
-- 简洁按钮和表单。
+- 单栏设备控制台布局，正文、顶部导航和底部系统入口使用同一页面宽度。
+- 默认正文 16px，标题 24px/21px/18px，兼顾桌面和移动端可读性。
+- 默认页面最大宽度 1040px，浅灰背景配白色 panel，避免正文和操作块错位。
+- 顶部导航使用中性色和浅绿灰 active 状态。
+- 内置状态、WiFi、Auth、OTA、Logs、Tools 页面使用统一标题、panel、按钮和表单节奏；页面标题本身使用白色 header panel，与正文 panel 内边距对齐。
 - 默认输入框样式只作用于文本类输入，例如未声明 type 的 input、text、password、number、email、url、tel、search。
 - checkbox、radio、file、range、color、hidden 等非文本控件保持浏览器原生尺寸和行为，业务页面不需要额外覆盖基础 CSS。
 - 统一 `.ok`、`.err`、`.info` 状态样式。

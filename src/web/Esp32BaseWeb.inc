@@ -18,6 +18,9 @@
 #if ESP32BASE_ENABLE_NTP
 #include "../network/Esp32BaseNtp.h"
 #endif
+#if ESP32BASE_ENABLE_WATCHDOG
+#include "../runtime/Esp32BaseWatchdog.h"
+#endif
 
 #if ESP32BASE_ENABLE_BUS
 #include "../runtime/Esp32BaseBus.h"
@@ -77,24 +80,22 @@ bool g_authLoggedForRequest = false;
 static const char WEB_HEAD[] PROGMEM =
     "<meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
     "<style>"
-    "body{font-family:sans-serif;font-size:14px;line-height:1.45;padding:12px;max-width:760px;margin:auto;color:#24303d}"
-    "h1,h2,h3{margin:0 0 12px}h1{font-size:20px}h2{font-size:18px}h3{font-size:16px}"
-    "a{color:#24303d;text-decoration:none}button,input[type=submit],input[type=button]{background:#24303d;color:#fff;padding:7px 12px;border:0;border-radius:3px;cursor:pointer;margin:2px 2px 2px 0}"
-    "input:not([type]),input[type=text],input[type=password],input[type=number],input[type=email],input[type=url],input[type=tel],input[type=search]{width:100%;padding:7px;margin:4px 0 12px;border:1px solid #d9e0e6;border-radius:3px;box-sizing:border-box}"
-    "nav{margin-bottom:14px;border-bottom:1px solid #d9e0e6;padding-bottom:8px}"
-    "details{margin:14px 0}summary{cursor:pointer;color:#24303d}"
-    "nav a{font-size:16px;display:inline-block;padding:4px 8px;margin:2px 2px 2px 0;border-radius:6px;color:#24303d}.brand{font-weight:600}nav a.active{background:#e7f1ec;color:#356b5f;font-weight:600}.ok{color:green}.err{color:#c33}.info{color:#667085;font-size:.86em;margin-top:16px}"
-    ".footerbar{margin-top:18px;padding-top:8px;border-top:1px solid #d9e0e6;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;color:#667085;font-size:13px}"
-    ".syslinks{min-width:0;flex:1 1 auto;display:flex;flex-wrap:wrap;gap:4px;align-items:center}"
-    ".syslinks a{font-size:1em;line-height:1.35;padding:3px 7px;margin:0;background:#f4f6f5;color:#667085;border-radius:4px}"
-    ".heap{flex:0 0 auto;margin-left:auto;white-space:nowrap;text-align:right;font-size:1em}"
-    "@media(max-width:520px){.footerbar{gap:6px 10px;font-size:.76em;align-items:flex-start}.syslinks a{padding:3px 6px}}"
-    "@media(max-width:360px){.heap{margin-left:0;text-align:left}}"
-    ".kv{border-collapse:collapse;width:100%;margin:8px 0 14px}.kv th,.kv td{border-bottom:1px solid #d9e0e6;padding:6px 4px;text-align:left;vertical-align:top}.kv th{width:34%;color:#667085;font-weight:400}"
-    ".tabs{display:flex;flex-wrap:wrap;gap:4px;margin:8px 0 10px}.tabs a{font-size:14px;padding:4px 8px;margin:0;background:#f4f6f5;color:#667085;border-radius:4px}.tabs a.active{background:#e7f1ec;color:#356b5f;font-weight:600}"
-    ".toolsection{margin:18px 0 0;padding-top:16px;border-top:1px solid #d9e0e6}.toolsection:first-of-type{margin-top:6px;padding-top:0;border-top:0}.toolsection form{margin:10px 0 0}"
-    ".logmeta{line-height:1.45}"
-    "pre{white-space:pre;overflow-x:auto;word-break:normal;font-size:.82em;background:#f7f7f7;padding:8px}"
+    "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:16px;line-height:1.5;margin:0;padding:18px;max-width:1040px;margin-inline:auto;color:#1f2933;background:#f6f8f7}"
+    "h1,h2,h3{color:#111827;line-height:1.25;margin:0 0 10px}h1{font-size:24px}h2{font-size:21px}h3{font-size:18px}p{margin:0 0 12px}"
+    "a{color:#25313f;text-decoration:none}.muted,.info{color:#64707d}.ok{color:#217a4f}.err,.dangertext{color:#b93a32}"
+    "nav,.panel,.footerbar{background:#fff;border:1px solid #d8e0e6;border-radius:6px;box-shadow:0 1px 2px rgba(16,24,40,.04)}"
+    "nav{margin:0 0 18px;padding:10px 12px}nav a{font-size:16px;font-weight:600;display:inline-block;padding:8px 10px;margin:2px;border-radius:5px;color:#25313f}.brand{font-weight:700}nav a.active{background:#e5f0eb;color:#245f52}"
+    ".page{margin:0}.pagehead{background:#fff;border:1px solid #d8e0e6;border-radius:6px;box-shadow:0 1px 2px rgba(16,24,40,.04);padding:14px 16px;margin:0 0 14px}.pagehead h1{margin:0}.panel{padding:16px;margin:14px 0}.panel>:last-child{margin-bottom:0}.actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px}"
+    "button,input[type=submit],input[type=button]{font-size:16px;background:#24303d;color:#fff;padding:9px 14px;border:0;border-radius:5px;cursor:pointer;margin:0 6px 6px 0}button:hover,input[type=submit]:hover,input[type=button]:hover{background:#111827}.dangerbtn,input.danger{background:#b93a32}.dangerbtn:hover,input.danger:hover{background:#9f2f29}"
+    "label{display:block;font-weight:600;margin:0 0 5px}input:not([type]),input[type=text],input[type=password],input[type=number],input[type=email],input[type=url],input[type=tel],input[type=search]{width:100%;font-size:16px;padding:9px 10px;margin:0 0 14px;border:1px solid #ccd5dd;border-radius:5px;box-sizing:border-box;background:#fff;color:#1f2933}"
+    "input[type=file]{font-size:16px;margin:2px 0 14px;max-width:100%}progress{height:14px;border:0;border-radius:8px;overflow:hidden;background:#e7ebef}"
+    "details{margin:14px 0}summary{cursor:pointer;color:#25313f}.footerbar{margin-top:18px;padding:10px 12px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;color:#64707d;font-size:14px}"
+    ".syslinks{min-width:0;flex:1 1 auto;display:flex;flex-wrap:wrap;gap:6px;align-items:center}.syslinks a{font-size:14px;line-height:1.35;padding:5px 8px;margin:0;background:#f1f4f3;color:#64707d;border-radius:5px}.heap{flex:0 0 auto;margin-left:auto;white-space:nowrap;text-align:right}"
+    "@media(max-width:640px){body{padding:12px}nav a{font-size:15px;padding:7px 8px}.footerbar{align-items:flex-start}.heap{margin-left:0;text-align:left}}"
+    ".kv{border-collapse:collapse;width:100%;margin:0}.kv th,.kv td{border-bottom:1px solid #d8e0e6;padding:8px 6px;text-align:left;vertical-align:top}.kv tr:last-child th,.kv tr:last-child td{border-bottom:0}.kv th{width:30%;color:#64707d;font-weight:600}"
+    ".tabs{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 12px}.tabs a{font-size:14px;padding:5px 8px;margin:0;background:#f1f4f3;color:#64707d;border-radius:5px}.tabs a.active{background:#e5f0eb;color:#245f52;font-weight:600}"
+    ".logmeta{line-height:1.5}.statusline{min-height:1.5em}.toolsection{padding:16px;margin:14px 0;background:#fff;border:1px solid #d8e0e6;border-radius:6px}"
+    "pre{white-space:pre;overflow-x:auto;word-break:normal;font-size:13px;line-height:1.45;background:#f1f4f3;border:1px solid #d8e0e6;border-radius:5px;padding:10px}"
     "</style>"
     "<script>function once(f){if(f.dataset.busy)return false;f.dataset.busy=1;var b=f.querySelector('[type=submit]');if(b)b.disabled=true;return true;}</script>";
 
@@ -890,13 +891,13 @@ void handleWifiPage() {
     } else if (g_server.hasArg("error")) {
         sendChunk("<p class=err>WiFi settings were not saved.</p>");
     }
-    sendChunk("<h2>WiFi Settings</h2><form method='post' action='/esp32base/wifi' onsubmit=\"if(!this.ssid.value.trim()){alert('SSID cannot be empty');return false;}if(!this.password.value.trim()){alert('Password cannot be empty');return false;}if(this.ssid.value.length>32||this.password.value.length>64){alert('SSID or password is too long');return false;}return once(this);\">");
-    sendChunk("SSID<input name='ssid' value='");
+    sendChunk("<header class='pagehead'><h1>WiFi Settings</h1></header><section class='panel'><form method='post' action='/esp32base/wifi' onsubmit=\"if(!this.ssid.value.trim()){alert('SSID cannot be empty');return false;}if(!this.password.value.trim()){alert('Password cannot be empty');return false;}if(this.ssid.value.length>32||this.password.value.length>64){alert('SSID or password is too long');return false;}return once(this);\">");
+    sendChunk("<label for='ssid'>SSID</label><input id='ssid' name='ssid' value='");
     sendEscapedHtmlChunk(ssid);
-    sendChunk("' maxlength='32' autocomplete='off'>Password<input id='wp' type='password' name='password' value='");
+    sendChunk("' maxlength='32' autocomplete='off'><label for='wp'>Password</label><input id='wp' type='password' name='password' value='");
     sendEscapedHtmlChunk(password);
-    sendChunk("' maxlength='64'><input type='button' value='Show/Hide Password' onclick=\"var p=document.getElementById('wp');p.type=p.type=='password'?'text':'password'\"><input type='submit' value='Save &amp; Connect'></form>");
-    sendChunk("<form method='post' action='/esp32base/api/wifi/clear' onsubmit=\"return confirm('Clear WiFi credentials?')&&once(this)\"><input type='submit' value='Clear WiFi' style='background:#c33'></form>");
+    sendChunk("' maxlength='64'><div class='actions'><input type='button' value='Show/Hide Password' onclick=\"var p=document.getElementById('wp');p.type=p.type=='password'?'text':'password'\"><input type='submit' value='Save &amp; Connect'></div></form></section>");
+    sendChunk("<section class='panel'><h2>Clear WiFi</h2><p class='muted'>Remove stored WiFi credentials from this device.</p><form method='post' action='/esp32base/api/wifi/clear' onsubmit=\"return confirm('Clear WiFi credentials?')&&once(this)\"><input class='danger' type='submit' value='Clear WiFi'></form></section>");
     Esp32BaseWeb::sendFooter();
 }
 
@@ -947,11 +948,13 @@ void handleToolsPage() {
         return;
     }
     Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_TOOLS]);
-    sendChunk("<h2>");
+    sendChunk("<header class='pagehead'><h1>");
     sendEscapedHtmlChunk(g_builtinLabels[Esp32BaseWeb::BUILTIN_TOOLS]);
-    sendChunk("</h2>");
+    sendChunk("</h1></header>");
     if (g_server.hasArg("formatted")) {
         sendChunk("<p class='ok'><b>LittleFS formatted.</b> FileLog configuration was reloaded.</p>");
+    } else if (g_server.hasArg("logs_cleared")) {
+        sendChunk("<p class='ok'><b>Logs cleared.</b></p>");
     } else if (g_server.hasArg("error")) {
         sendChunk("<p class='err'>Tools action failed: ");
         sendEscapedHtmlChunk(g_server.arg("error").c_str());
@@ -959,11 +962,16 @@ void handleToolsPage() {
     } else if (g_server.hasArg("restarting")) {
         sendChunk("<p class='ok'><b>Restart requested.</b> Device is restarting. Please wait a few seconds, then reload.</p>");
     }
-    sendChunk("<section class='toolsection'><h3>Restart device</h3><p>Restart the device through the normal lifecycle path.</p><form method='post' action='/esp32base/tools/reboot' onsubmit=\"return confirm('Reboot device now?')&&once(this)\"><input type='submit' value='Restart device' style='background:#c33'></form></section>");
+    sendChunk("<section class='panel'><h2>Restart device</h2><p class='muted'>Restart the device through the normal lifecycle path.</p><form method='post' action='/esp32base/tools/reboot' onsubmit=\"return confirm('Reboot device now?')&&once(this)\"><input class='danger' type='submit' value='Restart device'></form></section>");
 #if ESP32BASE_ENABLE_FS
-    sendChunk("<section class='toolsection'><h3>Format LittleFS</h3><p class='err'>This deletes logs and all files stored in LittleFS. WiFi, Web Auth and NVS config are not cleared.</p><form method='post' action='/esp32base/tools/format-fs' onsubmit=\"return confirm('Format LittleFS? This deletes logs and all files stored in LittleFS.')&&once(this)\"><input type='submit' value='Format LittleFS' style='background:#c33'></form></section>");
+    sendChunk("<section class='panel'><h2>Format LittleFS</h2><p class='dangertext'>This deletes logs and all files stored in LittleFS. WiFi, Web Auth and NVS config are not cleared.</p><form method='post' action='/esp32base/tools/format-fs' onsubmit=\"return confirm('Format LittleFS? This deletes logs and all files stored in LittleFS.')&&once(this)\"><input class='danger' type='submit' value='Format LittleFS'></form></section>");
 #else
-    sendChunk("<section class='toolsection'><h3>Format LittleFS</h3><p>LittleFS is unavailable in this profile.</p></section>");
+    sendChunk("<section class='panel'><h2>Format LittleFS</h2><p class='muted'>LittleFS is unavailable in this profile.</p></section>");
+#endif
+#if ESP32BASE_ENABLE_FILELOG
+    sendChunk("<section class='panel'><h2>Clear logs</h2><p class='dangertext'>Delete all file log contents. Runtime settings and WiFi credentials are not changed.</p><form method='post' action='/esp32base/tools/logs-clear' onsubmit=\"return confirm('Clear log files?')&&once(this)\"><input class='danger' type='submit' value='Clear Logs'></form></section>");
+#else
+    sendChunk("<section class='panel'><h2>Clear logs</h2><p class='muted'>File log is unavailable in this profile.</p></section>");
 #endif
     Esp32BaseWeb::sendFooter();
 }
@@ -975,7 +983,7 @@ void handleToolsRebootPost() {
     }
     ESP32BASE_LOG_W("web", "restart_requested source=tools");
     Esp32BaseWeb::sendHeader("Rebooting");
-    sendChunk("<script>history.replaceState(null,'','/esp32base/tools?restarting=1');</script><h2>Rebooting...</h2><p>Device is restarting. Please wait a few seconds, then reload.</p>");
+    sendChunk("<script>history.replaceState(null,'','/esp32base/tools?restarting=1');</script><header class='pagehead'><h1>Rebooting...</h1></header><section class='panel'><p>Device is restarting. Please wait a few seconds, then reload.</p></section>");
     Esp32BaseWeb::sendFooter();
     delay(100);
     Esp32BaseSystem::restart("web");
@@ -1011,6 +1019,19 @@ void handleToolsFormatFsPost() {
 #else
     ESP32BASE_LOG_W("web", "fs_format_requested source=tools result=unavailable");
     redirectSeeOther("/esp32base/tools?error=fs_unavailable");
+#endif
+}
+
+void handleToolsLogsClearPost() {
+    markRequest();
+    if (!ensureAuth()) {
+        return;
+    }
+#if ESP32BASE_ENABLE_FILELOG
+    const bool ok = Esp32BaseFileLog::clear();
+    redirectSeeOther(ok ? "/esp32base/tools?logs_cleared=1" : "/esp32base/tools?error=logs_clear_failed");
+#else
+    redirectSeeOther("/esp32base/tools?error=logs_unavailable");
 #endif
 }
 
@@ -1052,7 +1073,7 @@ void handleOtaPage() {
         return;
     }
     Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_OTA]);
-    sendChunk("<h2>OTA Update</h2><form id='f'><input id='fw' type='file' name='firmware' accept='.bin' required><input id='sha' placeholder='SHA256 optional' maxlength='64'><input type='submit' value='Upload Firmware'></form><progress id='p' value='0' max='100' style='width:100%;display:none'></progress><p id='s'></p>");
+    sendChunk("<header class='pagehead'><h1>OTA Update</h1></header><section class='panel'><form id='f'><label for='fw'>Firmware file</label><input id='fw' type='file' name='firmware' accept='.bin' required><label for='sha'>SHA256</label><input id='sha' placeholder='Optional 64-character digest' maxlength='64'><input type='submit' value='Upload Firmware'></form><progress id='p' value='0' max='100' style='width:100%;display:none'></progress><p id='s' class='statusline muted'></p></section>");
     sendChunk("<script>function h(n){var u=['B','KB','MB','GB'],i=0,x=n;while(x>=1024&&i<u.length-1){x/=1024;i++;}return n+' bytes ('+(i?x.toFixed(2):x)+' '+u[i]+')';}document.getElementById('f').onsubmit=function(e){e.preventDefault();if(this.dataset.busy)return false;this.dataset.busy=1;var f=document.getElementById('fw').files[0],st=document.getElementById('s'),pg=document.getElementById('p'),b=this.querySelector('[type=submit]');if(!f){this.dataset.busy='';return false;}var d=new FormData();d.append('firmware',f,f.name);var x=new XMLHttpRequest();if(b)b.disabled=true;pg.style.display='block';st.textContent='Uploading 0%';x.upload.onprogress=function(ev){if(ev.lengthComputable){var p=Math.floor(ev.loaded*100/ev.total);pg.value=p;st.textContent='Uploading '+p+'% '+h(ev.loaded)+' / '+h(ev.total);}};x.onload=function(){var r={};try{r=JSON.parse(x.responseText||'{}');}catch(e){}if(x.status==200){st.textContent='Upload successful. Restarting...';setTimeout(function(){location.href=r.redirect||'/esp32base';},8000);return;}st.textContent='Upload failed: '+(r.error||('HTTP '+x.status));document.getElementById('f').dataset.busy='';if(b)b.disabled=false;};x.onerror=function(){st.textContent='Upload failed: network error';document.getElementById('f').dataset.busy='';if(b)b.disabled=false;};x.open('POST','/esp32base/ota');x.setRequestHeader('X-Firmware-Size',String(f.size));var s=document.getElementById('sha').value;if(s)x.setRequestHeader('X-Sha256',s);x.send(d);return false;};</script>");
     Esp32BaseWeb::sendFooter();
 }
@@ -1146,9 +1167,9 @@ void handleRoot() {
         return;
     }
     Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_HOME]);
-    sendChunk("<div class='statuspage'><h2>");
+    sendChunk("<header class='pagehead'><h1>");
     sendEscapedHtmlChunk(g_deviceName);
-    sendChunk("</h2><table class='kv'>");
+    sendChunk("</h1></header><section class='panel statuspage'><table class='kv'>");
     sendInfoRowStart("Firmware");
     sendEscapedHtmlChunk(Esp32Base::firmwareName());
     sendChunk(" ");
@@ -1249,12 +1270,12 @@ void handleRoot() {
 #if ESP32BASE_ENABLE_OTA
     sendInfoRow("OTA", otaStatusName(Esp32BaseOta::status()));
 #endif
-    sendChunk("</table>");
+    sendChunk("</table></section>");
     if (g_homeMode == Esp32BaseWeb::HOME_ESP32BASE && appNavCount() > 0) {
-        sendChunk("<h2>Application</h2>");
+        sendChunk("<section class='panel'><h2>Application</h2>");
         sendAppLinks(true, nullptr);
+        sendChunk("</section>");
     }
-    sendChunk("</div>");
     Esp32BaseWeb::sendFooter();
 }
 
@@ -1294,6 +1315,13 @@ void sendLogEscapedChunk(const char* data, size_t len, void* user) {
                 one[0] = data[i];
                 sendChunk(one);
                 break;
+        }
+        if ((i & 0x3f) == 0x3f) {
+            flushChunkBuffer();
+#if ESP32BASE_ENABLE_WATCHDOG
+            Esp32BaseWatchdog::feed();
+#endif
+            yield();
         }
     }
 }
@@ -1343,13 +1371,12 @@ void handleLogsPage() {
         return;
     }
     Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_LOGS]);
-    sendChunk("<h2>");
+    sendChunk("<header class='pagehead'><h1>");
     sendEscapedHtmlChunk(g_builtinLabels[Esp32BaseWeb::BUILTIN_LOGS]);
-    sendChunk("</h2>");
+    sendChunk("</h1></header>");
 #if ESP32BASE_ENABLE_FILELOG
-    sendChunk("<form method='post' action='/esp32base/logs/clear' onsubmit=\"return confirm('Clear log files?')&&once(this)\"><input type='submit' value='Clear Log' style='background:#c33'></form>");
     if (!Esp32BaseFileLog::isEnabled()) {
-        sendChunk("<p>File log: <b>disabled</b></p>");
+        sendChunk("<section class='panel'><p>File log: <b>disabled</b></p></section>");
         Esp32BaseWeb::sendFooter();
         return;
     }
@@ -1382,15 +1409,15 @@ void handleLogsPage() {
         sendChunk(line);
     }
     const uint8_t selectedSegment = selectedLogSegment();
-    sendChunk("</p>");
+    sendChunk("</p></section><section class='panel'>");
     sendLogSegmentTabs(selectedSegment);
     sendChunk("<pre>");
     char selectedTitle[16];
     logSegmentTitle(selectedSegment, selectedTitle, sizeof(selectedTitle));
     sendLogSegment(selectedSegment, selectedTitle);
-    sendChunk("</pre>");
+    sendChunk("</pre></section>");
 #else
-    sendChunk("<p>File log: <b>unavailable</b></p>");
+    sendChunk("<section class='panel'><p>File log: <b>unavailable</b></p></section>");
 #endif
     Esp32BaseWeb::sendFooter();
 }
@@ -1414,9 +1441,9 @@ void handleAuthPage() {
         return;
     }
     Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_AUTH]);
-    sendChunk("<h2>");
+    sendChunk("<header class='pagehead'><h1>");
     sendEscapedHtmlChunk(g_builtinLabels[Esp32BaseWeb::BUILTIN_AUTH]);
-    sendChunk("</h2>");
+    sendChunk("</h1></header>");
     if (g_server.hasArg("saved")) {
         sendChunk("<p class='ok'>Auth updated. Use the new credentials on the next auth prompt.</p>");
     } else if (g_server.hasArg("error")) {
@@ -1424,17 +1451,17 @@ void handleAuthPage() {
         sendEscapedHtmlChunk(g_server.arg("error").c_str());
         sendChunk("</p>");
     }
-    sendChunk("<form method='post' action='/esp32base/auth' onsubmit=\"var f=this;function v(n){return f.elements[n].value.trim();}if(!v('current_user')||!v('current_pass')||!v('new_user')||!v('new_pass')||!v('confirm_pass')){alert('All auth fields are required');return false;}if(v('new_pass')!=v('confirm_pass')){alert('New passwords do not match');return false;}return once(this)\">");
-    sendChunk("Current auth user<input name='current_user' maxlength='31' required value='");
+    sendChunk("<section class='panel'><form method='post' action='/esp32base/auth' onsubmit=\"var f=this;function v(n){return f.elements[n].value.trim();}if(!v('current_user')||!v('current_pass')||!v('new_user')||!v('new_pass')||!v('confirm_pass')){alert('All auth fields are required');return false;}if(v('new_pass')!=v('confirm_pass')){alert('New passwords do not match');return false;}return once(this)\">");
+    sendChunk("<label for='current_user'>Current auth user</label><input id='current_user' name='current_user' maxlength='31' required value='");
     sendEscapedHtmlChunk(g_authUser);
     sendChunk("'>");
-    sendChunk("Current auth password<input type='password' name='current_pass' maxlength='63' autocomplete='current-password' required>");
-    sendChunk("New auth user<input name='new_user' maxlength='31' required value='");
+    sendChunk("<label for='current_pass'>Current auth password</label><input id='current_pass' type='password' name='current_pass' maxlength='63' autocomplete='current-password' required>");
+    sendChunk("<label for='new_user'>New auth user</label><input id='new_user' name='new_user' maxlength='31' required value='");
     sendEscapedHtmlChunk(g_authUser);
     sendChunk("'>");
-    sendChunk("New auth password<input type='password' name='new_pass' maxlength='63' autocomplete='new-password' required>");
-    sendChunk("Confirm new auth password<input type='password' name='confirm_pass' maxlength='63' autocomplete='new-password' required>");
-    sendChunk("<input type='submit' value='Save Auth'></form>");
+    sendChunk("<label for='new_pass'>New auth password</label><input id='new_pass' type='password' name='new_pass' maxlength='63' autocomplete='new-password' required>");
+    sendChunk("<label for='confirm_pass'>Confirm new auth password</label><input id='confirm_pass' type='password' name='confirm_pass' maxlength='63' autocomplete='new-password' required>");
+    sendChunk("<input type='submit' value='Save Auth'></form></section>");
     Esp32BaseWeb::sendFooter();
 }
 
@@ -1506,6 +1533,7 @@ bool Esp32BaseWeb::begin() {
     g_server.on("/esp32base/tools", HTTP_GET, handleToolsPage);
     g_server.on("/esp32base/tools/reboot", HTTP_POST, handleToolsRebootPost);
     g_server.on("/esp32base/tools/format-fs", HTTP_POST, handleToolsFormatFsPost);
+    g_server.on("/esp32base/tools/logs-clear", HTTP_POST, handleToolsLogsClearPost);
     g_server.on("/esp32base/reboot", HTTP_GET, handleToolsPage);
     g_server.on("/esp32base/reboot", HTTP_POST, handleToolsRebootPost);
     g_server.on("/esp32base/api/restart", HTTP_POST, handleRestart);
@@ -1791,18 +1819,21 @@ void Esp32BaseWeb::sendHeader(const char* title) {
     }
     sendChunk("</head><body>");
     sendMainNav();
+    sendChunk("<main class='page'>");
 }
 
 void Esp32BaseWeb::sendFooter() {
     char heap[48];
     formatReadableBytes(Esp32BaseSystem::freeHeap(), heap, sizeof(heap));
     if (g_systemNavMode == Esp32BaseWeb::SYSTEM_NAV_SECTION) {
+        sendChunk("</main>");
         sendChunk("<footer class='footerbar'><span class='syslinks'>");
         sendSystemLinks(false);
         sendChunk("</span><span class='heap'>Free heap: ");
         sendEscapedHtmlChunk(heap);
         sendChunk("</span></footer></body></html>");
     } else {
+        sendChunk("</main>");
         sendSystemNavSection();
         sendChunk("<div class=info>Free heap: ");
         sendEscapedHtmlChunk(heap);
