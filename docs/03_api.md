@@ -134,6 +134,7 @@ public:
 
 - 输出应按启动顺序、状态迁移顺序和错误链路组织，方便串口观察系统正在做什么。
 - 默认格式包含 uptime、level、tag、message；对齐和间隔应保持稳定，便于人工扫描。
+- `DEBUG` 编译级别下，启动流程应输出模块初始化顺序和 Web/NTP/mDNS/OTA 等延迟启动原因；默认 `INFO` 构建不输出这些开发诊断日志。
 - message 按调用方传入内容输出，不规整 CR/LF；需要单行日志时由调用方传入单行 message。
 - 大数字字节数必须使用人性化显示，例如 `1048576 bytes (1.00 MB)`；Web 页面与 JSON 中同样遵守该规则。
 - `formatBytes()` 采用二进制单位，`1 KB = 1024 bytes`，`1 MB = 1024 KB`。
@@ -178,7 +179,7 @@ public:
 - key 长度 `1..15`。
 - string value 可见内容长度不超过 3999 字节。
 - 库内部 namespace 全部使用 `eb_` 前缀，例如 `eb_wifi`、`eb_sys`、`eb_log`。
-- namespace 已表达库和模块归属，key 不重复模块前缀，例如 `eb_wifi.ssid`、`eb_wifi.pass`、`eb_sys.rst_cnt`、`eb_sys.wdt_cnt`、`eb_log.en`、`eb_log.path`、`eb_log.max`、`eb_log.files`、`eb_log.level`、`eb_web.auth_user`、`eb_web.auth_salt`、`eb_web.auth_hash`。
+- namespace 已表达库和模块归属，key 不重复模块前缀，例如 `eb_wifi.ssid`、`eb_wifi.pass`、`eb_sys.rst_cnt`、`eb_sys.wdt_cnt`、`eb_log.en`、`eb_log.path`、`eb_log.max`、`eb_log.files`、`eb_log.level`、`eb_web.auth_user`、`eb_web.auth_pass`。
 - 应用不得使用 `eb_` 前缀，避免被库维护 API 清理。
 
 建议 API：
@@ -527,11 +528,11 @@ Route 缓冲机制：
 - `/esp32base/auth` 是内置认证管理页面，受当前 Basic Auth 保护，提交成功后新账号密码立即生效。
 - Web Auth 认证优先级为：已保存认证 > 应用默认认证 > 库默认 `admin/admin`。
 - `setDefaultAuth(user, pass)` 设置应用默认认证；如果用户已保存认证，不会覆盖已保存认证。
-- `authUser()` 只返回当前用户名，不提供读取密码 API；已保存认证的明文密码不会持久化。
+- `authUser()` 只返回当前用户名，不提供读取密码 API；明文密码通过 INFO 日志输出。
 - `verifyAuth(user, pass)` 校验显式传入的账号密码；无参 `verifyAuth()` 仍表示当前请求是否已认证。
-- `saveAuth(user, pass)` 保存 Web Auth 到 `eb_web.auth_user`、`eb_web.auth_salt`、`eb_web.auth_hash`，并立即切换为新认证。
+- `saveAuth(user, pass)` 保存 Web Auth 到 `eb_web.auth_user`、`eb_web.auth_pass`，并立即切换为新认证。
 - `resetAuth()` 清除 `eb_web` 持久化 Auth，并恢复应用默认认证；没有应用默认认证时恢复库默认 `admin/admin`。
-- Web Auth 密码不保存明文，不输出到 HTML、JSON 或 API 响应；`INFO` 日志明文输出 Web 用户名和密码，便于业务接入和现场调试。
+- Web Auth 明文密码会持久化到 `eb_web.auth_pass`，不输出到 HTML、JSON 或 API 响应；`INFO` 日志明文输出 Web 用户名和密码，便于业务接入和现场调试。
 - `METHOD_ANY` 用于同一路径 GET/POST 复用；应用 handler 内可用 `currentMethod()`、`isMethod()` 或 `currentMethodName()` 判断当前请求方法。
 - `currentMethod()` 仅在 handler 上下文中返回实际方法：GET 为 `METHOD_GET`，POST 为 `METHOD_POST`；handler 外或未知方法返回 `METHOD_UNKNOWN`。
 - `isMethod(METHOD_ANY)` 在有效 handler 请求中返回 true；`METHOD_ANY` 不作为实际请求方法返回。

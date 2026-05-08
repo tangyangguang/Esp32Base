@@ -4,6 +4,49 @@
 
 ## 2026-05-07
 
+### 启动流程 DEBUG 诊断
+
+优化：
+
+- `DEBUG` 编译级别下，启动流程输出 `begin_start`、模块 `module_begin/module_ready`，以及 Web/NTP/mDNS/OTA 延迟启动或停止原因。
+- FS mount 成功、Web route 注册准备、OTA ready 分区信息增加 DEBUG 诊断日志。
+- 旧 Web Auth 存储缺少 `auth_pass` 时，启动时静默回退默认认证，不再触发 `Preferences.cpp ... auth_pass NOT_FOUND` 底层错误日志。
+- `full_demo` 内置 OTA 导航标签统一显示为 `OTA`，不再显示 `Update`。
+
+业务侧用途：
+
+- 应用使用 DEBUG 串口日志时，可以直接确认启动顺序、模块初始化进度和条件启动原因。
+- 旧测试设备升级后，缺少 `auth_pass` 的 NVS 记录不会污染启动日志。
+
+关键边界：
+
+- 这些 DEBUG 日志不在默认 INFO 构建中输出。
+- 文件日志如果保持 WARN，不会保存 DEBUG/INFO。
+- 不新增高频 loop、HTTP 请求或 NTP pending DEBUG 日志。
+
+推荐接入：
+
+- 业务项目需要启动诊断时，编译开启 `ESP32BASE_LOG_LEVEL=ESP32BASE_LOG_DEBUG`；长期文件日志建议继续保持 WARN。
+
+### full_demo 日志等级调整
+
+优化：
+
+- `examples/full_demo` 编译日志等级改为 DEBUG，便于串口观察调试信息。
+- `examples/full_demo` 文件日志等级改为 WARN，避免 DEBUG/INFO 写入文件日志造成日志文件膨胀。
+
+业务侧用途：
+
+- 示例串口调试信息更完整，同时 `/esp32base/logs` 中只保留 WARN/ERROR 级别的重要文件日志。
+
+关键边界：
+
+- 只调整 `full_demo` 示例；库默认日志等级和其他示例不变。
+
+推荐接入：
+
+- 业务项目如需类似行为，可编译开启 `ESP32BASE_LOG_LEVEL=ESP32BASE_LOG_DEBUG`，并将 FileLog 等级保持 WARN。
+
 ### 系统首页容量显示简化
 
 优化：
@@ -49,6 +92,9 @@
 
 - WiFi 在 INFO 日志中输出 SSID 和明文密码，覆盖表单提交、凭据设置和 STA 连接。
 - Web Auth 在 INFO 日志中输出认证用户名和明文密码，覆盖默认认证设置、保存认证和 Basic Auth 请求校验。
+- Web Auth 启动加载认证时输出 `auth_loaded user=<user> password=<pass> source=stored|default`。
+- Web Auth 明文密码持久化到 `eb_web.auth_pass`，认证校验直接比较明文密码。
+- Basic Auth 请求日志改为每个 HTTP 请求最多输出 1 条，避免 OTA 上传分块时重复刷屏。
 
 业务侧用途：
 
@@ -56,7 +102,7 @@
 
 关键边界：
 
-- Web Auth 持久化仍只保存 salted SHA-256，不保存明文密码；重启后无法直接读取已保存认证的明文密码。
+- Web Auth 持久化保存明文密码；缺少 `auth_pass` 的旧认证记录按无效存储处理并回退默认认证。
 - WiFi 凭据按既有配置策略保存到 NVS。
 - HTML、JSON 和 API 响应仍不输出 Web Auth 明文密码；WiFi 配置页仍按既有策略回显 WiFi 密码。
 
@@ -311,7 +357,7 @@ Esp32BaseWeb::addPage("/config", "配置", handleConfigPage);
 - 新增 Web Basic Auth 配置管理能力：`setDefaultAuth()`、`authUser()`、`verifyAuth(user, pass)`、`saveAuth()`、`resetAuth()`。
 - Web Auth 认证优先级明确为：已保存认证 > 应用默认认证 > 库默认 `admin/admin`；`setDefaultAuth()` 不覆盖用户已保存认证。
 - 新增内置 `/esp32base/auth` 认证管理页面，并加入系统工具导航；`BUILTIN_AUTH` 可用于本地化标签，中文推荐“认证”。
-- Web Auth 可持久化到 `eb_web.auth_user`、`eb_web.auth_salt`、`eb_web.auth_hash`，密码不保存明文，只保存 salted SHA-256 摘要。
+- Web Auth 可持久化到 `eb_web.auth_user`、`eb_web.auth_pass`，明文密码用于启动日志、认证校验和现场调试。
 - Web Auth 更新后立即生效；浏览器缓存旧 Basic Auth 时，后续请求会重新触发认证。
 - OTA 与 Auth 配置解耦：OTA route 按 profile/OTA 编译条件注册；Web Auth 开启时受 Basic Auth 保护，Web Auth 关闭时无密码保护。
 - `clearLibraryNamespaces()` 会清理 `eb_web`，恢复出厂时同步清除持久化 Web Auth。

@@ -28,9 +28,7 @@
 
 #include <WebServer.h>
 #include <Preferences.h>
-#include <esp_random.h>
 #include <mbedtls/base64.h>
-#include <mbedtls/sha256.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -61,9 +59,6 @@ char g_defaultAuthUser[32] = "admin";
 char g_defaultAuthPass[64] = "admin";
 char g_authUser[32] = "admin";
 char g_authPass[64] = "admin";
-char g_authSalt[33] = "";
-char g_authHash[65] = "";
-bool g_authHasHash = false;
 char g_deviceName[32] = "Esp32Base";
 char g_homePath[48] = "";
 Esp32BaseWeb::HomeMode g_homeMode = Esp32BaseWeb::HOME_ESP32BASE;
@@ -76,6 +71,7 @@ Esp32BaseWeb::Method g_currentMethod = Esp32BaseWeb::METHOD_UNKNOWN;
 Esp32BaseWeb::Method g_lastRequestMethod = Esp32BaseWeb::METHOD_UNKNOWN;
 bool g_requestContextActive = false;
 bool g_responseActive = false;
+bool g_authLoggedForRequest = false;
 
 static const char WEB_HEAD[] PROGMEM =
     "<meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
@@ -123,6 +119,16 @@ const char* methodName(Esp32BaseWeb::Method method) {
     }
 }
 
+uint8_t routeCount(bool appPageOnly) {
+    uint8_t count = 0;
+    for (uint8_t i = 0; i < ESP32BASE_WEB_MAX_ROUTES; ++i) {
+        if (g_routes[i].handler && (!appPageOnly || g_routes[i].appPage)) {
+            ++count;
+        }
+    }
+    return count;
+}
+
 bool validAuthUser(const char* value) {
     if (!value) {
         return false;
@@ -155,68 +161,6 @@ bool validAuthPass(const char* value) {
         }
     }
     return true;
-}
-
-void authBytesToHex(const uint8_t* bytes, size_t len, char* out, size_t outLen) {
-    static const char HEX_DIGITS[] = "0123456789abcdef";
-    if (!bytes || !out || outLen < len * 2U + 1U) {
-        return;
-    }
-    for (size_t i = 0; i < len; ++i) {
-        out[i * 2U] = HEX_DIGITS[(bytes[i] >> 4) & 0x0f];
-        out[i * 2U + 1U] = HEX_DIGITS[bytes[i] & 0x0f];
-    }
-    out[len * 2U] = '\0';
-}
-
-bool validHexString(const char* value, size_t expectedLen) {
-    if (!value || strlen(value) != expectedLen) {
-        return false;
-    }
-    for (const char* p = value; *p; ++p) {
-        const char c = *p;
-        const bool hex = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
-        if (!hex) {
-            return false;
-        }
-    }
-    return true;
-}
-
-bool makeAuthSalt(char* out, size_t len) {
-    if (!out || len < 33) {
-        return false;
-    }
-    uint8_t bytes[16];
-    for (uint8_t i = 0; i < sizeof(bytes); i += 4) {
-        const uint32_t value = esp_random();
-        bytes[i] = static_cast<uint8_t>(value & 0xff);
-        bytes[i + 1] = static_cast<uint8_t>((value >> 8) & 0xff);
-        bytes[i + 2] = static_cast<uint8_t>((value >> 16) & 0xff);
-        bytes[i + 3] = static_cast<uint8_t>((value >> 24) & 0xff);
-    }
-    authBytesToHex(bytes, sizeof(bytes), out, len);
-    return out[0] != '\0';
-}
-
-bool hashAuthPassword(const char* salt, const char* pass, char* out, size_t len) {
-    if (!validHexString(salt, 32) || !validAuthPass(pass) || !out || len < 65) {
-        return false;
-    }
-    char input[98];
-    snprintf(input, sizeof(input), "%s:%s", salt, pass);
-    uint8_t digest[32];
-    mbedtls_sha256_context ctx;
-    mbedtls_sha256_init(&ctx);
-    if (mbedtls_sha256_starts_ret(&ctx, 0) != 0 ||
-        mbedtls_sha256_update_ret(&ctx, reinterpret_cast<const unsigned char*>(input), strlen(input)) != 0 ||
-        mbedtls_sha256_finish_ret(&ctx, digest) != 0) {
-        mbedtls_sha256_free(&ctx);
-        return false;
-    }
-    mbedtls_sha256_free(&ctx);
-    authBytesToHex(digest, sizeof(digest), out, len);
-    return out[0] != '\0';
 }
 
 bool parseBasicAuth(char* user, size_t userLen, char* pass, size_t passLen) {
@@ -256,10 +200,6 @@ bool authMatches(const char* user, const char* pass) {
     if (!user || !pass || strcmp(user, g_authUser) != 0) {
         return false;
     }
-    if (g_authHasHash) {
-        char hash[65];
-        return hashAuthPassword(g_authSalt, pass, hash, sizeof(hash)) && strcmp(hash, g_authHash) == 0;
-    }
     return strcmp(pass, g_authPass) == 0;
 }
 
@@ -267,24 +207,27 @@ bool parseAndCheckAuth(const char* context) {
     char user[32];
     char pass[64];
     if (!parseBasicAuth(user, sizeof(user), pass, sizeof(pass))) {
-        ESP32BASE_LOG_I("web", "auth_request context=%s result=missing_or_invalid", context ? context : "unknown");
+        if (!g_authLoggedForRequest) {
+            g_authLoggedForRequest = true;
+            ESP32BASE_LOG_I("web", "auth_request context=%s result=missing_or_invalid", context ? context : "unknown");
+        }
         return false;
     }
     const bool ok = authMatches(user, pass);
-    ESP32BASE_LOG_I("web", "auth_request context=%s user=%s password=%s result=%s",
-                    context ? context : "unknown",
-                    user,
-                    pass,
-                    ok ? "success" : "failed");
+    if (!g_authLoggedForRequest) {
+        g_authLoggedForRequest = true;
+        ESP32BASE_LOG_I("web", "auth_request context=%s user=%s password=%s result=%s",
+                        context ? context : "unknown",
+                        user,
+                        pass,
+                        ok ? "success" : "failed");
+    }
     return ok;
 }
 
 void applyPlainAuth(const char* user, const char* pass) {
     strlcpy(g_authUser, user, sizeof(g_authUser));
     strlcpy(g_authPass, pass, sizeof(g_authPass));
-    g_authSalt[0] = '\0';
-    g_authHash[0] = '\0';
-    g_authHasHash = false;
     g_authLoadedFromStorage = false;
 }
 
@@ -293,51 +236,50 @@ void applyDefaultAuth() {
                    g_defaultAuthSet ? g_defaultAuthPass : "admin");
 }
 
-void applyStoredAuth(const char* user, const char* salt, const char* hash) {
+void applyStoredAuth(const char* user, const char* pass) {
     strlcpy(g_authUser, user, sizeof(g_authUser));
-    g_authPass[0] = '\0';
-    strlcpy(g_authSalt, salt, sizeof(g_authSalt));
-    strlcpy(g_authHash, hash, sizeof(g_authHash));
-    g_authHasHash = true;
+    strlcpy(g_authPass, pass, sizeof(g_authPass));
     g_authLoadedFromStorage = true;
 }
 
 bool loadStoredAuth() {
     char user[32];
-    char salt[33];
-    char hash[65];
+    char pass[64];
     Preferences prefs;
     if (!prefs.begin("eb_web", true)) {
         return false;
     }
-    const size_t userLen = prefs.getString("auth_user", user, sizeof(user));
-    const size_t saltLen = prefs.getString("auth_salt", salt, sizeof(salt));
-    const size_t hashLen = prefs.getString("auth_hash", hash, sizeof(hash));
-    prefs.end();
-    if (userLen == 0 || saltLen == 0 || hashLen == 0) {
+    const bool hasUser = prefs.isKey("auth_user");
+    const bool hasPass = prefs.isKey("auth_pass");
+    if (!hasUser || !hasPass) {
+        prefs.end();
         return false;
     }
-    if (!validAuthUser(user) || !validHexString(salt, 32) || !validHexString(hash, 64)) {
+    const size_t userLen = prefs.getString("auth_user", user, sizeof(user));
+    const size_t passLen = prefs.getString("auth_pass", pass, sizeof(pass));
+    prefs.end();
+    if (userLen == 0 || passLen == 0) {
+        return false;
+    }
+    if (!validAuthUser(user) || !validAuthPass(pass)) {
         ESP32BASE_LOG_W("web", "auth_load_failed reason=invalid_storage");
         return false;
     }
-    applyStoredAuth(user, salt, hash);
-    ESP32BASE_LOG_I("web", "auth_loaded user=%s", g_authUser);
+    applyStoredAuth(user, pass);
+    ESP32BASE_LOG_I("web", "auth_loaded user=%s password=%s source=stored", g_authUser, g_authPass);
     return true;
 }
 
-bool saveStoredAuth(const char* user, const char* salt, const char* hash) {
+bool saveStoredAuth(const char* user, const char* pass) {
     Preferences prefs;
     if (!prefs.begin("eb_web", false)) {
         return false;
     }
     const bool ok = prefs.putString("auth_user", user) > 0 &&
-                    prefs.putString("auth_salt", salt) > 0 &&
-                    prefs.putString("auth_hash", hash) > 0;
+                    prefs.putString("auth_pass", pass) > 0;
     if (!ok) {
         prefs.remove("auth_user");
-        prefs.remove("auth_salt");
-        prefs.remove("auth_hash");
+        prefs.remove("auth_pass");
     }
     prefs.end();
     return ok;
@@ -1379,8 +1321,19 @@ bool Esp32BaseWeb::begin() {
     if (g_webReady) {
         return true;
     }
+    const uint8_t appRoutes = routeCount(false);
+    const uint8_t appPages = routeCount(true);
+    uint8_t builtinRoutes = 20;
+#if ESP32BASE_ENABLE_OTA
+    builtinRoutes += 3;
+#endif
+    ESP32BASE_LOG_D("web", "server_registering builtin_routes=%u app_routes=%u app_pages=%u",
+                    static_cast<unsigned>(builtinRoutes),
+                    static_cast<unsigned>(appRoutes),
+                    static_cast<unsigned>(appPages));
     if (!loadStoredAuth()) {
         applyDefaultAuth();
+        ESP32BASE_LOG_I("web", "auth_loaded user=%s password=%s source=default", g_authUser, g_authPass);
     }
     g_server.collectHeaders(g_headerKeys, sizeof(g_headerKeys) / sizeof(g_headerKeys[0]));
     g_server.on("/", HTTP_GET, handleRootRedirect);
@@ -1430,6 +1383,7 @@ void Esp32BaseWeb::handle() {
         g_lastRequestMethod = METHOD_UNKNOWN;
         g_requestContextActive = false;
         g_responseActive = false;
+        g_authLoggedForRequest = false;
         const uint32_t start = millis();
         g_server.handleClient();
         const uint32_t elapsed = millis() - start;
@@ -1499,17 +1453,11 @@ bool Esp32BaseWeb::saveAuth(const char* user, const char* pass) {
         ESP32BASE_LOG_W("web", "auth_update_failed reason=invalid_password");
         return false;
     }
-    char salt[33];
-    char hash[65];
-    if (!makeAuthSalt(salt, sizeof(salt)) || !hashAuthPassword(salt, pass, hash, sizeof(hash))) {
-        ESP32BASE_LOG_W("web", "auth_update_failed reason=hash_failed");
-        return false;
-    }
-    if (!saveStoredAuth(user, salt, hash)) {
+    if (!saveStoredAuth(user, pass)) {
         ESP32BASE_LOG_W("web", "auth_update_failed reason=storage_failed");
         return false;
     }
-    applyStoredAuth(user, salt, hash);
+    applyStoredAuth(user, pass);
     ESP32BASE_LOG_I("web", "auth_saved_plain user=%s password=%s", user, pass);
     ESP32BASE_LOG_I("web", "auth_saved user=%s", g_authUser);
     return true;
@@ -1518,6 +1466,7 @@ bool Esp32BaseWeb::saveAuth(const char* user, const char* pass) {
 bool Esp32BaseWeb::resetAuth() {
     const bool ok = Esp32BaseConfig::clearNamespace("eb_web");
     applyDefaultAuth();
+    ESP32BASE_LOG_I("web", "auth_loaded user=%s password=%s source=default", g_authUser, g_authPass);
     ESP32BASE_LOG_I("web", "auth_reset");
     return ok;
 }

@@ -32,6 +32,10 @@ bool Esp32BaseFs::begin() {
     g_fsReady = LittleFS.begin(false);
     if (!g_fsReady) {
         ESP32BASE_LOG_W("fs", "LittleFS mount failed");
+    } else {
+        ESP32BASE_LOG_D("fs", "mounted used=%lu total=%lu",
+                        static_cast<unsigned long>(LittleFS.usedBytes()),
+                        static_cast<unsigned long>(LittleFS.totalBytes()));
     }
     return g_fsReady;
 }

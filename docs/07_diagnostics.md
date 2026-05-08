@@ -222,6 +222,7 @@ CI 应覆盖核心矩阵，release 前执行完整矩阵。
 - `reset_reason` 表示本次复位/启动来源；`wake_reason` 仅表示 sleep 唤醒来源，普通上电或普通复位时为 `undefined` 是正常状态；`reset_desc` / `wake_desc` 输出中文简明解释。
 - restart/deep sleep 生命周期 reason 仍由 `Esp32BaseSystem::appendRestartLog()` / `restartLogCount()` 记录，与 `boot_count` 分开看。
 - 启动日志按 begin 顺序输出，便于定位失败模块。
+- `DEBUG` 编译级别下，启动流程输出模块初始化顺序，以及 Web/NTP/mDNS/OTA 延迟启动或停止原因；这些日志用于开发诊断，默认 `INFO` 构建不输出。
 - NTP 对时前日志时间戳使用启动后毫秒数，例如 `[42442]`；对时后切换为绝对日期时间。
 - NTP 默认按 UTC+8 输出本地时间，应用可通过 `ESP32BASE_NTP_GMT_OFFSET_SEC` / `ESP32BASE_NTP_DAYLIGHT_OFFSET_SEC` 覆盖。
 - NTP 同步判断默认要求 epoch >= `ESP32BASE_NTP_SYNC_MIN_EPOCH`，默认值为 `1700000000UL`。
@@ -229,7 +230,7 @@ CI 应覆盖核心矩阵，release 前执行完整矩阵。
 - 字节数同时显示 raw bytes 与 KB/MB。
 - NTP 对时成功后输出实际时间、当前 uptime、推算 boot wall time。
 - WiFi 连接、断开、重连 backoff、进入/退出 config portal 都必须有清晰日志。
-- 文件日志默认 WARN，现场调试示例可设为 INFO。
+- 文件日志默认 WARN；现场调试示例可开启串口 DEBUG，同时保持文件日志 WARN，避免 DEBUG/INFO 写入文件。
 - `INFO` 日志明文输出 WiFi 名称/密码和 Web Auth 用户名/密码，便于业务接入和现场调试。
 
 ## 6. 运行诊断

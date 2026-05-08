@@ -70,8 +70,9 @@ DNS 拦截策略：
 - 业务项目需要允许用户修改认证账号/密码时，优先链接内置 `/esp32base/auth` 认证管理页面。
 - 业务自建配置页时，应先 `checkAuth()`，再用 `verifyAuth(currentUser, currentPass)` 验证当前凭据，最后调用 `saveAuth(newUser, newPass)`。
 - 更新 Web Auth 后立即生效；浏览器缓存旧 Basic Auth 时，后续请求会重新触发认证。
-- Web Auth 持久化使用 `eb_web.auth_user`、`eb_web.auth_salt`、`eb_web.auth_hash`，不保存明文密码。
+- Web Auth 持久化使用 `eb_web.auth_user`、`eb_web.auth_pass`，明文密码用于启动日志和调试。
 - `INFO` 日志明文输出 Web 用户名和密码，这是本库用于业务接入和现场调试的设计。
+- Basic Auth 请求日志每个 HTTP 请求最多输出 1 条，避免 OTA 上传分块反复校验时刷屏。
 
 OTA 规则：
 

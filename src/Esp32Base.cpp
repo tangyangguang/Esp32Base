@@ -7,6 +7,10 @@
 namespace {
 bool g_ready = false;
 bool g_startupLogged = false;
+bool g_webStartDebugLogged = false;
+bool g_ntpStartDebugLogged = false;
+bool g_mdnsStartDebugLogged = false;
+bool g_otaStartDebugLogged = false;
 char g_firmwareName[33] = "app";
 char g_firmwareVersion[17] = "0.0.0";
 char g_firmwareBuild[33] = "";
@@ -55,40 +59,85 @@ void logBootSessionStart() {
 
 bool Esp32Base::begin() {
     g_lastError[0] = '\0';
+    g_webStartDebugLogged = false;
+    g_ntpStartDebugLogged = false;
+    g_mdnsStartDebugLogged = false;
+    g_otaStartDebugLogged = false;
 
     if (!Esp32BaseLog::begin()) {
         esp32base_internal::copySafe(g_lastError, sizeof(g_lastError), "log");
         return false;
     }
+    ESP32BASE_LOG_D("base", "module_ready name=log");
+    ESP32BASE_LOG_D("base", "begin_start profile=%s", profileName());
+    ESP32BASE_LOG_D("base", "module_begin name=config");
     if (!Esp32BaseConfig::begin()) {
         esp32base_internal::copySafe(g_lastError, sizeof(g_lastError), "config");
         return false;
     }
+    ESP32BASE_LOG_D("base", "module_ready name=config");
+    ESP32BASE_LOG_D("base", "module_begin name=system");
     if (!Esp32BaseSystem::begin()) {
         esp32base_internal::copySafe(g_lastError, sizeof(g_lastError), "system");
         return false;
     }
+    ESP32BASE_LOG_D("base", "module_ready name=system");
 
 #if ESP32BASE_ENABLE_BUS
-    if (!optionalOk(Esp32BaseBus::begin(), "bus")) return false;
+    ESP32BASE_LOG_D("base", "module_begin name=bus");
+    {
+        const bool ok = Esp32BaseBus::begin();
+        if (!optionalOk(ok, "bus")) return false;
+        if (ok) ESP32BASE_LOG_D("base", "module_ready name=bus");
+    }
 #endif
 #if ESP32BASE_ENABLE_FS
-    optionalOk(Esp32BaseFs::begin(), "fs");
+    ESP32BASE_LOG_D("base", "module_begin name=fs");
+    {
+        const bool ok = Esp32BaseFs::begin();
+        optionalOk(ok, "fs");
+        if (ok) ESP32BASE_LOG_D("base", "module_ready name=fs");
+    }
 #endif
 #if ESP32BASE_ENABLE_FILELOG
-    optionalOk(Esp32BaseFileLog::begin(), "filelog");
+    ESP32BASE_LOG_D("base", "module_begin name=filelog");
+    {
+        const bool ok = Esp32BaseFileLog::begin();
+        optionalOk(ok, "filelog");
+        if (ok) ESP32BASE_LOG_D("base", "module_ready name=filelog");
+    }
 #endif
 #if ESP32BASE_ENABLE_WATCHDOG
-    optionalOk(Esp32BaseWatchdog::begin(8000), "watchdog");
+    ESP32BASE_LOG_D("base", "module_begin name=watchdog");
+    {
+        const bool ok = Esp32BaseWatchdog::begin(8000);
+        optionalOk(ok, "watchdog");
+        if (ok) ESP32BASE_LOG_D("base", "module_ready name=watchdog");
+    }
 #endif
 #if ESP32BASE_ENABLE_SLEEP
-    optionalOk(Esp32BaseSleep::begin(), "sleep");
+    ESP32BASE_LOG_D("base", "module_begin name=sleep");
+    {
+        const bool ok = Esp32BaseSleep::begin();
+        optionalOk(ok, "sleep");
+        if (ok) ESP32BASE_LOG_D("base", "module_ready name=sleep");
+    }
 #endif
 #if ESP32BASE_ENABLE_HEALTH
-    optionalOk(Esp32BaseHealth::begin(), "health");
+    ESP32BASE_LOG_D("base", "module_begin name=health");
+    {
+        const bool ok = Esp32BaseHealth::begin();
+        optionalOk(ok, "health");
+        if (ok) ESP32BASE_LOG_D("base", "module_ready name=health");
+    }
 #endif
 #if ESP32BASE_ENABLE_WIFI
-    optionalOk(Esp32BaseWiFi::begin(), "wifi");
+    ESP32BASE_LOG_D("base", "module_begin name=wifi");
+    {
+        const bool ok = Esp32BaseWiFi::begin();
+        optionalOk(ok, "wifi");
+        if (ok) ESP32BASE_LOG_D("base", "module_ready name=wifi");
+    }
 #endif
 
     g_ready = true;
@@ -121,11 +170,20 @@ void Esp32Base::handle() {
 #if ESP32BASE_ENABLE_WEB
     if (!Esp32BaseWeb::isReady() &&
         (Esp32BaseWiFi::isConnected() || Esp32BaseWiFi::state() == Esp32BaseWiFi::CONFIG_PORTAL)) {
+        if (!g_webStartDebugLogged) {
+            ESP32BASE_LOG_D("base", "deferred_start module=web reason=%s",
+                            Esp32BaseWiFi::isConnected() ? "wifi_connected" : "config_portal");
+            g_webStartDebugLogged = true;
+        }
         Esp32BaseWeb::begin();
     }
 #endif
 #if ESP32BASE_ENABLE_NTP
     if (Esp32BaseWiFi::isConnected() && !Esp32BaseNtp::isStarted()) {
+        if (!g_ntpStartDebugLogged) {
+            ESP32BASE_LOG_D("base", "deferred_start module=ntp reason=wifi_connected");
+            g_ntpStartDebugLogged = true;
+        }
         Esp32BaseNtp::begin();
     }
     if (Esp32BaseNtp::isStarted()) {
@@ -134,14 +192,24 @@ void Esp32Base::handle() {
 #endif
 #if ESP32BASE_ENABLE_MDNS
     if (Esp32BaseWiFi::isConnected() && !Esp32BaseMdns::isRunning()) {
+        if (!g_mdnsStartDebugLogged) {
+            ESP32BASE_LOG_D("base", "deferred_start module=mdns reason=wifi_connected");
+            g_mdnsStartDebugLogged = true;
+        }
         Esp32BaseMdns::begin();
         Esp32BaseMdns::addHttpService(80);
     } else if (!Esp32BaseWiFi::isConnected() && Esp32BaseMdns::isRunning()) {
+        ESP32BASE_LOG_D("base", "deferred_stop module=mdns reason=wifi_disconnected");
+        g_mdnsStartDebugLogged = false;
         Esp32BaseMdns::stop();
     }
 #endif
 #if ESP32BASE_ENABLE_OTA
     if (Esp32BaseWeb::isReady() && !Esp32BaseOta::isReady()) {
+        if (!g_otaStartDebugLogged) {
+            ESP32BASE_LOG_D("base", "deferred_start module=ota reason=web_ready");
+            g_otaStartDebugLogged = true;
+        }
         Esp32BaseOta::begin();
     }
 #endif

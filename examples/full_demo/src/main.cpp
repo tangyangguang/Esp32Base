@@ -110,7 +110,7 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/auth", nullptr, true, 200, "type='password'");
     RUN_SELFTEST("GET", "/esp32base/auth", nullptr, true, 200, "Confirm new auth password");
     RUN_SELFTEST("GET", "/esp32base/auth", nullptr, true, 200, "New passwords do not match");
-    RUN_SELFTEST("GET", "/esp32base/ota", nullptr, true, 200, "<title>Update</title>");
+    RUN_SELFTEST("GET", "/esp32base/ota", nullptr, true, 200, "<title>OTA</title>");
     RUN_SELFTEST("GET", "/esp32base/reboot", nullptr, true, 200, "<title>Restart</title>");
     RUN_SELFTEST("GET", "/dashboard", nullptr, true, 200, "<title>Dashboard</title>");
     RUN_SELFTEST("GET", "/control", nullptr, true, 200, "<title>Control</title>");
@@ -237,13 +237,13 @@ void setup() {
     Esp32BaseWeb::setSystemNavMode(Esp32BaseWeb::SYSTEM_NAV_SECTION);
     Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_HOME, "System");
     Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_WIFI, "Network");
-    Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_OTA, "Update");
+    Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_OTA, "OTA");
     Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_REBOOT, "Restart");
     Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_SYSTEM, "System Tools");
     Esp32BaseConfig::enableConfigAudit(true);
     Esp32Base::begin();
 #if ESP32BASE_ENABLE_FILELOG
-    Esp32BaseFileLog::enable("/logs/eb_app.log", 32UL * 1024UL, Esp32BaseLog::INFO, 4);
+    Esp32BaseFileLog::enable("/logs/eb_app.log", 32UL * 1024UL, Esp32BaseLog::WARN, 4);
 #endif
     const int32_t boot = Esp32BaseConfig::getInt(APP_NS, APP_KEY_BOOT, 0) + 1;
     Esp32BaseConfig::setIntDeferred(APP_NS, APP_KEY_BOOT, boot);
