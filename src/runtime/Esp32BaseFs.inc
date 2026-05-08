@@ -44,6 +44,14 @@ bool Esp32BaseFs::isReady() {
     return g_fsReady;
 }
 
+bool Esp32BaseFs::format() {
+    LittleFS.end();
+    g_fsReady = false;
+    const bool ok = LittleFS.format();
+    ESP32BASE_LOG_W("fs", "LittleFS format result=%s", ok ? "success" : "failed");
+    return ok;
+}
+
 bool Esp32BaseFs::writeFile(const char* path, const char* content) {
     return writeBytes(path, reinterpret_cast<const uint8_t*>(content ? content : ""), content ? strlen(content) : 0);
 }

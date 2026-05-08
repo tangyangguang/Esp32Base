@@ -109,8 +109,11 @@ OTA 规则：
 - handler 内 `Esp32BaseWeb::currentMethod()` 可区分 `METHOD_GET` / `METHOD_POST`；handler 外返回 `METHOD_UNKNOWN`。
 - `addPage()` 注册业务页面并进入业务导航；`addNavItem()` 只注册导航项，不注册路由。
 - `setHomeMode()` 控制 `/` 和 `/esp32base` 的首页模型：基础库首页、业务首页优先或融合首页。
-- `setSystemNavMode()` 控制 WiFi、OTA、Logs、Reboot 等基础功能入口在顶部、底部或底部紧凑系统工具区展示。
-- `setBuiltinLabel()` 可覆盖 Home/WiFi/OTA/Logs/Reboot/Auth 标签，用于应用统一本地化。
+- `setSystemNavMode()` 控制 Status、WiFi、OTA、Logs、Tools 等基础功能入口在顶部、底部或底部紧凑系统工具区展示。
+- `setBuiltinLabel()` 可覆盖 Status/WiFi/OTA/Logs/Tools/Auth 标签，用于应用统一本地化；`BUILTIN_REBOOT` 是 `BUILTIN_TOOLS` 的旧名称别名。
+- `setHeadExtraCallback()` 可在 `sendHeader()` 的 `</head>` 和顶部导航输出前注入业务 CSS，业务页面不需要复制基础库 header/nav。
+- 顶部导航按当前请求路径输出 `active` class：完全匹配优先，嵌套路由按最长 path 前缀匹配；`SYSTEM_NAV_SECTION` 下系统维护入口仍只在 footer 中展示。
+- 默认 Web 样式采用简洁中性色，普通链接、导航和 tabs 不使用蓝色主色；业务项目最终视觉仍由 `setHeadExtraCallback()` 注入 CSS 覆盖。
 
 默认容量：
 
@@ -148,10 +151,14 @@ Logs:
 - `GET /esp32base/logs`
 - `POST /esp32base/logs/clear`
 
-Lifecycle:
+Tools:
 
+- `GET /esp32base/tools`
+- `POST /esp32base/tools/reboot`
+- `POST /esp32base/tools/format-fs`
 - `GET /esp32base/reboot`
 - `POST /esp32base/reboot`
+- `POST /esp32base/api/restart`
 
 OTA 路由只在启用 OTA 且认证条件满足时注册。
 
@@ -166,10 +173,13 @@ WiFi 配置页：
 - 空 SSID 或空密码返回错误，不保存凭证。
 - SSID 超过 32 字节或密码超过 64 字节时返回错误，不静默截断。
 
-重启操作：
+Tools 维护页：
 
-- 页面按钮必须有二次确认。
-- 二次确认可使用浏览器端 JavaScript。
+- 重启按钮必须有二次确认，并通过统一 lifecycle restart 执行；POST 响应必须替换浏览器历史到 GET URL，避免刷新重复提交。
+- 重启和格式化等危险操作必须分组显示，避免按钮与下一项标题贴得太近。
+- 启用 FS 的 profile 显示 `Format LittleFS`，该操作会删除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth 或 NVS 配置。
+- 格式化 FS 是显式 POST 操作；执行前 flush 文件日志，成功后重新 mount FS，并重新加载文件日志配置；成功提示应明确显示在 Tools 页面，同时输出 WARN 级维护日志记录请求、format/mount/FileLog reload 结果。重启请求同样输出 WARN 级维护日志。
+- 普通 `GET` 页面慢请求只输出 DEBUG；`POST` 等操作慢请求继续输出 WARN。
 - API 层仍建议要求 POST，不使用 GET 触发重启。
 
 OTA 上传页：
@@ -178,6 +188,8 @@ OTA 上传页：
 - 上传中显示进度。
 - 进度同时显示百分比、已处理字节数和总字节数。
 - 字节数必须同时给出 raw bytes 和 KB/MB 人性化格式。
+- 上传成功后提示设备正在重启，并在短暂等待后跳转到当前配置的首页。
+- 上传失败时留在 OTA 页面，显示失败原因，并允许用户重新选择固件上传。
 
 Logs 页面：
 
@@ -185,6 +197,7 @@ Logs 页面：
 - FS/FileLog 不可用时显示 `File log: unavailable`。
 - 读取日志内容前必须调用 `Esp32BaseFileLog::flush()`。
 - 显示 enabled、path、file level、rotate files、buffer used/total、flush interval、max per file、max total、每段大小。
+- 文件日志状态信息使用紧凑小字号展示；其中的容量值只显示 KB/MB/B 人性化值，不重复 raw bytes。
 - 页面顶部以标签展示所有 segment，顺序为 `current-0`、`history-1`、`history-2` 到最旧 history；标签里的大小只显示 KB/MB/B 人性化值，不重复 raw bytes。
 - 默认显示 `current-0`；可通过 `?segment=N` 查看单个历史文件，非法或越界 segment 回落到 `current-0`。
 - 日志内容必须 HTML escape。
@@ -264,11 +277,10 @@ Esp32BaseWeb::setDeviceName("Faucet");
 Esp32BaseWeb::setHomePath("/status");
 Esp32BaseWeb::setHomeMode(Esp32BaseWeb::HOME_COMBINED);
 Esp32BaseWeb::setSystemNavMode(Esp32BaseWeb::SYSTEM_NAV_SECTION);
-Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_HOME, "系统");
+Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_HOME, "状态");
 Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_WIFI, "网络");
 Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_LOGS, "日志");
-Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_REBOOT, "重启");
-Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_SYSTEM, "系统工具");
+Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_TOOLS, "工具");
 Esp32BaseWeb::addPage("/status", "状态", handleStatusPage);
 Esp32BaseWeb::addPage("/config", "配置", handleConfigPage);
 ```

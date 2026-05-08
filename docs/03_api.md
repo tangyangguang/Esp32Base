@@ -450,6 +450,7 @@ public:
         BUILTIN_OTA,
         BUILTIN_LOGS,
         BUILTIN_REBOOT,
+        BUILTIN_TOOLS = BUILTIN_REBOOT,
         BUILTIN_SYSTEM,
         BUILTIN_AUTH
     };
@@ -480,6 +481,7 @@ public:
     static void setHomeMode(HomeMode mode);
     static void setSystemNavMode(SystemNavMode mode);
     static bool setBuiltinLabel(BuiltinPage page, const char* label);
+    static void setHeadExtraCallback(Handler handler);
 
     static Method currentMethod();
     static bool isMethod(Method method);
@@ -523,8 +525,11 @@ Route 缓冲机制：
 - `setDeviceName()` 设置导航品牌和默认标题；`setHomePath()` 设置业务首页路径。
 - `setHomeMode(HOME_ESP32BASE)` 保持基础库首页默认行为；`HOME_APP` 让 `/` 和 `/esp32base` 优先进入业务首页；`HOME_COMBINED` 让 `/` 进入业务首页，并保留 `/esp32base` 为融合首页。
 - `setSystemNavMode()` 控制基础功能入口位置：顶部、底部或底部紧凑系统工具区；`SYSTEM_NAV_SECTION` 会把系统入口作为小字链接与 `Free heap` 放在同一 footer 区域，窄屏可自然换行。
-- `setBuiltinLabel()` 覆盖内置导航标签，可用于中文本地化。
-- `/esp32base` 系统页展示固件、profile、hostname、uptime、boot count、reset/wake reason 及中文说明、heap、flash，以及当前 profile 可用的 WiFi、FS、FileLog、NTP、OTA 状态；页面容量值只显示 KB/MB/B 人性化格式。
+- `setBuiltinLabel()` 覆盖内置导航标签，可用于中文本地化；`BUILTIN_TOOLS` 是维护页标签，`BUILTIN_REBOOT` 作为旧名称别名保留。
+- `setHeadExtraCallback()` 设置额外 head 输出回调；`sendHeader()` 在默认 `WEB_HEAD` 后、`</head><body>` 和顶部导航前调用它，业务项目可在这里输出 `<style>`，避免页面刷新时先显示基础库默认导航样式。
+- 顶部导航会给当前匹配项输出 `active` class；匹配规则为 path 完全相等，或当前路径以 `path + "/"` 开头，多个匹配时选择最长 path。`SYSTEM_NAV_SECTION` 的底部系统维护菜单不参与 active 业务导航状态。
+- `/esp32base` Status 页展示固件、profile、hostname、uptime、boot count、reset/wake reason 及中文说明、heap、flash，以及当前 profile 可用的 WiFi、FS、FileLog、NTP、OTA 状态；页面容量值只显示 KB/MB/B 人性化格式。
+- `/esp32base/tools` Tools 页承载维护操作，包括重启设备；启用 FS 的 profile 还提供手动格式化 LittleFS 操作，会清除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth 或 NVS 配置。
 - `/esp32base/auth` 是内置认证管理页面，受当前 Basic Auth 保护，提交成功后新账号密码立即生效。
 - Web Auth 认证优先级为：已保存认证 > 应用默认认证 > 库默认 `admin/admin`。
 - `setDefaultAuth(user, pass)` 设置应用默认认证；如果用户已保存认证，不会覆盖已保存认证。
@@ -547,8 +552,9 @@ Route 缓冲机制：
 - WiFi 配置页面必须回显当前 SSID 和密码。
 - WiFi 配置提交必须校验 SSID 非空、密码非空；空值不得提交。
 - 重启按钮必须有二次确认，可用浏览器端 JavaScript 实现。
-- 页面和 API 中的字节数必须同时提供 raw bytes 与 KB/MB 人性化展示。
+- API 中的字节数可保留 raw bytes；内置页面面向人工查看时优先只显示 KB/MB/B 人性化格式，避免重复。
 - `sendHeader()` 输出的默认 input 样式只覆盖文本类控件；checkbox、radio、file、range、color、hidden 等非文本控件不被拉伸成文本输入框。
+- `sendHeader()` 的基础样式保持简洁中性：普通链接不默认渲染为蓝色按钮，导航 active 使用浅绿灰背景和深绿灰文字；业务视觉仍推荐通过 `setHeadExtraCallback()` 注入 CSS。
 
 ## 10. Esp32BaseOta
 
@@ -641,6 +647,7 @@ class Esp32BaseFs {
 public:
     static bool begin();
     static bool isReady();
+    static bool format();
 
     // text
     static bool writeFile(const char* path, const char* content);
@@ -682,6 +689,8 @@ public:
     static uint32_t loopPeriodMaxMs();
 };
 ```
+
+`format()` 会格式化 LittleFS 分区并清除已有文件；基础库默认 `begin()` 不自动格式化，避免误删业务数据。示例工程可在确认是首次调试或可丢弃文件内容时显式调用。
 
 FS 未成功 `begin()` 时，文件和目录操作返回失败，容量查询返回 0，不隐式格式化文件系统。
 

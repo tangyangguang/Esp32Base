@@ -87,11 +87,15 @@ bool ensureDirReady() {
         }
         memcpy(dir, g_fileLogPath, len);
         dir[len] = '\0';
-        if (!Esp32BaseFs::exists(dir) && !Esp32BaseFs::mkdir(dir)) {
+        if (!Esp32BaseFs::mkdir(dir) && !Esp32BaseFs::exists(dir)) {
+            ESP32BASE_LOG_W("filelog", "dir_create_failed path=%s", dir);
             return false;
         }
     }
     if (!ensureSegmentFiles()) {
+        ESP32BASE_LOG_W("filelog", "segment_prepare_failed path=%s rotate=%u",
+                        g_fileLogPath,
+                        static_cast<unsigned>(g_fileLogRotateFiles));
         return false;
     }
     const int64_t current = Esp32BaseFs::fileSize(g_fileLogPath);
@@ -286,6 +290,9 @@ bool Esp32BaseFileLog::begin() {
 bool Esp32BaseFileLog::enable(const char* pathValue, uint32_t maxBytesValue, Esp32BaseLog::Level fileLevelValue, uint8_t rotateFilesValue) {
     if (!Esp32BaseFs::isReady() || !pathValue || pathValue[0] != '/' || strlen(pathValue) >= sizeof(g_fileLogPath) || maxBytesValue < 256) {
         return false;
+    }
+    if (g_fileLogEnabled) {
+        flush();
     }
     if (rotateFilesValue < 1) {
         rotateFilesValue = 1;

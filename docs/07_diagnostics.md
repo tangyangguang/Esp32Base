@@ -230,7 +230,8 @@ CI 应覆盖核心矩阵，release 前执行完整矩阵。
 - 字节数同时显示 raw bytes 与 KB/MB。
 - NTP 对时成功后输出实际时间、当前 uptime、推算 boot wall time。
 - WiFi 连接、断开、重连 backoff、进入/退出 config portal 都必须有清晰日志。
-- 文件日志默认 WARN；现场调试示例可开启串口 DEBUG，同时保持文件日志 WARN，避免 DEBUG/INFO 写入文件。
+- 文件日志默认 WARN；现场调试示例可开启串口 DEBUG，并将文件日志设为 INFO 方便通过 Logs 页面观察。
+- 普通页面 GET 慢请求、认证成功、路由注册和配置审计 skipped/read/deferred 属于 DEBUG 诊断；配置实际写入、flush、启动认证加载、WiFi/OTA/NTP/mDNS 状态、格式化、重启和认证失败应保留 INFO/WARN/ERROR。
 - `INFO` 日志明文输出 WiFi 名称/密码和 Web Auth 用户名/密码，便于业务接入和现场调试。
 
 ## 6. 运行诊断
@@ -271,6 +272,7 @@ ESP32BASE_HEALTH_DEBUG_LOG_INTERVAL_MS=1800000
 - FileLog append/rotate/clear 失败。
 - OTA start/write/verify/end 失败。
 - OTA progress。
+- OTA 上传生命周期日志：开始、10% 阶段进度、成功或失败；进度日志必须低频，避免按 chunk 刷屏。
 - LittleFS mount failed。
 - Watchdog reset detected。
 - rollback reason。

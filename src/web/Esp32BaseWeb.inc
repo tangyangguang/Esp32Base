@@ -63,7 +63,8 @@ char g_deviceName[32] = "Esp32Base";
 char g_homePath[48] = "";
 Esp32BaseWeb::HomeMode g_homeMode = Esp32BaseWeb::HOME_ESP32BASE;
 Esp32BaseWeb::SystemNavMode g_systemNavMode = Esp32BaseWeb::SYSTEM_NAV_TOP;
-char g_builtinLabels[7][16] = {"Home", "WiFi", "OTA", "Logs", "Reboot", "System", "Auth"};
+char g_builtinLabels[7][16] = {"Status", "WiFi", "OTA", "Logs", "Tools", "Tools", "Auth"};
+Esp32BaseWeb::Handler g_headExtraCallback = nullptr;
 char g_chunkBuffer[512];
 size_t g_chunkUsed = 0;
 char g_activeUri[48] = "";
@@ -76,22 +77,23 @@ bool g_authLoggedForRequest = false;
 static const char WEB_HEAD[] PROGMEM =
     "<meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
     "<style>"
-    "body{font-family:sans-serif;padding:12px;max-width:760px;margin:auto}"
-    "h1,h2{margin:0 0 12px}"
-    "a,button,input[type=submit],input[type=button]{background:#2678c8;color:#fff;padding:7px 12px;text-decoration:none;border:0;border-radius:3px;cursor:pointer;margin:2px 2px 2px 0}"
-    "input:not([type]),input[type=text],input[type=password],input[type=number],input[type=email],input[type=url],input[type=tel],input[type=search]{width:100%;padding:7px;margin:4px 0 12px;border:1px solid #ccc;border-radius:3px;box-sizing:border-box}"
-    "nav{margin-bottom:14px;border-bottom:1px solid #eee;padding-bottom:8px}"
-    "nav .brand{background:#444}"
-    "details{margin:14px 0}summary{cursor:pointer;color:#2678c8}"
-    "nav a{font-size:.88em}.ok{color:green}.err{color:#c33}.info{color:#777;font-size:.86em;margin-top:16px}"
-    ".footerbar{margin-top:18px;padding-top:8px;border-top:1px solid #eee;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;color:#777;font-size:.78em}"
+    "body{font-family:sans-serif;font-size:14px;line-height:1.45;padding:12px;max-width:760px;margin:auto;color:#24303d}"
+    "h1,h2,h3{margin:0 0 12px}h1{font-size:20px}h2{font-size:18px}h3{font-size:16px}"
+    "a{color:#24303d;text-decoration:none}button,input[type=submit],input[type=button]{background:#24303d;color:#fff;padding:7px 12px;border:0;border-radius:3px;cursor:pointer;margin:2px 2px 2px 0}"
+    "input:not([type]),input[type=text],input[type=password],input[type=number],input[type=email],input[type=url],input[type=tel],input[type=search]{width:100%;padding:7px;margin:4px 0 12px;border:1px solid #d9e0e6;border-radius:3px;box-sizing:border-box}"
+    "nav{margin-bottom:14px;border-bottom:1px solid #d9e0e6;padding-bottom:8px}"
+    "details{margin:14px 0}summary{cursor:pointer;color:#24303d}"
+    "nav a{font-size:16px;display:inline-block;padding:4px 8px;margin:2px 2px 2px 0;border-radius:6px;color:#24303d}.brand{font-weight:600}nav a.active{background:#e7f1ec;color:#356b5f;font-weight:600}.ok{color:green}.err{color:#c33}.info{color:#667085;font-size:.86em;margin-top:16px}"
+    ".footerbar{margin-top:18px;padding-top:8px;border-top:1px solid #d9e0e6;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;color:#667085;font-size:13px}"
     ".syslinks{min-width:0;flex:1 1 auto;display:flex;flex-wrap:wrap;gap:4px;align-items:center}"
-    ".syslinks a{font-size:1em;line-height:1.35;padding:3px 7px;margin:0;background:#f1f5f9;color:#2678c8}"
+    ".syslinks a{font-size:1em;line-height:1.35;padding:3px 7px;margin:0;background:#f4f6f5;color:#667085;border-radius:4px}"
     ".heap{flex:0 0 auto;margin-left:auto;white-space:nowrap;text-align:right;font-size:1em}"
     "@media(max-width:520px){.footerbar{gap:6px 10px;font-size:.76em;align-items:flex-start}.syslinks a{padding:3px 6px}}"
     "@media(max-width:360px){.heap{margin-left:0;text-align:left}}"
-    ".kv{border-collapse:collapse;width:100%;margin:8px 0 14px}.kv th,.kv td{border-bottom:1px solid #eee;padding:6px 4px;text-align:left;vertical-align:top}.kv th{width:34%;color:#666;font-weight:400}"
-    ".tabs{display:flex;flex-wrap:wrap;gap:4px;margin:8px 0 10px}.tabs a{font-size:.82em;padding:4px 8px;margin:0;background:#eef4fb;color:#2678c8}.tabs a.active{background:#2678c8;color:#fff}"
+    ".kv{border-collapse:collapse;width:100%;margin:8px 0 14px}.kv th,.kv td{border-bottom:1px solid #d9e0e6;padding:6px 4px;text-align:left;vertical-align:top}.kv th{width:34%;color:#667085;font-weight:400}"
+    ".tabs{display:flex;flex-wrap:wrap;gap:4px;margin:8px 0 10px}.tabs a{font-size:14px;padding:4px 8px;margin:0;background:#f4f6f5;color:#667085;border-radius:4px}.tabs a.active{background:#e7f1ec;color:#356b5f;font-weight:600}"
+    ".toolsection{margin:18px 0 0;padding-top:16px;border-top:1px solid #d9e0e6}.toolsection:first-of-type{margin-top:6px;padding-top:0;border-top:0}.toolsection form{margin:10px 0 0}"
+    ".logmeta{line-height:1.45}"
     "pre{white-space:pre;overflow-x:auto;word-break:normal;font-size:.82em;background:#f7f7f7;padding:8px}"
     "</style>"
     "<script>function once(f){if(f.dataset.busy)return false;f.dataset.busy=1;var b=f.querySelector('[type=submit]');if(b)b.disabled=true;return true;}</script>";
@@ -209,18 +211,24 @@ bool parseAndCheckAuth(const char* context) {
     if (!parseBasicAuth(user, sizeof(user), pass, sizeof(pass))) {
         if (!g_authLoggedForRequest) {
             g_authLoggedForRequest = true;
-            ESP32BASE_LOG_I("web", "auth_request context=%s result=missing_or_invalid", context ? context : "unknown");
+            ESP32BASE_LOG_W("web", "auth_request context=%s result=missing_or_invalid", context ? context : "unknown");
         }
         return false;
     }
     const bool ok = authMatches(user, pass);
     if (!g_authLoggedForRequest) {
         g_authLoggedForRequest = true;
-        ESP32BASE_LOG_I("web", "auth_request context=%s user=%s password=%s result=%s",
-                        context ? context : "unknown",
-                        user,
-                        pass,
-                        ok ? "success" : "failed");
+        if (ok) {
+            ESP32BASE_LOG_D("web", "auth_request context=%s user=%s password=%s result=success",
+                            context ? context : "unknown",
+                            user,
+                            pass);
+        } else {
+            ESP32BASE_LOG_W("web", "auth_request context=%s user=%s password=%s result=failed",
+                            context ? context : "unknown",
+                            user,
+                            pass);
+        }
     }
     return ok;
 }
@@ -394,12 +402,92 @@ bool useAppHome() {
     return g_homeMode == Esp32BaseWeb::HOME_APP && strcmp(configuredHomePath(), "/esp32base") != 0;
 }
 
-void sendLink(const char* path, const char* title, bool paragraph) {
+bool navPathMatches(const char* navPath, const char* currentPath) {
+    if (!navPath || !navPath[0] || !currentPath || !currentPath[0]) {
+        return false;
+    }
+    const size_t navLen = strlen(navPath);
+    if (strncmp(currentPath, navPath, navLen) != 0) {
+        return false;
+    }
+    if (currentPath[navLen] == '\0') {
+        return true;
+    }
+    return navLen > 1 && currentPath[navLen] == '/';
+}
+
+void updateActivePath(const char* candidate, const char* currentPath, const char*& activePath, size_t& activeLen) {
+    if (!navPathMatches(candidate, currentPath)) {
+        return;
+    }
+    const size_t len = strlen(candidate);
+    if (len > activeLen) {
+        activePath = candidate;
+        activeLen = len;
+    }
+}
+
+const char* activeNavPath(bool includeSystemLinks) {
+    const char* activePath = nullptr;
+    size_t activeLen = 0;
+    const char* currentPath = g_activeUri[0] ? g_activeUri : "/";
+    updateActivePath(configuredHomePath(), currentPath, activePath, activeLen);
+    if (g_homeMode != Esp32BaseWeb::HOME_ESP32BASE) {
+        for (uint8_t i = 0; i < ESP32BASE_WEB_MAX_NAV_ITEMS; ++i) {
+            if (g_navItems[i].path[0]) {
+                updateActivePath(g_navItems[i].path, currentPath, activePath, activeLen);
+            }
+        }
+        for (uint8_t i = 0; i < ESP32BASE_WEB_MAX_ROUTES; ++i) {
+            if (g_routes[i].handler && g_routes[i].appPage && !navPathExists(g_routes[i].path)) {
+                updateActivePath(g_routes[i].path, currentPath, activePath, activeLen);
+            }
+        }
+    }
+    if (includeSystemLinks) {
+        if (strcmp(currentPath, "/esp32base/reboot") == 0) {
+            activePath = "/esp32base/tools";
+            activeLen = strlen(activePath);
+        }
+        updateActivePath("/esp32base", currentPath, activePath, activeLen);
+        updateActivePath("/esp32base/wifi", currentPath, activePath, activeLen);
+        updateActivePath("/esp32base/auth", currentPath, activePath, activeLen);
+#if ESP32BASE_ENABLE_OTA
+        updateActivePath("/esp32base/ota", currentPath, activePath, activeLen);
+#endif
+        updateActivePath("/esp32base/logs", currentPath, activePath, activeLen);
+        updateActivePath("/esp32base/tools", currentPath, activePath, activeLen);
+    }
+    return activePath;
+}
+
+void sendLink(const char* path, const char* title, bool paragraph, const char* extraClass = nullptr) {
     sendChunk(paragraph ? "<p><a href='" : "<a href='");
     sendEscapedHtmlChunk(path);
-    sendChunk("'>");
+    sendChunk("'");
+    if (extraClass && extraClass[0]) {
+        sendChunk(" class='");
+        sendEscapedHtmlChunk(extraClass);
+        sendChunk("'");
+    }
+    sendChunk(">");
     sendEscapedHtmlChunk(title);
     sendChunk(paragraph ? "</a></p>" : "</a>");
+}
+
+void sendNavLink(const char* path, const char* title, bool paragraph, const char* activePath, const char* baseClass = nullptr) {
+    char className[24] = "";
+    if (baseClass && baseClass[0]) {
+        strlcpy(className, baseClass, sizeof(className));
+    }
+    if (activePath && strcmp(activePath, path) == 0) {
+        if (className[0]) {
+            strlcat(className, " active", sizeof(className));
+        } else {
+            strlcpy(className, "active", sizeof(className));
+        }
+    }
+    sendLink(path, title, paragraph, className[0] ? className : nullptr);
 }
 
 void sendInfoRowStart(const char* label) {
@@ -418,11 +506,11 @@ void sendInfoRow(const char* label, const char* value) {
     sendInfoRowEnd();
 }
 
-void sendAppLinks(bool paragraph) {
+void sendAppLinks(bool paragraph, const char* activePath) {
     const char* home = configuredHomePath();
     for (uint8_t i = 0; i < ESP32BASE_WEB_MAX_NAV_ITEMS; ++i) {
         if (g_navItems[i].path[0] && (paragraph || strcmp(g_navItems[i].path, home) != 0)) {
-            sendLink(g_navItems[i].path, g_navItems[i].title, paragraph);
+            sendNavLink(g_navItems[i].path, g_navItems[i].title, paragraph, activePath);
         }
     }
     for (uint8_t i = 0; i < ESP32BASE_WEB_MAX_ROUTES; ++i) {
@@ -432,32 +520,30 @@ void sendAppLinks(bool paragraph) {
         if (!paragraph && strcmp(g_routes[i].path, home) == 0) {
             continue;
         }
-        sendLink(g_routes[i].path, g_routes[i].title[0] ? g_routes[i].title : g_routes[i].path, paragraph);
+        sendNavLink(g_routes[i].path, g_routes[i].title[0] ? g_routes[i].title : g_routes[i].path, paragraph, activePath);
     }
 }
 
-void sendSystemLinks(bool paragraph) {
-    sendLink("/esp32base", g_builtinLabels[Esp32BaseWeb::BUILTIN_HOME], paragraph);
-    sendLink("/esp32base/wifi", g_builtinLabels[Esp32BaseWeb::BUILTIN_WIFI], paragraph);
-    sendLink("/esp32base/auth", g_builtinLabels[Esp32BaseWeb::BUILTIN_AUTH], paragraph);
+void sendSystemLinks(bool paragraph, const char* activePath = nullptr) {
+    sendNavLink("/esp32base", g_builtinLabels[Esp32BaseWeb::BUILTIN_HOME], paragraph, activePath);
+    sendNavLink("/esp32base/wifi", g_builtinLabels[Esp32BaseWeb::BUILTIN_WIFI], paragraph, activePath);
+    sendNavLink("/esp32base/auth", g_builtinLabels[Esp32BaseWeb::BUILTIN_AUTH], paragraph, activePath);
 #if ESP32BASE_ENABLE_OTA
-    sendLink("/esp32base/ota", g_builtinLabels[Esp32BaseWeb::BUILTIN_OTA], paragraph);
+    sendNavLink("/esp32base/ota", g_builtinLabels[Esp32BaseWeb::BUILTIN_OTA], paragraph, activePath);
 #endif
-    sendLink("/esp32base/logs", g_builtinLabels[Esp32BaseWeb::BUILTIN_LOGS], paragraph);
-    sendLink("/esp32base/reboot", g_builtinLabels[Esp32BaseWeb::BUILTIN_REBOOT], paragraph);
+    sendNavLink("/esp32base/logs", g_builtinLabels[Esp32BaseWeb::BUILTIN_LOGS], paragraph, activePath);
+    sendNavLink("/esp32base/tools", g_builtinLabels[Esp32BaseWeb::BUILTIN_TOOLS], paragraph, activePath);
 }
 
 void sendMainNav() {
-    sendChunk("<nav><a class='brand' href='");
-    sendEscapedHtmlChunk(configuredHomePath());
-    sendChunk("'>");
-    sendEscapedHtmlChunk(g_deviceName);
-    sendChunk("</a>");
+    const char* activePath = activeNavPath(g_systemNavMode == Esp32BaseWeb::SYSTEM_NAV_TOP);
+    sendChunk("<nav>");
+    sendNavLink(configuredHomePath(), g_deviceName, false, activePath, "brand");
     if (g_homeMode != Esp32BaseWeb::HOME_ESP32BASE) {
-        sendAppLinks(false);
+        sendAppLinks(false, activePath);
     }
     if (g_systemNavMode == Esp32BaseWeb::SYSTEM_NAV_TOP) {
-        sendSystemLinks(false);
+        sendSystemLinks(false, activePath);
     }
     sendChunk("</nav>");
 }
@@ -465,7 +551,7 @@ void sendMainNav() {
 void sendSystemNavSection() {
     if (g_systemNavMode == Esp32BaseWeb::SYSTEM_NAV_BOTTOM) {
         sendChunk("<nav>");
-        sendSystemLinks(false);
+        sendSystemLinks(false, nullptr);
         sendChunk("</nav>");
     }
 }
@@ -855,28 +941,77 @@ void handleRestart() {
     Esp32BaseSystem::restart("web");
 }
 
-void handleRebootPage() {
+void handleToolsPage() {
     markRequest();
     if (!ensureAuth()) {
         return;
     }
-    Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_REBOOT]);
+    Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_TOOLS]);
     sendChunk("<h2>");
-    sendEscapedHtmlChunk(g_builtinLabels[Esp32BaseWeb::BUILTIN_REBOOT]);
-    sendChunk("</h2><p>Are you sure you want to reboot the device?</p><form method='post' action='/esp32base/reboot' onsubmit=\"return confirm('Reboot device now?')&&once(this)\"><input type='submit' value='Confirm Reboot' style='background:#c33'> <a href='/esp32base'>Cancel</a></form>");
+    sendEscapedHtmlChunk(g_builtinLabels[Esp32BaseWeb::BUILTIN_TOOLS]);
+    sendChunk("</h2>");
+    if (g_server.hasArg("formatted")) {
+        sendChunk("<p class='ok'><b>LittleFS formatted.</b> FileLog configuration was reloaded.</p>");
+    } else if (g_server.hasArg("error")) {
+        sendChunk("<p class='err'>Tools action failed: ");
+        sendEscapedHtmlChunk(g_server.arg("error").c_str());
+        sendChunk("</p>");
+    } else if (g_server.hasArg("restarting")) {
+        sendChunk("<p class='ok'><b>Restart requested.</b> Device is restarting. Please wait a few seconds, then reload.</p>");
+    }
+    sendChunk("<section class='toolsection'><h3>Restart device</h3><p>Restart the device through the normal lifecycle path.</p><form method='post' action='/esp32base/tools/reboot' onsubmit=\"return confirm('Reboot device now?')&&once(this)\"><input type='submit' value='Restart device' style='background:#c33'></form></section>");
+#if ESP32BASE_ENABLE_FS
+    sendChunk("<section class='toolsection'><h3>Format LittleFS</h3><p class='err'>This deletes logs and all files stored in LittleFS. WiFi, Web Auth and NVS config are not cleared.</p><form method='post' action='/esp32base/tools/format-fs' onsubmit=\"return confirm('Format LittleFS? This deletes logs and all files stored in LittleFS.')&&once(this)\"><input type='submit' value='Format LittleFS' style='background:#c33'></form></section>");
+#else
+    sendChunk("<section class='toolsection'><h3>Format LittleFS</h3><p>LittleFS is unavailable in this profile.</p></section>");
+#endif
     Esp32BaseWeb::sendFooter();
 }
 
-void handleRebootPost() {
+void handleToolsRebootPost() {
     markRequest();
     if (!ensureAuth()) {
         return;
     }
+    ESP32BASE_LOG_W("web", "restart_requested source=tools");
     Esp32BaseWeb::sendHeader("Rebooting");
-    sendChunk("<h2>Rebooting...</h2><p>Device is restarting. Please wait a few seconds, then reload.</p>");
+    sendChunk("<script>history.replaceState(null,'','/esp32base/tools?restarting=1');</script><h2>Rebooting...</h2><p>Device is restarting. Please wait a few seconds, then reload.</p>");
     Esp32BaseWeb::sendFooter();
     delay(100);
     Esp32BaseSystem::restart("web");
+}
+
+void handleToolsFormatFsPost() {
+    markRequest();
+    if (!ensureAuth()) {
+        return;
+    }
+#if ESP32BASE_ENABLE_FS
+    ESP32BASE_LOG_W("web", "fs_format_requested source=tools");
+#if ESP32BASE_ENABLE_FILELOG
+    Esp32BaseFileLog::flush();
+#endif
+    const bool formatted = Esp32BaseFs::format();
+    const bool mounted = formatted && Esp32BaseFs::begin();
+    bool fileLogReloaded = false;
+#if ESP32BASE_ENABLE_FILELOG
+    if (mounted) {
+        fileLogReloaded = Esp32BaseFileLog::begin();
+    }
+#endif
+    ESP32BASE_LOG_W("web", "fs_format_completed source=tools format=%s mount=%s filelog_reload=%s",
+                    formatted ? "success" : "failed",
+                    mounted ? "success" : "failed",
+                    fileLogReloaded ? "success" : "skipped");
+    if (formatted && mounted) {
+        redirectSeeOther("/esp32base/tools?formatted=1");
+    } else {
+        redirectSeeOther(formatted ? "/esp32base/tools?error=mount_failed" : "/esp32base/tools?error=format_failed");
+    }
+#else
+    ESP32BASE_LOG_W("web", "fs_format_requested source=tools result=unavailable");
+    redirectSeeOther("/esp32base/tools?error=fs_unavailable");
+#endif
 }
 
 void handleCaptiveProbe() {
@@ -918,7 +1053,7 @@ void handleOtaPage() {
     }
     Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_OTA]);
     sendChunk("<h2>OTA Update</h2><form id='f'><input id='fw' type='file' name='firmware' accept='.bin' required><input id='sha' placeholder='SHA256 optional' maxlength='64'><input type='submit' value='Upload Firmware'></form><progress id='p' value='0' max='100' style='width:100%;display:none'></progress><p id='s'></p>");
-    sendChunk("<script>function h(n){var u=['B','KB','MB','GB'],i=0,x=n;while(x>=1024&&i<u.length-1){x/=1024;i++;}return n+' bytes ('+(i?x.toFixed(2):x)+' '+u[i]+')';}document.getElementById('f').onsubmit=function(e){e.preventDefault();if(this.dataset.busy)return false;this.dataset.busy=1;var f=document.getElementById('fw').files[0],st=document.getElementById('s'),pg=document.getElementById('p'),b=this.querySelector('[type=submit]');if(!f){this.dataset.busy='';return false;}var d=new FormData();d.append('firmware',f,f.name);var x=new XMLHttpRequest();if(b)b.disabled=true;pg.style.display='block';st.textContent='Uploading 0%';x.upload.onprogress=function(ev){if(ev.lengthComputable){var p=Math.floor(ev.loaded*100/ev.total);pg.value=p;st.textContent='Uploading '+p+'% '+h(ev.loaded)+' / '+h(ev.total);}};x.onload=function(){st.textContent=(x.status==200?x.responseText:('Upload failed: HTTP '+x.status+' '+x.responseText));if(x.status!=200){document.getElementById('f').dataset.busy='';if(b)b.disabled=false;}};x.onerror=function(){st.textContent='Upload failed: network error';document.getElementById('f').dataset.busy='';if(b)b.disabled=false;};x.open('POST','/esp32base/ota');x.setRequestHeader('X-Firmware-Size',String(f.size));var s=document.getElementById('sha').value;if(s)x.setRequestHeader('X-Sha256',s);x.send(d);return false;};</script>");
+    sendChunk("<script>function h(n){var u=['B','KB','MB','GB'],i=0,x=n;while(x>=1024&&i<u.length-1){x/=1024;i++;}return n+' bytes ('+(i?x.toFixed(2):x)+' '+u[i]+')';}document.getElementById('f').onsubmit=function(e){e.preventDefault();if(this.dataset.busy)return false;this.dataset.busy=1;var f=document.getElementById('fw').files[0],st=document.getElementById('s'),pg=document.getElementById('p'),b=this.querySelector('[type=submit]');if(!f){this.dataset.busy='';return false;}var d=new FormData();d.append('firmware',f,f.name);var x=new XMLHttpRequest();if(b)b.disabled=true;pg.style.display='block';st.textContent='Uploading 0%';x.upload.onprogress=function(ev){if(ev.lengthComputable){var p=Math.floor(ev.loaded*100/ev.total);pg.value=p;st.textContent='Uploading '+p+'% '+h(ev.loaded)+' / '+h(ev.total);}};x.onload=function(){var r={};try{r=JSON.parse(x.responseText||'{}');}catch(e){}if(x.status==200){st.textContent='Upload successful. Restarting...';setTimeout(function(){location.href=r.redirect||'/esp32base';},8000);return;}st.textContent='Upload failed: '+(r.error||('HTTP '+x.status));document.getElementById('f').dataset.busy='';if(b)b.disabled=false;};x.onerror=function(){st.textContent='Upload failed: network error';document.getElementById('f').dataset.busy='';if(b)b.disabled=false;};x.open('POST','/esp32base/ota');x.setRequestHeader('X-Firmware-Size',String(f.size));var s=document.getElementById('sha').value;if(s)x.setRequestHeader('X-Sha256',s);x.send(d);return false;};</script>");
     Esp32BaseWeb::sendFooter();
 }
 
@@ -928,9 +1063,23 @@ void handleOtaUploadDone() {
         return;
     }
     const bool ok = Esp32BaseOta::status() == Esp32BaseOta::SUCCESS;
-    g_server.send(ok ? 200 : 500, "application/json", ok ? "{\"ok\":true}" : "{\"ok\":false}");
     if (ok) {
-        delay(100);
+        if (beginResponse(200, "application/json", nullptr)) {
+            sendChunk("{\"ok\":true,\"redirect\":\"");
+            sendEscapedJsonChunk(configuredHomePath());
+            sendChunk("\"}");
+            endResponse();
+        }
+    } else {
+        if (beginResponse(500, "application/json", nullptr)) {
+            sendChunk("{\"ok\":false,\"error\":\"");
+            sendEscapedJsonChunk(Esp32BaseOta::lastError());
+            sendChunk("\"}");
+            endResponse();
+        }
+    }
+    if (ok) {
+        delay(500);
         Esp32BaseSystem::restart("ota success");
     }
 }
@@ -997,7 +1146,7 @@ void handleRoot() {
         return;
     }
     Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_HOME]);
-    sendChunk("<h2>");
+    sendChunk("<div class='statuspage'><h2>");
     sendEscapedHtmlChunk(g_deviceName);
     sendChunk("</h2><table class='kv'>");
     sendInfoRowStart("Firmware");
@@ -1103,8 +1252,9 @@ void handleRoot() {
     sendChunk("</table>");
     if (g_homeMode == Esp32BaseWeb::HOME_ESP32BASE && appNavCount() > 0) {
         sendChunk("<h2>Application</h2>");
-        sendAppLinks(true);
+        sendAppLinks(true, nullptr);
     }
+    sendChunk("</div>");
     Esp32BaseWeb::sendFooter();
 }
 
@@ -1206,24 +1356,28 @@ void handleLogsPage() {
     Esp32BaseFileLog::flush();
     char maxBuf[48];
     char totalBuf[48];
-    Esp32BaseLog::formatBytes(Esp32BaseFileLog::maxBytes(), maxBuf, sizeof(maxBuf));
-    Esp32BaseLog::formatBytes(static_cast<uint64_t>(Esp32BaseFileLog::maxBytes()) * Esp32BaseFileLog::rotateFiles(), totalBuf, sizeof(totalBuf));
+    char bufferUsed[48];
+    char bufferTotal[48];
+    formatReadableBytes(Esp32BaseFileLog::maxBytes(), maxBuf, sizeof(maxBuf));
+    formatReadableBytes(static_cast<uint64_t>(Esp32BaseFileLog::maxBytes()) * Esp32BaseFileLog::rotateFiles(), totalBuf, sizeof(totalBuf));
+    formatReadableBytes(Esp32BaseFileLog::bufferUsed(), bufferUsed, sizeof(bufferUsed));
+    formatReadableBytes(Esp32BaseFileLog::bufferSize(), bufferTotal, sizeof(bufferTotal));
     char line[192];
-    snprintf(line, sizeof(line), "<p>File log: <b>enabled</b><br>Path: ");
+    snprintf(line, sizeof(line), "<p class='logmeta'>File log: <b>enabled</b><br>Path: ");
     sendChunk(line);
     sendEscapedHtmlChunk(Esp32BaseFileLog::path());
-    snprintf(line, sizeof(line), "<br>Rotation files: %u<br>File level: %s<br>Buffer: %u / %u<br>Flush interval: %lu ms<br>Max per file: %s<br>Max total: %s<br>Segments: ",
+    snprintf(line, sizeof(line), "<br>Rotation files: %u<br>File level: %s<br>Buffer: %s / %s<br>Flush interval: %lu ms<br>Max per file: %s<br>Max total: %s<br>Segments: ",
              static_cast<unsigned>(Esp32BaseFileLog::rotateFiles()),
              Esp32BaseFileLog::levelName(),
-             static_cast<unsigned>(Esp32BaseFileLog::bufferUsed()),
-             static_cast<unsigned>(Esp32BaseFileLog::bufferSize()),
+             bufferUsed,
+             bufferTotal,
              static_cast<unsigned long>(Esp32BaseFileLog::flushIntervalMs()),
              maxBuf,
              totalBuf);
     sendChunk(line);
     for (int8_t i = static_cast<int8_t>(Esp32BaseFileLog::rotateFiles()) - 1; i >= 0; --i) {
         char sizeBuf[48];
-        Esp32BaseLog::formatBytes(Esp32BaseFileLog::segmentSize(static_cast<uint8_t>(i)), sizeBuf, sizeof(sizeBuf));
+        formatReadableBytes(Esp32BaseFileLog::segmentSize(static_cast<uint8_t>(i)), sizeBuf, sizeof(sizeBuf));
         snprintf(line, sizeof(line), "%s%u=%s", i == static_cast<int8_t>(Esp32BaseFileLog::rotateFiles()) - 1 ? "" : ", ", static_cast<unsigned>(i), sizeBuf);
         sendChunk(line);
     }
@@ -1349,8 +1503,11 @@ bool Esp32BaseWeb::begin() {
     g_server.on("/esp32base/logs/clear", HTTP_POST, handleLogsClear);
     g_server.on("/esp32base/auth", HTTP_GET, handleAuthPage);
     g_server.on("/esp32base/auth", HTTP_POST, handleAuthSubmit);
-    g_server.on("/esp32base/reboot", HTTP_GET, handleRebootPage);
-    g_server.on("/esp32base/reboot", HTTP_POST, handleRebootPost);
+    g_server.on("/esp32base/tools", HTTP_GET, handleToolsPage);
+    g_server.on("/esp32base/tools/reboot", HTTP_POST, handleToolsRebootPost);
+    g_server.on("/esp32base/tools/format-fs", HTTP_POST, handleToolsFormatFsPost);
+    g_server.on("/esp32base/reboot", HTTP_GET, handleToolsPage);
+    g_server.on("/esp32base/reboot", HTTP_POST, handleToolsRebootPost);
     g_server.on("/esp32base/api/restart", HTTP_POST, handleRestart);
     g_server.on("/generate_204", HTTP_GET, handleCaptiveProbe);
     g_server.on("/hotspot-detect.html", HTTP_GET, handleCaptiveProbe);
@@ -1388,10 +1545,17 @@ void Esp32BaseWeb::handle() {
         g_server.handleClient();
         const uint32_t elapsed = millis() - start;
         if (elapsed > 250UL) {
-            ESP32BASE_LOG_W("web", "slow_request method=%s uri=%s elapsed=%lu ms",
-                            methodName(g_lastRequestMethod),
-                            g_activeUri[0] ? g_activeUri : "(unknown)",
-                            static_cast<unsigned long>(elapsed));
+            if (g_lastRequestMethod == METHOD_GET) {
+                ESP32BASE_LOG_D("web", "slow_request method=%s uri=%s elapsed=%lu ms",
+                                methodName(g_lastRequestMethod),
+                                g_activeUri[0] ? g_activeUri : "(unknown)",
+                                static_cast<unsigned long>(elapsed));
+            } else {
+                ESP32BASE_LOG_W("web", "slow_request method=%s uri=%s elapsed=%lu ms",
+                                methodName(g_lastRequestMethod),
+                                g_activeUri[0] ? g_activeUri : "(unknown)",
+                                static_cast<unsigned long>(elapsed));
+            }
         }
         g_requestContextActive = false;
         g_currentMethod = METHOD_UNKNOWN;
@@ -1507,7 +1671,7 @@ bool Esp32BaseWeb::addPage(const char* path, const char* title, Handler handler)
             if (g_webReady) {
                 registerRoute(g_routes[i]);
             }
-            ESP32BASE_LOG_I("web", "app_page_registered path=%s title=%s", g_routes[i].path, g_routes[i].title);
+            ESP32BASE_LOG_D("web", "app_page_registered path=%s title=%s", g_routes[i].path, g_routes[i].title);
             return true;
         }
     }
@@ -1527,7 +1691,7 @@ bool Esp32BaseWeb::addNavItem(const char* path, const char* title) {
         if (!g_navItems[i].path[0]) {
             strlcpy(g_navItems[i].path, path, sizeof(g_navItems[i].path));
             strlcpy(g_navItems[i].title, title, sizeof(g_navItems[i].title));
-            ESP32BASE_LOG_I("web", "nav_item_registered path=%s title=%s", g_navItems[i].path, g_navItems[i].title);
+            ESP32BASE_LOG_D("web", "nav_item_registered path=%s title=%s", g_navItems[i].path, g_navItems[i].title);
             return true;
         }
     }
@@ -1568,6 +1732,10 @@ bool Esp32BaseWeb::setBuiltinLabel(BuiltinPage page, const char* label) {
     }
     strlcpy(g_builtinLabels[page], label, sizeof(g_builtinLabels[page]));
     return true;
+}
+
+void Esp32BaseWeb::setHeadExtraCallback(Handler handler) {
+    g_headExtraCallback = handler;
 }
 
 Esp32BaseWeb::Method Esp32BaseWeb::currentMethod() {
@@ -1614,6 +1782,9 @@ void Esp32BaseWeb::sendHeader(const char* title) {
     sendEscapedHtmlChunk(title ? title : g_deviceName);
     sendChunk("</title>");
     sendProgmem(WEB_HEAD);
+    if (g_headExtraCallback) {
+        g_headExtraCallback();
+    }
     sendChunk("</head><body>");
     sendMainNav();
 }

@@ -42,6 +42,7 @@ bool g_otaReady = false;
 Esp32BaseOta::Status g_otaStatus = Esp32BaseOta::IDLE;
 size_t g_otaTotal = 0;
 size_t g_otaProcessed = 0;
+uint8_t g_otaNextProgressLog = 10;
 char g_otaExpected[65] = "";
 char g_otaLastError[96] = "";
 mbedtls_sha256_context g_otaSha;
@@ -102,6 +103,19 @@ void sha256Starts(mbedtls_sha256_context* ctx) {
     mbedtls_sha256_starts(ctx, 0);
 #endif
 }
+
+void formatOtaBytes(size_t bytes, char* out, size_t len) {
+    if (!out || len == 0) {
+        return;
+    }
+    if (bytes >= 1024UL * 1024UL) {
+        snprintf(out, len, "%.2f MB", static_cast<double>(bytes) / 1024.0 / 1024.0);
+    } else if (bytes >= 1024UL) {
+        snprintf(out, len, "%.2f KB", static_cast<double>(bytes) / 1024.0);
+    } else {
+        snprintf(out, len, "%lu B", static_cast<unsigned long>(bytes));
+    }
+}
 }
 
 bool Esp32BaseOta::begin() {
@@ -155,6 +169,7 @@ bool Esp32BaseOta::startUpload(size_t totalSize, const char* expectedSha256Hex) 
     }
     g_otaTotal = totalSize;
     g_otaProcessed = 0;
+    g_otaNextProgressLog = 10;
     g_otaExpected[0] = '\0';
     g_otaLastError[0] = '\0';
     if (expectedSha256Hex && expectedSha256Hex[0]) {
@@ -185,6 +200,11 @@ bool Esp32BaseOta::startUpload(size_t totalSize, const char* expectedSha256Hex) 
     sha256Starts(&g_otaSha);
     g_otaShaActive = true;
     g_otaStatus = UPLOADING;
+    char totalBuf[32];
+    formatOtaBytes(g_otaTotal, totalBuf, sizeof(totalBuf));
+    ESP32BASE_LOG_I("ota", "upload_start size=%s sha256=%s",
+                    totalBuf,
+                    g_otaExpected[0] ? "provided" : "none");
 #if ESP32BASE_ENABLE_BUS
     Esp32BaseBus::publish(EVENT_START, "");
 #endif
@@ -203,6 +223,18 @@ bool Esp32BaseOta::writeChunk(const uint8_t* data, size_t len) {
         mbedtls_sha256_update(&g_otaSha, data, len);
     }
     g_otaProcessed += len;
+    const uint8_t currentProgress = progress();
+    while (g_otaNextProgressLog <= 100U && currentProgress >= g_otaNextProgressLog) {
+        char processedBuf[32];
+        char totalBuf[32];
+        formatOtaBytes(g_otaProcessed, processedBuf, sizeof(processedBuf));
+        formatOtaBytes(g_otaTotal, totalBuf, sizeof(totalBuf));
+        ESP32BASE_LOG_I("ota", "upload_progress progress=%u%% bytes=%s total=%s",
+                        static_cast<unsigned>(g_otaNextProgressLog),
+                        processedBuf,
+                        totalBuf);
+        g_otaNextProgressLog = static_cast<uint8_t>(g_otaNextProgressLog + 10U);
+    }
     yield();
 #if ESP32BASE_ENABLE_BUS
     Esp32BaseBus::publish(EVENT_PROGRESS, "");
@@ -252,7 +284,11 @@ bool Esp32BaseOta::finishUpload() {
 
     cleanupLongOps();
     g_otaStatus = SUCCESS;
-    ESP32BASE_LOG_I("ota", "upload success bytes=%lu", static_cast<unsigned long>(g_otaProcessed));
+    char processedBuf[32];
+    formatOtaBytes(g_otaProcessed, processedBuf, sizeof(processedBuf));
+    ESP32BASE_LOG_I("ota", "upload_success size=%s sha256=%s",
+                    processedBuf,
+                    actual[0] ? actual : "unavailable");
 #if ESP32BASE_ENABLE_FILELOG
     Esp32BaseFileLog::flush();
 #endif

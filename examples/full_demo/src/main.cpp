@@ -97,12 +97,15 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/api/firmware", nullptr, true, 200, "\"full-demo\"");
     RUN_SELFTEST("GET", "/esp32base/api/ota", nullptr, true, 200, "\"progress\"");
     RUN_SELFTEST("GET", "/", nullptr, true, 302, "Location: /dashboard");
-    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "<title>System</title>");
+    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "<title>Status</title>");
+    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "class='statuspage'");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Firmware</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Uptime</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "WiFi</th>");
     RUN_SELFTEST("GET", "/esp32base/wifi", nullptr, true, 200, "<title>Network</title>");
     RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "File log: <b>enabled</b>");
+    RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "class='logmeta'");
+    RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "Max per file: 32.00 KB");
     RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "class='active'>current-0");
     RUN_SELFTEST("GET", "/esp32base/logs?segment=1", nullptr, true, 200, "class='active'>history-1");
     RUN_SELFTEST("GET", "/esp32base/logs?segment=99", nullptr, true, 200, "class='active'>current-0");
@@ -111,11 +114,19 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/auth", nullptr, true, 200, "Confirm new auth password");
     RUN_SELFTEST("GET", "/esp32base/auth", nullptr, true, 200, "New passwords do not match");
     RUN_SELFTEST("GET", "/esp32base/ota", nullptr, true, 200, "<title>OTA</title>");
-    RUN_SELFTEST("GET", "/esp32base/reboot", nullptr, true, 200, "<title>Restart</title>");
+    RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "<title>Tools</title>");
+    RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "class='toolsection'");
+    RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Restart device");
+    RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Format LittleFS");
+    RUN_SELFTEST("GET", "/esp32base/reboot", nullptr, true, 200, "<title>Tools</title>");
     RUN_SELFTEST("GET", "/dashboard", nullptr, true, 200, "<title>Dashboard</title>");
     RUN_SELFTEST("GET", "/control", nullptr, true, 200, "<title>Control</title>");
+    RUN_SELFTEST("GET", "/control", nullptr, true, 200, "<style id='full-demo-head-extra'>");
+    RUN_SELFTEST("GET", "/control", nullptr, true, 200, "<a href='/control' class='active'>Control</a>");
     RUN_SELFTEST("GET", "/control", nullptr, true, 200, "type='checkbox'");
     RUN_SELFTEST("GET", "/control", nullptr, true, 200, "type='radio'");
+    RUN_SELFTEST("GET", "/control/edit", nullptr, true, 200, "<a href='/control' class='active'>Control</a>");
+    RUN_SELFTEST("GET", "/control/edit", nullptr, true, 200, "<footer class='footerbar'><span class='syslinks'>");
     RUN_SELFTEST("GET", "/api/control", nullptr, true, 200, "\"method\":\"GET\"");
     RUN_SELFTEST("GET", "/api/csv", nullptr, true, 200, "Content-Type: text/csv");
     RUN_SELFTEST("GET", "/api/csv", nullptr, true, 200, "Content-Disposition: attachment");
@@ -138,6 +149,10 @@ void runSelfTest() {
     ESP32BASE_LOG_I("selftest", "summary pass=%u total=%u", static_cast<unsigned>(pass), static_cast<unsigned>(total));
 }
 #endif
+
+void handleHeadExtra() {
+    Esp32BaseWeb::sendChunk("<style id='full-demo-head-extra'>nav a.active{font-weight:700}</style>");
+}
 
 void handleDashboard() {
     if (!Esp32BaseWeb::checkAuth()) {
@@ -235,20 +250,28 @@ void setup() {
     Esp32BaseWeb::setHomePath("/dashboard");
     Esp32BaseWeb::setHomeMode(Esp32BaseWeb::HOME_COMBINED);
     Esp32BaseWeb::setSystemNavMode(Esp32BaseWeb::SYSTEM_NAV_SECTION);
-    Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_HOME, "System");
+    Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_HOME, "Status");
     Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_WIFI, "Network");
     Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_OTA, "OTA");
-    Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_REBOOT, "Restart");
-    Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_SYSTEM, "System Tools");
+    Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_TOOLS, "Tools");
+    Esp32BaseWeb::setHeadExtraCallback(handleHeadExtra);
     Esp32BaseConfig::enableConfigAudit(true);
     Esp32Base::begin();
 #if ESP32BASE_ENABLE_FILELOG
-    Esp32BaseFileLog::enable("/logs/eb_app.log", 32UL * 1024UL, Esp32BaseLog::WARN, 4);
+    if (!Esp32BaseFileLog::enable("/logs/eb_app.log", 32UL * 1024UL, Esp32BaseLog::INFO, 4)) {
+#if ESP32BASE_ENABLE_FS
+        ESP32BASE_LOG_W("example", "filelog_enable_failed fs_ready=%s", Esp32BaseFs::isReady() ? "yes" : "no");
+        if (!Esp32BaseFs::isReady() && Esp32BaseFs::format() && Esp32BaseFs::begin()) {
+            Esp32BaseFileLog::enable("/logs/eb_app.log", 32UL * 1024UL, Esp32BaseLog::INFO, 4);
+        }
+#endif
+    }
 #endif
     const int32_t boot = Esp32BaseConfig::getInt(APP_NS, APP_KEY_BOOT, 0) + 1;
     Esp32BaseConfig::setIntDeferred(APP_NS, APP_KEY_BOOT, boot);
     Esp32BaseWeb::addPage("/dashboard", "Dashboard", handleDashboard);
     Esp32BaseWeb::addPage("/control", "Control", handleControl);
+    Esp32BaseWeb::addRoute("/control/edit", Esp32BaseWeb::METHOD_GET, handleControl);
     Esp32BaseWeb::addApi("/api/control", handleControlApi);
     Esp32BaseWeb::addApi("/api/csv", handleCsvApi);
     ESP32BASE_LOG_I("example", "full demo ready boot=%ld", static_cast<long>(boot));

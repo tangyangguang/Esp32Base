@@ -12,32 +12,60 @@
 - FS mount 成功、Web route 注册准备、OTA ready 分区信息增加 DEBUG 诊断日志。
 - 旧 Web Auth 存储缺少 `auth_pass` 时，启动时静默回退默认认证，不再触发 `Preferences.cpp ... auth_pass NOT_FOUND` 底层错误日志。
 - `full_demo` 内置 OTA 导航标签统一显示为 `OTA`，不再显示 `Update`。
+- `/esp32base/ota` 上传成功后，页面提示设备重启，并在短暂等待后跳转到当前配置的首页。
+- `/esp32base/ota` 上传失败时留在 OTA 页面，显示失败原因，并允许重新上传。
+- 新增 `Esp32BaseWeb::setHeadExtraCallback()`，业务项目可在 `sendHeader()` 输出顶部导航前注入 CSS。
+- 顶部业务导航自动为当前匹配项输出 `active` class，嵌套路由按最长 path 前缀匹配。
+- 基础库默认链接样式改为更中性，普通链接不再默认渲染成强蓝色按钮。
+- Web 默认配色改为简洁中性色，导航和 tabs 的 active 状态使用浅绿灰背景和深绿灰文字，不再使用蓝色主色。
+- 新增 `Esp32BaseFs::format()`；`full_demo` 在首次调试遇到 LittleFS 未格式化导致 FileLog 启用失败时，会格式化 FS 并重试启用 INFO 文件日志。
+- 内置系统首页默认命名改为 `Status`；原 `Restart` 入口升级为 `Tools` 维护页，用于承载重启和格式化 LittleFS 等维护操作。
 
 业务侧用途：
 
 - 应用使用 DEBUG 串口日志时，可以直接确认启动顺序、模块初始化进度和条件启动原因。
 - 旧测试设备升级后，缺少 `auth_pass` 的 NVS 记录不会污染启动日志。
+- OTA 成功后浏览器会自动回到设备首页，便于确认新固件启动状态。
+- OTA 失败后可直接看到失败原因并重试，不需要手动刷新页面。
+- 业务项目可继续使用 `addPage()` / `addNavItem()` / `sendHeader()`，同时把业务 CSS 提前放进 head，避免页面刷新时导航先闪成基础库默认样式。
+- 业务项目即使不注入 CSS，也会得到低侵入、设备控制台风格的默认导航。
+- `full_demo` 首次烧录后即使 LittleFS 尚未初始化，也能自动恢复文件日志页面。
+- `Tools` 页面提供显式维护动作；格式化 LittleFS 可用于调试期恢复未初始化或损坏的文件系统。
 
 关键边界：
 
 - 这些 DEBUG 日志不在默认 INFO 构建中输出。
-- 文件日志如果保持 WARN，不会保存 DEBUG/INFO。
+- 文件日志等级独立于串口编译日志等级；`full_demo` 使用 INFO 文件日志便于观察，业务长期运行建议按需要保持 WARN。
 - 不新增高频 loop、HTTP 请求或 NTP pending DEBUG 日志。
+- `setHeadExtraCallback()` 回调只应输出 `<style>`、`<meta>` 等 head 内容，不应输出 body 内容。
+- 默认样式只提供基础可读性，不新增主题系统或颜色配置 API。
+- 基础库默认不会自动格式化 FS；`format()` 会清除 LittleFS 文件，仅由示例或应用在明确可接受数据丢失时调用。
+- `Format LittleFS` 会删除日志和所有 LittleFS 文件，但不会清除 WiFi、Web Auth 或 NVS 配置；旧 `/esp32base/reboot` 入口保留并进入 `Tools` 语义。
+- Tools 页格式化成功后会明确提示，并重新加载 FileLog 配置；FileLog 会在格式化后重新创建日志目录，避免后续写入触发底层 VFS 目录不存在错误。
+- 格式化 LittleFS 会输出 WARN 级维护日志，记录请求来源、format/mount/FileLog reload 结果；FileLog 目录或 segment 准备失败也会输出 WARN。
+- FileLog 重复 `enable()` 前会先 flush 现有 buffer，避免启动阶段 boot session 多行日志在示例或维护操作重新加载 FileLog 配置时丢失尾部。
+- 普通 `GET` 页面慢请求日志降为 DEBUG；非 GET 操作慢请求仍保持 WARN，避免维护/写操作耗时被忽略。
+- 配置审计中 `changed=no result=skipped`、读取审计和 deferred 排队日志降为 DEBUG；实际写入成功/flush 成功仍为 INFO，失败为 WARN/ERROR。
+- 普通页面 Basic Auth 校验成功降为 DEBUG；认证缺失、无效或密码错误仍为 WARN，启动认证加载和认证修改继续保持 INFO。
+- 业务页面/导航注册日志降为 DEBUG，减少示例 INFO 文件日志中的启动噪音。
+- Tools 页面维护操作改为轻量分组布局，避免 `Restart device` 按钮和 `Format LittleFS` 标题贴近。
+- `POST /esp32base/tools/reboot` 响应会把浏览器历史替换为 `/esp32base/tools?restarting=1`，避免刷新重复提交；重启请求输出 `restart_requested source=tools` WARN 日志。
+- OTA 上传增加 INFO 生命周期日志：`upload_start`、10% 阶段 `upload_progress`、`upload_success`；进度带 `%`，字节数使用 KB/MB/B 友好展示，失败仍输出 ERROR。
 
 推荐接入：
 
-- 业务项目需要启动诊断时，编译开启 `ESP32BASE_LOG_LEVEL=ESP32BASE_LOG_DEBUG`；长期文件日志建议继续保持 WARN。
+- 业务项目需要启动诊断时，编译开启 `ESP32BASE_LOG_LEVEL=ESP32BASE_LOG_DEBUG`；文件日志等级按设备用途单独选择，示例观察可用 INFO，长期运行建议 WARN。
 
 ### full_demo 日志等级调整
 
 优化：
 
 - `examples/full_demo` 编译日志等级改为 DEBUG，便于串口观察调试信息。
-- `examples/full_demo` 文件日志等级改为 WARN，避免 DEBUG/INFO 写入文件日志造成日志文件膨胀。
+- `examples/full_demo` 文件日志等级保持 INFO，便于在 `/esp32base/logs` 观察示例运行和 Web/OTA 行为。
 
 业务侧用途：
 
-- 示例串口调试信息更完整，同时 `/esp32base/logs` 中只保留 WARN/ERROR 级别的重要文件日志。
+- 示例串口调试信息更完整，同时 `/esp32base/logs` 中可查看 INFO 级别的示例运行日志。
 
 关键边界：
 
@@ -45,7 +73,7 @@
 
 推荐接入：
 
-- 业务项目如需类似行为，可编译开启 `ESP32BASE_LOG_LEVEL=ESP32BASE_LOG_DEBUG`，并将 FileLog 等级保持 WARN。
+- 业务项目如需类似观察体验，可编译开启 `ESP32BASE_LOG_LEVEL=ESP32BASE_LOG_DEBUG`，并按需要将 FileLog 设为 INFO；长期运行设备建议使用 WARN。
 
 ### 系统首页容量显示简化
 
@@ -135,6 +163,8 @@
 优化：
 
 - Logs 页面顶部 `current-0`、`history-N` 标签中的文件大小改为只显示 KB/MB/B 人性化值，不再同时显示 raw bytes。
+- Logs 页面文件日志状态信息改为 14px 小字号，`Buffer`、`Max per file`、`Max total`、`Segments` 中的字节数也只显示 KB/MB/B 人性化值。
+- 内置页面默认正文为 14px，导航为 16px，页面标题收敛到 18px/16px 层级，footer 为 13px，整体更接近设备维护控制台。
 
 业务侧用途：
 
@@ -275,10 +305,10 @@ void handleRecordsCsv() {
 
 业务侧用途：
 
-- 可声明业务页面是设备主界面，基础库 WiFi、OTA、Logs、Reboot 是系统工具。
+- 可声明业务页面是设备主界面，基础库 WiFi、OTA、Logs、Tools 是系统工具。
 - 可设置 `/` 和 `/esp32base` 使用基础库首页、业务首页优先或融合首页。
 - 可把系统工具放在顶部、底部或底部紧凑系统工具区。
-- 可覆盖 Home/WiFi/OTA/Logs/Reboot/Auth 标签，适配中文业务项目。
+- 可覆盖 Home/WiFi/OTA/Logs/Tools/Auth 标签，适配中文业务项目。
 
 关键行为：
 
@@ -296,11 +326,10 @@ Esp32BaseWeb::setDeviceName("Faucet");
 Esp32BaseWeb::setHomePath("/status");
 Esp32BaseWeb::setHomeMode(Esp32BaseWeb::HOME_COMBINED);
 Esp32BaseWeb::setSystemNavMode(Esp32BaseWeb::SYSTEM_NAV_SECTION);
-Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_HOME, "系统");
+Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_HOME, "状态");
 Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_WIFI, "网络");
 Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_LOGS, "日志");
-Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_REBOOT, "重启");
-Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_SYSTEM, "系统工具");
+Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_TOOLS, "工具");
 Esp32BaseWeb::addPage("/status", "状态", handleStatusPage);
 Esp32BaseWeb::addPage("/config", "配置", handleConfigPage);
 ```

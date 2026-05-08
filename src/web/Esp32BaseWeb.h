@@ -49,6 +49,7 @@ public:
         BUILTIN_OTA,
         BUILTIN_LOGS,
         BUILTIN_REBOOT,
+        BUILTIN_TOOLS = BUILTIN_REBOOT,
         BUILTIN_SYSTEM,
         BUILTIN_AUTH
     };
@@ -79,6 +80,7 @@ public:
     static void setHomeMode(HomeMode mode);
     static void setSystemNavMode(SystemNavMode mode);
     static bool setBuiltinLabel(BuiltinPage page, const char* label);
+    static void setHeadExtraCallback(Handler handler);
 
     static Method currentMethod();
     static bool isMethod(Method method);

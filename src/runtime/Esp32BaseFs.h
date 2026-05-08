@@ -8,6 +8,7 @@ class Esp32BaseFs {
 public:
     static bool begin();
     static bool isReady();
+    static bool format();
 
     static bool writeFile(const char* path, const char* content);
     static bool readFile(const char* path, char* out, size_t len);

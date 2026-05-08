@@ -174,8 +174,13 @@ bool writePending(PendingItem& item) {
     }
     prefs.end();
     if (g_auditEnabled) {
-        ESP32BASE_LOG_I("config", "audit op=flush ns=%s key=%s type=%u result=%s",
-                        item.ns, item.key, static_cast<unsigned>(item.type), ok ? "success" : "failed");
+        if (ok) {
+            ESP32BASE_LOG_I("config", "audit op=flush ns=%s key=%s type=%u result=success",
+                            item.ns, item.key, static_cast<unsigned>(item.type));
+        } else {
+            ESP32BASE_LOG_W("config", "audit op=flush ns=%s key=%s type=%u result=failed",
+                            item.ns, item.key, static_cast<unsigned>(item.type));
+        }
     }
     return ok;
 }
@@ -214,7 +219,7 @@ bool Esp32BaseConfig::setStr(const char* ns, const char* key, const char* value)
     const bool readOk = readStoredString(ns, key, g_stringScratch, sizeof(g_stringScratch), &hadOld);
     if (readOk && hadOld && strcmp(g_stringScratch, value) == 0) {
         if (g_auditEnabled) {
-            ESP32BASE_LOG_I("config", "audit op=setStr ns=%s key=%s changed=no result=skipped", ns, key);
+            ESP32BASE_LOG_D("config", "audit op=setStr ns=%s key=%s changed=no result=skipped", ns, key);
         }
         clearPendingKey(ns, key);
         return true;
@@ -227,7 +232,9 @@ bool Esp32BaseConfig::setStr(const char* ns, const char* key, const char* value)
     const size_t written = prefs.putString(key, value);
     const bool ok = value[0] == '\0' ? prefs.isKey(key) : written > 0;
     prefs.end();
-    if (g_auditEnabled || !ok) {
+    if (!ok) {
+        ESP32BASE_LOG_W("config", "audit op=setStr ns=%s key=%s changed=yes result=failed", ns, key);
+    } else if (g_auditEnabled) {
         ESP32BASE_LOG_I("config", "audit op=setStr ns=%s key=%s changed=yes result=%s", ns, key, ok ? "success" : "failed");
     }
     if (ok) {
@@ -258,7 +265,7 @@ bool Esp32BaseConfig::getStr(const char* ns, const char* key, char* out, size_t 
         esp32base_internal::copySafe(out, len, def ? def : "");
     }
     if (g_readAuditEnabled) {
-        ESP32BASE_LOG_I("config", "audit op=getStr ns=%s key=%s found=%s value=%s", ns, key, found ? "yes" : "no", out);
+        ESP32BASE_LOG_D("config", "audit op=getStr ns=%s key=%s found=%s value=%s", ns, key, found ? "yes" : "no", out);
     }
     return found;
 }
@@ -275,14 +282,17 @@ bool Esp32BaseConfig::setInt(const char* ns, const char* key, int32_t value) {
     if (hadOld && prefs.getInt(key, value) == value) {
         prefs.end();
         if (g_auditEnabled) {
-            ESP32BASE_LOG_I("config", "audit op=setInt ns=%s key=%s changed=no result=skipped", ns, key);
+            ESP32BASE_LOG_D("config", "audit op=setInt ns=%s key=%s changed=no result=skipped", ns, key);
         }
         clearPendingKey(ns, key);
         return true;
     }
     const bool ok = prefs.putInt(key, value) > 0;
     prefs.end();
-    if (g_auditEnabled || !ok) {
+    if (!ok) {
+        ESP32BASE_LOG_W("config", "audit op=setInt ns=%s key=%s changed=yes value=%ld result=failed",
+                        ns, key, static_cast<long>(value));
+    } else if (g_auditEnabled) {
         ESP32BASE_LOG_I("config", "audit op=setInt ns=%s key=%s changed=yes value=%ld result=%s",
                         ns, key, static_cast<long>(value), ok ? "success" : "failed");
     }
@@ -311,7 +321,7 @@ int32_t Esp32BaseConfig::getInt(const char* ns, const char* key, int32_t def) {
     const int32_t value = found ? prefs.getInt(key, def) : def;
     prefs.end();
     if (g_readAuditEnabled) {
-        ESP32BASE_LOG_I("config", "audit op=getInt ns=%s key=%s found=%s value=%ld",
+        ESP32BASE_LOG_D("config", "audit op=getInt ns=%s key=%s found=%s value=%ld",
                         ns, key, found ? "yes" : "no", static_cast<long>(value));
     }
     return value;
@@ -330,7 +340,7 @@ bool Esp32BaseConfig::setIntDeferred(const char* ns, const char* key, int32_t va
     g_pending[slot].intValue = value;
     g_pending[slot].dueMs = millis() + delayMs;
     if (g_auditEnabled) {
-        ESP32BASE_LOG_I("config", "audit op=setIntDeferred ns=%s key=%s value=%ld", ns, key, static_cast<long>(value));
+        ESP32BASE_LOG_D("config", "audit op=setIntDeferred ns=%s key=%s value=%ld", ns, key, static_cast<long>(value));
     }
     return true;
 }
@@ -347,14 +357,17 @@ bool Esp32BaseConfig::setBool(const char* ns, const char* key, bool value) {
     if (hadOld && prefs.getBool(key, value) == value) {
         prefs.end();
         if (g_auditEnabled) {
-            ESP32BASE_LOG_I("config", "audit op=setBool ns=%s key=%s changed=no result=skipped", ns, key);
+            ESP32BASE_LOG_D("config", "audit op=setBool ns=%s key=%s changed=no result=skipped", ns, key);
         }
         clearPendingKey(ns, key);
         return true;
     }
     const bool ok = prefs.putBool(key, value) > 0;
     prefs.end();
-    if (g_auditEnabled || !ok) {
+    if (!ok) {
+        ESP32BASE_LOG_W("config", "audit op=setBool ns=%s key=%s changed=yes value=%u result=failed",
+                        ns, key, value ? 1U : 0U);
+    } else if (g_auditEnabled) {
         ESP32BASE_LOG_I("config", "audit op=setBool ns=%s key=%s changed=yes value=%u result=%s",
                         ns, key, value ? 1U : 0U, ok ? "success" : "failed");
     }
@@ -383,7 +396,7 @@ bool Esp32BaseConfig::getBool(const char* ns, const char* key, bool def) {
     const bool value = found ? prefs.getBool(key, def) : def;
     prefs.end();
     if (g_readAuditEnabled) {
-        ESP32BASE_LOG_I("config", "audit op=getBool ns=%s key=%s found=%s value=%u",
+        ESP32BASE_LOG_D("config", "audit op=getBool ns=%s key=%s found=%s value=%u",
                         ns, key, found ? "yes" : "no", value ? 1U : 0U);
     }
     return value;
@@ -402,7 +415,7 @@ bool Esp32BaseConfig::setBoolDeferred(const char* ns, const char* key, bool valu
     g_pending[slot].boolValue = value;
     g_pending[slot].dueMs = millis() + delayMs;
     if (g_auditEnabled) {
-        ESP32BASE_LOG_I("config", "audit op=setBoolDeferred ns=%s key=%s value=%u", ns, key, value ? 1U : 0U);
+        ESP32BASE_LOG_D("config", "audit op=setBoolDeferred ns=%s key=%s value=%u", ns, key, value ? 1U : 0U);
     }
     return true;
 }
@@ -425,7 +438,7 @@ bool Esp32BaseConfig::setStrDeferred(const char* ns, const char* key, const char
     g_pending[slot].strValue = copy;
     g_pending[slot].dueMs = millis() + delayMs;
     if (g_auditEnabled) {
-        ESP32BASE_LOG_I("config", "audit op=setStrDeferred ns=%s key=%s len=%u", ns, key, static_cast<unsigned>(strlen(value)));
+        ESP32BASE_LOG_D("config", "audit op=setStrDeferred ns=%s key=%s len=%u", ns, key, static_cast<unsigned>(strlen(value)));
     }
     return true;
 }

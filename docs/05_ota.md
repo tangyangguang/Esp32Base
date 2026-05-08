@@ -39,6 +39,9 @@ OTA route 按 profile/OTA 编译条件注册，不依赖应用是否设置默认
 记录：
 
 - progress。
+- 上传开始输出 `INFO ota upload_start size=<friendly> sha256=<provided|none>`。
+- 上传过程中按 10% 阶段输出少量 `INFO ota upload_progress progress=<N>% bytes=<friendly> total=<friendly>`，不按 chunk 刷屏。
+- 上传完成输出 `INFO ota upload_success size=<friendly> sha256=<actual>`；失败继续输出 ERROR。
 - bytesProcessed。
 - totalSize。
 - totalSize human。
@@ -66,13 +69,15 @@ OTA route 按 profile/OTA 编译条件注册，不依赖应用是否设置默认
 13. 恢复 Watchdog。
 14. 恢复 WiFi power save。
 15. 恢复 Config deferred flush。
-16. 走统一 restart。
+16. Web 上传页收到成功响应后提示重启，并在短暂等待后跳转到当前配置的首页。
+17. 走统一 restart。
 
 失败或 abort 必须恢复：
 
 - Watchdog。
 - WiFi power save。
 - Config deferred flush。
+- Web 上传页留在 OTA 页面，显示失败原因并允许重新上传。
 - OTA 状态。
 
 ## 5. SHA256
