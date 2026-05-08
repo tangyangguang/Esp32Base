@@ -7,8 +7,9 @@
 - Web 使用 HTTP Basic Auth，不提供 HTTPS。
 - Basic Auth 明文传输，只用于降低误操作风险，不抵御同一局域网内的嗅探、MITM 或主动攻击。
 - Web Auth 密码不在 HTML、JSON 或 API 响应中明文输出；持久化时保存明文密码；`INFO` 日志会明文输出 Web 用户名和密码。
-- OTA 只提供上传认证和 SHA256 完整性校验，不提供固件加密、签名信任链或差分升级。
-- OTA 与 Web Auth 配置解耦；关闭 Web Auth 时 OTA 仍可访问，但没有密码保护，风险由应用和用户自行承担。
+- OTA 只提供上传认证和完整性校验，不提供固件加密、签名信任链或差分升级；Web OTA 使用可选 SHA256，ArduinoOTA/espota 使用内建 MD5。
+- Web OTA 与 Web Auth 配置解耦；关闭 Web Auth 时 Web OTA 仍可访问，但没有密码保护，风险由应用和用户自行承担。
+- 关闭 Web Auth 不会关闭 ArduinoOTA/espota 密码；命令行 OTA 仍要求当前 Web Auth 密码。
 - Web 配置页面在用户通过 Basic Auth 后会回显当前 WiFi 密码，这是运维查看当前配置所需。该回显与日志的 INFO 级密码屏蔽策略分别考虑；生产固件应避免在公共网络环境下打开配置页。
 
 ## 2. Web 边界
@@ -17,6 +18,7 @@
 - 长时间 handler 会阻塞其他请求，建议单次 handler < 200ms。
 - 不支持 WebSocket、SPA、大型前端资源管理器、多用户权限和会话系统。
 - OTA 上传页只复用 Web Basic Auth，不提供第二套认证。
+- ArduinoOTA/espota 不提供用户名，认证只使用当前 Web Auth 密码。
 
 ## 3. 网络边界
 
@@ -70,6 +72,7 @@
 - OTA 只支持整包升级。
 - 未提供 SHA256 时允许跳过完整性校验；提供时必须严格校验。
 - SHA256 校验失败不得调用 `Update.end(true)`，不得重启到新固件。
+- SHA256 规则仅适用于 Web OTA；espota 继续使用 ArduinoOTA 协议内建 MD5。
 - 默认不关闭 brownout detector；临时关闭 brownout 仅作为显式开启的风险选项。
 
 ## 10. 日志边界

@@ -79,6 +79,7 @@ OTA 规则：
 - OTA route 按 profile/OTA 编译条件注册，不依赖 `setDefaultAuth()` 或持久化认证。
 - Web Auth 开启时，OTA 页面和上传接口复用 Web Basic Auth。
 - Web Auth 关闭时，OTA 页面和上传接口不要求认证，风险由应用和用户自行承担。
+- 启用 OTA 时默认同时启用 ArduinoOTA/espota；espota 只使用当前 Web Auth 密码作为 `--auth` 密码，即使 Web Auth 关闭也仍要求密码。
 
 不使用“密码是否等于默认字符串”作为唯一判断。
 
@@ -88,6 +89,7 @@ OTA 规则：
 - 它只用于防误操作。
 - 不抵御 LAN 内主动攻击。
 - 关闭 Web Auth 时，内置页面和 OTA 均无密码保护。
+- 关闭 Web Auth 只影响 HTTP/Web OTA；不关闭 ArduinoOTA/espota 密码。
 - Web Auth 密码不在 HTML、JSON 或 API 响应中输出；INFO 日志会明文输出 Web 用户名和密码，日志访问权限由应用和部署环境控制。
 
 ## 5. 路由表

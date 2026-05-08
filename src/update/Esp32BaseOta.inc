@@ -3,6 +3,7 @@
 #if ESP32BASE_ENABLE_OTA
 
 #include "Esp32BaseOta.h"
+#include "../Esp32Base.h"
 #include "../core/Esp32BaseConfig.h"
 #include "../core/Esp32BaseLog.h"
 #include "../core/Esp32BaseSystem.h"
@@ -19,6 +20,10 @@
 #if ESP32BASE_ENABLE_WATCHDOG
 #include "../runtime/Esp32BaseWatchdog.h"
 #endif
+#if ESP32BASE_ENABLE_ARDUINO_OTA
+#include "../web/Esp32BaseWeb.h"
+#include <ArduinoOTA.h>
+#endif
 
 #include <Update.h>
 #include <esp_ota_ops.h>
@@ -27,6 +32,7 @@
 #include <mbedtls/version.h>
 #endif
 #include <ctype.h>
+#include <new>
 #include <string.h>
 
 #ifndef ESP32BASE_OTA_REQUIRE_MARK_VALID
@@ -50,6 +56,12 @@ bool g_otaShaActive = false;
 bool g_otaPrevPowerSave = true;
 uint32_t g_otaBootMs = 0;
 const esp_partition_t* g_otaBootPartition = nullptr;
+#if ESP32BASE_ENABLE_ARDUINO_OTA
+bool g_arduinoOtaReady = false;
+bool g_arduinoOtaTransferActive = false;
+bool g_arduinoOtaRestartPending = false;
+char g_arduinoOtaAuthPass[64] = "";
+#endif
 
 void setError(const char* message) {
     strlcpy(g_otaLastError, message ? message : "", sizeof(g_otaLastError));
@@ -96,6 +108,17 @@ void cleanupLongOps() {
     Esp32BaseConfig::resumeDeferredFlush();
 }
 
+void prepareLongOps() {
+    Esp32BaseConfig::pauseDeferredFlush();
+#if ESP32BASE_ENABLE_WATCHDOG
+    Esp32BaseWatchdog::removeCurrentTaskForLongOperation();
+#endif
+#if ESP32BASE_ENABLE_WIFI
+    g_otaPrevPowerSave = Esp32BaseWiFi::powerSave();
+    Esp32BaseWiFi::setPowerSave(false);
+#endif
+}
+
 void sha256Starts(mbedtls_sha256_context* ctx) {
 #if defined(MBEDTLS_VERSION_MAJOR) && MBEDTLS_VERSION_MAJOR >= 3 && defined(MBEDTLS_SHA256_SHA256)
     mbedtls_sha256_starts(ctx, MBEDTLS_SHA256_SHA256);
@@ -116,6 +139,127 @@ void formatOtaBytes(size_t bytes, char* out, size_t len) {
         snprintf(out, len, "%lu B", static_cast<unsigned long>(bytes));
     }
 }
+
+void logProgressIfDue() {
+    const uint8_t currentProgress = Esp32BaseOta::progress();
+    while (g_otaNextProgressLog <= 100U && currentProgress >= g_otaNextProgressLog) {
+        char processedBuf[32];
+        char totalBuf[32];
+        formatOtaBytes(g_otaProcessed, processedBuf, sizeof(processedBuf));
+        formatOtaBytes(g_otaTotal, totalBuf, sizeof(totalBuf));
+        ESP32BASE_LOG_I("ota", "upload_progress progress=%u%% bytes=%s total=%s",
+                        static_cast<unsigned>(g_otaNextProgressLog),
+                        processedBuf,
+                        totalBuf);
+        g_otaNextProgressLog = static_cast<uint8_t>(g_otaNextProgressLog + 10U);
+    }
+}
+
+#if ESP32BASE_ENABLE_ARDUINO_OTA
+const char* arduinoOtaErrorName(ota_error_t error) {
+    switch (error) {
+        case OTA_AUTH_ERROR: return "auth";
+        case OTA_BEGIN_ERROR: return "begin";
+        case OTA_CONNECT_ERROR: return "connect";
+        case OTA_RECEIVE_ERROR: return "receive";
+        case OTA_END_ERROR: return "end";
+        default: return "unknown";
+    }
+}
+
+void resetArduinoOtaObject(bool stopActiveListener) {
+    if (stopActiveListener) {
+        ArduinoOTA.end();
+    }
+    ArduinoOTA.~ArduinoOTAClass();
+    new (&ArduinoOTA) ArduinoOTAClass();
+}
+
+void configureArduinoOtaCallbacks() {
+    ArduinoOTA.onStart([]() {
+        g_arduinoOtaTransferActive = true;
+        g_arduinoOtaRestartPending = false;
+        g_otaProcessed = 0;
+        g_otaNextProgressLog = 10;
+        g_otaLastError[0] = '\0';
+        g_otaStatus = Esp32BaseOta::UPLOADING;
+        prepareLongOps();
+        char totalBuf[32];
+        formatOtaBytes(g_otaTotal, totalBuf, sizeof(totalBuf));
+        ESP32BASE_LOG_I("ota", "arduino_upload_start size=%s auth=enabled md5=arduinoota",
+                        g_otaTotal ? totalBuf : "unknown");
+#if ESP32BASE_ENABLE_BUS
+        Esp32BaseBus::publish(Esp32BaseOta::EVENT_START, "");
+#endif
+    });
+    ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+        g_otaTotal = static_cast<size_t>(total);
+        g_otaProcessed = static_cast<size_t>(progress);
+        logProgressIfDue();
+#if ESP32BASE_ENABLE_BUS
+        Esp32BaseBus::publish(Esp32BaseOta::EVENT_PROGRESS, "");
+#endif
+    });
+    ArduinoOTA.onEnd([]() {
+        g_otaStatus = Esp32BaseOta::SUCCESS;
+        g_arduinoOtaTransferActive = false;
+        cleanupLongOps();
+        char processedBuf[32];
+        formatOtaBytes(g_otaProcessed, processedBuf, sizeof(processedBuf));
+        ESP32BASE_LOG_I("ota", "arduino_upload_success size=%s", processedBuf);
+#if ESP32BASE_ENABLE_FILELOG
+        Esp32BaseFileLog::flush();
+#endif
+#if ESP32BASE_ENABLE_BUS
+        Esp32BaseBus::publish(Esp32BaseOta::EVENT_SUCCESS, "");
+#endif
+        g_arduinoOtaRestartPending = true;
+    });
+    ArduinoOTA.onError([](ota_error_t error) {
+        const bool wasActive = g_arduinoOtaTransferActive;
+        g_arduinoOtaTransferActive = false;
+        if (wasActive) {
+            cleanupLongOps();
+        }
+        char message[96];
+        snprintf(message, sizeof(message), "arduino ota %s error", arduinoOtaErrorName(error));
+        setError(message);
+        g_otaStatus = Esp32BaseOta::FAILED;
+    });
+}
+
+void beginArduinoOta() {
+    if (g_arduinoOtaReady) {
+        return;
+    }
+    strlcpy(g_arduinoOtaAuthPass, Esp32BaseWeb::authPassword(), sizeof(g_arduinoOtaAuthPass));
+    resetArduinoOtaObject(false);
+    ArduinoOTA.setHostname(Esp32Base::hostname());
+    ArduinoOTA.setPassword(g_arduinoOtaAuthPass);
+    ArduinoOTA.setMdnsEnabled(false);
+    ArduinoOTA.setRebootOnSuccess(false);
+    configureArduinoOtaCallbacks();
+    ArduinoOTA.begin();
+    g_arduinoOtaReady = true;
+    ESP32BASE_LOG_I("ota", "arduino_ota_ready host=%s.local port=3232 auth=enabled",
+                    Esp32Base::hostname());
+}
+
+void syncArduinoOtaAuth() {
+    if (!g_arduinoOtaReady || g_arduinoOtaTransferActive || g_otaStatus == Esp32BaseOta::UPLOADING ||
+        g_otaStatus == Esp32BaseOta::VERIFYING) {
+        return;
+    }
+    const char* currentPass = Esp32BaseWeb::authPassword();
+    if (strcmp(g_arduinoOtaAuthPass, currentPass) == 0) {
+        return;
+    }
+    ESP32BASE_LOG_I("ota", "arduino_ota_auth_changed restarting_listener");
+    resetArduinoOtaObject(true);
+    g_arduinoOtaReady = false;
+    beginArduinoOta();
+}
+#endif
 }
 
 bool Esp32BaseOta::begin() {
@@ -131,10 +275,34 @@ bool Esp32BaseOta::begin() {
     } else {
         ESP32BASE_LOG_D("ota", "ready partition=unknown");
     }
+#if ESP32BASE_ENABLE_ARDUINO_OTA
+    beginArduinoOta();
+#endif
     return true;
 }
 
 void Esp32BaseOta::handle() {
+#if ESP32BASE_ENABLE_ARDUINO_OTA
+    if (g_arduinoOtaRestartPending) {
+        g_arduinoOtaRestartPending = false;
+        delay(500);
+        Esp32BaseSystem::restart("arduino ota success");
+        return;
+    }
+    if (g_otaReady) {
+        if (!g_arduinoOtaReady) {
+            beginArduinoOta();
+        } else {
+            syncArduinoOtaAuth();
+        }
+#if ESP32BASE_ENABLE_WIFI
+        if (Esp32BaseWiFi::isConnected() && g_arduinoOtaReady &&
+            (!isUploading() || g_arduinoOtaTransferActive)) {
+            ArduinoOTA.handle();
+        }
+#endif
+    }
+#endif
 #if ESP32BASE_OTA_REQUIRE_MARK_VALID
     if (!g_otaReady || !g_otaBootPartition || esp_ota_get_running_partition() != g_otaBootPartition) {
         return;
@@ -162,6 +330,10 @@ Esp32BaseOta::Status Esp32BaseOta::status() {
 }
 
 bool Esp32BaseOta::startUpload(size_t totalSize, const char* expectedSha256Hex) {
+    if (isUploading()) {
+        setError("ota already in progress");
+        return false;
+    }
     if (totalSize == 0) {
         setError("invalid ota size");
         g_otaStatus = FAILED;
@@ -180,14 +352,7 @@ bool Esp32BaseOta::startUpload(size_t totalSize, const char* expectedSha256Hex) 
         }
     }
 
-    Esp32BaseConfig::pauseDeferredFlush();
-#if ESP32BASE_ENABLE_WATCHDOG
-    Esp32BaseWatchdog::removeCurrentTaskForLongOperation();
-#endif
-#if ESP32BASE_ENABLE_WIFI
-    g_otaPrevPowerSave = Esp32BaseWiFi::powerSave();
-    Esp32BaseWiFi::setPowerSave(false);
-#endif
+    prepareLongOps();
 
     if (!Update.begin(totalSize)) {
         cleanupLongOps();
@@ -223,18 +388,7 @@ bool Esp32BaseOta::writeChunk(const uint8_t* data, size_t len) {
         mbedtls_sha256_update(&g_otaSha, data, len);
     }
     g_otaProcessed += len;
-    const uint8_t currentProgress = progress();
-    while (g_otaNextProgressLog <= 100U && currentProgress >= g_otaNextProgressLog) {
-        char processedBuf[32];
-        char totalBuf[32];
-        formatOtaBytes(g_otaProcessed, processedBuf, sizeof(processedBuf));
-        formatOtaBytes(g_otaTotal, totalBuf, sizeof(totalBuf));
-        ESP32BASE_LOG_I("ota", "upload_progress progress=%u%% bytes=%s total=%s",
-                        static_cast<unsigned>(g_otaNextProgressLog),
-                        processedBuf,
-                        totalBuf);
-        g_otaNextProgressLog = static_cast<uint8_t>(g_otaNextProgressLog + 10U);
-    }
+    logProgressIfDue();
     yield();
 #if ESP32BASE_ENABLE_BUS
     Esp32BaseBus::publish(EVENT_PROGRESS, "");

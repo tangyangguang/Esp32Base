@@ -28,6 +28,7 @@ ESP32BASE_PROFILE_CORE
 - `ESP32BASE_ENABLE_WEB`
 - `ESP32BASE_ENABLE_OTA`
 - `ESP32BASE_ENABLE_WEB_OTA`
+- `ESP32BASE_ENABLE_ARDUINO_OTA`
 
 ## 2. 展开契约
 
@@ -62,8 +63,9 @@ Profile 默认值不能覆盖用户显式 `-D`。
 硬依赖：
 
 - `WEB` 需要 `WIFI`。
-- `OTA` 需要 `WIFI` + `WEB`。第一版 OTA 是 Web OTA，不提供脱离 Web 的独立 OTA 传输入口。
+- `OTA` 需要 `WIFI` + `WEB`。
 - `WEB_OTA` 需要 `WEB` + `OTA`。
+- `ARDUINO_OTA` 需要 `OTA`，默认值跟随 `OTA`；启用 OTA 的 profile 默认同时支持 Web OTA 和 espota。
 - `DNS` 需要 `WIFI`。
 - `NTP` 需要 `WIFI`。
 - `MDNS` 需要 `WIFI`。
@@ -220,11 +222,13 @@ Bus 默认启用，但可显式关闭。
 - WEB_RUNTIME
 - OTA
 - Web OTA route hooks
+- ArduinoOTA / espota command-line OTA
 
 适合：
 
 - 完整本地管理。
 - Web OTA。
+- PlatformIO `espota` 命令行 OTA。
 - 诊断压测。
 - 设备长期维护。
 

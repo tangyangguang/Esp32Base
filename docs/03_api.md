@@ -463,6 +463,7 @@ public:
 
     static void setDefaultAuth(const char* user, const char* pass);
     static const char* authUser();
+    static const char* authPassword();
     static bool isAuthEnabled();
     static void setAuthEnabled(bool enabled);
     static bool checkAuth();
@@ -533,7 +534,7 @@ Route 缓冲机制：
 - `/esp32base/auth` 是内置认证管理页面，受当前 Basic Auth 保护，提交成功后新账号密码立即生效。
 - Web Auth 认证优先级为：已保存认证 > 应用默认认证 > 库默认 `admin/admin`。
 - `setDefaultAuth(user, pass)` 设置应用默认认证；如果用户已保存认证，不会覆盖已保存认证。
-- `authUser()` 只返回当前用户名，不提供读取密码 API；明文密码通过 INFO 日志输出。
+- `authUser()` 返回当前用户名；`authPassword()` 返回当前生效密码，仅供本地 C++ 认证集成使用，例如 ArduinoOTA/espota，禁止输出到 HTML、JSON 或 API 响应。
 - `verifyAuth(user, pass)` 校验显式传入的账号密码；无参 `verifyAuth()` 仍表示当前请求是否已认证。
 - `saveAuth(user, pass)` 保存 Web Auth 到 `eb_web.auth_user`、`eb_web.auth_pass`，并立即切换为新认证。
 - `resetAuth()` 清除 `eb_web` 持久化 Auth，并恢复应用默认认证；没有应用默认认证时恢复库默认 `admin/admin`。
@@ -602,6 +603,10 @@ public:
 `expectedSha256Hex` 可为空；不为空时必须是 64 字节十六进制字符串，大小写均接受，内部统一按小写比较。
 
 Web OTA 上传页面不要求额外认证；它只复用 Web 层 Basic Auth。上传过程必须提供进度展示。
+
+启用 `ESP32BASE_ENABLE_OTA` 时，`ESP32BASE_ENABLE_ARDUINO_OTA` 默认同为 1，提供 ArduinoOTA/espota 兼容入口。命令行 OTA 使用 `Esp32Base::hostname()` 和标准端口 3232，复用 mDNS 的 `<hostname>.local` 解析；认证密码为当前生效的 Web Auth 密码，用户名不参与。即使 Web Auth 被关闭，ArduinoOTA 仍要求密码。
+
+Web OTA 与 ArduinoOTA 不得同时写 flash；已有 OTA 传输进行时，另一入口必须拒绝或暂停处理。
 
 ## 11. Esp32BaseWatchdog / Sleep / Fs / Health
 

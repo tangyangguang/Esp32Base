@@ -2,6 +2,72 @@
 
 本文从 2026-05-06 起记录 Esp32Base 新增和优化的能力，面向正在接入本库的业务项目。业务项目应优先查看本文，了解最近可用的新 API、行为变化和推荐接入方式。
 
+## 2026-05-08
+
+### 快速命令行 Web OTA
+
+新增：
+
+- Esp32Base 提供可复用 PlatformIO extra_script，注册 `webota` target，可通过现有 HTTP Web OTA 接口上传固件。
+- `webota` 使用 `/esp32base/ota`、Web Basic Auth、`X-Firmware-Size` 和默认自动 SHA256 校验。
+- `webota` 默认 64 KB 分块上传，并在上传前通过状态接口预检连接和认证，减少反复烧录耗时和错误密码等待。
+- `webota` 日志显示友好容量、开始/结束时间、用时、平均速度，并按约 5% 粒度输出进度。
+- 支持 IP 地址上传，不依赖 mDNS。
+
+业务侧用途：
+
+- 业务项目无需复制脚本或自建临时 target；配置地址和认证后可直接运行：
+
+```sh
+pio run -t webota
+```
+
+推荐接入：
+
+```ini
+extra_scripts =
+  post:path/to/Esp32Base/scripts/esp32base_webota.py
+
+custom_esp32base_webota_host = 192.168.2.112
+custom_esp32base_webota_user = admin
+custom_esp32base_webota_password = admin
+```
+
+关键边界：
+
+- `espota` 是 ArduinoOTA 标准协议，适合标准工具链兼容；`webota` 是 Esp32Base 提供的 HTTP 上传方式，通常更适合反复快速烧录。
+- `webota` 复用现有 Web OTA 页面/API，不改变浏览器 Web OTA，也不影响 ArduinoOTA/espota。
+- 失败会区分连接失败、认证失败、设备返回错误和上传中断。
+
+### ArduinoOTA / espota 命令行 OTA
+
+新增：
+
+- 启用 `ESP32BASE_ENABLE_OTA` 时默认启用 `ESP32BASE_ENABLE_ARDUINO_OTA`，支持 PlatformIO `upload_protocol = espota`。
+- ArduinoOTA 使用 `Esp32Base::hostname()`，可通过 `<hostname>.local` 和标准端口 3232 上传。
+- espota 认证密码复用当前生效的 Web Auth 密码；即使关闭 Web Auth，espota 仍要求密码。
+- Web OTA 与 espota 共用 OTA 状态和 Watchdog、NVS deferred flush、WiFi power save、FileLog 资源保护策略，避免同时写 flash。
+
+业务侧用途：
+
+- 业务项目无需再各自写 PlatformIO 脚本包装 `/esp32base/ota`，可直接使用 `pio run -t upload --upload-port <hostname>.local`。
+- 不需要命令行 OTA 的项目可显式设置 `ESP32BASE_ENABLE_ARDUINO_OTA=0`，保留原 Web OTA。
+
+关键边界：
+
+- 非 OTA profile 不新增 ArduinoOTA 能力，不改变现有裁剪边界。
+- espota 只有密码没有用户名，因此用户名不参与命令行 OTA 认证。
+- Web OTA 继续支持可选 SHA256；ArduinoOTA/espota 使用协议内建 MD5。
+
+推荐接入：
+
+```ini
+upload_protocol = espota
+upload_port = esp32base-full.local
+upload_flags =
+  --auth=admin
+```
+
 ## 2026-05-07
 
 ### 启动流程 DEBUG 诊断

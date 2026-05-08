@@ -1588,6 +1588,10 @@ const char* Esp32BaseWeb::authUser() {
     return g_authUser;
 }
 
+const char* Esp32BaseWeb::authPassword() {
+    return g_authPass;
+}
+
 bool Esp32BaseWeb::isAuthEnabled() {
     return g_authEnabled;
 }

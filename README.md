@@ -97,6 +97,34 @@ Profile 是默认组合，用户仍可用 `ESP32BASE_ENABLE_*` 精细覆盖。�
 
 `Esp32BaseFs` 对业务暴露文本、二进制、追加、目录和容量 API，并提供 `readBytesAt()` / `writeBytesAt()` 按偏移读写能力。业务可通过这些 API 实现二进制定长日志分页读取和环形覆盖写入，不需要 include `LittleFS.h` 或 Arduino `File`。
 
+`ESP32BASE_PROFILE_FULL` 默认同时支持 Web OTA 和 PlatformIO/espota 命令行 OTA。命令行 OTA 使用 `Esp32Base::hostname()` 对应的 `<hostname>.local`、标准端口 3232，以及当前 Web Auth 密码：
+
+```ini
+upload_protocol = espota
+upload_port = esp32-demo.local
+upload_flags =
+  --auth=admin
+```
+
+不需要命令行 OTA 的业务可显式设置 `ESP32BASE_ENABLE_ARDUINO_OTA=0`，现有 Web OTA 不受影响。
+
+需要更快的命令行上传时，可使用 Esp32Base 内置 `webota` target。它复用现有 HTTP Web OTA 接口和 Web Auth，推荐直接配置设备 IP：
+
+```ini
+extra_scripts =
+  post:path/to/Esp32Base/scripts/esp32base_webota.py
+
+custom_esp32base_webota_host = 192.168.2.112
+custom_esp32base_webota_user = admin
+custom_esp32base_webota_password = admin
+```
+
+```sh
+pio run -t webota
+```
+
+`espota` 是 ArduinoOTA 标准协议；`webota` 是 Esp32Base 提供的 HTTP 上传方式，默认较大分块并在上传前预检认证，通常更适合反复快速烧录，但要求设备 Web OTA 可访问。
+
 ## 文档入口
 
 建议按顺序阅读：

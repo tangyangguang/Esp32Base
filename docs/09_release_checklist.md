@@ -38,6 +38,7 @@
 - map 符号。
 - 非法 `ESP32BASE_PROFILE` 必须编译失败。
 - 错误依赖组合必须编译失败，例如启用 `OTA` 但关闭 `WEB`。
+- 启用 `OTA` 时默认启用 `ARDUINO_OTA`；显式 `ESP32BASE_ENABLE_ARDUINO_OTA=0` 必须可关闭命令行 OTA。
 
 ## 4. 发布包检查
 
@@ -61,7 +62,7 @@
 - WEB 不链接 Update。
 - FS 关闭时 FileLog 不拉入 LittleFS。
 - 关闭 Bus/Fs/Health 不产生静态对象。
-- 外部最小应用仅 `#include <Esp32Base.h>` 并启用 FULL profile 时，不额外声明 framework 内置库也必须编译通过。
+- 外部最小应用仅 `#include <Esp32Base.h>` 并启用 FULL profile 时，不额外声明 framework 内置库也必须编译通过，包括 ArduinoOTA。
 
 ## 6. OTA 检查
 
@@ -69,6 +70,11 @@
 
 - Web Auth 开启时，未认证不能写 flash。
 - Web Auth 关闭时，OTA route 仍注册且无密码保护。
+- espota 正确密码上传成功。
+- espota 错误密码上传失败且设备仍可访问。
+- `pio run -t webota` 通过 HTTP Web OTA 上传成功。
+- `webota` 错误 Web Auth 上传失败且设备仍可访问。
+- Web OTA 与 espota 不得同时写 flash。
 - SHA256 正确路径成功。
 - SHA256 错误路径失败。
 - `Update.end(true)` 只在 SHA256 通过后调用。
