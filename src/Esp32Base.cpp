@@ -95,7 +95,7 @@ bool Esp32Base::begin() {
     ESP32BASE_LOG_D("base", "module_begin name=fs");
     {
         const bool ok = Esp32BaseFs::begin();
-        optionalOk(ok, "fs");
+        if (!optionalOk(ok, "fs")) return false;
         if (ok) ESP32BASE_LOG_D("base", "module_ready name=fs");
     }
 #endif
@@ -103,7 +103,7 @@ bool Esp32Base::begin() {
     ESP32BASE_LOG_D("base", "module_begin name=filelog");
     {
         const bool ok = Esp32BaseFileLog::begin();
-        optionalOk(ok, "filelog");
+        if (!optionalOk(ok, "filelog")) return false;
         if (ok) ESP32BASE_LOG_D("base", "module_ready name=filelog");
     }
 #endif
@@ -111,7 +111,7 @@ bool Esp32Base::begin() {
     ESP32BASE_LOG_D("base", "module_begin name=watchdog");
     {
         const bool ok = Esp32BaseWatchdog::begin(8000);
-        optionalOk(ok, "watchdog");
+        if (!optionalOk(ok, "watchdog")) return false;
         if (ok) ESP32BASE_LOG_D("base", "module_ready name=watchdog");
     }
 #endif
@@ -119,7 +119,7 @@ bool Esp32Base::begin() {
     ESP32BASE_LOG_D("base", "module_begin name=sleep");
     {
         const bool ok = Esp32BaseSleep::begin();
-        optionalOk(ok, "sleep");
+        if (!optionalOk(ok, "sleep")) return false;
         if (ok) ESP32BASE_LOG_D("base", "module_ready name=sleep");
     }
 #endif
@@ -127,7 +127,7 @@ bool Esp32Base::begin() {
     ESP32BASE_LOG_D("base", "module_begin name=health");
     {
         const bool ok = Esp32BaseHealth::begin();
-        optionalOk(ok, "health");
+        if (!optionalOk(ok, "health")) return false;
         if (ok) ESP32BASE_LOG_D("base", "module_ready name=health");
     }
 #endif
@@ -135,7 +135,7 @@ bool Esp32Base::begin() {
     ESP32BASE_LOG_D("base", "module_begin name=wifi");
     {
         const bool ok = Esp32BaseWiFi::begin();
-        optionalOk(ok, "wifi");
+        if (!optionalOk(ok, "wifi")) return false;
         if (ok) ESP32BASE_LOG_D("base", "module_ready name=wifi");
     }
 #endif
@@ -162,8 +162,10 @@ void Esp32Base::handle() {
     Esp32BaseWiFi::handle();
 #endif
 #if ESP32BASE_ENABLE_DNS
-    if (!Esp32BaseDns::isRunning()) {
+    if (Esp32BaseWiFi::state() == Esp32BaseWiFi::CONFIG_PORTAL && !Esp32BaseDns::isRunning()) {
         Esp32BaseDns::begin();
+    } else if (Esp32BaseWiFi::state() != Esp32BaseWiFi::CONFIG_PORTAL && Esp32BaseDns::isRunning()) {
+        Esp32BaseDns::stop();
     }
     Esp32BaseDns::handle();
 #endif

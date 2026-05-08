@@ -115,7 +115,7 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/auth", nullptr, true, 200, "New passwords do not match");
     RUN_SELFTEST("GET", "/esp32base/ota", nullptr, true, 200, "<title>OTA</title>");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "<title>Tools</title>");
-    RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "class='toolsection'");
+    RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "class='panel'");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Restart device");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Format LittleFS");
     RUN_SELFTEST("GET", "/esp32base/reboot", nullptr, true, 200, "<title>Tools</title>");

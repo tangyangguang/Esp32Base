@@ -29,6 +29,8 @@
 - `text / data / bss`。
 - 重模块符号。
 
+可用 `scripts/check_trim_symbols.py` 在 `examples/basic` 构建后快速检查最终 ELF 是否包含被禁用 profile 的重模块符号。
+
 验收：
 
 - CORE 不链接 WiFi/WebServer/Update/LittleFS。

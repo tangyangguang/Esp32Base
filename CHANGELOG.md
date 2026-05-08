@@ -4,6 +4,18 @@
 
 ## 2026-05-08
 
+### 启动严格模式与 Captive DNS 生命周期修复
+
+修复：
+
+- `ESP32BASE_STRICT_OPTIONAL_BEGIN=1` 现在会对 FS、FileLog、Watchdog、Sleep、Health、WiFi 等所有可选模块生效；任一可选模块 begin 失败都会使 `Esp32Base::begin()` 返回 false。
+- Captive Portal DNS 只在 WiFi 处于 `CONFIG_PORTAL` 时运行；设备切回 STA 或离开配网页后会停止 DNS server，避免旧的 captive DNS 状态残留。
+- `full_demo` 自测用例同步当前 Tools 页面结构，避免启用自测时因过期 CSS 类名误报失败。
+
+验证：
+
+- 新增 `scripts/check_trim_symbols.py`，用于在 `examples/basic` 构建后检查最终 ELF 是否包含被禁用 profile 的重模块符号。
+
 ### 内置 Web 页面视觉统一
 
 优化：
