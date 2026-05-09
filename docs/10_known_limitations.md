@@ -31,6 +31,10 @@
 
 ## 4. 并发边界
 
+- `Esp32Base::begin()`、`Esp32Base::handle()`、`Esp32BaseConfig`、`Esp32BaseWeb` 和 `Esp32BaseBus` 按单系统服务任务模型使用，推荐固定在 Arduino `loopTask` 或应用自建的同一个服务任务中调用。
+- `Esp32BaseConfig` 当前不是线程安全 API，不提供内部 mutex；业务 FreeRTOS task 不应跨核直接调用 Config 写入、flush 或清理 API。
+- 双核项目推荐架构是：WiFi/Web/OTA/NVS/FileLog 等基础库服务运行在同一个 loop/system task，实时或核心业务 task 通过 FreeRTOS queue、flag 或 ring buffer 投递请求。
+- 实时任务不要直接做 NVS、LittleFS、Web、OTA、FileLog 操作，避免 flash 写入、文件系统和网络栈阻塞实时响应。
 - `Esp32BaseBus::publish()` 只允许在 Arduino loop 任务调用。
 - WiFi callback、timer callback、ISR、LWIP 回调不得直接 publish，只能入队后在 `handle()` 中处理。
 - 本库不提供跨任务事件总线，不包装 FreeRTOS 队列作为公开通用消息系统。

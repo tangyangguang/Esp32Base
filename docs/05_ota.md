@@ -65,7 +65,8 @@ pio run -t webota
 - `esp32base_webota_user` / `esp32base_webota_password`：默认 `admin` / `admin`。
 - `esp32base_webota_auth`：可用 `user:password` 一次性设置 Basic Auth。
 - `esp32base_webota_sha256`：默认 `auto`，可设为 `off` 或 64 字符 SHA256。
-- `esp32base_webota_timeout`：默认 `120` 秒。
+- `esp32base_webota_timeout`：默认 `120` 秒，用于预检和普通请求。
+- `esp32base_webota_upload_timeout`：默认 `600` 秒，用于实际固件上传，弱网或大固件可单独调大。
 - `esp32base_webota_chunk_size`：默认 `65536` 字节；HTTP 上传默认使用较大分块以提高反复烧录效率。
 - `esp32base_webota_preflight`：默认 `true`，上传前通过状态接口快速校验连接和认证，避免错误密码时传完整包。
 - `esp32base_webota_status_path`：默认 `/esp32base/api/ota`，用于预检。
@@ -78,6 +79,8 @@ pio run -t webota
 - `webota` 是 Esp32Base 提供的 HTTP 上传方式，默认 64 KB 分块，通常比 espota 快；要求设备 Web 服务和 `/esp32base/ota` 可访问。
 - 两者都不影响浏览器 Web OTA 页面。
 - `webota` 命令行日志会显示友好容量单位、开始时间、结束时间、用时、平均速度，并按约 5% 粒度输出上传进度。
+- 设备端会在 Web OTA 开始前检查下一 OTA 分区容量；固件大于可写 app slot 时直接失败。上传过程中实际写入字节数也不得超过声明总大小。
+- `Update.begin()` 失败时会把底层 Update 错误字符串写入 `lastError()`，便于区分空间、flash 或 Update 状态问题。
 
 ## 3. 状态机
 
@@ -96,6 +99,7 @@ pio run -t webota
 - 上传开始输出 `INFO ota upload_start size=<friendly> sha256=<provided|none>`。
 - 上传过程中按 10% 阶段输出少量 `INFO ota upload_progress progress=<N>% bytes=<friendly> total=<friendly>`，不按 chunk 刷屏。
 - 上传完成输出 `INFO ota upload_success size=<friendly> sha256=<actual>`；失败继续输出 ERROR。
+- 成功、失败或 abort 后输出上传摘要，例如 `INFO ota upload_summary duration=13.49s uploaded=1020.2 KB average=75.7 KB/s`。ArduinoOTA/espota 使用 `arduino_upload_summary` / `arduino_upload_failed` 前缀。
 - bytesProcessed。
 - totalSize。
 - totalSize human。

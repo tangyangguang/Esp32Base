@@ -5,6 +5,7 @@
 #include "Esp32BaseNtp.h"
 #include "../core/Esp32BaseLog.h"
 
+#include <esp_sntp.h>
 #include <time.h>
 
 namespace {
@@ -36,7 +37,8 @@ bool Esp32BaseNtp::isStarted() {
 
 bool Esp32BaseNtp::isTimeSynced() {
     time_t now = time(nullptr);
-    const bool synced = now >= static_cast<time_t>(ESP32BASE_NTP_SYNC_MIN_EPOCH);
+    const bool synced = sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED &&
+                        now >= static_cast<time_t>(ESP32BASE_NTP_SYNC_MIN_EPOCH);
     if (synced && !g_loggedSync) {
         char actual[32];
         formatTime(actual, sizeof(actual), "%Y-%m-%d %H:%M:%S");

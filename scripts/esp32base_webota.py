@@ -51,6 +51,18 @@ def _as_int(value, default):
     return parsed
 
 
+def _as_float(value, default):
+    if value in (None, ""):
+        return default
+    try:
+        parsed = float(str(value).strip())
+    except ValueError:
+        raise ValueError("expected numeric value, got: %s" % value)
+    if parsed <= 0:
+        raise ValueError("timeout values must be greater than 0")
+    return parsed
+
+
 def _format_bytes(value):
     value = int(value or 0)
     if value < 1024:
@@ -310,7 +322,12 @@ def _run_webota(target, source, env):
     if sha256:
         headers["X-Sha256"] = sha256
 
-    timeout = float(_option("esp32base_webota_timeout", "120"))
+    try:
+        timeout = _as_float(_option("esp32base_webota_timeout"), 120.0)
+        upload_timeout = _as_float(_option("esp32base_webota_upload_timeout"), 600.0)
+    except ValueError as exc:
+        print("Error: %s" % exc, file=sys.stderr)
+        env.Exit(1)
     verify_tls = _as_bool(_option("esp32base_webota_verify_tls"), False)
     try:
         chunk_size = _as_int(_option("esp32base_webota_chunk_size"), 64 * 1024)
@@ -324,10 +341,11 @@ def _run_webota(target, source, env):
     print("Web OTA target: %s" % url)
     print("Web OTA firmware: %s (%s, %d bytes)" % (firmware, _format_bytes(firmware_size), firmware_size))
     print("Web OTA chunk size: %s (%d bytes)" % (_format_bytes(chunk_size), chunk_size))
+    print("Web OTA timeouts: request %.1fs, upload %.1fs" % (timeout, upload_timeout))
 
     try:
         _preflight(parsed, headers, timeout, verify_tls)
-        conn = _open_connection(parsed, timeout, verify_tls)
+        conn = _open_connection(parsed, upload_timeout, verify_tls)
         _send_multipart(conn, parsed, firmware, firmware_size, headers, chunk_size, stats)
         response = conn.getresponse()
         conn.close()

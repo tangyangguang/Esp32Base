@@ -10,6 +10,8 @@ Profile 是经过验证的能力组合。
 ESP32BASE_PROFILE_CORE
 ```
 
+仓库示例默认面向 ESP32 4MB Flash，并使用 `partitions/esp32-4mb-ota-balanced.csv`。ESP32-S3、ESP32-C3 或 8MB 板型应选择对应 env 或匹配的分区表；尤其是 FULL/Web OTA profile，固件必须小于下一 OTA app slot。`examples/basic` 提供 classic ESP32、ESP32-S3 8MB 和 ESP32-C3 4MB env；`full_demo`、`web_logs_ota` 和 `net_runtime` 也提供 ESP32-S3 8MB env。
+
 底层宏：
 
 - `ESP32BASE_ENABLE_LOG`

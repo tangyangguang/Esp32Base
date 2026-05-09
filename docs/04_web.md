@@ -79,6 +79,7 @@ OTA 规则：
 - OTA route 按 profile/OTA 编译条件注册，不依赖 `setDefaultAuth()` 或持久化认证。
 - Web Auth 开启时，OTA 页面和上传接口复用 Web Basic Auth。
 - Web Auth 关闭时，OTA 页面和上传接口不要求认证，风险由应用和用户自行承担。
+- 调用 `Esp32BaseWeb::setAuthEnabled(false)` 后，内置 HTTP 路由会完全开放，包括 WiFi 保存/清除、Auth 保存、重启、Tools、Logs clear 和 Web OTA；这只适合受控调试网络，不适合暴露到外部网络。
 - 启用 OTA 时默认同时启用 ArduinoOTA/espota；espota 只使用当前 Web Auth 密码作为 `--auth` 密码，即使 Web Auth 关闭也仍要求密码。
 
 不使用“密码是否等于默认字符串”作为唯一判断。
@@ -89,8 +90,10 @@ OTA 规则：
 - 它只用于防误操作。
 - 不抵御 LAN 内主动攻击。
 - 关闭 Web Auth 时，内置页面和 OTA 均无密码保护。
+- 关闭 Web Auth 不只是关闭登录框，而是让所有内置 HTTP 页面和 POST 操作无需认证。
 - 关闭 Web Auth 只影响 HTTP/Web OTA；不关闭 ArduinoOTA/espota 密码。
 - Web Auth 密码不在 HTML、JSON 或 API 响应中输出；INFO 日志会明文输出 Web 用户名和密码，日志访问权限由应用和部署环境控制。
+- 内置危险 POST 会做轻量 `Origin` / `Referer` host 校验；存在这些头时必须与请求 `Host` 同源，缺失时放行，保证 curl、PlatformIO `webota` 和简单脚本可用。校验失败返回 403，不执行副作用。
 
 ## 5. 路由表
 
@@ -184,6 +187,7 @@ Tools 维护页：
 - 格式化 FS 是显式 POST 操作；执行前 flush 文件日志，成功后重新 mount FS，并重新加载文件日志配置；成功提示应明确显示在 Tools 页面，同时输出 WARN 级维护日志记录请求、format/mount/FileLog reload 结果。重启请求同样输出 WARN 级维护日志。
 - 普通 `GET` 页面慢请求只输出 DEBUG；`POST` 等操作慢请求继续输出 WARN。
 - API 层仍建议要求 POST，不使用 GET 触发重启。
+- 内置危险 POST 包括 WiFi 保存/清除、Auth 保存、重启、Tools 操作、Logs clear、Web OTA upload/done；跨站 `Origin` 或 `Referer` 会被拒绝。
 
 OTA 上传页：
 

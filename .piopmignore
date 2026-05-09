@@ -1,6 +1,15 @@
 design-history/
 design-history/**
 ESP32BASE_DOCUMENTATION_REVIEW*.md
+bug-ticklish-kitten.md
+.git/
+.git/**
+.claude/
+.claude/**
+**/.git
+**/.git/**
+**/.claude/**
+**/bug-ticklish-kitten.md
 **/.DS_Store
 **/.pio/
 **/.pioenvs/

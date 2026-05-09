@@ -54,6 +54,8 @@ char g_otaLastError[96] = "";
 mbedtls_sha256_context g_otaSha;
 bool g_otaShaActive = false;
 bool g_otaPrevPowerSave = true;
+uint32_t g_otaTransferStartedMs = 0;
+bool g_otaSummaryLogged = false;
 uint32_t g_otaBootMs = 0;
 const esp_partition_t* g_otaBootPartition = nullptr;
 #if ESP32BASE_ENABLE_ARDUINO_OTA
@@ -140,6 +142,48 @@ void formatOtaBytes(size_t bytes, char* out, size_t len) {
     }
 }
 
+void formatOtaBytesShort(double bytes, char* out, size_t len) {
+    if (!out || len == 0) {
+        return;
+    }
+    if (bytes >= 1024.0 * 1024.0) {
+        snprintf(out, len, "%.1f MB", bytes / 1024.0 / 1024.0);
+    } else if (bytes >= 1024.0) {
+        snprintf(out, len, "%.1f KB", bytes / 1024.0);
+    } else {
+        snprintf(out, len, "%.0f B", bytes);
+    }
+}
+
+void resetOtaTransferStats() {
+    g_otaTransferStartedMs = millis();
+    g_otaSummaryLogged = false;
+}
+
+void logOtaTransferSummary(const char* prefix) {
+    if (g_otaSummaryLogged || g_otaTransferStartedMs == 0) {
+        return;
+    }
+    g_otaSummaryLogged = true;
+    const uint32_t durationMs = millis() - g_otaTransferStartedMs;
+    const double durationSec = static_cast<double>(durationMs) / 1000.0;
+    char uploadedBuf[32];
+    char speedBuf[40];
+    formatOtaBytesShort(static_cast<double>(g_otaProcessed), uploadedBuf, sizeof(uploadedBuf));
+    if (durationSec >= 0.1) {
+        char speedBytes[32];
+        formatOtaBytesShort(static_cast<double>(g_otaProcessed) / durationSec, speedBytes, sizeof(speedBytes));
+        snprintf(speedBuf, sizeof(speedBuf), "%s/s", speedBytes);
+    } else {
+        strlcpy(speedBuf, "n/a", sizeof(speedBuf));
+    }
+    ESP32BASE_LOG_I("ota", "%s duration=%.2fs uploaded=%s average=%s",
+                    prefix && prefix[0] ? prefix : "upload_summary",
+                    durationSec,
+                    uploadedBuf,
+                    speedBuf);
+}
+
 void logProgressIfDue() {
     const uint8_t currentProgress = Esp32BaseOta::progress();
     while (g_otaNextProgressLog <= 100U && currentProgress >= g_otaNextProgressLog) {
@@ -182,6 +226,7 @@ void configureArduinoOtaCallbacks() {
         g_otaProcessed = 0;
         g_otaNextProgressLog = 10;
         g_otaLastError[0] = '\0';
+        resetOtaTransferStats();
         g_otaStatus = Esp32BaseOta::UPLOADING;
         prepareLongOps();
         char totalBuf[32];
@@ -207,6 +252,7 @@ void configureArduinoOtaCallbacks() {
         char processedBuf[32];
         formatOtaBytes(g_otaProcessed, processedBuf, sizeof(processedBuf));
         ESP32BASE_LOG_I("ota", "arduino_upload_success size=%s", processedBuf);
+        logOtaTransferSummary("arduino_upload_summary");
 #if ESP32BASE_ENABLE_FILELOG
         Esp32BaseFileLog::flush();
 #endif
@@ -224,6 +270,7 @@ void configureArduinoOtaCallbacks() {
         char message[96];
         snprintf(message, sizeof(message), "arduino ota %s error", arduinoOtaErrorName(error));
         setError(message);
+        logOtaTransferSummary("arduino_upload_failed");
         g_otaStatus = Esp32BaseOta::FAILED;
     });
 }
@@ -339,14 +386,33 @@ bool Esp32BaseOta::startUpload(size_t totalSize, const char* expectedSha256Hex) 
         g_otaStatus = FAILED;
         return false;
     }
+    const esp_partition_t* nextPartition = esp_ota_get_next_update_partition(nullptr);
+    if (!nextPartition) {
+        setError("no ota update partition");
+        g_otaStatus = FAILED;
+        return false;
+    }
+    if (totalSize > nextPartition->size) {
+        char totalBuf[32];
+        char partitionBuf[32];
+        char message[96];
+        formatOtaBytes(totalSize, totalBuf, sizeof(totalBuf));
+        formatOtaBytes(nextPartition->size, partitionBuf, sizeof(partitionBuf));
+        snprintf(message, sizeof(message), "ota size too large: firmware=%s partition=%s", totalBuf, partitionBuf);
+        setError(message);
+        g_otaStatus = FAILED;
+        return false;
+    }
     g_otaTotal = totalSize;
     g_otaProcessed = 0;
     g_otaNextProgressLog = 10;
     g_otaExpected[0] = '\0';
     g_otaLastError[0] = '\0';
+    resetOtaTransferStats();
     if (expectedSha256Hex && expectedSha256Hex[0]) {
         if (!copySha256Hex(expectedSha256Hex, g_otaExpected, sizeof(g_otaExpected))) {
             setError("invalid sha256 hex");
+            logOtaTransferSummary("upload_failed");
             g_otaStatus = FAILED;
             return false;
         }
@@ -356,7 +422,10 @@ bool Esp32BaseOta::startUpload(size_t totalSize, const char* expectedSha256Hex) 
 
     if (!Update.begin(totalSize)) {
         cleanupLongOps();
-        setError("Update.begin failed");
+        char message[96];
+        snprintf(message, sizeof(message), "Update.begin failed: %s", Update.errorString());
+        setError(message);
+        logOtaTransferSummary("upload_failed");
         g_otaStatus = FAILED;
         return false;
     }
@@ -378,6 +447,10 @@ bool Esp32BaseOta::startUpload(size_t totalSize, const char* expectedSha256Hex) 
 
 bool Esp32BaseOta::writeChunk(const uint8_t* data, size_t len) {
     if (g_otaStatus != UPLOADING || !data) {
+        return false;
+    }
+    if (g_otaProcessed > g_otaTotal || len > g_otaTotal - g_otaProcessed) {
+        abortUpload("ota size overflow");
         return false;
     }
     if (Update.write(const_cast<uint8_t*>(data), len) != len) {
@@ -417,6 +490,7 @@ bool Esp32BaseOta::finishUpload() {
         Update.abort();
         cleanupLongOps();
         setError("sha256 mismatch");
+        logOtaTransferSummary("upload_failed");
         g_otaStatus = FAILED;
         return false;
     }
@@ -425,6 +499,7 @@ bool Esp32BaseOta::finishUpload() {
         Update.abort();
         cleanupLongOps();
         setError("ota size mismatch");
+        logOtaTransferSummary("upload_failed");
         g_otaStatus = FAILED;
         return false;
     }
@@ -432,6 +507,7 @@ bool Esp32BaseOta::finishUpload() {
     if (!Update.end(true)) {
         cleanupLongOps();
         setError("Update.end failed");
+        logOtaTransferSummary("upload_failed");
         g_otaStatus = FAILED;
         return false;
     }
@@ -443,6 +519,7 @@ bool Esp32BaseOta::finishUpload() {
     ESP32BASE_LOG_I("ota", "upload_success size=%s sha256=%s",
                     processedBuf,
                     actual[0] ? actual : "unavailable");
+    logOtaTransferSummary("upload_summary");
 #if ESP32BASE_ENABLE_FILELOG
     Esp32BaseFileLog::flush();
 #endif
@@ -460,6 +537,7 @@ void Esp32BaseOta::abortUpload(const char* reason) {
     Update.abort();
     cleanupLongOps();
     setError(reason ? reason : "ota aborted");
+    logOtaTransferSummary("upload_aborted");
     g_otaStatus = FAILED;
 }
 

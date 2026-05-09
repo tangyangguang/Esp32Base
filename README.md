@@ -95,6 +95,8 @@ Profile 是默认组合，用户仍可用 `ESP32BASE_ENABLE_*` 精细覆盖。�
 
 文件日志是 Runtime/FS 能力，不属于 Core。`CORE` 和默认 `NET` 不链接 LittleFS；`RUNTIME`、`NET_RUNTIME`、`WEB_RUNTIME`、`FULL` 默认可用文件日志。
 
+仓库示例默认面向 ESP32 4MB Flash，并使用 `partitions/esp32-4mb-ota-balanced.csv`。ESP32-S3、ESP32-C3 或 8MB 板型请优先使用示例中对应 env，或在业务项目里选择匹配芯片和 Flash 容量的分区表，避免 FULL/Web OTA 固件超过 app slot。
+
 `Esp32BaseFs` 对业务暴露文本、二进制、追加、目录和容量 API，并提供 `readBytesAt()` / `writeBytesAt()` 按偏移读写能力。业务可通过这些 API 实现二进制定长日志分页读取和环形覆盖写入，不需要 include `LittleFS.h` 或 Arduino `File`。
 
 `ESP32BASE_PROFILE_FULL` 默认同时支持 Web OTA 和 PlatformIO/espota 命令行 OTA。命令行 OTA 使用 `Esp32Base::hostname()` 对应的 `<hostname>.local`、标准端口 3232，以及当前 Web Auth 密码：

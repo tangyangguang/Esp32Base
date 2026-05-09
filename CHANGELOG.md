@@ -2,6 +2,34 @@
 
 本文从 2026-05-06 起记录 Esp32Base 新增和优化的能力，面向正在接入本库的业务项目。业务项目应优先查看本文，了解最近可用的新 API、行为变化和推荐接入方式。
 
+## 2026-05-09
+
+### Web POST 轻量同源防护与 OTA 健壮性
+
+修复：
+
+- 内置危险 POST 增加轻量 `Origin` / `Referer` host 校验；存在这些头时必须与请求 `Host` 同源，缺失时继续放行，保证 curl、PlatformIO `webota` 和简单脚本可用。
+- 覆盖 WiFi 保存/清除、Auth 保存、重启、Tools 操作、Logs clear、Web OTA upload/done；校验失败返回 403，不执行副作用。
+- Web OTA 开始上传前检查下一 OTA 分区容量；固件超过 app slot 时给出明确错误，不进入写入流程。
+- OTA 写入过程检查累计写入不能超过声明总大小；客户端伪造过小 size 后继续写入时会 abort。
+- 设备端 OTA 日志增加上传摘要，成功、失败或 abort 时输出耗时、已上传容量和平均速度，例如 `upload_summary duration=13.49s uploaded=1020.2 KB average=75.7 KB/s`。
+- `Update.begin()` 失败时记录底层 Update 错误字符串，减少只看到通用失败信息的调试成本。
+- NTP 同步判定同时检查 SNTP 同步状态和最小 epoch，避免设备曾设置过 RTC 时误判已完成网络对时。
+- `scripts/esp32base_webota.py` 新增 `esp32base_webota_upload_timeout`，默认 600 秒；原 `esp32base_webota_timeout` 继续用于预检和普通请求。
+- `full_demo`、`web_logs_ota` 和 `net_runtime` 示例补充 ESP32-S3 8MB env，避免 S3/8MB 板使用 ESP32 4MB 分区表浪费空间。
+
+文档：
+
+- 明确多核/多任务项目推荐单系统服务任务模型：`Esp32Base::begin()`、`Esp32Base::handle()`、`Esp32BaseConfig`、Web、Bus 固定在同一个 loop/system task 中调用。
+- 明确 `Esp32BaseConfig` 当前不是线程安全 API；业务 task 应通过 FreeRTOS queue/flag/ring buffer 投递配置变更，再由 loop/system task 调用 `setXxx()` 或 `setXxxDeferred()`。
+- 明确 `setAuthEnabled(false)` 会完全开放内置 HTTP 路由，包括 OTA、重启、Tools 和配置提交，只适合受控调试网络。
+- 补充 `Esp32BaseWeb::redirectSeeOther()` API、`Esp32BaseFileLog` 最小示例，以及示例默认 ESP32 4MB 分区、S3/C3/8MB 板型需选择匹配 env/分区表。
+
+设计边界：
+
+- 本轮不改变个人项目/调试优先安全模型：INFO 明文日志、默认弱口令、开放配置 AP、OTA 无签名、NVS 明文、可关闭 Web Auth 仍按既定设计保留。
+- 本轮不给 `Esp32BaseConfig` 加 mutex，也不引入完整 CSRF token 系统；多任务安全通过明确单任务调用模型和业务侧队列投递实现。
+
 ## 2026-05-08
 
 ### 启动严格模式与 Captive DNS 生命周期修复

@@ -52,6 +52,7 @@ public:
 - `setHostname()` 仅设置运行时 hostname，不写 NVS。
 - 应用应在 `Esp32Base::begin()` 前调用 `setHostname()`。
 - 应用如需持久化 hostname，应自行通过 `Esp32BaseConfig` 保存，并在 begin 前恢复。
+- 应用应显式调用 `setFirmwareInfo()`；未设置时状态页和日志会显示库默认固件名/版本，仅用于开发占位。
 - mDNS 启动时读取当前 hostname；WiFi connected 后再修改 hostname 不要求自动重启 mDNS。
 - `lastError()` 返回最近一次 begin 或关键模块启动失败原因；无错误时返回空字符串，不返回 `nullptr`。
 
@@ -169,6 +170,23 @@ public:
 };
 ```
 
+最小可运行示例：
+
+```cpp
+#define ESP32BASE_PROFILE ESP32BASE_PROFILE_RUNTIME
+#include <Esp32Base.h>
+
+void setup() {
+    Esp32BaseFileLog::enable("/logs/eb_app.log", 32UL * 1024UL, Esp32BaseLog::INFO, 4);
+    Esp32Base::begin();
+    ESP32BASE_LOG_I("app", "boot");
+}
+
+void loop() {
+    Esp32Base::handle();
+}
+```
+
 ## 4. Esp32BaseConfig
 
 后端：ESP32 NVS。
@@ -232,6 +250,53 @@ deferred 语义：
 - 同一 namespace/key 的 pending 写入会合并为最新值，不重复占用多条 pending。
 - OTA 上传期间只暂停 deferred flush；`getXxx()`、`pendingCount()`、`flushAll()` 和 `clearLibraryNamespaces()` 仍按各自语义工作。
 - `clearLibraryNamespaces()` 只清理库内部 `eb_` 前缀 namespace，不清理业务 namespace。
+
+多任务用法：
+
+- Config API 按单任务模型设计，只能在 Arduino `loopTask` 或同一个系统服务任务中统一调用。
+- `Esp32Base::begin()`、`Esp32Base::handle()`、`Esp32BaseConfig`、`Esp32BaseWeb` 和 `Esp32BaseBus` 推荐固定在 Arduino `loopTask`，或固定在应用自建的同一个系统服务任务中调用。
+- `Esp32BaseConfig` 当前不是线程安全 API；业务 FreeRTOS task 不应从另一个核或另一个 task 直接调用 `setXxx()`、`setXxxDeferred()`、`flushAll()` 或 `clearNamespace()`。
+- 业务 task 需要改配置时，应通过 FreeRTOS queue、flag 或 ring buffer 把请求投递给 loop/system task，再由这个任务统一调用 Config API。
+- 实时任务不要直接做 NVS、LittleFS、Web、OTA、FileLog 操作；这些操作可能写 flash、分配资源或阻塞网络/文件系统，容易影响实时响应。
+
+最小队列示例：
+
+```cpp
+#include <Esp32Base.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
+#include <freertos/task.h>
+
+struct ConfigMsg {
+    int32_t targetTemp;
+};
+
+QueueHandle_t g_configQueue;
+
+void controlTask(void*) {
+    ConfigMsg msg;
+    for (;;) {
+        msg.targetTemp = 25;
+        xQueueSend(g_configQueue, &msg, 0);
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+}
+
+void setup() {
+    g_configQueue = xQueueCreate(4, sizeof(ConfigMsg));
+    Esp32Base::begin();
+    xTaskCreatePinnedToCore(controlTask, "control", 4096, nullptr, 1, nullptr, 1);
+}
+
+void loop() {
+    Esp32Base::handle();
+
+    ConfigMsg msg;
+    while (xQueueReceive(g_configQueue, &msg, 0) == pdTRUE) {
+        Esp32BaseConfig::setIntDeferred("app_cfg", "target", msg.targetTemp, 1000);
+    }
+}
+```
 
 ## 5. Esp32BaseSystem
 
@@ -502,6 +567,7 @@ public:
     static void sendBytes(const uint8_t* data, size_t len);
     static void writeHtmlEscaped(const char* text);
     static void writeCsvEscaped(const char* text);
+    static void redirectSeeOther(const char* location);
 
     static void sendText(int code, const char* text);
     static void sendHtml(int code, const char* html);
@@ -535,6 +601,7 @@ Route 缓冲机制：
 - Web Auth 认证优先级为：已保存认证 > 应用默认认证 > 库默认 `admin/admin`。
 - `setDefaultAuth(user, pass)` 设置应用默认认证；如果用户已保存认证，不会覆盖已保存认证。
 - `authUser()` 返回当前用户名；`authPassword()` 返回当前生效密码，仅供本地 C++ 认证集成使用，例如 ArduinoOTA/espota，禁止输出到 HTML、JSON 或 API 响应。
+- `setAuthEnabled(false)` 会完全开放内置 HTTP 路由，包括 WiFi 保存/清除、Auth 保存、重启、Tools、Logs clear 和 Web OTA；只适合受控调试网络。
 - `verifyAuth(user, pass)` 校验显式传入的账号密码；无参 `verifyAuth()` 仍表示当前请求是否已认证。
 - `saveAuth(user, pass)` 保存 Web Auth 到 `eb_web.auth_user`、`eb_web.auth_pass`，并立即切换为新认证。
 - `resetAuth()` 清除 `eb_web` 持久化 Auth，并恢复应用默认认证；没有应用默认认证时恢复库默认 `admin/admin`。
@@ -546,6 +613,7 @@ Route 缓冲机制：
 - `beginText(code)` 等价于 `text/plain; charset=utf-8` chunked 响应；`beginCsv(code, filename)` 等价于 `text/csv; charset=utf-8`，filename 非空时发送 `Content-Disposition: attachment`。
 - `beginResponse()` / `beginText()` / `beginCsv()` 只能在 handler 请求上下文中成功；handler 外、contentType 为空或超过 63 字节、filename 含不安全字符时返回 false 并记录 WARN。
 - CSV 字段必须用 `writeCsvEscaped()` 输出，避免逗号、换行或双引号破坏导出格式。
+- `redirectSeeOther(location)` 发送 `303 See Other`，用于 POST 成功后跳转到 GET 页面，避免浏览器刷新重复提交。
 - `beginJson(code)` 的状态码必须在 `endJson()` 发送时保留。
 
 内置页面交互要求：

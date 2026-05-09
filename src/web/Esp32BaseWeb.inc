@@ -53,7 +53,7 @@ struct NavItem {
 WebServer g_server(80);
 Route g_routes[ESP32BASE_WEB_MAX_ROUTES];
 NavItem g_navItems[ESP32BASE_WEB_MAX_NAV_ITEMS];
-const char* g_headerKeys[] = {"Authorization", "X-Sha256", "X-Firmware-Size"};
+const char* g_headerKeys[] = {"Authorization", "X-Sha256", "X-Firmware-Size", "Host", "Origin", "Referer"};
 bool g_webReady = false;
 bool g_authEnabled = true;
 bool g_defaultAuthSet = false;
@@ -76,6 +76,7 @@ Esp32BaseWeb::Method g_lastRequestMethod = Esp32BaseWeb::METHOD_UNKNOWN;
 bool g_requestContextActive = false;
 bool g_responseActive = false;
 bool g_authLoggedForRequest = false;
+bool g_otaUploadForbidden = false;
 
 static const char WEB_HEAD[] PROGMEM =
     "<meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
@@ -103,6 +104,7 @@ void flushChunkBuffer();
 void markRequest();
 void sendChunk(const char* text);
 void sendEscapedHtmlChunk(const char* text);
+bool ensureAuth();
 
 Esp32BaseWeb::Method fromHttpMethod(HTTPMethod method) {
     switch (method) {
@@ -173,7 +175,11 @@ bool parseBasicAuth(char* user, size_t userLen, char* pass, size_t passLen) {
     user[0] = '\0';
     pass[0] = '\0';
     const String header = g_server.header("Authorization");
-    if (!header.startsWith("Basic ") || header.length() > 180) {
+    if (!header.startsWith("Basic ")) {
+        return false;
+    }
+    if (header.length() > 180) {
+        ESP32BASE_LOG_W("web", "auth_header_rejected reason=too_long length=%u", static_cast<unsigned>(header.length()));
         return false;
     }
     const char* encoded = header.c_str() + 6;
@@ -323,6 +329,95 @@ bool validHeaderValue(const char* value, size_t maxLen) {
         }
     }
     return true;
+}
+
+bool sameHost(const char* a, const char* b) {
+    if (!a || !b || !a[0] || !b[0]) {
+        return false;
+    }
+    while (*a && *b) {
+        char ca = *a++;
+        char cb = *b++;
+        if (ca >= 'A' && ca <= 'Z') {
+            ca = static_cast<char>(ca - 'A' + 'a');
+        }
+        if (cb >= 'A' && cb <= 'Z') {
+            cb = static_cast<char>(cb - 'A' + 'a');
+        }
+        if (ca != cb) {
+            return false;
+        }
+    }
+    return *a == '\0' && *b == '\0';
+}
+
+bool extractUrlHost(const char* url, char* out, size_t len) {
+    if (!url || !out || len == 0) {
+        return false;
+    }
+    out[0] = '\0';
+    const char* p = nullptr;
+    if (strncmp(url, "http://", 7) == 0) {
+        p = url + 7;
+    } else if (strncmp(url, "https://", 8) == 0) {
+        p = url + 8;
+    } else {
+        return false;
+    }
+    const char* end = p;
+    while (*end && *end != '/' && *end != '?' && *end != '#') {
+        ++end;
+    }
+    const char* at = static_cast<const char*>(memchr(p, '@', static_cast<size_t>(end - p)));
+    if (at) {
+        p = at + 1;
+    }
+    const size_t hostLen = static_cast<size_t>(end - p);
+    if (hostLen == 0 || hostLen >= len) {
+        return false;
+    }
+    memcpy(out, p, hostLen);
+    out[hostLen] = '\0';
+    return true;
+}
+
+bool requestSameOrigin() {
+    const String origin = g_server.header("Origin");
+    const String referer = g_server.header("Referer");
+    if (origin.length() == 0 && referer.length() == 0) {
+        return true;
+    }
+
+    const String hostHeader = g_server.header("Host");
+    char host[96];
+    strlcpy(host, hostHeader.c_str(), sizeof(host));
+    if (!host[0]) {
+        return false;
+    }
+
+    char sourceHost[96];
+    if (origin.length() > 0) {
+        if (!extractUrlHost(origin.c_str(), sourceHost, sizeof(sourceHost))) {
+            return false;
+        }
+        return sameHost(host, sourceHost);
+    }
+    if (!extractUrlHost(referer.c_str(), sourceHost, sizeof(sourceHost))) {
+        return false;
+    }
+    return sameHost(host, sourceHost);
+}
+
+bool ensurePostAllowed(const char* context) {
+    if (!ensureAuth()) {
+        return false;
+    }
+    if (requestSameOrigin()) {
+        return true;
+    }
+    ESP32BASE_LOG_W("web", "post_rejected context=%s reason=cross_origin", context ? context : "unknown");
+    g_server.send(403, "text/plain", "Forbidden");
+    return false;
 }
 
 bool validDownloadFilename(const char* filename) {
@@ -903,7 +998,7 @@ void handleWifiPage() {
 
 void handleWifiSubmit() {
     markRequest();
-    if (!ensureAuth()) {
+    if (!ensurePostAllowed("wifi_submit")) {
         return;
     }
     const String ssid = g_server.arg("ssid");
@@ -925,7 +1020,7 @@ void handleWifiSubmit() {
 
 void handleWifiClear() {
     markRequest();
-    if (!ensureAuth()) {
+    if (!ensurePostAllowed("wifi_clear")) {
         return;
     }
     Esp32BaseWiFi::clearCredentials();
@@ -934,7 +1029,7 @@ void handleWifiClear() {
 
 void handleRestart() {
     markRequest();
-    if (!ensureAuth()) {
+    if (!ensurePostAllowed("restart")) {
         return;
     }
     g_server.send(200, "text/plain", "restarting");
@@ -978,7 +1073,7 @@ void handleToolsPage() {
 
 void handleToolsRebootPost() {
     markRequest();
-    if (!ensureAuth()) {
+    if (!ensurePostAllowed("tools_reboot")) {
         return;
     }
     ESP32BASE_LOG_W("web", "restart_requested source=tools");
@@ -991,7 +1086,7 @@ void handleToolsRebootPost() {
 
 void handleToolsFormatFsPost() {
     markRequest();
-    if (!ensureAuth()) {
+    if (!ensurePostAllowed("tools_format_fs")) {
         return;
     }
 #if ESP32BASE_ENABLE_FS
@@ -1024,7 +1119,7 @@ void handleToolsFormatFsPost() {
 
 void handleToolsLogsClearPost() {
     markRequest();
-    if (!ensureAuth()) {
+    if (!ensurePostAllowed("tools_logs_clear")) {
         return;
     }
 #if ESP32BASE_ENABLE_FILELOG
@@ -1083,6 +1178,13 @@ void handleOtaUploadDone() {
     if (!ensureAuth()) {
         return;
     }
+    if (g_otaUploadForbidden || !requestSameOrigin()) {
+        ESP32BASE_LOG_W("web", "post_rejected context=ota_upload reason=cross_origin");
+        g_otaUploadForbidden = false;
+        g_server.send(403, "application/json", "{\"ok\":false,\"error\":\"forbidden\"}");
+        return;
+    }
+    g_otaUploadForbidden = false;
     const bool ok = Esp32BaseOta::status() == Esp32BaseOta::SUCCESS;
     if (ok) {
         if (beginResponse(200, "application/json", nullptr)) {
@@ -1114,6 +1216,13 @@ void handleOtaUpload() {
     }
     HTTPUpload& upload = g_server.upload();
     if (upload.status == UPLOAD_FILE_START) {
+        g_otaUploadForbidden = false;
+        if (!requestSameOrigin()) {
+            g_otaUploadForbidden = true;
+            ESP32BASE_LOG_W("web", "post_rejected context=ota_upload reason=cross_origin");
+            Esp32BaseOta::abortUpload("forbidden ota upload origin");
+            return;
+        }
         char sha256[65] = "";
         size_t firmwareSize = upload.totalSize;
         if (g_server.hasHeader("X-Sha256")) {
@@ -1126,8 +1235,14 @@ void handleOtaUpload() {
         }
         Esp32BaseOta::startUpload(firmwareSize, sha256[0] ? sha256 : nullptr);
     } else if (upload.status == UPLOAD_FILE_WRITE) {
+        if (g_otaUploadForbidden) {
+            return;
+        }
         Esp32BaseOta::writeChunk(upload.buf, upload.currentSize);
     } else if (upload.status == UPLOAD_FILE_END) {
+        if (g_otaUploadForbidden) {
+            return;
+        }
         Esp32BaseOta::finishUpload();
     } else if (upload.status == UPLOAD_FILE_ABORTED) {
         Esp32BaseOta::abortUpload("client aborted");
@@ -1424,7 +1539,7 @@ void handleLogsPage() {
 
 void handleLogsClear() {
     markRequest();
-    if (!ensureAuth()) {
+    if (!ensurePostAllowed("logs_clear")) {
         return;
     }
 #if ESP32BASE_ENABLE_FILELOG
@@ -1467,7 +1582,7 @@ void handleAuthPage() {
 
 void handleAuthSubmit() {
     markRequest();
-    if (!ensureAuth()) {
+    if (!ensurePostAllowed("auth_submit")) {
         return;
     }
     char currentUser[32];
@@ -1626,6 +1741,9 @@ bool Esp32BaseWeb::isAuthEnabled() {
 
 void Esp32BaseWeb::setAuthEnabled(bool enabled) {
     g_authEnabled = enabled;
+    ESP32BASE_LOG_W("web", "auth_%s builtin_routes=%s",
+                    enabled ? "enabled" : "disabled",
+                    enabled ? "protected" : "open");
 }
 
 bool Esp32BaseWeb::checkAuth() {
