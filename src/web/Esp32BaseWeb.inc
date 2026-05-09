@@ -435,6 +435,30 @@ bool validDownloadFilename(const char* filename) {
     return true;
 }
 
+bool appendQuotedHeaderValue(char* out, size_t len, const char* value) {
+    if (!out || len == 0 || !value) {
+        return false;
+    }
+    size_t used = strlen(out);
+    for (const char* p = value; *p; ++p) {
+        const char c = *p;
+        if (c == '"' || c == '\\') {
+            if (used + 2 >= len) {
+                return false;
+            }
+            out[used++] = '\\';
+            out[used++] = c;
+        } else {
+            if (used + 1 >= len) {
+                return false;
+            }
+            out[used++] = c;
+        }
+    }
+    out[used] = '\0';
+    return true;
+}
+
 uint8_t appPageCount() {
     uint8_t count = 0;
     for (uint8_t i = 0; i < ESP32BASE_WEB_MAX_ROUTES; ++i) {
@@ -747,7 +771,12 @@ bool beginResponse(int code, const char* contentType, const char* filename) {
             return false;
         }
         char disposition[96];
-        snprintf(disposition, sizeof(disposition), "attachment; filename=\"%s\"", filename);
+        strlcpy(disposition, "attachment; filename=\"", sizeof(disposition));
+        if (!appendQuotedHeaderValue(disposition, sizeof(disposition), filename) ||
+            strlcat(disposition, "\"", sizeof(disposition)) >= sizeof(disposition)) {
+            ESP32BASE_LOG_W("web", "begin_response filename too long");
+            return false;
+        }
         g_server.sendHeader("Content-Disposition", disposition);
     }
     g_chunkUsed = 0;

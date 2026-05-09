@@ -2,7 +2,7 @@
 #include <Esp32Base.h>
 
 void setup() {
-    Esp32Base::setFirmwareInfo("web-logs-ota", "0.1.0");
+    Esp32Base::setFirmwareInfo("web-logs-ota", "1.0.0");
     Esp32Base::setHostname("esp32base-web");
     Esp32BaseWeb::setDefaultAuth("admin", "admin");
     Esp32Base::begin();

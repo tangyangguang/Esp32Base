@@ -243,7 +243,7 @@ void handleCsvApi() {
 }
 
 void setup() {
-    Esp32Base::setFirmwareInfo("full-demo", "0.1.0");
+    Esp32Base::setFirmwareInfo("full-demo", "1.0.0");
     Esp32Base::setHostname("esp32base-full");
     Esp32BaseWeb::setDefaultAuth("admin", "admin");
     Esp32BaseWeb::setDeviceName("Full Demo");

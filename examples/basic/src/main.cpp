@@ -2,7 +2,7 @@
 #include <Esp32Base.h>
 
 void setup() {
-    Esp32Base::setFirmwareInfo("basic", "0.1.0");
+    Esp32Base::setFirmwareInfo("basic", "1.0.0");
     Esp32Base::setHostname("esp32base-basic");
 #if ESP32BASE_ENABLE_WEB
     Esp32BaseWeb::setDefaultAuth("admin", "admin");

@@ -2,7 +2,7 @@
 #include <Esp32Base.h>
 
 void setup() {
-    Esp32Base::setFirmwareInfo("net-runtime", "0.1.0");
+    Esp32Base::setFirmwareInfo("net-runtime", "1.0.0");
     Esp32Base::setHostname("esp32base-net");
     Esp32Base::begin();
 #if ESP32BASE_ENABLE_FILELOG
