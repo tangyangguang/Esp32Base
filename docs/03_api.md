@@ -514,8 +514,7 @@ public:
         BUILTIN_WIFI,
         BUILTIN_OTA,
         BUILTIN_LOGS,
-        BUILTIN_REBOOT,
-        BUILTIN_TOOLS = BUILTIN_REBOOT,
+        BUILTIN_TOOLS,
         BUILTIN_SYSTEM,
         BUILTIN_AUTH
     };
@@ -592,7 +591,7 @@ Route 缓冲机制：
 - `setDeviceName()` 设置导航品牌和默认标题；`setHomePath()` 设置业务首页路径。
 - `setHomeMode(HOME_ESP32BASE)` 保持基础库首页默认行为；`HOME_APP` 让 `/` 和 `/esp32base` 优先进入业务首页；`HOME_COMBINED` 让 `/` 进入业务首页，并保留 `/esp32base` 为融合首页。
 - `setSystemNavMode()` 控制基础功能入口位置：顶部、底部或底部紧凑系统工具区；`SYSTEM_NAV_SECTION` 会把系统入口作为小字链接与 `Free heap` 放在同一 footer 区域，窄屏可自然换行。
-- `setBuiltinLabel()` 覆盖内置导航标签，可用于中文本地化；`BUILTIN_TOOLS` 是维护页标签，`BUILTIN_REBOOT` 作为旧名称别名保留。
+- `setBuiltinLabel()` 覆盖内置导航标签，可用于中文本地化；系统工具页统一使用 `BUILTIN_TOOLS`，不提供旧 Reboot 历史别名。
 - `setHeadExtraCallback()` 设置额外 head 输出回调；`sendHeader()` 在默认 `WEB_HEAD` 后、`</head><body>` 和顶部导航前调用它，业务项目可在这里输出 `<style>`，避免页面刷新时先显示基础库默认导航样式。
 - 顶部导航会给当前匹配项输出 `active` class；匹配规则为 path 完全相等，或当前路径以 `path + "/"` 开头，多个匹配时选择最长 path。`SYSTEM_NAV_SECTION` 的底部系统维护菜单不参与 active 业务导航状态。
 - `/esp32base` Status 页展示固件、profile、hostname、uptime、boot count、reset/wake reason 及中文说明、heap、flash，以及当前 profile 可用的 WiFi、FS、FileLog、NTP、OTA 状态；页面容量值只显示 KB/MB/B 人性化格式。

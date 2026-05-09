@@ -115,7 +115,7 @@ OTA 规则：
 - `addPage()` 注册业务页面并进入业务导航；`addNavItem()` 只注册导航项，不注册路由。
 - `setHomeMode()` 控制 `/` 和 `/esp32base` 的首页模型：基础库首页、业务首页优先或融合首页。
 - `setSystemNavMode()` 控制 Status、WiFi、OTA、Logs、Tools 等基础功能入口在顶部、底部或底部紧凑系统工具区展示。
-- `setBuiltinLabel()` 可覆盖 Status/WiFi/OTA/Logs/Tools/Auth 标签，用于应用统一本地化；`BUILTIN_REBOOT` 是 `BUILTIN_TOOLS` 的旧名称别名。
+- `setBuiltinLabel()` 可覆盖 Status/WiFi/OTA/Logs/Tools/Auth 标签，用于应用统一本地化；系统工具页统一使用 `BUILTIN_TOOLS`，不提供旧 Reboot 历史别名。
 - `setHeadExtraCallback()` 可在 `sendHeader()` 的 `</head>` 和顶部导航输出前注入业务 CSS，业务页面不需要复制基础库 header/nav。
 - 顶部导航按当前请求路径输出 `active` class：完全匹配优先，嵌套路由按最长 path 前缀匹配；`SYSTEM_NAV_SECTION` 下系统维护入口仍只在 footer 中展示。
 - 默认 Web 样式采用简洁中性色，普通链接、导航和 tabs 不使用蓝色主色；业务项目最终视觉仍由 `setHeadExtraCallback()` 注入 CSS 覆盖。
@@ -166,6 +166,8 @@ Tools:
 - `POST /esp32base/api/restart`
 
 OTA 路由只在启用 OTA 且认证条件满足时注册。
+
+`/esp32base/reboot` 只作为旧 URL 兼容入口，进入同一个 Tools 工具页语义；导航标签、本地化和公开枚举都只使用 `BUILTIN_TOOLS`。
 
 ## 7. 内置页面交互
 

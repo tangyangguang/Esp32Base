@@ -48,8 +48,7 @@ public:
         BUILTIN_WIFI,
         BUILTIN_OTA,
         BUILTIN_LOGS,
-        BUILTIN_REBOOT,
-        BUILTIN_TOOLS = BUILTIN_REBOOT,
+        BUILTIN_TOOLS,
         BUILTIN_SYSTEM,
         BUILTIN_AUTH
     };

@@ -20,6 +20,7 @@
 
 文档：
 
+- 内置 Web 导航标签枚举移除旧 Reboot 历史别名；系统工具页统一使用 `BUILTIN_TOOLS`，`/esp32base/reboot` 仅作为旧 URL 进入 Tools 语义。
 - 明确多核/多任务项目推荐单系统服务任务模型：`Esp32Base::begin()`、`Esp32Base::handle()`、`Esp32BaseConfig`、Web、Bus 固定在同一个 loop/system task 中调用。
 - 明确 `Esp32BaseConfig` 当前不是线程安全 API；业务 task 应通过 FreeRTOS queue/flag/ring buffer 投递配置变更，再由 loop/system task 调用 `setXxx()` 或 `setXxxDeferred()`。
 - 明确 `setAuthEnabled(false)` 会完全开放内置 HTTP 路由，包括 OTA、重启、Tools 和配置提交，只适合受控调试网络。
