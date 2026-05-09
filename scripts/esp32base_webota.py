@@ -27,8 +27,6 @@ def _option(name, default=None):
     common_section = "esp32base_webota"
     value = _config_get(env_section, "custom_%s" % name)
     if value is None:
-        value = _config_get(env_section, name)
-    if value is None:
         value = _config_get(common_section, name)
     if value is None:
         value = os.environ.get(name.upper())

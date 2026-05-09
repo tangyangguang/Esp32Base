@@ -565,10 +565,6 @@ const char* activeNavPath(bool includeSystemLinks) {
         }
     }
     if (includeSystemLinks) {
-        if (strcmp(currentPath, "/esp32base/reboot") == 0) {
-            activePath = "/esp32base/tools";
-            activeLen = strlen(activePath);
-        }
         updateActivePath("/esp32base", currentPath, activePath, activeLen);
         updateActivePath("/esp32base/wifi", currentPath, activePath, activeLen);
         updateActivePath("/esp32base/auth", currentPath, activePath, activeLen);
@@ -1648,7 +1644,7 @@ bool Esp32BaseWeb::begin() {
     }
     const uint8_t appRoutes = routeCount(false);
     const uint8_t appPages = routeCount(true);
-    uint8_t builtinRoutes = 20;
+    uint8_t builtinRoutes = 22;
 #if ESP32BASE_ENABLE_OTA
     builtinRoutes += 3;
 #endif
@@ -1678,8 +1674,6 @@ bool Esp32BaseWeb::begin() {
     g_server.on("/esp32base/tools/reboot", HTTP_POST, handleToolsRebootPost);
     g_server.on("/esp32base/tools/format-fs", HTTP_POST, handleToolsFormatFsPost);
     g_server.on("/esp32base/tools/logs-clear", HTTP_POST, handleToolsLogsClearPost);
-    g_server.on("/esp32base/reboot", HTTP_GET, handleToolsPage);
-    g_server.on("/esp32base/reboot", HTTP_POST, handleToolsRebootPost);
     g_server.on("/esp32base/api/restart", HTTP_POST, handleRestart);
     g_server.on("/generate_204", HTTP_GET, handleCaptiveProbe);
     g_server.on("/hotspot-detect.html", HTTP_GET, handleCaptiveProbe);

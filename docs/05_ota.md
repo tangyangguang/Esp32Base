@@ -71,7 +71,7 @@ pio run -t webota
 - `esp32base_webota_preflight`：默认 `true`，上传前通过状态接口快速校验连接和认证，避免错误密码时传完整包。
 - `esp32base_webota_status_path`：默认 `/esp32base/api/ota`，用于预检。
 
-配置优先级为当前 `platformio.ini` 环境的 `custom_esp32base_webota_*` 配置、`[esp32base_webota]` 公共段、环境变量。脚本也兼容不带 `custom_` 前缀的环境级配置，但 PlatformIO 会对非标准 env option 打警告。环境变量名使用配置项大写形式，例如 `ESP32BASE_WEBOTA_HOST`。
+配置优先级为当前 `platformio.ini` 环境的 `custom_esp32base_webota_*` 配置、`[esp32base_webota]` 公共段、环境变量。环境变量名使用配置项大写形式，例如 `ESP32BASE_WEBOTA_HOST`。
 
 使用边界：
 

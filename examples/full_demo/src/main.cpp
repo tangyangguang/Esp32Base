@@ -118,7 +118,6 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "class='panel'");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Restart device");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Format LittleFS");
-    RUN_SELFTEST("GET", "/esp32base/reboot", nullptr, true, 200, "<title>Tools</title>");
     RUN_SELFTEST("GET", "/dashboard", nullptr, true, 200, "<title>Dashboard</title>");
     RUN_SELFTEST("GET", "/control", nullptr, true, 200, "<title>Control</title>");
     RUN_SELFTEST("GET", "/control", nullptr, true, 200, "<style id='full-demo-head-extra'>");

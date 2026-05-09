@@ -161,13 +161,9 @@ Tools:
 - `GET /esp32base/tools`
 - `POST /esp32base/tools/reboot`
 - `POST /esp32base/tools/format-fs`
-- `GET /esp32base/reboot`
-- `POST /esp32base/reboot`
 - `POST /esp32base/api/restart`
 
 OTA 路由只在启用 OTA 且认证条件满足时注册。
-
-`/esp32base/reboot` 只作为旧 URL 兼容入口，进入同一个 Tools 工具页语义；导航标签、本地化和公开枚举都只使用 `BUILTIN_TOOLS`。
 
 ## 7. 内置页面交互
 

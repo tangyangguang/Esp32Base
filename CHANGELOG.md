@@ -20,7 +20,9 @@
 
 文档：
 
-- 内置 Web 导航标签枚举移除旧 Reboot 历史别名；系统工具页统一使用 `BUILTIN_TOOLS`，`/esp32base/reboot` 仅作为旧 URL 进入 Tools 语义。
+- 内置 Web 导航标签枚举移除旧 Reboot 历史别名；系统工具页统一使用 `BUILTIN_TOOLS`，并移除旧 `/esp32base/reboot` 路由。
+- 移除顶层 `Esp32BaseLog.h` / `Esp32BaseConfig.h` 转发头，公开入口统一为 `#include <Esp32Base.h>`。
+- `webota` 配置只读取 env 中的 `custom_esp32base_webota_*`、`[esp32base_webota]` 公共段和环境变量，不再兼容非 `custom_` env option。
 - 明确多核/多任务项目推荐单系统服务任务模型：`Esp32Base::begin()`、`Esp32Base::handle()`、`Esp32BaseConfig`、Web、Bus 固定在同一个 loop/system task 中调用。
 - 明确 `Esp32BaseConfig` 当前不是线程安全 API；业务 task 应通过 FreeRTOS queue/flag/ring buffer 投递配置变更，再由 loop/system task 调用 `setXxx()` 或 `setXxxDeferred()`。
 - 明确 `setAuthEnabled(false)` 会完全开放内置 HTTP 路由，包括 OTA、重启、Tools 和配置提交，只适合受控调试网络。
@@ -164,7 +166,7 @@ upload_flags =
 - `setHeadExtraCallback()` 回调只应输出 `<style>`、`<meta>` 等 head 内容，不应输出 body 内容。
 - 默认样式只提供基础可读性，不新增主题系统或颜色配置 API。
 - 基础库默认不会自动格式化 FS；`format()` 会清除 LittleFS 文件，仅由示例或应用在明确可接受数据丢失时调用。
-- `Format LittleFS` 会删除日志和所有 LittleFS 文件，但不会清除 WiFi、Web Auth 或 NVS 配置；旧 `/esp32base/reboot` 入口保留并进入 `Tools` 语义。
+- `Format LittleFS` 会删除日志和所有 LittleFS 文件，但不会清除 WiFi、Web Auth 或 NVS 配置；`Tools` 页面统一承载维护操作。
 - Tools 页格式化成功后会明确提示，并重新加载 FileLog 配置；FileLog 会在格式化后重新创建日志目录，避免后续写入触发底层 VFS 目录不存在错误。
 - 格式化 LittleFS 会输出 WARN 级维护日志，记录请求来源、format/mount/FileLog reload 结果；FileLog 目录或 segment 准备失败也会输出 WARN。
 - FileLog 重复 `enable()` 前会先 flush 现有 buffer，避免启动阶段 boot session 多行日志在示例或维护操作重新加载 FileLog 配置时丢失尾部。
