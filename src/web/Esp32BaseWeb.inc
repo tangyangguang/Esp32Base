@@ -225,12 +225,7 @@ bool parseAndCheckAuth(const char* context) {
     const bool ok = authMatches(user, pass);
     if (!g_authLoggedForRequest) {
         g_authLoggedForRequest = true;
-        if (ok) {
-            ESP32BASE_LOG_D("web", "auth_request context=%s user=%s password=%s result=success",
-                            context ? context : "unknown",
-                            user,
-                            pass);
-        } else {
+        if (!ok) {
             ESP32BASE_LOG_W("web", "auth_request context=%s user=%s password=%s result=failed",
                             context ? context : "unknown",
                             user,

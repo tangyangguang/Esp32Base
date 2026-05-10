@@ -15,7 +15,8 @@ enum PendingType : uint8_t {
     PENDING_EMPTY = 0,
     PENDING_INT,
     PENDING_BOOL,
-    PENDING_STR
+    PENDING_STR,
+    PENDING_BLOB
 };
 
 struct PendingItem {
@@ -23,6 +24,8 @@ struct PendingItem {
     char ns[16];
     char key[16];
     char* strValue;
+    uint8_t* blobValue;
+    size_t blobLen;
     int32_t intValue;
     bool boolValue;
     uint32_t dueMs;
@@ -34,6 +37,7 @@ bool g_auditEnabled = false;
 bool g_readAuditEnabled = false;
 PendingItem g_pending[ESP32BASE_CONFIG_PENDING_MAX];
 char g_stringScratch[CONFIG_STRING_MAX_VISIBLE_LEN + 1];
+uint8_t g_blobScratch[Esp32BaseConfig::CONFIG_BLOB_MAX_LEN];
 
 bool validName(const char* value) {
     if (!value) {
@@ -94,6 +98,51 @@ bool readStoredString(const char* ns, const char* key, char* out, size_t len, bo
     return true;
 }
 
+bool readStoredBlob(const char* ns, const char* key, void* out, size_t len, size_t* actualLen, bool* found) {
+    if (actualLen) {
+        *actualLen = 0;
+    }
+    if (found) {
+        *found = false;
+    }
+    if (!out || len == 0 || len > Esp32BaseConfig::CONFIG_BLOB_MAX_LEN) {
+        return false;
+    }
+
+    nvs_handle_t handle = 0;
+    const esp_err_t openErr = nvs_open(ns, NVS_READONLY, &handle);
+    if (openErr == ESP_ERR_NVS_NOT_FOUND) {
+        return true;
+    }
+    if (openErr != ESP_OK) {
+        return false;
+    }
+
+    size_t required = 0;
+    esp_err_t err = nvs_get_blob(handle, key, nullptr, &required);
+    if (err == ESP_ERR_NVS_NOT_FOUND) {
+        nvs_close(handle);
+        return true;
+    }
+    if (err != ESP_OK || required == 0 || required > len || required > Esp32BaseConfig::CONFIG_BLOB_MAX_LEN) {
+        nvs_close(handle);
+        return false;
+    }
+
+    err = nvs_get_blob(handle, key, out, &required);
+    nvs_close(handle);
+    if (err != ESP_OK) {
+        return false;
+    }
+    if (actualLen) {
+        *actualLen = required;
+    }
+    if (found) {
+        *found = true;
+    }
+    return true;
+}
+
 int findPending(const char* ns, const char* key) {
     for (uint8_t i = 0; i < ESP32BASE_CONFIG_PENDING_MAX; ++i) {
         if (g_pending[i].type != PENDING_EMPTY && strcmp(g_pending[i].ns, ns) == 0 && strcmp(g_pending[i].key, key) == 0) {
@@ -125,8 +174,17 @@ void clearPendingString(PendingItem& item) {
     }
 }
 
+void clearPendingBlob(PendingItem& item) {
+    if (item.type == PENDING_BLOB && item.blobValue) {
+        free(item.blobValue);
+        item.blobValue = nullptr;
+    }
+    item.blobLen = 0;
+}
+
 void clearPendingItem(PendingItem& item) {
     clearPendingString(item);
+    clearPendingBlob(item);
     item.type = PENDING_EMPTY;
     item.ns[0] = '\0';
     item.key[0] = '\0';
@@ -167,6 +225,9 @@ bool writePending(PendingItem& item) {
                 const size_t written = prefs.putString(item.key, value);
                 ok = value[0] == '\0' ? prefs.isKey(item.key) : written > 0;
             }
+            break;
+        case PENDING_BLOB:
+            ok = item.blobValue && item.blobLen > 0 && prefs.putBytes(item.key, item.blobValue, item.blobLen) == item.blobLen;
             break;
         default:
             ok = true;
@@ -336,6 +397,7 @@ bool Esp32BaseConfig::setIntDeferred(const char* ns, const char* key, int32_t va
         return false;
     }
     clearPendingString(g_pending[slot]);
+    clearPendingBlob(g_pending[slot]);
     g_pending[slot].type = PENDING_INT;
     g_pending[slot].intValue = value;
     g_pending[slot].dueMs = millis() + delayMs;
@@ -411,6 +473,7 @@ bool Esp32BaseConfig::setBoolDeferred(const char* ns, const char* key, bool valu
         return false;
     }
     clearPendingString(g_pending[slot]);
+    clearPendingBlob(g_pending[slot]);
     g_pending[slot].type = PENDING_BOOL;
     g_pending[slot].boolValue = value;
     g_pending[slot].dueMs = millis() + delayMs;
@@ -434,11 +497,119 @@ bool Esp32BaseConfig::setStrDeferred(const char* ns, const char* key, const char
     }
     strcpy(copy, value);
     clearPendingString(g_pending[slot]);
+    clearPendingBlob(g_pending[slot]);
     g_pending[slot].type = PENDING_STR;
     g_pending[slot].strValue = copy;
     g_pending[slot].dueMs = millis() + delayMs;
     if (g_auditEnabled) {
         ESP32BASE_LOG_D("config", "audit op=setStrDeferred ns=%s key=%s len=%u", ns, key, static_cast<unsigned>(strlen(value)));
+    }
+    return true;
+}
+
+bool Esp32BaseConfig::setBlob(const char* ns, const char* key, const void* data, size_t len) {
+    if (!validName(ns) || !validName(key) || !data || len == 0 || len > CONFIG_BLOB_MAX_LEN) {
+        return false;
+    }
+    bool hadOld = false;
+    size_t oldLen = 0;
+    const bool readOk = readStoredBlob(ns, key, g_blobScratch, sizeof(g_blobScratch), &oldLen, &hadOld);
+    if (readOk && hadOld && oldLen == len && memcmp(g_blobScratch, data, len) == 0) {
+        if (g_auditEnabled) {
+            ESP32BASE_LOG_D("config", "audit op=setBlob ns=%s key=%s len=%u changed=no result=skipped",
+                            ns, key, static_cast<unsigned>(len));
+        }
+        clearPendingKey(ns, key);
+        return true;
+    }
+
+    Preferences prefs;
+    if (!prefs.begin(ns, false)) {
+        return false;
+    }
+    const bool ok = prefs.putBytes(key, data, len) == len;
+    prefs.end();
+    if (!ok) {
+        ESP32BASE_LOG_W("config", "audit op=setBlob ns=%s key=%s len=%u changed=yes result=failed",
+                        ns, key, static_cast<unsigned>(len));
+    } else if (g_auditEnabled) {
+        ESP32BASE_LOG_I("config", "audit op=setBlob ns=%s key=%s len=%u changed=yes result=success",
+                        ns, key, static_cast<unsigned>(len));
+    }
+    if (ok) {
+        clearPendingKey(ns, key);
+    }
+    return ok;
+}
+
+bool Esp32BaseConfig::getBlob(const char* ns, const char* key, void* out, size_t len) {
+    if (!validName(ns) || !validName(key) || !out || len == 0 || len > CONFIG_BLOB_MAX_LEN) {
+        return false;
+    }
+
+    const int pending = findPending(ns, key);
+    if (pending >= 0 && g_pending[pending].type == PENDING_BLOB) {
+        if (g_pending[pending].blobLen != len || !g_pending[pending].blobValue) {
+            return false;
+        }
+        memcpy(out, g_pending[pending].blobValue, len);
+        return true;
+    }
+
+    bool found = false;
+    size_t actualLen = 0;
+    const bool ok = readStoredBlob(ns, key, out, len, &actualLen, &found);
+    if (g_readAuditEnabled) {
+        ESP32BASE_LOG_D("config", "audit op=getBlob ns=%s key=%s found=%s len=%u",
+                        ns, key, found ? "yes" : "no", static_cast<unsigned>(actualLen));
+    }
+    return ok && found && actualLen == len;
+}
+
+bool Esp32BaseConfig::setBlobDeferred(const char* ns, const char* key, const void* data, size_t len, uint32_t delayMs) {
+    if (!validName(ns) || !validName(key) || !data || len == 0 || len > CONFIG_BLOB_MAX_LEN) {
+        return false;
+    }
+    const int existing = findPending(ns, key);
+    if (existing >= 0 && g_pending[existing].type == PENDING_BLOB && g_pending[existing].blobLen == len &&
+        g_pending[existing].blobValue && memcmp(g_pending[existing].blobValue, data, len) == 0) {
+        if (g_auditEnabled) {
+            ESP32BASE_LOG_D("config", "audit op=setBlobDeferred ns=%s key=%s len=%u changed=no result=skipped_pending",
+                            ns, key, static_cast<unsigned>(len));
+        }
+        return true;
+    }
+
+    bool hadOld = false;
+    size_t oldLen = 0;
+    const bool readOk = readStoredBlob(ns, key, g_blobScratch, sizeof(g_blobScratch), &oldLen, &hadOld);
+    if (readOk && hadOld && oldLen == len && memcmp(g_blobScratch, data, len) == 0) {
+        if (g_auditEnabled) {
+            ESP32BASE_LOG_D("config", "audit op=setBlobDeferred ns=%s key=%s len=%u changed=no result=skipped",
+                            ns, key, static_cast<unsigned>(len));
+        }
+        clearPendingKey(ns, key);
+        return true;
+    }
+
+    const int slot = allocPending(ns, key);
+    if (slot < 0) {
+        return false;
+    }
+    uint8_t* copy = static_cast<uint8_t*>(malloc(len));
+    if (!copy) {
+        return false;
+    }
+    memcpy(copy, data, len);
+    clearPendingString(g_pending[slot]);
+    clearPendingBlob(g_pending[slot]);
+    g_pending[slot].type = PENDING_BLOB;
+    g_pending[slot].blobValue = copy;
+    g_pending[slot].blobLen = len;
+    g_pending[slot].dueMs = millis() + delayMs;
+    if (g_auditEnabled) {
+        ESP32BASE_LOG_D("config", "audit op=setBlobDeferred ns=%s key=%s len=%u",
+                        ns, key, static_cast<unsigned>(len));
     }
     return true;
 }

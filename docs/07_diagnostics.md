@@ -105,6 +105,9 @@
 - 8 个不同 key 可入队，第 9 个返回 false。
 - `setXxxDeferred()` 后立即 `getXxx()` 返回 pending 新值。
 - 同 key 多次 deferred 写入合并。
+- POD blob 写入/读取成功，最大长度边界为 256 字节。
+- POD blob 重复写入相同值跳过 NVS 写入。
+- POD blob deferred 后立即读取返回 pending 新值，`flushAll()` 后重启仍保持。
 - OTA 上传期间 pending 可读，普通 deferred flush 暂停。
 - `clearLibraryNamespaces()` 不清理业务 namespace。
 - Fs 文本读写、二进制读写、追加、目录列举、rename、mkdir、rmdir。

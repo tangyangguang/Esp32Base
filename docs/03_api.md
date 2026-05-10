@@ -196,6 +196,7 @@ void loop() {
 - namespace 长度 `1..15`。
 - key 长度 `1..15`。
 - string value 可见内容长度不超过 3999 字节。
+- blob value 长度为 `1..256` 字节，用于小型固定大小 POD 元数据，不用于日志、记录正文或大块业务数据。
 - 库内部 namespace 全部使用 `eb_` 前缀，例如 `eb_wifi`、`eb_sys`、`eb_log`。
 - namespace 已表达库和模块归属，key 不重复模块前缀，例如 `eb_wifi.ssid`、`eb_wifi.pass`、`eb_sys.rst_cnt`、`eb_sys.wdt_cnt`、`eb_log.en`、`eb_log.path`、`eb_log.max`、`eb_log.files`、`eb_log.level`、`eb_web.auth_user`、`eb_web.auth_pass`。
 - 应用不得使用 `eb_` 前缀，避免被库维护 API 清理。
@@ -221,6 +222,19 @@ public:
     static bool setBoolDeferred(const char* ns, const char* key, bool value, uint32_t delayMs = 1000);
 
     static bool setStrDeferred(const char* ns, const char* key, const char* value, uint32_t delayMs = 1000);
+
+    static bool setBlob(const char* ns, const char* key, const void* data, size_t len);
+    static bool getBlob(const char* ns, const char* key, void* out, size_t len);
+    static bool setBlobDeferred(const char* ns, const char* key, const void* data, size_t len, uint32_t delayMs = 1000);
+
+    template <typename T>
+    static bool setPod(const char* ns, const char* key, const T& value);
+
+    template <typename T>
+    static bool getPod(const char* ns, const char* key, T& out, const T& def = T());
+
+    template <typename T>
+    static bool setPodDeferred(const char* ns, const char* key, const T& value, uint32_t delayMs = 1000);
 
     static bool flushNextDue();
     static bool flushNextForced();
@@ -250,6 +264,40 @@ deferred 语义：
 - 同一 namespace/key 的 pending 写入会合并为最新值，不重复占用多条 pending。
 - OTA 上传期间只暂停 deferred flush；`getXxx()`、`pendingCount()`、`flushAll()` 和 `clearLibraryNamespaces()` 仍按各自语义工作。
 - `clearLibraryNamespaces()` 只清理库内部 `eb_` 前缀 namespace，不清理业务 namespace。
+
+blob / POD 语义：
+
+- `setBlob()` / `setBlobDeferred()` 的 `data` 不能为 `nullptr`，`len` 必须在 `1..256`；非法 namespace、key、data 或 len 返回 false。
+- `getBlob()` 要求调用方传入准确的固定大小；NVS 中不存在 key、读取失败或存储长度与 `len` 不一致时返回 false。
+- `setBlob()` 写入前会读取旧值；旧值长度和内容完全相同时返回 true 并跳过 NVS 写入，同时清除同 key pending。
+- `setBlobDeferred()` 如果 pending 中已有相同 blob，或 NVS 旧值已经相同，会返回 true 并跳过新的 NVS 写入；否则入队并由 `handle()` / `flushAll()` 落盘。
+- `getBlob()` 和 `getPod()` 与其他 `getXxx()` 一样先读 pending，同 key deferred 写入后立即可见。
+- `setPod()` / `getPod()` / `setPodDeferred()` 是 blob API 的模板薄封装，只接受 trivially copyable 且 standard-layout 的固定布局结构；不要保存含指针、虚函数、`String`、容器或跨固件版本布局不稳定的类型。
+- 如果 POD 结构未来需要改变布局，业务应自己在结构中放 `version` 字段并按应用策略迁移；Config 不替业务解释 blob 内容。
+
+POD 元数据示例：
+
+```cpp
+struct StoreMeta {
+    uint32_t head;
+    uint32_t count;
+    uint32_t nextId;
+};
+
+StoreMeta meta = {};
+Esp32BaseConfig::getPod("app_store", "meta", meta);
+
+meta.head = nextHead;
+meta.count = nextCount;
+meta.nextId = nextId;
+
+if (!Esp32BaseConfig::setPodDeferred("app_store", "meta", meta, 1000)) {
+    ESP32BASE_LOG_W("app", "store meta enqueue failed");
+}
+
+// restart、deep sleep、OTA success 等关键路径前仍调用 flushAll()。
+Esp32BaseConfig::flushAll();
+```
 
 多任务用法：
 

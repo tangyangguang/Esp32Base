@@ -4,7 +4,14 @@
 
 static const char* APP_NS = "demo";
 static const char* APP_KEY_BOOT = "boot";
+static const char* APP_KEY_META = "meta";
 static const char* APP_KEY_VALUE = "value";
+
+struct DemoMeta {
+    uint32_t boot;
+    uint32_t nextId;
+    uint32_t marker;
+};
 
 #ifndef ESP32BASE_FULL_DEMO_SELFTEST
 #define ESP32BASE_FULL_DEMO_SELFTEST 0
@@ -268,6 +275,18 @@ void setup() {
 #endif
     const int32_t boot = Esp32BaseConfig::getInt(APP_NS, APP_KEY_BOOT, 0) + 1;
     Esp32BaseConfig::setIntDeferred(APP_NS, APP_KEY_BOOT, boot);
+    DemoMeta meta = {};
+    Esp32BaseConfig::getPod(APP_NS, APP_KEY_META, meta);
+    meta.boot = static_cast<uint32_t>(boot);
+    meta.nextId += 1U;
+    meta.marker = 0xEB32BA5EUL;
+    if (Esp32BaseConfig::setPodDeferred(APP_NS, APP_KEY_META, meta)) {
+        DemoMeta pendingMeta = {};
+        Esp32BaseConfig::getPod(APP_NS, APP_KEY_META, pendingMeta);
+        ESP32BASE_LOG_I("example", "demo meta boot=%lu next_id=%lu",
+                        static_cast<unsigned long>(pendingMeta.boot),
+                        static_cast<unsigned long>(pendingMeta.nextId));
+    }
     Esp32BaseWeb::addPage("/dashboard", "Dashboard", handleDashboard);
     Esp32BaseWeb::addPage("/control", "Control", handleControl);
     Esp32BaseWeb::addRoute("/control/edit", Esp32BaseWeb::METHOD_GET, handleControl);

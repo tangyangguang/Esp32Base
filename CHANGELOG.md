@@ -2,6 +2,27 @@
 
 本文从 2026-05-06 起记录 Esp32Base 新增和优化的能力，面向正在接入本库的业务项目。业务项目应优先查看本文，了解最近可用的新 API、行为变化和推荐接入方式。
 
+## 2026-05-10
+
+### Config 小型结构化元数据
+
+新增：
+
+- `Esp32BaseConfig` 新增 `setBlob()` / `getBlob()` / `setBlobDeferred()`，用于一次保存和读取最大 256 字节的小型固定大小元数据。
+- 新增 `setPod<T>()` / `getPod<T>()` / `setPodDeferred<T>()` 模板薄封装，要求类型为 trivially copyable 且 standard-layout，适合保存 `head/count/next_id` 这类环形文件元数据。
+- blob 同步写入会做写前比较；旧值长度和内容完全相同时返回 true 并跳过 NVS 写入。
+- blob deferred 写入支持 pending read-through、同 key 合并、相同 pending 跳过，以及 `flushAll()` 强制落盘。
+
+业务侧用途：
+
+- 业务项目的 RecordStore/EventStore 可把 `head`、`count`、`next_id` 合并为一个 POD metadata key，避免每条记录或事件 append 后分别写 3 个 NVS key。
+- blob API 只保存小型结构化元数据；记录正文、事件环形文件和高频日志仍应由业务文件或 FS 能力承载。
+
+文档：
+
+- `docs/03_api.md` 补充 blob/POD API、256 字节上限、namespace/key 校验、失败返回、相同值跳过写入、deferred/flushAll 语义和示例。
+- `full_demo` 示例增加 POD metadata 的 deferred 写入和 pending read-through 示例。
+
 ## 2026-05-09
 
 ### Web POST 轻量同源防护与 OTA 健壮性

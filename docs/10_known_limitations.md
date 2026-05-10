@@ -43,6 +43,7 @@
 
 - Config 后端为 ESP32 NVS，只适合小配置，不适合大量数据或高频日志。
 - Config 字符串 API 支持最大 3999 字节可见内容，并使用固定 scratch buffer 读取和比较，避免 Arduino `String` 造成 heap 碎片；它仍然不适合大量数据或高频日志。
+- Config blob / POD API 支持最大 256 字节，只适合 head/count/next_id 这类小型固定布局元数据；业务记录正文、事件环形文件和高频日志仍应放在文件系统或业务自己的存储结构中。
 - NVS 写满时 set API 返回 false，库不自动删除业务数据。
 - `clearLibraryNamespaces()` 只清理 `eb_` 前缀的库 namespace。
 - 应用不得使用 `eb_` 前缀作为自己的 NVS namespace。

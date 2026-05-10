@@ -64,6 +64,8 @@
 #define ESP32BASE_CONFIG_PENDING_MAX ESP32BASE_EB_CONFIG_PENDING_MAX
 ```
 
+每个 pending blob 按实际长度动态分配，单个 blob 最大 256 字节；Config 另有一个 256 字节静态 scratch buffer 用于 blob 写前比较和读取。
+
 ### 3.4 FileLog
 
 文件日志仅在 FS profile 中启用。默认 `4 × 32KB = 128KB`，低优先级缓存 1KB，flush interval 2s。量产推荐 WARN 文件等级；示例使用 INFO 文件等级方便观察。Core 和默认 NET 不链接 LittleFS，也不产生 FileLog 静态状态。
@@ -94,6 +96,7 @@ ESP32BASE_RESTART_LOG_CAPACITY=4
 - NVS namespace：15 字符。
 - NVS key：15 字符。
 - NVS string value：可见内容 <= 3999 字节。
+- NVS blob value：1..256 字节。
 
 人性化容量显示：
 
