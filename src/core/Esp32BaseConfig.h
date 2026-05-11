@@ -72,6 +72,11 @@ public:
     static uint8_t pendingCapacity();
 
     static bool clearNamespace(const char* ns);
+    static bool clearWifiConfig();
+    static bool clearWebAuthConfig();
+    static bool clearSystemConfig();
+    static bool clearLogConfig();
+    static bool factoryReset();
     static bool clearLibraryNamespaces();
 
     static void pauseDeferredFlush();

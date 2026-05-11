@@ -37,6 +37,8 @@ public:
     static bool begin(uint32_t baud = ESP32BASE_LOG_BAUD);
     static void setRuntimeLevel(Level level);
     static Level runtimeLevel();
+    static void setSerialLevel(Level level);
+    static Level serialLevel();
     static void setSink(Sink sink);
     static void setInternalLineSink(LineSink sink);
     static void setTimeProvider(TimeProvider provider);

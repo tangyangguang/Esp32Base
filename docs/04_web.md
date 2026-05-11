@@ -79,7 +79,7 @@ OTA 规则：
 - OTA route 按 profile/OTA 编译条件注册，不依赖 `setDefaultAuth()` 或持久化认证。
 - Web Auth 开启时，OTA 页面和上传接口复用 Web Basic Auth。
 - Web Auth 关闭时，OTA 页面和上传接口不要求认证，风险由应用和用户自行承担。
-- 调用 `Esp32BaseWeb::setAuthEnabled(false)` 后，内置 HTTP 路由会完全开放，包括 WiFi 保存/清除、Auth 保存、重启、Tools、Logs clear 和 Web OTA；这只适合受控调试网络，不适合暴露到外部网络。
+- 调用 `Esp32BaseWeb::setAuthEnabled(false)` 后，内置 HTTP 路由会完全开放，包括 WiFi 保存/清除、Auth 保存、重启、System、Logs clear 和 Web OTA；这只适合受控调试网络，不适合暴露到外部网络。
 - 启用 OTA 时默认同时启用 ArduinoOTA/espota；espota 只使用当前 Web Auth 密码作为 `--auth` 密码，即使 Web Auth 关闭也仍要求密码。
 
 不使用“密码是否等于默认字符串”作为唯一判断。
@@ -114,10 +114,10 @@ OTA 规则：
 - handler 内 `Esp32BaseWeb::currentMethod()` 可区分 `METHOD_GET` / `METHOD_POST`；handler 外返回 `METHOD_UNKNOWN`。
 - `addPage()` 注册业务页面并进入业务导航；`addNavItem()` 只注册导航项，不注册路由。
 - `setHomeMode()` 控制 `/` 和 `/esp32base` 的首页模型：基础库首页、业务首页优先或融合首页。
-- `setSystemNavMode()` 控制 Status、WiFi、OTA、Logs、Tools 等基础功能入口在顶部、底部或底部紧凑系统工具区展示。
-- `setBuiltinLabel()` 可覆盖 Status/WiFi/OTA/Logs/Tools/Auth 标签，用于应用统一本地化；系统工具页统一使用 `BUILTIN_TOOLS`，不提供旧 Reboot 历史别名。
+- `setSystemNavMode()` 控制 Status、Logs、System 等系统入口在顶部、底部或底部紧凑系统工具区展示；默认使用底部紧凑系统工具区，让顶部主要服务业务导航。
+- `setBuiltinLabel()` 可覆盖 Status/WiFi/OTA/Logs/System/Auth 标签，用于应用统一本地化；系统维护页统一使用 `BUILTIN_TOOLS`，不提供旧 Reboot 历史别名。
 - `setHeadExtraCallback()` 可在 `sendHeader()` 的 `</head>` 和顶部导航输出前注入业务 CSS，业务页面不需要复制基础库 header/nav。
-- 顶部导航按当前请求路径输出 `active` class：完全匹配优先，嵌套路由按最长 path 前缀匹配；`SYSTEM_NAV_SECTION` 下系统维护入口仍只在 footer 中展示。
+- 导航按当前请求路径输出 `active` class：完全匹配优先，嵌套路由按最长 path 前缀匹配；`SYSTEM_NAV_SECTION` 下系统维护入口只在 footer 中展示，WiFi/Auth/OTA 二级页会把 System 标记为 active。
 - 默认 Web 样式采用简洁中性色，普通链接、导航和 tabs 不使用蓝色主色；业务项目最终视觉仍由 `setHeadExtraCallback()` 注入 CSS 覆盖。
 
 默认容量：
@@ -138,6 +138,8 @@ Web:
 - `GET /esp32base/api/status`
 - `GET /esp32base/api/chip`
 - `GET /esp32base/api/firmware`
+- `GET /esp32base/api/hostname`
+- `POST /esp32base/api/hostname`
 - `GET /esp32base/wifi`
 - `POST /esp32base/wifi`
 - `POST /esp32base/api/wifi`
@@ -156,9 +158,10 @@ Logs:
 - `GET /esp32base/logs`
 - `POST /esp32base/logs/clear`
 
-Tools:
+System:
 
 - `GET /esp32base/tools`
+- `POST /esp32base/tools/hostname`
 - `POST /esp32base/tools/reboot`
 - `POST /esp32base/tools/format-fs`
 - `POST /esp32base/api/restart`
@@ -176,16 +179,18 @@ WiFi 配置页：
 - 空 SSID 或空密码返回错误，不保存凭证。
 - SSID 超过 32 字节或密码超过 64 字节时返回错误，不静默截断。
 
-Tools 维护页：
+System 维护页：
 
+- 默认底部系统导航只展示 Status、Logs、System；WiFi、Auth、OTA 是低频配置/维护入口，收在 System 页面中并显示为 WiFi Setup、Web Auth、Firmware OTA，但保留原直达 URL。
+- Hostname 设置区显示当前 hostname、构建默认 hostname、已保存 hostname 和是否需要重启；保存只写入 `eb_sys.hostname`，不热切换当前 mDNS/OTA/Web 身份，页面必须提示重启后生效。
 - 重启按钮必须有二次确认，并通过统一 lifecycle restart 执行；POST 响应必须替换浏览器历史到 GET URL，避免刷新重复提交。
 - 重启和格式化等危险操作必须分组显示，避免按钮与下一项标题贴得太近。
 - 启用 FS 的 profile 显示 `Format LittleFS`，该操作会删除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth 或 NVS 配置。
-- 启用 FileLog 的 profile 显示 `Clear logs`，清空日志只接受 POST，表单使用 `confirm()` 和 `once(form)`，成功后回到 Tools 页面显示结果。
-- 格式化 FS 是显式 POST 操作；执行前 flush 文件日志，成功后重新 mount FS，并重新加载文件日志配置；成功提示应明确显示在 Tools 页面，同时输出 WARN 级维护日志记录请求、format/mount/FileLog reload 结果。重启请求同样输出 WARN 级维护日志。
+- 启用 FileLog 的 profile 显示 `Clear logs`，清空日志只接受 POST，表单使用 `confirm()` 和 `once(form)`，成功后回到 System 页面显示结果。
+- 格式化 FS 是显式 POST 操作；执行前 flush 文件日志，成功后重新 mount FS，并重新加载文件日志配置；成功提示应明确显示在 System 页面，同时输出 WARN 级维护日志记录请求、format/mount/FileLog reload 结果。重启请求同样输出 WARN 级维护日志。
 - 普通 `GET` 页面慢请求只输出 DEBUG；`POST` 等操作慢请求继续输出 WARN。
 - API 层仍建议要求 POST，不使用 GET 触发重启。
-- 内置危险 POST 包括 WiFi 保存/清除、Auth 保存、重启、Tools 操作、Logs clear、Web OTA upload/done；跨站 `Origin` 或 `Referer` 会被拒绝。
+- 内置危险 POST 包括 WiFi 保存/清除、Hostname 保存、Auth 保存、重启、System 操作、Logs clear、Web OTA upload/done；跨站 `Origin` 或 `Referer` 会被拒绝。
 
 OTA 上传页：
 
@@ -206,7 +211,7 @@ Logs 页面：
 - 页面顶部以标签展示所有 segment，顺序为 `current-0`、`history-1`、`history-2` 到最旧 history；标签里的大小只显示 KB/MB/B 人性化值，不重复 raw bytes。
 - 默认显示 `current-0`；可通过 `?segment=N` 查看单个历史文件，非法或越界 segment 回落到 `current-0`。
 - 日志内容必须 HTML escape。
-- 清空日志入口位于 Tools 页面；Logs 页面只负责查看日志。
+- 清空日志入口位于 System 页面；Logs 页面只负责查看日志。
 - 日志正文一次只展示一个 segment，并输出当前 segment 标题，包括 0 字节文件。
 - 日志内容只做 HTML escape，不折叠、不省略、不规整空白行，页面展示应忠实反映文件内容。
 - 日志正文流式输出期间必须周期性 yield/feed Watchdog，避免大日志页面长请求触发看门狗。
@@ -219,16 +224,19 @@ Logs 页面：
 
 系统首页：
 
-- `/esp32base` 展示固件、profile、hostname、uptime、boot count、reset/wake reason 及中文说明、heap、flash、WiFi/IP/RSSI、FS、FileLog、NTP、OTA 等当前 profile 可用信息。
+- `/esp32base` 是只读设备体检页，按 Overview、Hardware、Firmware & OTA、Network、Storage & Logs、Partition Table、Boot Reasons 分组展示调试信息。
+- Hardware 显示芯片型号、revision、CPU、SDK、Flash、PSRAM 和 eFuse MAC；Network 显示 WiFi/IP/RSSI、power save、STA MAC 和 AP MAC。
+- Firmware & OTA 显示当前固件大小、运行 app slot、下一 OTA slot、Max OTA upload、OTA headroom、rollback 状态，以及仅在存在错误时显示的 Last OTA error。
+- Partition Table 使用运行时分区表展示 Name、Type、SubType、Offset、Size、Role；Role 用于标识 running app、next OTA、app data、NVS config、OTA state、coredump 等。
 - 未启用的模块不显示对应行，避免非 FULL profile 引入额外依赖。
 
 页面风格：
 
 - 单栏设备控制台布局，正文、顶部导航和底部系统入口使用同一页面宽度。
-- 默认正文 16px，标题 24px/21px/18px，兼顾桌面和移动端可读性。
+- 默认正文 14px，标题 18px/16px/15px，采用紧凑设备控制台尺度。
 - 默认页面最大宽度 1040px，浅灰背景配白色 panel，避免正文和操作块错位。
 - 顶部导航使用中性色和浅绿灰 active 状态。
-- 内置状态、WiFi、Auth、OTA、Logs、Tools 页面使用统一标题、panel、按钮和表单节奏；页面标题本身使用白色 header panel，与正文 panel 内边距对齐。
+- 内置状态、WiFi、Auth、OTA、Logs、System 页面使用统一标题、panel、按钮和表单节奏；页面标题本身使用白色 header panel，与正文 panel 内边距对齐。
 - 默认输入框样式只作用于文本类输入，例如未声明 type 的 input、text、password、number、email、url、tel、search。
 - checkbox、radio、file、range、color、hidden 等非文本控件保持浏览器原生尺寸和行为，业务页面不需要额外覆盖基础 CSS。
 - 统一 `.ok`、`.err`、`.info` 状态样式。
@@ -296,10 +304,11 @@ Esp32BaseWeb::addPage("/config", "配置", handleConfigPage);
 - `HOME_APP`：`/` 和 `/esp32base` 优先跳转业务首页，基础功能通过系统导航入口访问。
 - `HOME_COMBINED`：`/` 跳转业务首页，`/esp32base` 使用同一套导航框架展示设备融合首页。
 - 配置业务首页后，导航品牌链接指向业务首页，业务主导航不会重复显示同一个首页入口。
-- `SYSTEM_NAV_SECTION` 会在页面底部以小字系统入口与 `Free heap` 同行展示；窄屏下系统入口可自然换行，避免遮挡和横向滚动。
+- `SYSTEM_NAV_SECTION` 会在页面底部以小字系统入口与 `Free heap`、`Up`、`RSSI` 同行展示；窄屏下系统入口和状态摘要可自然换行，避免遮挡和横向滚动。
 - 基础库页面复用同一套导航框架，业务页和系统页保持一致入口结构。
-- `/esp32base` 系统页展示固件、profile、hostname、uptime、boot count、reset/wake reason 及中文说明、heap、flash，以及当前 profile 可用的 WiFi、FS、FileLog、NTP、OTA 状态。
+- `/esp32base` 系统页按 Overview、Hardware、Firmware & OTA、Network、Storage & Logs、Partition Table、Boot Reasons 分组展示设备调试信息，包括 MAC、OTA headroom 和运行时分区表。
 - `/esp32base/api/status` 保留 `resetReason` / `wakeReason` 原始字段，并提供 `resetReasonText` / `wakeReasonText` 中文说明字段。
+- `/esp32base/api/hostname` 返回 `currentHostname`、`defaultHostname`、`storedHostname`、`storedValid`、`restartRequired` 和校验规则；POST 参数 `hostname` 必须符合 1-32 位小写字母、数字和短横线规则，不能首尾短横线，不能包含 `.local`。
 
 同一路径 API 分流：
 
@@ -362,6 +371,8 @@ Esp32BaseWeb::endJson();
 - 没有已保存 WiFi 凭证。
 - 应用显式调用 `startConfigPortal()`。
 - 用户显式清除凭证并在应用策略中选择进入 portal。
+
+默认 config portal AP SSID 为 `ESP32-Config-XXXX`，其中 `XXXX` 取 eFuse MAC 按常见网络 MAC 顺序显示时的最后两个字节，便于和 Status 页 MAC 信息对照。
 
 有已保存凭证但连接失败时：
 

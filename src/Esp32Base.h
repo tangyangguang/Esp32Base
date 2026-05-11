@@ -5,6 +5,10 @@
 #include "core/Esp32BaseConfig.h"
 #include "core/Esp32BaseSystem.h"
 
+#ifndef ESP32BASE_DEFAULT_HOSTNAME
+#define ESP32BASE_DEFAULT_HOSTNAME "esp32base"
+#endif
+
 #if ESP32BASE_ENABLE_BUS
 #include "runtime/Esp32BaseBus.h"
 #endif
@@ -52,8 +56,9 @@ public:
     static const char* firmwareVersion();
     static const char* firmwareBuild();
 
-    static void setHostname(const char* hostname);
     static const char* hostname();
+    static const char* defaultHostname();
+    static bool isValidHostname(const char* hostname);
 
     static const char* profileName();
     static bool isReady();

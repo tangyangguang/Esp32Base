@@ -664,6 +664,10 @@ bool Esp32BaseConfig::clearNamespace(const char* ns) {
     if (!validName(ns)) {
         return false;
     }
+    if (!namespaceExists(ns)) {
+        clearPendingNamespace(ns);
+        return true;
+    }
     Preferences prefs;
     if (!prefs.begin(ns, false)) {
         return false;
@@ -676,13 +680,33 @@ bool Esp32BaseConfig::clearNamespace(const char* ns) {
     return ok;
 }
 
-bool Esp32BaseConfig::clearLibraryNamespaces() {
+bool Esp32BaseConfig::clearWifiConfig() {
+    return clearNamespace("eb_wifi");
+}
+
+bool Esp32BaseConfig::clearWebAuthConfig() {
+    return clearNamespace("eb_web");
+}
+
+bool Esp32BaseConfig::clearSystemConfig() {
+    return clearNamespace("eb_sys");
+}
+
+bool Esp32BaseConfig::clearLogConfig() {
+    return clearNamespace("eb_log");
+}
+
+bool Esp32BaseConfig::factoryReset() {
     bool ok = true;
-    ok = clearNamespace("eb_wifi") && ok;
-    ok = clearNamespace("eb_sys") && ok;
-    ok = clearNamespace("eb_log") && ok;
-    ok = clearNamespace("eb_web") && ok;
+    ok = clearWifiConfig() && ok;
+    ok = clearWebAuthConfig() && ok;
+    ok = clearSystemConfig() && ok;
+    ok = clearLogConfig() && ok;
     return ok;
+}
+
+bool Esp32BaseConfig::clearLibraryNamespaces() {
+    return factoryReset();
 }
 
 void Esp32BaseConfig::pauseDeferredFlush() {

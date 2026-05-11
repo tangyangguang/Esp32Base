@@ -30,7 +30,10 @@
 #endif
 
 #include <WebServer.h>
+#include <WiFi.h>
 #include <Preferences.h>
+#include <esp_ota_ops.h>
+#include <esp_partition.h>
 #include <mbedtls/base64.h>
 #include <stdlib.h>
 #include <string.h>
@@ -65,8 +68,8 @@ char g_authPass[64] = "admin";
 char g_deviceName[32] = "Esp32Base";
 char g_homePath[48] = "";
 Esp32BaseWeb::HomeMode g_homeMode = Esp32BaseWeb::HOME_ESP32BASE;
-Esp32BaseWeb::SystemNavMode g_systemNavMode = Esp32BaseWeb::SYSTEM_NAV_TOP;
-char g_builtinLabels[7][16] = {"Status", "WiFi", "OTA", "Logs", "Tools", "Tools", "Auth"};
+Esp32BaseWeb::SystemNavMode g_systemNavMode = Esp32BaseWeb::SYSTEM_NAV_SECTION;
+char g_builtinLabels[7][16] = {"Status", "WiFi", "OTA", "Logs", "System", "System", "Auth"};
 Esp32BaseWeb::Handler g_headExtraCallback = nullptr;
 char g_chunkBuffer[512];
 size_t g_chunkUsed = 0;
@@ -81,22 +84,23 @@ bool g_otaUploadForbidden = false;
 static const char WEB_HEAD[] PROGMEM =
     "<meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
     "<style>"
-    "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:16px;line-height:1.5;margin:0;padding:18px;max-width:1040px;margin-inline:auto;color:#1f2933;background:#f6f8f7}"
-    "h1,h2,h3{color:#111827;line-height:1.25;margin:0 0 10px}h1{font-size:24px}h2{font-size:21px}h3{font-size:18px}p{margin:0 0 12px}"
+    "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:14px;line-height:1.45;margin:0;padding:14px;max-width:1040px;margin-inline:auto;color:#1f2933;background:#f6f8f7}"
+    "h1,h2,h3{color:#111827;line-height:1.25;margin:0 0 8px}h1{font-size:18px}h2{font-size:16px}h3{font-size:15px}p{margin:0 0 10px}"
     "a{color:#25313f;text-decoration:none}.muted,.info{color:#64707d}.ok{color:#217a4f}.err,.dangertext{color:#b93a32}"
     "nav,.panel,.footerbar{background:#fff;border:1px solid #d8e0e6;border-radius:6px;box-shadow:0 1px 2px rgba(16,24,40,.04)}"
-    "nav{margin:0 0 18px;padding:10px 12px}nav a{font-size:16px;font-weight:600;display:inline-block;padding:8px 10px;margin:2px;border-radius:5px;color:#25313f}.brand{font-weight:700}nav a.active{background:#e5f0eb;color:#245f52}"
-    ".page{margin:0}.pagehead{background:#fff;border:1px solid #d8e0e6;border-radius:6px;box-shadow:0 1px 2px rgba(16,24,40,.04);padding:14px 16px;margin:0 0 14px}.pagehead h1{margin:0}.panel{padding:16px;margin:14px 0}.panel>:last-child{margin-bottom:0}.actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px}"
-    "button,input[type=submit],input[type=button]{font-size:16px;background:#24303d;color:#fff;padding:9px 14px;border:0;border-radius:5px;cursor:pointer;margin:0 6px 6px 0}button:hover,input[type=submit]:hover,input[type=button]:hover{background:#111827}.dangerbtn,input.danger{background:#b93a32}.dangerbtn:hover,input.danger:hover{background:#9f2f29}"
-    "label{display:block;font-weight:600;margin:0 0 5px}input:not([type]),input[type=text],input[type=password],input[type=number],input[type=email],input[type=url],input[type=tel],input[type=search]{width:100%;font-size:16px;padding:9px 10px;margin:0 0 14px;border:1px solid #ccd5dd;border-radius:5px;box-sizing:border-box;background:#fff;color:#1f2933}"
-    "input[type=file]{font-size:16px;margin:2px 0 14px;max-width:100%}progress{height:14px;border:0;border-radius:8px;overflow:hidden;background:#e7ebef}"
-    "details{margin:14px 0}summary{cursor:pointer;color:#25313f}.footerbar{margin-top:18px;padding:10px 12px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;color:#64707d;font-size:14px}"
-    ".syslinks{min-width:0;flex:1 1 auto;display:flex;flex-wrap:wrap;gap:6px;align-items:center}.syslinks a{font-size:14px;line-height:1.35;padding:5px 8px;margin:0;background:#f1f4f3;color:#64707d;border-radius:5px}.heap{flex:0 0 auto;margin-left:auto;white-space:nowrap;text-align:right}"
-    "@media(max-width:640px){body{padding:12px}nav a{font-size:15px;padding:7px 8px}.footerbar{align-items:flex-start}.heap{margin-left:0;text-align:left}}"
-    ".kv{border-collapse:collapse;width:100%;margin:0}.kv th,.kv td{border-bottom:1px solid #d8e0e6;padding:8px 6px;text-align:left;vertical-align:top}.kv tr:last-child th,.kv tr:last-child td{border-bottom:0}.kv th{width:30%;color:#64707d;font-weight:600}"
-    ".tabs{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 12px}.tabs a{font-size:14px;padding:5px 8px;margin:0;background:#f1f4f3;color:#64707d;border-radius:5px}.tabs a.active{background:#e5f0eb;color:#245f52;font-weight:600}"
-    ".logmeta{line-height:1.5}.statusline{min-height:1.5em}.toolsection{padding:16px;margin:14px 0;background:#fff;border:1px solid #d8e0e6;border-radius:6px}"
-    "pre{white-space:pre;overflow-x:auto;word-break:normal;font-size:13px;line-height:1.45;background:#f1f4f3;border:1px solid #d8e0e6;border-radius:5px;padding:10px}"
+    "nav{margin:0 0 14px;padding:8px 10px}nav a{font-size:14px;font-weight:600;display:inline-block;padding:6px 8px;margin:2px;border-radius:5px;color:#25313f}.brand{font-weight:700}nav a.active{background:#e5f0eb;color:#245f52}"
+    ".page{margin:0}.pagehead{background:#fff;border:1px solid #d8e0e6;border-radius:6px;box-shadow:0 1px 2px rgba(16,24,40,.04);padding:10px 12px;margin:0 0 12px}.pagehead h1{margin:0}.panel{padding:12px;margin:12px 0}.panel>:last-child{margin-bottom:0}.actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}"
+    "button,input[type=submit],input[type=button]{font-size:14px;background:#24303d;color:#fff;padding:7px 11px;border:0;border-radius:5px;cursor:pointer;margin:0 6px 6px 0}button:hover,input[type=submit]:hover,input[type=button]:hover{background:#111827}.dangerbtn,input.danger{background:#b93a32}.dangerbtn:hover,input.danger:hover{background:#9f2f29}"
+    "label{display:block;font-weight:600;margin:0 0 4px}input:not([type]),input[type=text],input[type=password],input[type=number],input[type=email],input[type=url],input[type=tel],input[type=search]{width:100%;font-size:14px;padding:7px 9px;margin:0 0 12px;border:1px solid #ccd5dd;border-radius:5px;box-sizing:border-box;background:#fff;color:#1f2933}"
+    "input[type=file]{font-size:14px;margin:2px 0 12px;max-width:100%}progress{height:12px;border:0;border-radius:8px;overflow:hidden;background:#e7ebef}"
+    "details{margin:12px 0}summary{cursor:pointer;color:#25313f}.footerbar{margin-top:14px;padding:8px 10px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;color:#64707d;font-size:13px}"
+    ".syslinks{min-width:0;flex:1 1 auto;display:flex;flex-wrap:wrap;gap:5px;align-items:center}.syslinks a{font-size:13px;line-height:1.35;padding:4px 7px;margin:0;background:#f1f4f3;color:#64707d;border-radius:5px}.heap{flex:0 0 auto;margin-left:auto;white-space:nowrap;text-align:right;font-size:12px}"
+    "@media(max-width:640px){body{padding:10px}nav a{font-size:14px;padding:6px 7px}.footerbar{align-items:flex-start}.heap{margin-left:0;text-align:left;white-space:normal}}"
+    ".kv{border-collapse:collapse;width:100%;margin:0}.kv th,.kv td{border-bottom:1px solid #d8e0e6;padding:7px 5px;text-align:left;vertical-align:top}.kv tr:last-child th,.kv tr:last-child td{border-bottom:0}.kv th{width:30%;color:#64707d;font-weight:600}"
+    ".part{border-collapse:collapse;width:100%;font-size:13px}.part th,.part td{border-bottom:1px solid #d8e0e6;padding:6px 5px;text-align:left;vertical-align:top}.part th{color:#64707d;font-weight:600}.part tr:last-child td{border-bottom:0}"
+    ".tabs,.quicklinks{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 10px}.tabs a,.quicklinks a{font-size:13px;padding:5px 8px;margin:0;background:#f1f4f3;color:#64707d;border-radius:5px}.tabs a.active{background:#e5f0eb;color:#245f52;font-weight:600}"
+    ".logmeta{line-height:1.45;font-size:13px}.statusline{min-height:1.45em}.toolsection{padding:12px;margin:12px 0;background:#fff;border:1px solid #d8e0e6;border-radius:6px}"
+    "pre{white-space:pre;overflow-x:auto;word-break:normal;font-size:12px;line-height:1.45;background:#f1f4f3;border:1px solid #d8e0e6;border-radius:5px;padding:9px}"
     "</style>"
     "<script>function once(f){if(f.dataset.busy)return false;f.dataset.busy=1;var b=f.querySelector('[type=submit]');if(b)b.disabled=true;return true;}</script>";
 
@@ -104,6 +108,7 @@ void flushChunkBuffer();
 void markRequest();
 void sendChunk(const char* text);
 void sendEscapedHtmlChunk(const char* text);
+void formatReadableBytes(uint64_t bytes, char* out, size_t len);
 bool ensureAuth();
 
 Esp32BaseWeb::Method fromHttpMethod(HTTPMethod method) {
@@ -294,20 +299,6 @@ bool saveStoredAuth(const char* user, const char* pass) {
     prefs.end();
     return ok;
 }
-
-#if ESP32BASE_ENABLE_OTA
-const char* otaStatusName(Esp32BaseOta::Status status) {
-    switch (status) {
-        case Esp32BaseOta::IDLE: return "IDLE";
-        case Esp32BaseOta::READY: return "READY";
-        case Esp32BaseOta::UPLOADING: return "UPLOADING";
-        case Esp32BaseOta::VERIFYING: return "VERIFYING";
-        case Esp32BaseOta::SUCCESS: return "SUCCESS";
-        case Esp32BaseOta::FAILED: return "FAILED";
-        default: return "UNKNOWN";
-    }
-}
-#endif
 
 bool validHeaderValue(const char* value, size_t maxLen) {
     if (!value || !value[0]) {
@@ -561,11 +552,15 @@ const char* activeNavPath(bool includeSystemLinks) {
     }
     if (includeSystemLinks) {
         updateActivePath("/esp32base", currentPath, activePath, activeLen);
-        updateActivePath("/esp32base/wifi", currentPath, activePath, activeLen);
-        updateActivePath("/esp32base/auth", currentPath, activePath, activeLen);
+        if (navPathMatches("/esp32base/wifi", currentPath) ||
+            navPathMatches("/esp32base/auth", currentPath)
 #if ESP32BASE_ENABLE_OTA
-        updateActivePath("/esp32base/ota", currentPath, activePath, activeLen);
+            || navPathMatches("/esp32base/ota", currentPath)
 #endif
+        ) {
+            activePath = "/esp32base/tools";
+            activeLen = strlen(activePath);
+        }
         updateActivePath("/esp32base/logs", currentPath, activePath, activeLen);
         updateActivePath("/esp32base/tools", currentPath, activePath, activeLen);
     }
@@ -617,6 +612,128 @@ void sendInfoRow(const char* label, const char* value) {
     sendInfoRowEnd();
 }
 
+void sendStatusSectionStart(const char* title) {
+    sendChunk("<section class='panel statuspage'><h2>");
+    sendEscapedHtmlChunk(title);
+    sendChunk("</h2><table class='kv'>");
+}
+
+void sendStatusSectionEnd() {
+    sendChunk("</table></section>");
+}
+
+void formatMac(uint64_t mac, char* out, size_t len) {
+    if (!out || len == 0) {
+        return;
+    }
+    snprintf(out, len, "%02X:%02X:%02X:%02X:%02X:%02X",
+             static_cast<unsigned>(mac & 0xff),
+             static_cast<unsigned>((mac >> 8) & 0xff),
+             static_cast<unsigned>((mac >> 16) & 0xff),
+             static_cast<unsigned>((mac >> 24) & 0xff),
+             static_cast<unsigned>((mac >> 32) & 0xff),
+             static_cast<unsigned>((mac >> 40) & 0xff));
+}
+
+const char* partitionTypeName(esp_partition_type_t type) {
+    switch (type) {
+        case ESP_PARTITION_TYPE_APP: return "app";
+        case ESP_PARTITION_TYPE_DATA: return "data";
+        default: return "unknown";
+    }
+}
+
+const char* partitionSubtypeName(const esp_partition_t* partition) {
+    if (!partition) {
+        return "unknown";
+    }
+    if (partition->type == ESP_PARTITION_TYPE_APP) {
+        if (partition->subtype >= ESP_PARTITION_SUBTYPE_APP_OTA_MIN &&
+            partition->subtype <= ESP_PARTITION_SUBTYPE_APP_OTA_MAX) {
+            return partition->label;
+        }
+        switch (partition->subtype) {
+            case ESP_PARTITION_SUBTYPE_APP_FACTORY: return "factory";
+            case ESP_PARTITION_SUBTYPE_APP_TEST: return "test";
+            default: return "app";
+        }
+    }
+    if (partition->type == ESP_PARTITION_TYPE_DATA) {
+        switch (partition->subtype) {
+            case ESP_PARTITION_SUBTYPE_DATA_NVS: return "nvs";
+            case ESP_PARTITION_SUBTYPE_DATA_PHY: return "phy";
+            case ESP_PARTITION_SUBTYPE_DATA_OTA: return "ota";
+            case ESP_PARTITION_SUBTYPE_DATA_SPIFFS: return "spiffs";
+            case ESP_PARTITION_SUBTYPE_DATA_COREDUMP: return "coredump";
+            default: return "data";
+        }
+    }
+    return "unknown";
+}
+
+bool samePartition(const esp_partition_t* a, const esp_partition_t* b) {
+    return a && b && a->address == b->address && a->size == b->size &&
+           a->type == b->type && a->subtype == b->subtype &&
+           strncmp(a->label, b->label, sizeof(a->label)) == 0;
+}
+
+const char* partitionRole(const esp_partition_t* partition, const esp_partition_t* running, const esp_partition_t* nextOta) {
+    if (!partition) {
+        return "-";
+    }
+    if (samePartition(partition, running)) {
+        return "running app";
+    }
+    if (samePartition(partition, nextOta)) {
+        return "next OTA";
+    }
+    if (partition->type == ESP_PARTITION_TYPE_APP) {
+        return "app";
+    }
+    if (partition->type == ESP_PARTITION_TYPE_DATA) {
+        switch (partition->subtype) {
+            case ESP_PARTITION_SUBTYPE_DATA_NVS: return "NVS config";
+            case ESP_PARTITION_SUBTYPE_DATA_OTA: return "OTA state";
+            case ESP_PARTITION_SUBTYPE_DATA_SPIFFS: return "app data";
+            case ESP_PARTITION_SUBTYPE_DATA_COREDUMP: return "coredump";
+            default: return "data";
+        }
+    }
+    return "-";
+}
+
+void sendPartitionTable() {
+    const esp_partition_t* running = esp_ota_get_running_partition();
+    const esp_partition_t* nextOta = esp_ota_get_next_update_partition(nullptr);
+    esp_partition_iterator_t it = esp_partition_find(ESP_PARTITION_TYPE_ANY, ESP_PARTITION_SUBTYPE_ANY, nullptr);
+    sendChunk("<section class='panel statuspage'><h2>Partition Table</h2><table class='part'><tr><th>Name</th><th>Type</th><th>SubType</th><th>Offset</th><th>Size</th><th>Role</th></tr>");
+    while (it) {
+        const esp_partition_t* p = esp_partition_get(it);
+        if (p) {
+            char offset[16];
+            char sizeBuf[48];
+            snprintf(offset, sizeof(offset), "0x%06lx", static_cast<unsigned long>(p->address));
+            formatReadableBytes(p->size, sizeBuf, sizeof(sizeBuf));
+            sendChunk("<tr><td>");
+            sendEscapedHtmlChunk(p->label);
+            sendChunk("</td><td>");
+            sendEscapedHtmlChunk(partitionTypeName(p->type));
+            sendChunk("</td><td>");
+            sendEscapedHtmlChunk(partitionSubtypeName(p));
+            sendChunk("</td><td>");
+            sendEscapedHtmlChunk(offset);
+            sendChunk("</td><td>");
+            sendEscapedHtmlChunk(sizeBuf);
+            sendChunk("</td><td>");
+            sendEscapedHtmlChunk(partitionRole(p, running, nextOta));
+            sendChunk("</td></tr>");
+        }
+        it = esp_partition_next(it);
+    }
+    esp_partition_iterator_release(it);
+    sendChunk("</table></section>");
+}
+
 void sendAppLinks(bool paragraph, const char* activePath) {
     const char* home = configuredHomePath();
     for (uint8_t i = 0; i < ESP32BASE_WEB_MAX_NAV_ITEMS; ++i) {
@@ -637,11 +754,6 @@ void sendAppLinks(bool paragraph, const char* activePath) {
 
 void sendSystemLinks(bool paragraph, const char* activePath = nullptr) {
     sendNavLink("/esp32base", g_builtinLabels[Esp32BaseWeb::BUILTIN_HOME], paragraph, activePath);
-    sendNavLink("/esp32base/wifi", g_builtinLabels[Esp32BaseWeb::BUILTIN_WIFI], paragraph, activePath);
-    sendNavLink("/esp32base/auth", g_builtinLabels[Esp32BaseWeb::BUILTIN_AUTH], paragraph, activePath);
-#if ESP32BASE_ENABLE_OTA
-    sendNavLink("/esp32base/ota", g_builtinLabels[Esp32BaseWeb::BUILTIN_OTA], paragraph, activePath);
-#endif
     sendNavLink("/esp32base/logs", g_builtinLabels[Esp32BaseWeb::BUILTIN_LOGS], paragraph, activePath);
     sendNavLink("/esp32base/tools", g_builtinLabels[Esp32BaseWeb::BUILTIN_TOOLS], paragraph, activePath);
 }
@@ -677,6 +789,25 @@ void formatReadableBytes(uint64_t bytes, char* out, size_t len) {
         snprintf(out, len, "%.2f KB", static_cast<double>(bytes) / 1024.0);
     } else {
         snprintf(out, len, "%llu B", static_cast<unsigned long long>(bytes));
+    }
+}
+
+void sendFooterStats() {
+    char heap[48];
+    char uptime[48];
+    formatReadableBytes(Esp32BaseSystem::freeHeap(), heap, sizeof(heap));
+    Esp32BaseLog::formatUptime(Esp32BaseSystem::uptimeMs(), uptime, sizeof(uptime));
+    sendChunk("Free heap: ");
+    sendEscapedHtmlChunk(heap);
+    sendChunk(" · Up: ");
+    sendEscapedHtmlChunk(uptime);
+    sendChunk(" · RSSI: ");
+    if (Esp32BaseWiFi::isConnected()) {
+        char rssi[24];
+        snprintf(rssi, sizeof(rssi), "%ld dBm", static_cast<long>(Esp32BaseWiFi::rssi()));
+        sendEscapedHtmlChunk(rssi);
+    } else {
+        sendChunk("-");
     }
 }
 
@@ -952,12 +1083,33 @@ void handleChip() {
     if (!beginResponse(200, "application/json", nullptr)) {
         return;
     }
-    sendChunk("{\"freeHeap\":");
+    char mac[18];
+    formatMac(ESP.getEfuseMac(), mac, sizeof(mac));
+    sendChunk("{\"chipModel\":\"");
+    sendEscapedJsonChunk(ESP.getChipModel());
+    sendChunk("\",\"chipRevision\":");
+    sendIntChunk(ESP.getChipRevision());
+    sendChunk(",\"cpuMHz\":");
+    sendIntChunk(ESP.getCpuFreqMHz());
+    sendChunk(",\"sdkVersion\":\"");
+    sendEscapedJsonChunk(ESP.getSdkVersion());
+    sendChunk("\",\"efuseMac\":\"");
+    sendEscapedJsonChunk(mac);
+    sendChunk("\",\"staMac\":\"");
+    sendEscapedJsonChunk(WiFi.macAddress().c_str());
+    sendChunk("\",\"apMac\":\"");
+    sendEscapedJsonChunk(WiFi.softAPmacAddress().c_str());
+    sendChunk("\",\"freeHeap\":");
     sendBytesJsonChunk(Esp32BaseSystem::freeHeap());
     sendChunk(",\"minFreeHeap\":");
     sendBytesJsonChunk(Esp32BaseSystem::minFreeHeap());
     sendChunk(",\"totalHeap\":");
     sendBytesJsonChunk(Esp32BaseSystem::totalHeap());
+    sendChunk(",\"psram\":{\"total\":");
+    sendBytesJsonChunk(ESP.getPsramSize());
+    sendChunk(",\"free\":");
+    sendBytesJsonChunk(ESP.getFreePsram());
+    sendChunk("}");
     sendChunk(",\"flash\":");
     sendBytesJsonChunk(Esp32BaseSystem::flashSize());
     sendChunk(",\"resetReason\":\"");
@@ -990,6 +1142,79 @@ void handleFirmware() {
     endResponse();
 }
 
+bool loadStoredHostname(char* out, size_t len) {
+    if (!out || len == 0) {
+        return false;
+    }
+    out[0] = '\0';
+    return Esp32BaseConfig::getStr("eb_sys", "hostname", out, len, "");
+}
+
+bool hostnameRestartRequired(const char* storedHostname) {
+    return storedHostname && storedHostname[0] &&
+           Esp32Base::isValidHostname(storedHostname) &&
+           strcmp(storedHostname, Esp32Base::hostname()) != 0;
+}
+
+void sendHostnameJson(int code) {
+    char stored[64] = "";
+    const bool hasStored = loadStoredHostname(stored, sizeof(stored));
+    const bool storedValid = hasStored && Esp32Base::isValidHostname(stored);
+    if (!beginResponse(code, "application/json", nullptr)) {
+        return;
+    }
+    sendChunk("{\"currentHostname\":\"");
+    sendEscapedJsonChunk(Esp32Base::hostname());
+    sendChunk("\",\"defaultHostname\":\"");
+    sendEscapedJsonChunk(Esp32Base::defaultHostname());
+    sendChunk("\",\"storedHostname\":\"");
+    sendEscapedJsonChunk(hasStored ? stored : "");
+    sendChunk("\",\"storedValid\":");
+    sendChunk(storedValid ? "true" : "false");
+    sendChunk(",\"restartRequired\":");
+    sendChunk(hostnameRestartRequired(stored) ? "true" : "false");
+    sendChunk(",\"rule\":\"1-32 lowercase letters, digits and hyphen; no leading/trailing hyphen; no .local\"}");
+    endResponse();
+}
+
+void handleHostnameApiGet() {
+    markRequest();
+    if (!ensureAuth()) {
+        return;
+    }
+    sendHostnameJson(200);
+}
+
+void handleHostnameSubmit() {
+    markRequest();
+    if (!ensurePostAllowed("hostname_submit")) {
+        return;
+    }
+    const String hostname = g_server.arg("hostname");
+    const String uri = g_server.uri();
+    const bool apiRequest = strcmp(uri.c_str(), "/esp32base/api/hostname") == 0;
+    if (!Esp32Base::isValidHostname(hostname.c_str())) {
+        ESP32BASE_LOG_W("web", "hostname_save_rejected value=%s", hostname.c_str());
+        if (apiRequest) {
+            sendHostnameJson(400);
+        } else {
+            redirectSeeOther("/esp32base/tools?hostname_error=invalid");
+        }
+        return;
+    }
+    const bool ok = Esp32BaseConfig::setStr("eb_sys", "hostname", hostname.c_str());
+    ESP32BASE_LOG_I("web", "hostname_save value=%s current=%s restart_required=%s result=%s",
+                    hostname.c_str(),
+                    Esp32Base::hostname(),
+                    strcmp(hostname.c_str(), Esp32Base::hostname()) != 0 ? "yes" : "no",
+                    ok ? "success" : "failed");
+    if (apiRequest) {
+        sendHostnameJson(ok ? 200 : 500);
+    } else {
+        redirectSeeOther(ok ? "/esp32base/tools?hostname_saved=1" : "/esp32base/tools?hostname_error=save_failed");
+    }
+}
+
 void handleWifiPage() {
     markRequest();
     if (!ensureAuth()) {
@@ -1005,6 +1230,8 @@ void handleWifiPage() {
         sendChunk("<p class=ok>Saved. Credentials updated and connection started.</p>");
     } else if (g_server.hasArg("error")) {
         sendChunk("<p class=err>WiFi settings were not saved.</p>");
+    } else if (g_server.hasArg("cleared")) {
+        sendChunk("<p class=ok>Saved WiFi credentials were cleared.</p>");
     }
     sendChunk("<header class='pagehead'><h1>WiFi Settings</h1></header><section class='panel'><form method='post' action='/esp32base/wifi' onsubmit=\"if(!this.ssid.value.trim()){alert('SSID cannot be empty');return false;}if(!this.password.value.trim()){alert('Password cannot be empty');return false;}if(this.ssid.value.length>32||this.password.value.length>64){alert('SSID or password is too long');return false;}return once(this);\">");
     sendChunk("<label for='ssid'>SSID</label><input id='ssid' name='ssid' value='");
@@ -1066,17 +1293,42 @@ void handleToolsPage() {
     sendChunk("<header class='pagehead'><h1>");
     sendEscapedHtmlChunk(g_builtinLabels[Esp32BaseWeb::BUILTIN_TOOLS]);
     sendChunk("</h1></header>");
+    sendChunk("<section class='panel'><h2>System settings</h2><div class='quicklinks'>");
+    sendNavLink("/esp32base/wifi", "WiFi Setup", false, nullptr);
+    sendNavLink("/esp32base/auth", "Web Auth", false, nullptr);
+#if ESP32BASE_ENABLE_OTA
+    sendNavLink("/esp32base/ota", "Firmware OTA", false, nullptr);
+#endif
+    sendChunk("</div><p class='muted'>Low-frequency device settings.</p></section>");
     if (g_server.hasArg("formatted")) {
         sendChunk("<p class='ok'><b>LittleFS formatted.</b> FileLog configuration was reloaded.</p>");
     } else if (g_server.hasArg("logs_cleared")) {
         sendChunk("<p class='ok'><b>Logs cleared.</b></p>");
     } else if (g_server.hasArg("error")) {
-        sendChunk("<p class='err'>Tools action failed: ");
+        sendChunk("<p class='err'>System action failed: ");
         sendEscapedHtmlChunk(g_server.arg("error").c_str());
         sendChunk("</p>");
     } else if (g_server.hasArg("restarting")) {
         sendChunk("<p class='ok'><b>Restart requested.</b> Device is restarting. Please wait a few seconds, then reload.</p>");
     }
+    if (g_server.hasArg("hostname_saved")) {
+        sendChunk("<p class='ok'><b>Hostname saved.</b> Restart the device for mDNS, OTA and Web discovery to use it.</p>");
+    } else if (g_server.hasArg("hostname_error")) {
+        sendChunk("<p class='err'>Hostname was not saved: ");
+        sendEscapedHtmlChunk(g_server.arg("hostname_error").c_str());
+        sendChunk("</p>");
+    }
+    char storedHostname[64] = "";
+    const bool hasStoredHostname = loadStoredHostname(storedHostname, sizeof(storedHostname));
+    sendChunk("<section class='panel'><h2>Hostname</h2><table class='kv'>");
+    sendInfoRow("Current", Esp32Base::hostname());
+    sendInfoRow("Default", Esp32Base::defaultHostname());
+    sendInfoRow("Stored", hasStoredHostname && storedHostname[0] ? storedHostname : "-");
+    sendInfoRow("Restart required", hostnameRestartRequired(storedHostname) ? "yes" : "no");
+    sendChunk("</table><form method='post' action='/esp32base/tools/hostname' onsubmit=\"var h=this.hostname.value.trim();if(!/^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/.test(h)){alert('Use 1-32 lowercase letters, digits and hyphen. No leading or trailing hyphen. Do not include .local.');return false;}this.hostname.value=h;return once(this);\">");
+    sendChunk("<label for='host'>New hostname</label><input id='host' name='hostname' maxlength='32' autocomplete='off' value='");
+    sendEscapedHtmlChunk(hasStoredHostname && storedHostname[0] ? storedHostname : Esp32Base::hostname());
+    sendChunk("'><p class='muted'>Saved hostname takes effect after restart.</p><input type='submit' value='Save Hostname'></form></section>");
     sendChunk("<section class='panel'><h2>Restart device</h2><p class='muted'>Restart the device through the normal lifecycle path.</p><form method='post' action='/esp32base/tools/reboot' onsubmit=\"return confirm('Reboot device now?')&&once(this)\"><input class='danger' type='submit' value='Restart device'></form></section>");
 #if ESP32BASE_ENABLE_FS
     sendChunk("<section class='panel'><h2>Format LittleFS</h2><p class='dangertext'>This deletes logs and all files stored in LittleFS. WiFi, Web Auth and NVS config are not cleared.</p><form method='post' action='/esp32base/tools/format-fs' onsubmit=\"return confirm('Format LittleFS? This deletes logs and all files stored in LittleFS.')&&once(this)\"><input class='danger' type='submit' value='Format LittleFS'></form></section>");
@@ -1304,7 +1556,10 @@ void handleRoot() {
     Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_HOME]);
     sendChunk("<header class='pagehead'><h1>");
     sendEscapedHtmlChunk(g_deviceName);
-    sendChunk("</h1></header><section class='panel statuspage'><table class='kv'>");
+    sendChunk("</h1></header>");
+
+    char value[128];
+    sendStatusSectionStart("Overview");
     sendInfoRowStart("Firmware");
     sendEscapedHtmlChunk(Esp32Base::firmwareName());
     sendChunk(" ");
@@ -1317,33 +1572,99 @@ void handleRoot() {
     sendInfoRowEnd();
     sendInfoRow("Profile", Esp32Base::profileName());
     sendInfoRow("Hostname", Esp32Base::hostname());
-    char value[96];
     Esp32BaseLog::formatUptime(Esp32BaseSystem::uptimeMs(), value, sizeof(value));
     sendInfoRow("Uptime", value);
     snprintf(value, sizeof(value), "%lu", static_cast<unsigned long>(Esp32BaseSystem::bootCount()));
     sendInfoRow("Boot count", value);
-    sendInfoRowStart("Reset reason");
-    sendEscapedHtmlChunk(Esp32BaseSystem::resetReason());
-    sendChunk(" / ");
-    sendEscapedHtmlChunk(Esp32BaseSystem::resetReasonText());
-    sendInfoRowEnd();
-    sendInfoRowStart("Wake reason");
-    sendEscapedHtmlChunk(Esp32BaseSystem::wakeReason());
-    sendChunk(" / ");
-    sendEscapedHtmlChunk(Esp32BaseSystem::wakeReasonText());
-    sendInfoRowEnd();
+    sendStatusSectionEnd();
+
+    char mac[18];
+    char flash[48];
+    formatReadableBytes(Esp32BaseSystem::flashSize(), flash, sizeof(flash));
+    sendStatusSectionStart("Hardware");
+    sendInfoRow("Chip", ESP.getChipModel());
+    snprintf(value, sizeof(value), "%d", ESP.getChipRevision());
+    sendInfoRow("Revision", value);
+    snprintf(value, sizeof(value), "%u MHz", static_cast<unsigned>(ESP.getCpuFreqMHz()));
+    sendInfoRow("CPU", value);
+    sendInfoRow("SDK", ESP.getSdkVersion());
+    sendInfoRow("Flash chip", flash);
+    if (ESP.getPsramSize() > 0) {
+        char psramTotal[48];
+        char psramFree[48];
+        formatReadableBytes(ESP.getPsramSize(), psramTotal, sizeof(psramTotal));
+        formatReadableBytes(ESP.getFreePsram(), psramFree, sizeof(psramFree));
+        snprintf(value, sizeof(value), "free %s, total %s", psramFree, psramTotal);
+        sendInfoRow("PSRAM", value);
+    }
+    formatMac(ESP.getEfuseMac(), mac, sizeof(mac));
+    sendInfoRow("eFuse MAC", mac);
+    sendStatusSectionEnd();
+
+    sendStatusSectionStart("Firmware & OTA");
+    char sketch[48];
+    formatReadableBytes(ESP.getSketchSize(), sketch, sizeof(sketch));
+    sendInfoRow("Current firmware", sketch);
+    const esp_partition_t* runningPartition = esp_ota_get_running_partition();
+    const esp_partition_t* nextPartition = esp_ota_get_next_update_partition(nullptr);
+    if (runningPartition) {
+        char runningSize[48];
+        formatReadableBytes(runningPartition->size, runningSize, sizeof(runningSize));
+        snprintf(value, sizeof(value), "%s / %s", runningPartition->label, runningSize);
+        sendInfoRow("Running slot", value);
+    } else {
+        sendInfoRow("Running slot", "unknown");
+    }
+    if (nextPartition) {
+        char targetSize[48];
+        formatReadableBytes(nextPartition->size, targetSize, sizeof(targetSize));
+        snprintf(value, sizeof(value), "%s / %s", nextPartition->label, targetSize);
+        sendInfoRow("OTA target slot", value);
+        sendInfoRow("Max OTA upload", targetSize);
+        if (nextPartition->size >= ESP.getSketchSize()) {
+            char headroom[48];
+            formatReadableBytes(nextPartition->size - ESP.getSketchSize(), headroom, sizeof(headroom));
+            sendInfoRow("OTA headroom", headroom);
+        } else {
+            sendInfoRow("OTA headroom", "0 B");
+        }
+    } else {
+        sendInfoRow("OTA target slot", "unavailable");
+        sendInfoRow("Max OTA upload", "unavailable");
+        sendInfoRow("OTA headroom", "unknown");
+    }
+#if ESP32BASE_ENABLE_OTA
+    sendInfoRow("Rollback", Esp32BaseOta::isRollbackPossible() ? "possible" : "not possible");
+    if (Esp32BaseOta::lastError()[0]) {
+        sendInfoRow("Last OTA error", Esp32BaseOta::lastError());
+    }
+#endif
+    sendStatusSectionEnd();
+
+    sendStatusSectionStart("Runtime Health");
     char freeHeap[48];
     char minHeap[48];
     char totalHeap[48];
-    char flash[48];
     formatReadableBytes(Esp32BaseSystem::freeHeap(), freeHeap, sizeof(freeHeap));
     formatReadableBytes(Esp32BaseSystem::minFreeHeap(), minHeap, sizeof(minHeap));
     formatReadableBytes(Esp32BaseSystem::totalHeap(), totalHeap, sizeof(totalHeap));
-    formatReadableBytes(Esp32BaseSystem::flashSize(), flash, sizeof(flash));
     snprintf(value, sizeof(value), "free %s, min %s, total %s", freeHeap, minHeap, totalHeap);
     sendInfoRow("Heap", value);
-    sendInfoRow("Flash", flash);
+#if ESP32BASE_ENABLE_NTP
+    const uint32_t epoch = Esp32BaseNtp::timestamp();
+    const bool synced = epoch >= ESP32BASE_NTP_SYNC_MIN_EPOCH;
+    sendInfoRowStart("Time");
+    sendEscapedHtmlChunk(Esp32BaseNtp::isStarted() ? (synced ? "synced" : "pending") : "not started");
+    if (synced && Esp32BaseNtp::formatTime(value, sizeof(value), "%Y-%m-%d %H:%M:%S")) {
+        sendChunk("<br>");
+        sendEscapedHtmlChunk(value);
+    }
+    sendInfoRowEnd();
+#endif
+    sendStatusSectionEnd();
+
 #if ESP32BASE_ENABLE_WIFI
+    sendStatusSectionStart("Network");
     sendInfoRowStart("WiFi");
     sendEscapedHtmlChunk(Esp32BaseWiFi::stateName());
     if (Esp32BaseWiFi::ssid()[0]) {
@@ -1356,12 +1677,19 @@ void handleRoot() {
             sendChunk("<br>IP ");
             sendEscapedHtmlChunk(ip);
         }
-        snprintf(value, sizeof(value), "<br>RSSI %ld dBm / power save %s",
-                 static_cast<long>(Esp32BaseWiFi::rssi()), Esp32BaseWiFi::powerSave() ? "on" : "off");
+        snprintf(value, sizeof(value), "<br>RSSI %ld dBm",
+                 static_cast<long>(Esp32BaseWiFi::rssi()));
         sendChunk(value);
     }
     sendInfoRowEnd();
+    sendInfoRow("Power save", Esp32BaseWiFi::powerSave() ? "on" : "off");
+    sendInfoRow("STA MAC", WiFi.macAddress().c_str());
+    sendInfoRow("AP MAC", WiFi.softAPmacAddress().c_str());
+    sendStatusSectionEnd();
 #endif
+
+#if ESP32BASE_ENABLE_FS || ESP32BASE_ENABLE_FILELOG
+    sendStatusSectionStart("Storage & Logs");
 #if ESP32BASE_ENABLE_FS
     if (Esp32BaseFs::isReady()) {
         char used[48];
@@ -1391,21 +1719,24 @@ void handleRoot() {
     }
     sendInfoRowEnd();
 #endif
-#if ESP32BASE_ENABLE_NTP
-    const uint32_t epoch = Esp32BaseNtp::timestamp();
-    const bool synced = epoch >= ESP32BASE_NTP_SYNC_MIN_EPOCH;
-    sendInfoRowStart("Time");
-    sendEscapedHtmlChunk(Esp32BaseNtp::isStarted() ? (synced ? "synced" : "pending") : "not started");
-    if (synced && Esp32BaseNtp::formatTime(value, sizeof(value), "%Y-%m-%d %H:%M:%S")) {
-        sendChunk("<br>");
-        sendEscapedHtmlChunk(value);
-    }
+    sendStatusSectionEnd();
+#endif
+
+    sendPartitionTable();
+
+    sendStatusSectionStart("Boot Reasons");
+    sendInfoRowStart("Reset reason");
+    sendEscapedHtmlChunk(Esp32BaseSystem::resetReason());
+    sendChunk(" / ");
+    sendEscapedHtmlChunk(Esp32BaseSystem::resetReasonText());
     sendInfoRowEnd();
-#endif
-#if ESP32BASE_ENABLE_OTA
-    sendInfoRow("OTA", otaStatusName(Esp32BaseOta::status()));
-#endif
-    sendChunk("</table></section>");
+    sendInfoRowStart("Wake reason");
+    sendEscapedHtmlChunk(Esp32BaseSystem::wakeReason());
+    sendChunk(" / ");
+    sendEscapedHtmlChunk(Esp32BaseSystem::wakeReasonText());
+    sendInfoRowEnd();
+    sendStatusSectionEnd();
+
     if (g_homeMode == Esp32BaseWeb::HOME_ESP32BASE && appNavCount() > 0) {
         sendChunk("<section class='panel'><h2>Application</h2>");
         sendAppLinks(true, nullptr);
@@ -1657,6 +1988,8 @@ bool Esp32BaseWeb::begin() {
     g_server.on("/esp32base/api/status", HTTP_GET, handleStatus);
     g_server.on("/esp32base/api/chip", HTTP_GET, handleChip);
     g_server.on("/esp32base/api/firmware", HTTP_GET, handleFirmware);
+    g_server.on("/esp32base/api/hostname", HTTP_GET, handleHostnameApiGet);
+    g_server.on("/esp32base/api/hostname", HTTP_POST, handleHostnameSubmit);
     g_server.on("/esp32base/wifi", HTTP_GET, handleWifiPage);
     g_server.on("/esp32base/wifi", HTTP_POST, handleWifiSubmit);
     g_server.on("/esp32base/api/wifi", HTTP_POST, handleWifiSubmit);
@@ -1666,6 +1999,7 @@ bool Esp32BaseWeb::begin() {
     g_server.on("/esp32base/auth", HTTP_GET, handleAuthPage);
     g_server.on("/esp32base/auth", HTTP_POST, handleAuthSubmit);
     g_server.on("/esp32base/tools", HTTP_GET, handleToolsPage);
+    g_server.on("/esp32base/tools/hostname", HTTP_POST, handleHostnameSubmit);
     g_server.on("/esp32base/tools/reboot", HTTP_POST, handleToolsRebootPost);
     g_server.on("/esp32base/tools/format-fs", HTTP_POST, handleToolsFormatFsPost);
     g_server.on("/esp32base/tools/logs-clear", HTTP_POST, handleToolsLogsClearPost);
@@ -1959,20 +2293,18 @@ void Esp32BaseWeb::sendHeader(const char* title) {
 }
 
 void Esp32BaseWeb::sendFooter() {
-    char heap[48];
-    formatReadableBytes(Esp32BaseSystem::freeHeap(), heap, sizeof(heap));
     if (g_systemNavMode == Esp32BaseWeb::SYSTEM_NAV_SECTION) {
         sendChunk("</main>");
         sendChunk("<footer class='footerbar'><span class='syslinks'>");
-        sendSystemLinks(false);
-        sendChunk("</span><span class='heap'>Free heap: ");
-        sendEscapedHtmlChunk(heap);
+        sendSystemLinks(false, activeNavPath(true));
+        sendChunk("</span><span class='heap'>");
+        sendFooterStats();
         sendChunk("</span></footer></body></html>");
     } else {
         sendChunk("</main>");
         sendSystemNavSection();
-        sendChunk("<div class=info>Free heap: ");
-        sendEscapedHtmlChunk(heap);
+        sendChunk("<div class=info>");
+        sendFooterStats();
         sendChunk("</div></body></html>");
     }
     endResponse();

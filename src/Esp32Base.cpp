@@ -14,8 +14,49 @@ bool g_otaStartDebugLogged = false;
 char g_firmwareName[33] = "app";
 char g_firmwareVersion[17] = "1.0.0";
 char g_firmwareBuild[33] = "";
+char g_defaultHostname[33] = "esp32base";
 char g_hostname[33] = "esp32base";
 char g_lastError[96] = "";
+
+bool hostnameValid(const char* hostname) {
+    if (!hostname || !hostname[0]) {
+        return false;
+    }
+    const size_t len = strlen(hostname);
+    if (len == 0 || len > 32 || hostname[0] == '-' || hostname[len - 1] == '-') {
+        return false;
+    }
+    for (const char* p = hostname; *p; ++p) {
+        const char c = *p;
+        if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-') {
+            continue;
+        }
+        return false;
+    }
+    return true;
+}
+
+void initHostname() {
+    if (hostnameValid(ESP32BASE_DEFAULT_HOSTNAME)) {
+        esp32base_internal::copySafe(g_defaultHostname, sizeof(g_defaultHostname), ESP32BASE_DEFAULT_HOSTNAME);
+    } else {
+        esp32base_internal::copySafe(g_defaultHostname, sizeof(g_defaultHostname), "esp32base");
+        ESP32BASE_LOG_W("base", "invalid default hostname ignored value=%s fallback=esp32base", ESP32BASE_DEFAULT_HOSTNAME);
+    }
+    esp32base_internal::copySafe(g_hostname, sizeof(g_hostname), g_defaultHostname);
+
+    char stored[64] = "";
+    if (!Esp32BaseConfig::getStr("eb_sys", "hostname", stored, sizeof(stored), "")) {
+        ESP32BASE_LOG_D("base", "hostname source=default value=%s", g_hostname);
+        return;
+    }
+    if (hostnameValid(stored)) {
+        esp32base_internal::copySafe(g_hostname, sizeof(g_hostname), stored);
+        ESP32BASE_LOG_I("base", "hostname loaded source=nvs value=%s default=%s", g_hostname, g_defaultHostname);
+        return;
+    }
+    ESP32BASE_LOG_W("base", "invalid stored hostname ignored value=%s default=%s", stored, g_defaultHostname);
+}
 
 bool optionalOk(bool ok, const char* module) {
     if (ok) {
@@ -76,6 +117,7 @@ bool Esp32Base::begin() {
         return false;
     }
     ESP32BASE_LOG_D("base", "module_ready name=config");
+    initHostname();
     ESP32BASE_LOG_D("base", "module_begin name=system");
     if (!Esp32BaseSystem::begin()) {
         esp32base_internal::copySafe(g_lastError, sizeof(g_lastError), "system");
@@ -252,12 +294,16 @@ const char* Esp32Base::firmwareBuild() {
     return g_firmwareBuild;
 }
 
-void Esp32Base::setHostname(const char* hostnameValue) {
-    esp32base_internal::copySafe(g_hostname, sizeof(g_hostname), hostnameValue);
-}
-
 const char* Esp32Base::hostname() {
     return g_hostname;
+}
+
+const char* Esp32Base::defaultHostname() {
+    return g_defaultHostname;
+}
+
+bool Esp32Base::isValidHostname(const char* hostnameValue) {
+    return hostnameValid(hostnameValue);
 }
 
 const char* Esp32Base::profileName() {

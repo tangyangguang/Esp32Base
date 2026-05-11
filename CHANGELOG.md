@@ -2,6 +2,94 @@
 
 本文从 2026-05-06 起记录 Esp32Base 新增和优化的能力，面向正在接入本库的业务项目。业务项目应优先查看本文，了解最近可用的新 API、行为变化和推荐接入方式。
 
+## 2026-05-11
+
+### 内置 Web 导航与底部状态摘要
+
+优化：
+
+- Status 页重构为只读设备体检页，按 Overview、Hardware、Firmware & OTA、Network、Storage & Logs、Partition Table、Boot Reasons 分组展示。
+- Status 页新增芯片型号、revision、CPU、SDK、eFuse MAC、STA MAC、AP MAC、OTA headroom 和完整运行时分区表。
+- Status 页移除常驻 `OTA status` 行，保留 OTA 内部状态机和 `/esp32base/api/ota` 诊断字段；异常时仍显示 `Last OTA error`。
+- eFuse MAC 按常见网络 MAC 顺序展示，便于和 STA MAC、AP MAC 直接对照调试。
+- 修正 config portal 默认 AP SSID 后缀，`ESP32-Config-XXXX` 的 `XXXX` 现在取可读 eFuse MAC 的最后两个字节，而不是 `ESP.getEfuseMac()` 整数低 16 位。
+- 分区表展示 Name、Type、SubType、Offset、Size、Role；Role 标识 running app、next OTA、app data、NVS config、OTA state、coredump 等调试语义。
+- 默认系统导航改为底部紧凑区，顶部导航主要用于业务首页和业务页面。
+- 默认系统入口收敛为 Status、Logs、System；WiFi、Auth、OTA 作为低频配置/维护入口收进 System 页，但保留原直达 URL。
+- System 页入口使用见名知义的短名称：WiFi Setup、Web Auth、Firmware OTA。
+- `BUILTIN_TOOLS` 默认标签从 `Tools` 改为 `System`，更准确表达设备级维护页面职责。
+- 底部状态摘要保留 `Free heap:`，并新增简写 `Up:` 和 `RSSI:`，使用更小字号显示，便于快速判断运行时长和 WiFi 信号。
+- 内置 Web 默认正文调整为 14px，标题为 18px/16px/15px，按钮、输入框、footer 和日志区域同步收紧为设备控制台尺度。
+
+关键边界：
+
+- 不新增主题系统或配置 API；业务仍可通过 `setHeadExtraCallback()` 覆盖样式。
+- WiFi、Auth、OTA 页面职责不合并进 System，只在 System 页提供入口，避免低频配置表单和危险操作混在一个长页面中。
+
+### Hostname 编译期默认值与持久化管理
+
+新增/调整：
+
+- 移除 `Esp32Base::setHostname()` 公开 API，不再支持应用代码运行期设置 hostname，避免 mDNS、ArduinoOTA 和 Web 展示出现半生效状态。
+- 新增 `ESP32BASE_DEFAULT_HOSTNAME` 编译期默认 hostname，未配置时为 `esp32base`。
+- 新增 `Esp32Base::defaultHostname()` 和 `Esp32Base::isValidHostname()`。
+- `Esp32Base::begin()` 在 Config 初始化后读取 hostname：先使用 `ESP32BASE_DEFAULT_HOSTNAME`，再用合法的 `eb_sys.hostname` 覆盖。
+- hostname 校验规则固定为 1-32 位小写字母、数字和短横线，不能以短横线开头或结尾，不能包含 `.` 或 `.local`。
+- Web System 页新增 Hostname 设置区，显示当前值、默认值、已保存值和是否需要重启。
+- 新增 `GET /esp32base/api/hostname` 与 `POST /esp32base/api/hostname`。
+- Web/API 保存 hostname 只写入 `eb_sys.hostname`，不热切换当前运行时 hostname；重启后 mDNS、ArduinoOTA、状态页和 API 完整使用新名称。
+- `factoryReset()` 清理 `eb_sys.hostname` 后，重启恢复 `ESP32BASE_DEFAULT_HOSTNAME`。
+
+推荐接入：
+
+```ini
+build_flags =
+  -D ESP32BASE_DEFAULT_HOSTNAME=\"esp32-fan\"
+```
+
+业务侧用途：
+
+- 多台同类设备运行同一业务固件时，可先用构建默认 hostname 提供稳定出厂身份，再通过 Web/API 为每台设备保存唯一 hostname。
+- 业务项目不需要自行保存/恢复 hostname，也不需要分别处理 mDNS、OTA 和 Web 展示。
+
+关键边界：
+
+- Hostname 是启动期设备身份，不支持运行期热切换。
+- Web/API 修改成功后必须重启，才会影响 mDNS `<hostname>.local` 和 ArduinoOTA/espota。
+- 出厂重置不会删除业务 namespace；只清除基础库 namespace，其中 `eb_sys.hostname` 会被清除。
+
+### 日志、出厂重置与 Config 审计收口
+
+新增/调整：
+
+- `Esp32BaseLog` 新增 `setSerialLevel()` / `serialLevel()`，Serial 输出等级和 FileLog 写入等级解耦。
+- `runtimeLevel()` 仍控制日志是否生成并分发给 sink/FileLog；`serialLevel()` 只控制 `Serial.println()`。
+- 量产设备可设置 `Esp32BaseLog::setSerialLevel(Esp32BaseLog::NONE)` 关闭串口，同时保持 FileLog WARN/ERROR 或 INFO 正常写入。
+- 新增 `Esp32BaseConfig::factoryReset()`。
+- 新增单项清理 API：`clearWifiConfig()`、`clearWebAuthConfig()`、`clearSystemConfig()`、`clearLogConfig()`。
+- `clearLibraryNamespaces()` 现在等价于 `factoryReset()`。
+- namespace 不存在时清理返回成功，不创建空 namespace，也避免底层 `NOT_FOUND` 噪声。
+- 文档明确 `enableConfigAudit(true)` / `enableConfigReadAudit(true)` 可在 `Esp32Base::begin()` 前调用；需要覆盖基础库初始化读写时必须在 begin 前开启。
+
+推荐接入：
+
+```cpp
+Esp32BaseLog::setSerialLevel(Esp32BaseLog::NONE);
+Esp32BaseFileLog::enable("/logs/eb_app.log", 32UL * 1024UL, Esp32BaseLog::WARN, 4);
+```
+
+```cpp
+Esp32BaseConfig::factoryReset();
+Esp32BaseConfig::flushAll();
+Esp32BaseSystem::restart("factory reset");
+```
+
+关键边界：
+
+- 如果 `ESP32BASE_LOG_LEVEL=ESP32BASE_LOG_NONE`，日志宏会被编译掉，FileLog 也收不到日志。
+- `factoryReset()` 不自动重启、不格式化 LittleFS、不删除 FileLog 日志文件内容、不清理业务 namespace。
+- `enableConfigReadAudit(true)` 噪声较多，读取审计主要在 DEBUG 编译等级下观察。
+
 ## 2026-05-10
 
 ### Config 小型结构化元数据
@@ -72,12 +160,12 @@
 
 优化：
 
-- 内置 Web 默认正文从 14px 提升到 16px，标题层级统一为 24px / 21px / 18px。
+- 内置 Web 默认正文统一为 14px，标题层级统一为 18px / 16px / 15px。
 - 页面最大宽度提升到 1040px，顶部导航、正文 panel 和底部系统入口使用一致的设备控制台布局。
-- Status、WiFi、Auth、OTA、Logs、Tools 页面统一使用 `h1` 页面标题、白色 panel、简洁按钮、文本输入框和中性色配色。
-- Tools 页面把标题、说明和危险操作按钮收进同一个 panel，避免标题和操作区域错位。
+- Status、WiFi、Auth、OTA、Logs、System 页面统一使用 `h1` 页面标题、白色 panel、简洁按钮、文本输入框和中性色配色。
+- System 页面把标题、说明和危险操作按钮收进同一个 panel，避免标题和操作区域错位。
 - 页面标题改为独立 header panel，与正文 panel 的内边距和视觉起点对齐。
-- Logs 页面移除清空按钮，只负责查看日志；`Clear logs` 维护动作移到 Tools 页面。
+- Logs 页面移除清空按钮，只负责查看日志；`Clear logs` 维护动作移到 System 页面。
 - Logs 页面输出大日志时周期性 yield/feed Watchdog，降低长日志请求触发看门狗的风险。
 
 关键边界：
@@ -311,7 +399,7 @@ upload_flags =
 
 - Logs 页面顶部 `current-0`、`history-N` 标签中的文件大小改为只显示 KB/MB/B 人性化值，不再同时显示 raw bytes。
 - Logs 页面文件日志状态信息改为 14px 小字号，`Buffer`、`Max per file`、`Max total`、`Segments` 中的字节数也只显示 KB/MB/B 人性化值。
-- 内置页面默认正文为 14px，导航为 16px，页面标题收敛到 18px/16px 层级，footer 为 13px，整体更接近设备维护控制台。
+- 内置页面默认正文为 14px，导航为 14px，页面标题收敛到 18px/16px/15px 层级，footer 为 13px，整体更接近设备维护控制台。
 
 业务侧用途：
 
@@ -452,10 +540,10 @@ void handleRecordsCsv() {
 
 业务侧用途：
 
-- 可声明业务页面是设备主界面，基础库 WiFi、OTA、Logs、Tools 是系统工具。
+- 可声明业务页面是设备主界面，基础库 WiFi、OTA、Logs、System 是系统工具。
 - 可设置 `/` 和 `/esp32base` 使用基础库首页、业务首页优先或融合首页。
 - 可把系统工具放在顶部、底部或底部紧凑系统工具区。
-- 可覆盖 Home/WiFi/OTA/Logs/Tools/Auth 标签，适配中文业务项目。
+- 可覆盖 Home/WiFi/OTA/Logs/System/Auth 标签，适配中文业务项目。
 
 关键行为：
 
@@ -464,7 +552,7 @@ void handleRecordsCsv() {
 - 配置业务首页后，导航品牌链接指向业务首页，业务主导航不会重复显示同一个首页入口。
 - `HOME_APP` 和 `HOME_COMBINED` 下，设备根路径 `/` 都进入业务首页；`HOME_COMBINED` 仅保留 `/esp32base` 为融合首页。
 - 内置页面和业务页面复用同一套 `sendHeader()` / `sendFooter()` 导航框架。
-- `SYSTEM_NAV_SECTION` 使用底部小字系统入口，与 `Free heap` 同行展示；移动端允许系统入口自然换行，避免挤压和横向滚动。
+- `SYSTEM_NAV_SECTION` 使用底部小字系统入口，与 `Free heap`、`Up`、`RSSI` 同行展示；移动端允许系统入口自然换行，避免挤压和横向滚动。
 
 推荐接入：
 

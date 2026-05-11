@@ -5,6 +5,7 @@
 
 namespace {
 Esp32BaseLog::Level g_runtimeLevel = static_cast<Esp32BaseLog::Level>(ESP32BASE_LOG_LEVEL);
+Esp32BaseLog::Level g_serialLevel = static_cast<Esp32BaseLog::Level>(ESP32BASE_LOG_LEVEL);
 Esp32BaseLog::Sink g_sink = nullptr;
 Esp32BaseLog::LineSink g_internalLineSink = nullptr;
 Esp32BaseLog::TimeProvider g_timeProvider = nullptr;
@@ -36,6 +37,18 @@ void Esp32BaseLog::setRuntimeLevel(Level level) {
 
 Esp32BaseLog::Level Esp32BaseLog::runtimeLevel() {
     return g_runtimeLevel;
+}
+
+void Esp32BaseLog::setSerialLevel(Level level) {
+    if (level > static_cast<Level>(ESP32BASE_LOG_LEVEL)) {
+        g_serialLevel = static_cast<Level>(ESP32BASE_LOG_LEVEL);
+        return;
+    }
+    g_serialLevel = level;
+}
+
+Esp32BaseLog::Level Esp32BaseLog::serialLevel() {
+    return g_serialLevel;
 }
 
 void Esp32BaseLog::setSink(Sink sink) {
@@ -70,7 +83,9 @@ void Esp32BaseLog::write(Level level, const char* tag, const char* fmt, ...) {
 
     char line[256];
     snprintf(line, sizeof(line), "[%s] %-5s %-12s %s", timestamp, levelName(level), tag ? tag : "", message);
-    Serial.println(line);
+    if (level <= g_serialLevel) {
+        Serial.println(line);
+    }
 
     if (g_internalLineSink) {
         g_internalLineSink(level, tag ? tag : "", message, line);

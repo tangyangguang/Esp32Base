@@ -50,6 +50,12 @@ bool credentialsValid(const char* ssidValue, const char* passwordValue) {
 
 const char* wlStatusName(wl_status_t status);
 
+uint16_t readableMacSuffix(uint64_t mac) {
+    const uint8_t penultimate = static_cast<uint8_t>((mac >> 32) & 0xff);
+    const uint8_t last = static_cast<uint8_t>((mac >> 40) & 0xff);
+    return (static_cast<uint16_t>(penultimate) << 8) | last;
+}
+
 uint32_t retryDelayMs() {
     if (g_wifiRetryCount < ESP32BASE_WIFI_RETRY_FAST_COUNT) {
         return ESP32BASE_WIFI_RETRY_FAST_MS;
@@ -216,7 +222,7 @@ bool Esp32BaseWiFi::startConfigPortal() {
     g_wifiRetryCount = 0;
     if (!g_configPortalSsid[0]) {
         snprintf(g_configPortalSsid, sizeof(g_configPortalSsid), "ESP32-Config-%04X",
-                 static_cast<unsigned>(static_cast<uint32_t>(ESP.getEfuseMac()) & 0xFFFFU));
+                 static_cast<unsigned>(readableMacSuffix(ESP.getEfuseMac())));
     }
     const bool ok = WiFi.softAP(g_configPortalSsid);
     g_wifiState = ok ? CONFIG_PORTAL : FAILED;

@@ -115,7 +115,16 @@
 - deferred 写后立即读返回 pending 新值。
 - restart 前全部落盘。
 - NVS 写满返回 false。
-- `clearLibraryNamespaces()` 不误删业务 namespace。
+- `factoryReset()` 清理 `eb_wifi`、`eb_web`、`eb_sys`、`eb_log`。
+- 单项清理 API 只影响对应 namespace。
+- namespace 不存在时出厂重置返回成功，不创建空 namespace。
+- `factoryReset()` 不误删业务 namespace，不格式化 LittleFS，不删除 FileLog 日志文件内容。
+- `clearLibraryNamespaces()` 与 `factoryReset()` 行为一致。
+- `enableConfigAudit(true)` / `enableConfigReadAudit(true)` 在 `Esp32Base::begin()` 前开启时能覆盖基础库初始化配置读写。
+- 未配置 `ESP32BASE_DEFAULT_HOSTNAME` 时默认 hostname 为 `esp32base`。
+- 合法 `ESP32BASE_DEFAULT_HOSTNAME` 生效；非法默认 hostname 回退 `esp32base` 并输出 WARN。
+- 合法 `eb_sys.hostname` 覆盖构建默认 hostname；非法持久化 hostname 被忽略并输出 WARN。
+- `factoryReset()` 后重启清除 `eb_sys.hostname`，恢复构建默认 hostname。
 
 ## 9. 文件日志检查
 
@@ -127,6 +136,8 @@
 - 默认轮转为 `4 × 32KB`。
 - INFO/DEBUG 仅在 file level 降低后写文件。
 - INFO/DEBUG 使用 `1KB / 2s` 缓存。
+- `setSerialLevel(NONE)` 后 Serial 不输出，但 FileLog 仍按文件等级写入。
+- `setRuntimeLevel(NONE)` 后 Serial 和 FileLog 都停止。
 - WARN/ERROR 立即写入。
 - 文件满后轮转 current、`.1`、`.2`、`.3`。
 - clear 幂等，清空后 current 可继续写入。
@@ -166,6 +177,7 @@
 - 状态 API。
 - chip API。
 - firmware API。
+- Hostname API。
 - WiFi 配置 API。
 - Logs 页面。
 - Logs clear POST + confirm + once + 303。
@@ -176,6 +188,7 @@
 - `addPage()` / `addNavItem()` 注册的业务入口进入业务导航且不重复业务首页入口。
 - 内置 Status/WiFi/OTA/Logs/Tools/Auth 标签可覆盖，用于本地化。
 - Tools 维护页中的重启和格式化 FS 按钮都有二次确认。
+- Tools 维护页可保存 hostname，显示当前值、默认值、已保存值和重启需求；保存后不热切换当前运行时 hostname。
 - 格式化 FS 等破坏性维护操作必须输出 WARN 级日志，记录发起、结果和关键恢复步骤。
 - 自定义路由 begin 前注册。
 - 自定义路由 Web ready 后注册。

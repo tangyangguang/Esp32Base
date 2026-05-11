@@ -27,7 +27,6 @@
 
 void setup() {
     Esp32Base::setFirmwareInfo("demo", "1.0.0");
-    Esp32Base::setHostname("esp32-demo");
     Esp32Base::begin();
 }
 
@@ -43,7 +42,14 @@ void loop() {
 #include <Esp32Base.h>
 ```
 
-`setHostname()` 建议在 `Esp32Base::begin()` 前调用。需要持久化 hostname 时，由应用使用 `Esp32BaseConfig` 保存并在 begin 前恢复。
+默认 hostname 通过构建配置指定，不在应用代码中调用 setter：
+
+```ini
+build_flags =
+  -D ESP32BASE_DEFAULT_HOSTNAME=\"esp32-demo\"
+```
+
+Web/API 保存的 hostname 存储在 `eb_sys.hostname`，重启后覆盖构建默认值；出厂重置清除该配置后恢复 `ESP32BASE_DEFAULT_HOSTNAME`。
 
 启用 FS 的 profile 会默认启用 Runtime 文件日志：`/logs/eb_app.log`，默认 `4 × 32KB`，文件等级 WARN。示例会显式改为 INFO：
 

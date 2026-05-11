@@ -35,8 +35,9 @@ public:
     static const char* firmwareVersion();
     static const char* firmwareBuild();
 
-    static void setHostname(const char* hostname);
     static const char* hostname();
+    static const char* defaultHostname();
+    static bool isValidHostname(const char* hostname);
 
     static const char* profileName();
     static bool isReady();
@@ -49,11 +50,14 @@ public:
 
 约定：
 
-- `setHostname()` 仅设置运行时 hostname，不写 NVS。
-- 应用应在 `Esp32Base::begin()` 前调用 `setHostname()`。
-- 应用如需持久化 hostname，应自行通过 `Esp32BaseConfig` 保存，并在 begin 前恢复。
+- 默认 hostname 由编译期宏 `ESP32BASE_DEFAULT_HOSTNAME` 指定；未设置时为 `"esp32base"`。
+- 应用代码不提供 hostname setter，避免运行期半生效切换造成 mDNS、ArduinoOTA 和 Web 识别不一致。
+- `begin()` 在 Config 初始化后读取 `eb_sys.hostname`；合法持久化值覆盖构建默认值，非法值记录 WARN 并忽略。
+- hostname 校验规则：1-32 位小写字母、数字、短横线；不能以短横线开头或结尾；不允许 `.` 或 `.local`。
+- Web/API 保存 hostname 只写入 `eb_sys.hostname`，不修改当前运行时 hostname；重启后完整生效。
+- `factoryReset()` 清理 `eb_sys.hostname` 后，重启恢复 `ESP32BASE_DEFAULT_HOSTNAME`。
 - 应用应显式调用 `setFirmwareInfo()`；未设置时状态页和日志会显示库默认固件名/版本，仅用于开发占位。
-- mDNS 启动时读取当前 hostname；WiFi connected 后再修改 hostname 不要求自动重启 mDNS。
+- mDNS 和 ArduinoOTA 启动时读取当前 hostname；运行期不做 hostname 热切换。
 - `lastError()` 返回最近一次 begin 或关键模块启动失败原因；无错误时返回空字符串，不返回 `nullptr`。
 
 ## 3. Esp32BaseLog
@@ -112,6 +116,8 @@ public:
     static bool begin(uint32_t baud = ESP32BASE_LOG_BAUD);
     static void setRuntimeLevel(Level level);
     static Level runtimeLevel();
+    static void setSerialLevel(Level level);
+    static Level serialLevel();
     static void setSink(Sink sink);
     static void setInternalLineSink(LineSink sink);
     static void setTimeProvider(TimeProvider provider);
@@ -124,6 +130,15 @@ public:
 ```
 
 运行时级别只能进一步过滤，不能突破编译期上限。
+
+`runtimeLevel()` 控制日志是否生成并分发给 sink / FileLog；`serialLevel()` 只控制 Serial 输出。量产设备需要关闭串口但保留文件日志时，不要把 `ESP32BASE_LOG_LEVEL` 编译为 `ESP32BASE_LOG_NONE`，而应保持编译期等级为文件日志需要记录的最高等级，再在运行期关闭 Serial：
+
+```cpp
+Esp32BaseLog::setSerialLevel(Esp32BaseLog::NONE);
+Esp32BaseFileLog::enable("/logs/eb_app.log", 32UL * 1024UL, Esp32BaseLog::WARN, 4);
+```
+
+如果 `ESP32BASE_LOG_LEVEL=ESP32BASE_LOG_NONE`，日志宏会在编译期变为空语句，Serial、sink 和 FileLog 都不会收到日志。
 
 输出目标：
 
@@ -244,11 +259,21 @@ public:
     static uint8_t pendingCapacity();
 
     static bool clearNamespace(const char* ns);
+    static bool clearWifiConfig();
+    static bool clearWebAuthConfig();
+    static bool clearSystemConfig();
+    static bool clearLogConfig();
+    static bool factoryReset();
     static bool clearLibraryNamespaces();
 
     static void pauseDeferredFlush();
     static void resumeDeferredFlush();
     static bool isDeferredFlushPaused();
+
+    static void enableConfigAudit(bool enabled);
+    static void enableConfigReadAudit(bool enabled);
+    static bool isConfigAuditEnabled();
+    static bool isConfigReadAuditEnabled();
 };
 ```
 
@@ -263,7 +288,37 @@ deferred 语义：
 - 字符串读取和写前比较使用固定 scratch buffer，不使用 Arduino `String` 拼接或读取，减少配置高频读取造成的 heap 碎片风险。
 - 同一 namespace/key 的 pending 写入会合并为最新值，不重复占用多条 pending。
 - OTA 上传期间只暂停 deferred flush；`getXxx()`、`pendingCount()`、`flushAll()` 和 `clearLibraryNamespaces()` 仍按各自语义工作。
-- `clearLibraryNamespaces()` 只清理库内部 `eb_` 前缀 namespace，不清理业务 namespace。
+- `factoryReset()` 只清理基础库 NVS 配置，不重启、不格式化 LittleFS、不删除 FileLog 日志文件内容、不清理业务 namespace。
+- `clearWifiConfig()` 清理 `eb_wifi`，包含 WiFi SSID/password。
+- `clearWebAuthConfig()` 清理 `eb_web`，包含 Web Auth user/password。
+- `clearSystemConfig()` 清理 `eb_sys`，包含 boot/restart/watchdog/system counters。
+- `clearLogConfig()` 清理 `eb_log`，包含 FileLog 配置。
+- `clearLibraryNamespaces()` 等价于 `factoryReset()`，保留用于兼容旧代码。
+- `clearNamespace()` 和各出厂重置 API 在 namespace 不存在时返回成功，不创建空 namespace，也不输出底层 `NOT_FOUND` 噪声。
+
+基础库出厂重置推荐流程：
+
+```cpp
+Esp32BaseConfig::factoryReset();
+Esp32BaseConfig::flushAll();
+Esp32BaseSystem::restart("factory reset");
+```
+
+完整整机出厂重置应由业务项目先清理自己的 namespace，再调用 `factoryReset()`。
+
+配置审计可以在 `Esp32Base::begin()` 前调用。如果需要覆盖基础库初始化过程中的配置读取/写入，必须在 begin 前开启；如果只关心业务运行期配置变化，也可以在 begin 后开启。
+
+```cpp
+void setup() {
+    Esp32BaseLog::setSerialLevel(Esp32BaseLog::INFO);
+    Esp32BaseConfig::enableConfigAudit(true);
+    Esp32BaseConfig::enableConfigReadAudit(true);
+
+    Esp32Base::begin();
+}
+```
+
+写入/flush 成功多为 INFO；读取审计、未变化跳过和 deferred 入队多为 DEBUG。需要读取审计时，编译期 `ESP32BASE_LOG_LEVEL` 必须至少为 `ESP32BASE_LOG_DEBUG`。
 
 blob / POD 语义：
 
@@ -466,6 +521,7 @@ public:
 WiFi 凭证和重连策略：
 
 - 无已保存凭证时，`begin()` 可进入 `CONFIG_PORTAL`。
+- 默认 config portal AP SSID 为 `ESP32-Config-XXXX`，其中 `XXXX` 取 eFuse MAC 按常见网络 MAC 顺序显示时的最后两个字节。
 - 有效凭证要求 SSID 非空且不超过 32 字节，密码非空且不超过 64 字节；超限输入返回 false，不静默截断。
 - 有已保存凭证但连接失败时，不自动进入 AP/config portal，而是持续重连。
 - 单次 STA 连接尝试有非阻塞超时，默认 `ESP32BASE_WIFI_CONNECT_TIMEOUT_MS=15000`。
@@ -638,17 +694,17 @@ Route 缓冲机制：
 - `addRoute()` 和 `addApi()` 不进入业务入口列表，避免 API 或隐藏路由污染导航。
 - `setDeviceName()` 设置导航品牌和默认标题；`setHomePath()` 设置业务首页路径。
 - `setHomeMode(HOME_ESP32BASE)` 保持基础库首页默认行为；`HOME_APP` 让 `/` 和 `/esp32base` 优先进入业务首页；`HOME_COMBINED` 让 `/` 进入业务首页，并保留 `/esp32base` 为融合首页。
-- `setSystemNavMode()` 控制基础功能入口位置：顶部、底部或底部紧凑系统工具区；`SYSTEM_NAV_SECTION` 会把系统入口作为小字链接与 `Free heap` 放在同一 footer 区域，窄屏可自然换行。
+- `setSystemNavMode()` 控制系统入口位置：顶部、底部或底部紧凑系统工具区；默认使用 `SYSTEM_NAV_SECTION`，把 Status、Logs、System 作为小字链接与 `Free heap`、`Up`、`RSSI` 放在同一 footer 区域，窄屏可自然换行。
 - `setBuiltinLabel()` 覆盖内置导航标签，可用于中文本地化；系统工具页统一使用 `BUILTIN_TOOLS`，不提供旧 Reboot 历史别名。
 - `setHeadExtraCallback()` 设置额外 head 输出回调；`sendHeader()` 在默认 `WEB_HEAD` 后、`</head><body>` 和顶部导航前调用它，业务项目可在这里输出 `<style>`，避免页面刷新时先显示基础库默认导航样式。
-- 顶部导航会给当前匹配项输出 `active` class；匹配规则为 path 完全相等，或当前路径以 `path + "/"` 开头，多个匹配时选择最长 path。`SYSTEM_NAV_SECTION` 的底部系统维护菜单不参与 active 业务导航状态。
-- `/esp32base` Status 页展示固件、profile、hostname、uptime、boot count、reset/wake reason 及中文说明、heap、flash，以及当前 profile 可用的 WiFi、FS、FileLog、NTP、OTA 状态；页面容量值只显示 KB/MB/B 人性化格式。
-- `/esp32base/tools` Tools 页承载维护操作，包括重启设备；启用 FS 的 profile 还提供手动格式化 LittleFS 操作，会清除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth 或 NVS 配置。
+- 导航会给当前匹配项输出 `active` class；匹配规则为 path 完全相等，或当前路径以 `path + "/"` 开头，多个匹配时选择最长 path。`SYSTEM_NAV_SECTION` 下 WiFi/Auth/OTA 二级页会把底部 System 入口标记为 active。
+- `/esp32base` Status 页是只读设备体检页，按 Overview、Hardware、Firmware & OTA、Network、Storage & Logs、Partition Table、Boot Reasons 分组展示固件、芯片、MAC、heap、WiFi、FS、FileLog、OTA headroom、运行时分区表和启动原因；页面容量值只显示 KB/MB/B 人性化格式。
+- `/esp32base/tools` System 页承载低频维护入口和操作，包括 WiFi Setup、Web Auth、Firmware OTA 直达入口、hostname 保存、重启设备；启用 FS 的 profile 还提供手动格式化 LittleFS 操作，会清除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth 或 NVS 配置。
 - `/esp32base/auth` 是内置认证管理页面，受当前 Basic Auth 保护，提交成功后新账号密码立即生效。
 - Web Auth 认证优先级为：已保存认证 > 应用默认认证 > 库默认 `admin/admin`。
 - `setDefaultAuth(user, pass)` 设置应用默认认证；如果用户已保存认证，不会覆盖已保存认证。
 - `authUser()` 返回当前用户名；`authPassword()` 返回当前生效密码，仅供本地 C++ 认证集成使用，例如 ArduinoOTA/espota，禁止输出到 HTML、JSON 或 API 响应。
-- `setAuthEnabled(false)` 会完全开放内置 HTTP 路由，包括 WiFi 保存/清除、Auth 保存、重启、Tools、Logs clear 和 Web OTA；只适合受控调试网络。
+- `setAuthEnabled(false)` 会完全开放内置 HTTP 路由，包括 WiFi 保存/清除、Auth 保存、重启、System、Logs clear 和 Web OTA；只适合受控调试网络。
 - `verifyAuth(user, pass)` 校验显式传入的账号密码；无参 `verifyAuth()` 仍表示当前请求是否已认证。
 - `saveAuth(user, pass)` 保存 Web Auth 到 `eb_web.auth_user`、`eb_web.auth_pass`，并立即切换为新认证。
 - `resetAuth()` 清除 `eb_web` 持久化 Auth，并恢复应用默认认证；没有应用默认认证时恢复库默认 `admin/admin`。
@@ -719,7 +775,7 @@ public:
 
 Web OTA 上传页面不要求额外认证；它只复用 Web 层 Basic Auth。上传过程必须提供进度展示。
 
-启用 `ESP32BASE_ENABLE_OTA` 时，`ESP32BASE_ENABLE_ARDUINO_OTA` 默认同为 1，提供 ArduinoOTA/espota 兼容入口。命令行 OTA 使用 `Esp32Base::hostname()` 和标准端口 3232，复用 mDNS 的 `<hostname>.local` 解析；认证密码为当前生效的 Web Auth 密码，用户名不参与。即使 Web Auth 被关闭，ArduinoOTA 仍要求密码。
+启用 `ESP32BASE_ENABLE_OTA` 时，`ESP32BASE_ENABLE_ARDUINO_OTA` 默认同为 1，提供 ArduinoOTA/espota 兼容入口。命令行 OTA 使用 `Esp32Base::hostname()` 和标准端口 3232，复用 mDNS 的 `<hostname>.local` 解析；认证密码为当前生效的 Web Auth 密码，用户名不参与。Web/API 修改 hostname 后必须重启，ArduinoOTA 和 mDNS 才会使用新名称。即使 Web Auth 被关闭，ArduinoOTA 仍要求密码。
 
 Web OTA 与 ArduinoOTA 不得同时写 flash；已有 OTA 传输进行时，另一入口必须拒绝或暂停处理。
 

@@ -236,7 +236,10 @@ CI 应覆盖核心矩阵，release 前执行完整矩阵。
 - NTP 对时成功后输出实际时间、当前 uptime、推算 boot wall time。
 - WiFi 连接、断开、重连 backoff、进入/退出 config portal 都必须有清晰日志。
 - 文件日志默认 WARN；现场调试示例可开启串口 DEBUG，并将文件日志设为 INFO 方便通过 Logs 页面观察。
+- Serial 日志和 FileLog 必须可独立控制；量产设备可通过 `Esp32BaseLog::setSerialLevel(Esp32BaseLog::NONE)` 关闭串口，同时保持 FileLog WARN/ERROR 或 INFO 正常写入。
+- `ESP32BASE_LOG_LEVEL` 是编译期上限；如果编译为 `ESP32BASE_LOG_NONE`，日志宏被移除，FileLog 也不会收到日志。
 - 普通页面 GET 慢请求、认证成功、路由注册和配置审计 skipped/read/deferred 属于 DEBUG 诊断；配置实际写入、flush、启动认证加载、WiFi/OTA/NTP/mDNS 状态、格式化、重启和认证失败应保留 INFO/WARN/ERROR。
+- Config audit 可在 `Esp32Base::begin()` 前开启；begin 前开启可覆盖基础库初始化读写，begin 后开启只覆盖后续业务运行期访问。read audit 噪声较大，且多数为 DEBUG。
 - `INFO` 日志明文输出 WiFi 名称/密码和 Web Auth 用户名/密码，便于业务接入和现场调试。
 
 ## 6. 运行诊断
