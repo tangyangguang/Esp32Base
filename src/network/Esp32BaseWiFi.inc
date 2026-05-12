@@ -38,12 +38,12 @@ uint8_t g_wifiRetryCount = 0;
 bool g_wifiPowerSave = true;
 
 bool credentialsPresent() {
-    return g_wifiSsid[0] != '\0' && g_wifiPassword[0] != '\0';
+    return g_wifiSsid[0] != '\0';
 }
 
 bool credentialsValid(const char* ssidValue, const char* passwordValue) {
     return ssidValue && passwordValue &&
-           ssidValue[0] != '\0' && passwordValue[0] != '\0' &&
+           ssidValue[0] != '\0' &&
            strlen(ssidValue) < sizeof(g_wifiSsid) &&
            strlen(passwordValue) < sizeof(g_wifiPassword);
 }
@@ -88,7 +88,11 @@ void beginSta() {
         return;
     }
     WiFi.mode(WIFI_STA);
-    WiFi.begin(g_wifiSsid, g_wifiPassword);
+    if (g_wifiPassword[0]) {
+        WiFi.begin(g_wifiSsid, g_wifiPassword);
+    } else {
+        WiFi.begin(g_wifiSsid);
+    }
     g_wifiAttemptStartMs = millis();
     g_wifiState = Esp32BaseWiFi::CONNECTING;
     ESP32BASE_LOG_I("wifi", "station_connecting ssid=%s password=%s status=%s status_code=%u",
@@ -213,8 +217,11 @@ bool Esp32BaseWiFi::connect(const char* ssidValue, const char* passwordValue, bo
 bool Esp32BaseWiFi::clearCredentials() {
     g_wifiSsid[0] = '\0';
     g_wifiPassword[0] = '\0';
-    Esp32BaseConfig::clearNamespace("eb_wifi");
-    return true;
+    const bool ok = Esp32BaseConfig::clearNamespace("eb_wifi");
+    if (!ok) {
+        ESP32BASE_LOG_W("wifi", "credential_clear_failed");
+    }
+    return ok;
 }
 
 bool Esp32BaseWiFi::startConfigPortal() {

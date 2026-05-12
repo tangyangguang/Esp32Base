@@ -131,6 +131,7 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "spiffs");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "next OTA");
     RUN_SELFTEST("GET", "/esp32base/wifi", nullptr, true, 200, "<title>Network</title>");
+    RUN_SELFTEST("GET", "/esp32base/wifi", nullptr, true, 200, "Password (optional)");
     RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "File log: <b>enabled</b>");
     RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "class='logmeta'");
     RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "Max per file: 32.00 KB");

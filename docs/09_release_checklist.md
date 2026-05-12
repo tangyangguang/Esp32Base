@@ -96,7 +96,7 @@
 - DNS 拦截生效。
 - 所有 DNS 查询通配到 AP IP。
 - iOS / Android / macOS / Windows 可进入配网页。
-- WiFi 配置页拒绝空 SSID / 空密码。
+- WiFi 配置页拒绝空 SSID，允许空密码用于开放 WiFi。
 - WiFi 配置页拒绝超长 SSID / 密码。
 - WiFi 配置页回显 SSID / 密码。
 - 提交凭证后切换 STA。

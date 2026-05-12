@@ -1229,14 +1229,18 @@ void handleWifiPage() {
     if (g_server.hasArg("saved")) {
         sendChunk("<p class=ok>Saved. Credentials updated and connection started.</p>");
     } else if (g_server.hasArg("error")) {
-        sendChunk("<p class=err>WiFi settings were not saved.</p>");
+        if (g_server.arg("error") == "clear_failed") {
+            sendChunk("<p class=err>WiFi credentials were not cleared.</p>");
+        } else {
+            sendChunk("<p class=err>WiFi settings were not saved.</p>");
+        }
     } else if (g_server.hasArg("cleared")) {
         sendChunk("<p class=ok>Saved WiFi credentials were cleared.</p>");
     }
-    sendChunk("<header class='pagehead'><h1>WiFi Settings</h1></header><section class='panel'><form method='post' action='/esp32base/wifi' onsubmit=\"if(!this.ssid.value.trim()){alert('SSID cannot be empty');return false;}if(!this.password.value.trim()){alert('Password cannot be empty');return false;}if(this.ssid.value.length>32||this.password.value.length>64){alert('SSID or password is too long');return false;}return once(this);\">");
+    sendChunk("<header class='pagehead'><h1>WiFi Settings</h1></header><section class='panel'><form method='post' action='/esp32base/wifi' onsubmit=\"if(!this.ssid.value.trim()){alert('SSID cannot be empty');return false;}if(this.ssid.value.length>32||this.password.value.length>64){alert('SSID or password is too long');return false;}return once(this);\">");
     sendChunk("<label for='ssid'>SSID</label><input id='ssid' name='ssid' value='");
     sendEscapedHtmlChunk(ssid);
-    sendChunk("' maxlength='32' autocomplete='off'><label for='wp'>Password</label><input id='wp' type='password' name='password' value='");
+    sendChunk("' maxlength='32' autocomplete='off'><label for='wp'>Password (optional)</label><input id='wp' type='password' name='password' value='");
     sendEscapedHtmlChunk(password);
     sendChunk("' maxlength='64'><div class='actions'><input type='button' value='Show/Hide Password' onclick=\"var p=document.getElementById('wp');p.type=p.type=='password'?'text':'password'\"><input type='submit' value='Save &amp; Connect'></div></form></section>");
     sendChunk("<section class='panel'><h2>Clear WiFi</h2><p class='muted'>Remove stored WiFi credentials from this device.</p><form method='post' action='/esp32base/api/wifi/clear' onsubmit=\"return confirm('Clear WiFi credentials?')&&once(this)\"><input class='danger' type='submit' value='Clear WiFi'></form></section>");
@@ -1250,7 +1254,7 @@ void handleWifiSubmit() {
     }
     const String ssid = g_server.arg("ssid");
     const String password = g_server.arg("password");
-    if (ssid.length() == 0 || password.length() == 0 || ssid.length() > 32 || password.length() > 64) {
+    if (ssid.length() == 0 || ssid.length() > 32 || password.length() > 64) {
         redirectSeeOther("/esp32base/wifi?error=invalid");
         return;
     }
@@ -1270,8 +1274,8 @@ void handleWifiClear() {
     if (!ensurePostAllowed("wifi_clear")) {
         return;
     }
-    Esp32BaseWiFi::clearCredentials();
-    redirectSeeOther("/esp32base/wifi?cleared=1");
+    const bool ok = Esp32BaseWiFi::clearCredentials();
+    redirectSeeOther(ok ? "/esp32base/wifi?cleared=1" : "/esp32base/wifi?error=clear_failed");
 }
 
 void handleRestart() {

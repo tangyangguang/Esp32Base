@@ -93,7 +93,7 @@
 - DNS 拦截。
 - 所有 DNS 查询通配到 AP IP。
 - 非内置路径重定向。
-- WiFi 表单拒绝空 SSID / 空密码。
+- WiFi 表单拒绝空 SSID，允许空密码用于开放 WiFi。
 - 重启按钮二次确认。
 - OTA 上传页进度显示。
 
@@ -165,7 +165,7 @@ CI 应覆盖核心矩阵，release 前执行完整矩阵。
 - OTA 后未 markValid 可回滚。
 - OTA 期间高频 NVS 写入。
 - Captive Portal 多系统。
-- WiFi 配置页空 SSID / 空密码拒绝提交。
+- WiFi 配置页空 SSID 拒绝提交，空密码允许提交。
 - WiFi 配置页超长 SSID / 密码拒绝提交。
 - WiFi 配置页回显 SSID / 密码。
 - 重启按钮二次确认。

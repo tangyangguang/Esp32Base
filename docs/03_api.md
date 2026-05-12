@@ -522,12 +522,12 @@ WiFi 凭证和重连策略：
 
 - 无已保存凭证时，`begin()` 可进入 `CONFIG_PORTAL`。
 - 默认 config portal AP SSID 为 `ESP32-Config-XXXX`，其中 `XXXX` 取 eFuse MAC 按常见网络 MAC 顺序显示时的最后两个字节。
-- 有效凭证要求 SSID 非空且不超过 32 字节，密码非空且不超过 64 字节；超限输入返回 false，不静默截断。
+- 有效凭证要求 SSID 非空且不超过 32 字节，密码可为空且不超过 64 字节；超限输入返回 false，不静默截断。
 - 有已保存凭证但连接失败时，不自动进入 AP/config portal，而是持续重连。
 - 单次 STA 连接尝试有非阻塞超时，默认 `ESP32BASE_WIFI_CONNECT_TIMEOUT_MS=15000`。
 - 前几次重连使用短间隔，连续失败后进入长间隔 backoff；backoff 必须非阻塞，不影响 `handle()`、Watchdog feed 和必要休眠。
 - 只有显式 `clearCredentials()`、`startConfigPortal()` 或应用自定义策略，才能进入 AP/config portal。
-- `clearCredentials()` 只清空库管理的 WiFi 凭证，不立即触发重连、断线或 portal。
+- `clearCredentials()` 只清空库管理的 WiFi 凭证，不立即触发重连、断线或 portal；NVS 清理失败时返回 false。
 - `connect(..., persist=true)` 必须先同步写入 NVS 保存凭证，写入失败时返回 false 且不切换连接；这是显式配置提交的可靠性取舍，避免页面提交后立即重启导致新凭证丢失。
 - `INFO` 日志明文输出 SSID 和密码，便于业务接入和现场调试。
 - 进入 deep sleep 后 STA、AP、DNS、Web 均不可用；唤醒相当于新一轮启动，按凭证状态恢复网络。
@@ -722,7 +722,7 @@ Route 缓冲机制：
 内置页面交互要求：
 
 - WiFi 配置页面必须回显当前 SSID 和密码。
-- WiFi 配置提交必须校验 SSID 非空、密码非空；空值不得提交。
+- WiFi 配置提交必须校验 SSID 非空；密码允许为空以支持开放 WiFi。
 - 重启按钮必须有二次确认，可用浏览器端 JavaScript 实现。
 - API 中的字节数可保留 raw bytes；内置页面面向人工查看时优先只显示 KB/MB/B 人性化格式，避免重复。
 - `sendHeader()` 输出的默认 input 样式只覆盖文本类控件；checkbox、radio、file、range、color、hidden 等非文本控件不被拉伸成文本输入框。

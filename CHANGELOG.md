@@ -13,6 +13,7 @@
 - Status 页移除常驻 `OTA status` 行，保留 OTA 内部状态机和 `/esp32base/api/ota` 诊断字段；异常时仍显示 `Last OTA error`。
 - eFuse MAC 按常见网络 MAC 顺序展示，便于和 STA MAC、AP MAC 直接对照调试。
 - 修正 config portal 默认 AP SSID 后缀，`ESP32-Config-XXXX` 的 `XXXX` 现在取可读 eFuse MAC 的最后两个字节，而不是 `ESP.getEfuseMac()` 整数低 16 位。
+- WiFi 配置支持开放 WiFi：SSID 仍必须非空，密码可为空；`clearCredentials()` 现在返回 NVS 清理真实结果，Web 清除失败会显示失败反馈。
 - 分区表展示 Name、Type、SubType、Offset、Size、Role；Role 标识 running app、next OTA、app data、NVS config、OTA state、coredump 等调试语义。
 - 默认系统导航改为底部紧凑区，顶部导航主要用于业务首页和业务页面。
 - 默认系统入口收敛为 Status、Logs、System；WiFi、Auth、OTA 作为低频配置/维护入口收进 System 页，但保留原直达 URL。
