@@ -12,8 +12,22 @@
 namespace {
 bool g_enabled = false;
 bool g_removed = false;
-uint32_t g_totalResetCount = 0;
-uint32_t g_tripResetCount = 0;
+
+uint32_t loadLifetimeResetCount() {
+    const int32_t stored = Esp32BaseConfig::getInt("eb_sys", "wdt_cnt", -1);
+    if (stored >= 0) {
+        return static_cast<uint32_t>(stored);
+    }
+    const int32_t fallback = Esp32BaseConfig::getInt("eb_sys", "wdt_total_cnt", -1);
+    if (fallback >= 0) {
+        const uint32_t value = static_cast<uint32_t>(fallback);
+        Esp32BaseConfig::setInt("eb_sys", "wdt_cnt", static_cast<int32_t>(value));
+        return value;
+    }
+    return 0;
+}
+
+uint32_t g_lifetimeResetCount = 0;
 }
 
 bool Esp32BaseWatchdog::begin(uint32_t timeoutMs) {
@@ -22,17 +36,13 @@ bool Esp32BaseWatchdog::begin(uint32_t timeoutMs) {
         return false;
     }
     if (wasWatchdogReset()) {
-        g_totalResetCount = static_cast<uint32_t>(Esp32BaseConfig::getInt("eb_sys", "wdt_total_cnt", 0)) + 1U;
-        g_tripResetCount = static_cast<uint32_t>(Esp32BaseConfig::getInt("eb_sys", "wdt_trip_cnt", 0)) + 1U;
-        const bool totalOk = Esp32BaseConfig::setInt("eb_sys", "wdt_total_cnt", static_cast<int32_t>(g_totalResetCount));
-        const bool tripOk = Esp32BaseConfig::setInt("eb_sys", "wdt_trip_cnt", static_cast<int32_t>(g_tripResetCount));
-        ESP32BASE_LOG_W("watchdog", "boot_after_watchdog_reset total_resets=%lu trip_resets=%lu persist=%s",
-                        static_cast<unsigned long>(g_totalResetCount),
-                        static_cast<unsigned long>(g_tripResetCount),
-                        (totalOk && tripOk) ? "success" : "failed");
+        g_lifetimeResetCount = loadLifetimeResetCount() + 1U;
+        const bool ok = Esp32BaseConfig::setInt("eb_sys", "wdt_cnt", static_cast<int32_t>(g_lifetimeResetCount));
+        ESP32BASE_LOG_W("watchdog", "boot after watchdog reset count=%lu persist=%s",
+                        static_cast<unsigned long>(g_lifetimeResetCount),
+                        ok ? "success" : "failed");
     } else {
-        g_totalResetCount = static_cast<uint32_t>(Esp32BaseConfig::getInt("eb_sys", "wdt_total_cnt", 0));
-        g_tripResetCount = static_cast<uint32_t>(Esp32BaseConfig::getInt("eb_sys", "wdt_trip_cnt", 0));
+        g_lifetimeResetCount = loadLifetimeResetCount();
     }
 #if ESP_ARDUINO_VERSION_MAJOR >= 3
     esp_task_wdt_config_t config = {};
@@ -91,19 +101,8 @@ bool Esp32BaseWatchdog::wasWatchdogReset() {
     return reason == ESP_RST_TASK_WDT || reason == ESP_RST_INT_WDT || reason == ESP_RST_WDT;
 }
 
-uint32_t Esp32BaseWatchdog::totalResetCount() {
-    return g_totalResetCount;
-}
-
-uint32_t Esp32BaseWatchdog::tripResetCount() {
-    return g_tripResetCount;
-}
-
-bool Esp32BaseWatchdog::clearTripResetCount() {
-    g_tripResetCount = 0;
-    const bool ok = Esp32BaseConfig::setInt("eb_sys", "wdt_trip_cnt", 0);
-    ESP32BASE_LOG_W("watchdog", "watchdog_trip_cleared result=%s", ok ? "success" : "failed");
-    return ok;
+uint32_t Esp32BaseWatchdog::lifetimeResetCount() {
+    return g_lifetimeResetCount;
 }
 
 #endif
