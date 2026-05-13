@@ -7,10 +7,6 @@ void setup() {
     Esp32BaseWeb::setDefaultAuth("admin", "admin");
 #endif
     Esp32Base::begin();
-#if ESP32BASE_ENABLE_FILELOG
-    Esp32BaseFileLog::enable("/logs/eb_app.log", 32UL * 1024UL, Esp32BaseLog::INFO, 4);
-    ESP32BASE_LOG_I("example", "file log set to INFO for example build");
-#endif
 }
 
 void loop() {

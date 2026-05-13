@@ -4,6 +4,24 @@
 
 ## 2026-05-11
 
+### FileLog 运行时模式收口
+
+破坏性调整：
+
+- `Esp32BaseFileLog` 改为模式 API：`setMode(OFF/WARN/INFO)`、`mode()`、`modeName()`；不再公开按 path/max/level/files 拼装启用的接口。
+- 文件日志运行时只支持 OFF、WARN、INFO；DEBUG/VERBOSE 不作为文件日志模式，也不会出现在内置 Web 配置中。
+- 文件日志默认值改为 `ESP32BASE_EB_FILELOG_DEFAULT_MODE`，可取 `ESP32BASE_FILELOG_MODE_OFF`、`ESP32BASE_FILELOG_MODE_WARN`、`ESP32BASE_FILELOG_MODE_INFO`。
+- FileLog 持久化配置收口为 `eb_log.mode`；不读取旧的启用/等级 key，不做 NVS 迁移。
+- Web System 页新增 FileLog 模式设置，保存后立即生效；Logs 页面继续只负责查看日志。
+- Logs 页面在 FileLog OFF 时仍展示已有历史日志；OFF 只停止后续写入，不隐藏或删除历史内容。
+- FileLog 模式变更 WARN 审计日志补充上一次模式和新模式，便于现场确认配置变化来源。
+- 示例通过 `ESP32BASE_EB_FILELOG_DEFAULT_MODE=ESP32BASE_FILELOG_MODE_INFO` 设置默认 INFO 模式，不再在应用代码里重新配置 FileLog。
+
+关键边界：
+
+- `ESP32BASE_LOG_LEVEL` 仍是编译期最高保留日志等级；FileLog 默认模式和 Web 可选项都不能突破该上限。
+- FileLog path、max bytes、rotate files、buffer、flush interval 继续是构建期资源策略，不在内置 Web 普通运维界面暴露。
+
 ### 内置 Web 导航与底部状态摘要
 
 优化：
@@ -76,7 +94,7 @@ build_flags =
 
 ```cpp
 Esp32BaseLog::setSerialLevel(Esp32BaseLog::NONE);
-Esp32BaseFileLog::enable("/logs/eb_app.log", 32UL * 1024UL, Esp32BaseLog::WARN, 4);
+Esp32BaseFileLog::setMode(Esp32BaseFileLog::WARN);
 ```
 
 ```cpp
@@ -271,15 +289,15 @@ upload_flags =
 关键边界：
 
 - 这些 DEBUG 日志不在默认 INFO 构建中输出。
-- 文件日志等级独立于串口编译日志等级；`full_demo` 使用 INFO 文件日志便于观察，业务长期运行建议按需要保持 WARN。
+- 文件日志模式独立于串口编译日志等级；`full_demo` 使用 INFO 文件日志便于观察，业务长期运行建议按需要保持 WARN。
 - 不新增高频 loop、HTTP 请求或 NTP pending DEBUG 日志。
 - `setHeadExtraCallback()` 回调只应输出 `<style>`、`<meta>` 等 head 内容，不应输出 body 内容。
 - 默认样式只提供基础可读性，不新增主题系统或颜色配置 API。
 - 基础库默认不会自动格式化 FS；`format()` 会清除 LittleFS 文件，仅由示例或应用在明确可接受数据丢失时调用。
 - `Format LittleFS` 会删除日志和所有 LittleFS 文件，但不会清除 WiFi、Web Auth 或 NVS 配置；`Tools` 页面统一承载维护操作。
-- Tools 页格式化成功后会明确提示，并重新加载 FileLog 配置；FileLog 会在格式化后重新创建日志目录，避免后续写入触发底层 VFS 目录不存在错误。
+- Tools 页格式化成功后会明确提示，并重新加载 FileLog 模式；FileLog 会在格式化后重新创建日志目录，避免后续写入触发底层 VFS 目录不存在错误。
 - 格式化 LittleFS 会输出 WARN 级维护日志，记录请求来源、format/mount/FileLog reload 结果；FileLog 目录或 segment 准备失败也会输出 WARN。
-- FileLog 重复 `enable()` 前会先 flush 现有 buffer，避免启动阶段 boot session 多行日志在示例或维护操作重新加载 FileLog 配置时丢失尾部。
+- FileLog 切换模式前会先 flush 现有 buffer，避免启动阶段 boot session 多行日志在示例或维护操作重新加载 FileLog 模式时丢失尾部。
 - 普通 `GET` 页面慢请求日志降为 DEBUG；非 GET 操作慢请求仍保持 WARN，避免维护/写操作耗时被忽略。
 - 配置审计中 `changed=no result=skipped`、读取审计和 deferred 排队日志降为 DEBUG；实际写入成功/flush 成功仍为 INFO，失败为 WARN/ERROR。
 - 普通页面 Basic Auth 校验成功降为 DEBUG；认证缺失、无效或密码错误仍为 WARN，启动认证加载和认证修改继续保持 INFO。
@@ -290,14 +308,14 @@ upload_flags =
 
 推荐接入：
 
-- 业务项目需要启动诊断时，编译开启 `ESP32BASE_LOG_LEVEL=ESP32BASE_LOG_DEBUG`；文件日志等级按设备用途单独选择，示例观察可用 INFO，长期运行建议 WARN。
+- 业务项目需要启动诊断时，编译开启 `ESP32BASE_LOG_LEVEL=ESP32BASE_LOG_DEBUG`；文件日志模式按设备用途单独选择，示例观察可用 INFO，长期运行建议 WARN。
 
 ### full_demo 日志等级调整
 
 优化：
 
 - `examples/full_demo` 编译日志等级改为 DEBUG，便于串口观察调试信息。
-- `examples/full_demo` 文件日志等级保持 INFO，便于在 `/esp32base/logs` 观察示例运行和 Web/OTA 行为。
+- `examples/full_demo` 文件日志默认模式保持 INFO，便于在 `/esp32base/logs` 观察示例运行和 Web/OTA 行为。
 
 业务侧用途：
 
@@ -383,7 +401,7 @@ upload_flags =
 
 业务侧用途：
 
-- 业务项目将文件日志等级降到 DEBUG 排查问题时，不会被周期性 Health tick 刷屏。
+- DEBUG health tick 不进入文件日志模式，不会污染现场 INFO 文件日志。
 
 关键边界：
 
@@ -400,6 +418,8 @@ upload_flags =
 
 - Logs 页面顶部 `current-0`、`history-N` 标签中的文件大小改为只显示 KB/MB/B 人性化值，不再同时显示 raw bytes。
 - Logs 页面文件日志状态信息改为 14px 小字号，`Buffer`、`Max per file`、`Max total`、`Segments` 中的字节数也只显示 KB/MB/B 人性化值。
+- Logs 页面文件日志状态信息改为紧凑 label/value 表格；segment 标签中的文件名和大小拆成两个视觉字段，避免 `history-2 0 B` 被误读。
+- Logs 页面文件日志状态信息放入普通 panel，和页面标题、日志内容区域保持一致的左侧留白。
 - 内置页面默认正文为 14px，导航为 14px，页面标题收敛到 18px/16px/15px 层级，footer 为 13px，整体更接近设备维护控制台。
 
 业务侧用途：

@@ -135,7 +135,7 @@ public:
 
 ```cpp
 Esp32BaseLog::setSerialLevel(Esp32BaseLog::NONE);
-Esp32BaseFileLog::enable("/logs/eb_app.log", 32UL * 1024UL, Esp32BaseLog::WARN, 4);
+Esp32BaseFileLog::setMode(Esp32BaseFileLog::WARN);
 ```
 
 如果 `ESP32BASE_LOG_LEVEL=ESP32BASE_LOG_NONE`，日志宏会在编译期变为空语句，Serial、sink 和 FileLog 都不会收到日志。
@@ -159,23 +159,28 @@ Esp32BaseFileLog::enable("/logs/eb_app.log", 32UL * 1024UL, Esp32BaseLog::WARN, 
 
 ### 3.4 Esp32BaseFileLog
 
-仅在 `ESP32BASE_ENABLE_FILELOG=1` 时可用，依赖 `Esp32BaseFs`。默认文件为 `/logs/eb_app.log`，`4 × 32KB` 轮转，文件等级 WARN。INFO/DEBUG 文件日志使用 1KB / 2s 缓存，不做节流。
+仅在 `ESP32BASE_ENABLE_FILELOG=1` 时可用，依赖 `Esp32BaseFs`。默认文件为 `/logs/eb_app.log`，`4 × 32KB` 轮转，默认模式 WARN。运行时文件日志模式只支持 OFF、WARN、INFO；DEBUG/VERBOSE 不作为文件日志模式。INFO 模式使用 1KB / 2s 缓存，不做节流。
 
 ```cpp
 class Esp32BaseFileLog {
 public:
+    enum Mode : uint8_t {
+        OFF = ESP32BASE_FILELOG_MODE_OFF,
+        WARN = ESP32BASE_FILELOG_MODE_WARN,
+        INFO = ESP32BASE_FILELOG_MODE_INFO
+    };
+
     static bool begin();
-    static bool enable(const char* path, uint32_t maxBytes, Esp32BaseLog::Level fileLevel, uint8_t rotateFiles);
-    static void disable();
+    static bool setMode(Mode mode);
     static bool flush();
     static bool clear();
     static void handle();
     static bool isEnabled();
+    static Mode mode();
+    static const char* modeName();
     static const char* path();
     static uint32_t maxBytes();
     static uint8_t rotateFiles();
-    static Esp32BaseLog::Level level();
-    static const char* levelName();
     static uint32_t size();
     static uint32_t segmentSize(uint8_t index);
     static bool bufferEnabled();
@@ -192,8 +197,8 @@ public:
 #include <Esp32Base.h>
 
 void setup() {
-    Esp32BaseFileLog::enable("/logs/eb_app.log", 32UL * 1024UL, Esp32BaseLog::INFO, 4);
     Esp32Base::begin();
+    Esp32BaseFileLog::setMode(Esp32BaseFileLog::INFO);
     ESP32BASE_LOG_I("app", "boot");
 }
 
@@ -213,7 +218,7 @@ void loop() {
 - string value 可见内容长度不超过 3999 字节。
 - blob value 长度为 `1..256` 字节，用于小型固定大小 POD 元数据，不用于日志、记录正文或大块业务数据。
 - 库内部 namespace 全部使用 `eb_` 前缀，例如 `eb_wifi`、`eb_sys`、`eb_log`。
-- namespace 已表达库和模块归属，key 不重复模块前缀，例如 `eb_wifi.ssid`、`eb_wifi.pass`、`eb_sys.rst_cnt`、`eb_sys.wdt_cnt`、`eb_log.en`、`eb_log.path`、`eb_log.max`、`eb_log.files`、`eb_log.level`、`eb_web.auth_user`、`eb_web.auth_pass`。
+- namespace 已表达库和模块归属，key 不重复模块前缀，例如 `eb_wifi.ssid`、`eb_wifi.pass`、`eb_sys.rst_cnt`、`eb_sys.wdt_cnt`、`eb_log.mode`、`eb_web.auth_user`、`eb_web.auth_pass`。
 - 应用不得使用 `eb_` 前缀，避免被库维护 API 清理。
 
 建议 API：

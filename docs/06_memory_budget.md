@@ -68,7 +68,7 @@
 
 ### 3.4 FileLog
 
-文件日志仅在 FS profile 中启用。默认 `4 × 32KB = 128KB`，低优先级缓存 1KB，flush interval 2s。量产推荐 WARN 文件等级；示例使用 INFO 文件等级方便观察。Core 和默认 NET 不链接 LittleFS，也不产生 FileLog 静态状态。
+文件日志仅在 FS profile 中启用。默认 `4 × 32KB = 128KB`，低优先级缓存 1KB，flush interval 2s。量产推荐 WARN 模式；示例使用 INFO 默认模式方便观察。Core 和默认 NET 不链接 LittleFS，也不产生 FileLog 静态状态。
 
 ### 3.5 Health
 

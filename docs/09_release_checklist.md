@@ -134,9 +134,12 @@
 - 非 FS profile 不强行启用 FileLog。
 - 默认路径为 `/logs/eb_app.log`。
 - 默认轮转为 `4 × 32KB`。
-- INFO/DEBUG 仅在 file level 降低后写文件。
-- INFO/DEBUG 使用 `1KB / 2s` 缓存。
-- `setSerialLevel(NONE)` 后 Serial 不输出，但 FileLog 仍按文件等级写入。
+- INFO 仅在 FileLog 模式为 INFO 后写文件；DEBUG/VERBOSE 不能配置为文件日志模式。
+- INFO 使用 `1KB / 2s` 缓存。
+- Web System 页只能设置 Off/WARN/INFO，非法 POST 值必须失败。
+- Web System 页切换 FileLog 模式时，WARN 审计日志必须包含上一次模式和新模式。
+- FileLog OFF 后 Logs 页面仍能查看已有历史 segment。
+- `setSerialLevel(NONE)` 后 Serial 不输出，但 FileLog 仍按当前模式写入。
 - `setRuntimeLevel(NONE)` 后 Serial 和 FileLog 都停止。
 - WARN/ERROR 立即写入。
 - 文件满后轮转 current、`.1`、`.2`、`.3`。
@@ -206,7 +209,7 @@
 - `examples/full_demo` 可在自身目录 `pio run`。
 - `examples/web_logs_ota` 可在自身目录 `pio run`。
 - `examples/net_runtime` 可在自身目录 `pio run`。
-- 所有启用 FS 的示例将文件日志设为 INFO。
+- 所有启用 FS 的示例通过 `ESP32BASE_EB_FILELOG_DEFAULT_MODE=ESP32BASE_FILELOG_MODE_INFO` 将文件日志默认模式设为 INFO。
 
 ## 14. Soak 检查
 

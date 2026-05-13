@@ -98,8 +98,8 @@ static const char WEB_HEAD[] PROGMEM =
     "@media(max-width:640px){body{padding:10px}nav a{font-size:14px;padding:6px 7px}.footerbar{align-items:flex-start}.heap{margin-left:0;text-align:left;white-space:normal}}"
     ".kv{border-collapse:collapse;width:100%;margin:0}.kv th,.kv td{border-bottom:1px solid #d8e0e6;padding:7px 5px;text-align:left;vertical-align:top}.kv tr:last-child th,.kv tr:last-child td{border-bottom:0}.kv th{width:30%;color:#64707d;font-weight:600}"
     ".part{border-collapse:collapse;width:100%;font-size:13px}.part th,.part td{border-bottom:1px solid #d8e0e6;padding:6px 5px;text-align:left;vertical-align:top}.part th{color:#64707d;font-weight:600}.part tr:last-child td{border-bottom:0}"
-    ".tabs,.quicklinks{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 10px}.tabs a,.quicklinks a{font-size:13px;padding:5px 8px;margin:0;background:#f1f4f3;color:#64707d;border-radius:5px}.tabs a.active{background:#e5f0eb;color:#245f52;font-weight:600}"
-    ".logmeta{line-height:1.45;font-size:13px}.statusline{min-height:1.45em}.toolsection{padding:12px;margin:12px 0;background:#fff;border:1px solid #d8e0e6;border-radius:6px}"
+    ".tabs,.quicklinks{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 10px}.tabs a,.quicklinks a{font-size:13px;padding:5px 8px;margin:0;background:#f1f4f3;color:#64707d;border-radius:5px}.tabs a{display:inline-flex;align-items:center;gap:8px}.tabs a.active{background:#e5f0eb;color:#245f52;font-weight:600}.segsize{padding-left:7px;border-left:1px solid #d8e0e6;font-variant-numeric:tabular-nums}"
+    ".logmeta{border-collapse:collapse;font-size:13px;line-height:1.45;margin:0}.logmeta th,.logmeta td{padding:2px 10px 2px 0;text-align:left;vertical-align:top}.logmeta th{width:112px;color:#64707d;font-weight:600}.logmeta td{color:#1f2933}.statusline{min-height:1.45em}.toolsection{padding:12px;margin:12px 0;background:#fff;border:1px solid #d8e0e6;border-radius:6px}"
     "pre{white-space:pre;overflow-x:auto;word-break:normal;font-size:12px;line-height:1.45;background:#f1f4f3;border:1px solid #d8e0e6;border-radius:5px;padding:9px}"
     "</style>"
     "<script>function once(f){if(f.dataset.busy)return false;f.dataset.busy=1;var b=f.querySelector('[type=submit]');if(b)b.disabled=true;return true;}</script>";
@@ -1278,6 +1278,40 @@ void handleWifiClear() {
     redirectSeeOther(ok ? "/esp32base/wifi?cleared=1" : "/esp32base/wifi?error=clear_failed");
 }
 
+#if ESP32BASE_ENABLE_FILELOG
+void sendFileLogModeOption(const char* value, const char* label, Esp32BaseFileLog::Mode mode) {
+    sendChunk("<label><input type='radio' name='mode' value='");
+    sendEscapedHtmlChunk(value);
+    sendChunk("'");
+    if (Esp32BaseFileLog::mode() == mode) {
+        sendChunk(" checked");
+    }
+    sendChunk("> ");
+    sendEscapedHtmlChunk(label);
+    sendChunk("</label> ");
+}
+
+bool fileLogModeFromArg(const String& raw, Esp32BaseFileLog::Mode& mode) {
+    if (raw == "off") {
+        mode = Esp32BaseFileLog::OFF;
+        return true;
+    }
+#if ESP32BASE_LOG_LEVEL >= ESP32BASE_LOG_WARN
+    if (raw == "warn") {
+        mode = Esp32BaseFileLog::WARN;
+        return true;
+    }
+#endif
+#if ESP32BASE_LOG_LEVEL >= ESP32BASE_LOG_INFO
+    if (raw == "info") {
+        mode = Esp32BaseFileLog::INFO;
+        return true;
+    }
+#endif
+    return false;
+}
+#endif
+
 void handleRestart() {
     markRequest();
     if (!ensurePostAllowed("restart")) {
@@ -1305,9 +1339,11 @@ void handleToolsPage() {
 #endif
     sendChunk("</div><p class='muted'>Low-frequency device settings.</p></section>");
     if (g_server.hasArg("formatted")) {
-        sendChunk("<p class='ok'><b>LittleFS formatted.</b> FileLog configuration was reloaded.</p>");
+        sendChunk("<p class='ok'><b>LittleFS formatted.</b> FileLog mode was reloaded.</p>");
     } else if (g_server.hasArg("logs_cleared")) {
         sendChunk("<p class='ok'><b>Logs cleared.</b></p>");
+    } else if (g_server.hasArg("filelog_saved")) {
+        sendChunk("<p class='ok'><b>File log mode saved.</b></p>");
     } else if (g_server.hasArg("error")) {
         sendChunk("<p class='err'>System action failed: ");
         sendEscapedHtmlChunk(g_server.arg("error").c_str());
@@ -1333,6 +1369,22 @@ void handleToolsPage() {
     sendChunk("<label for='host'>New hostname</label><input id='host' name='hostname' maxlength='32' autocomplete='off' value='");
     sendEscapedHtmlChunk(hasStoredHostname && storedHostname[0] ? storedHostname : Esp32Base::hostname());
     sendChunk("'><p class='muted'>Saved hostname takes effect after restart.</p><input type='submit' value='Save Hostname'></form></section>");
+#if ESP32BASE_ENABLE_FILELOG
+    sendChunk("<section class='panel'><h2>File log</h2><table class='kv'>");
+    sendInfoRow("Current mode", Esp32BaseFileLog::modeName());
+    sendInfoRow("Path", Esp32BaseFileLog::path());
+    sendChunk("</table><form method='post' action='/esp32base/tools/filelog' onsubmit=\"return once(this)\"><div class='quicklinks'>");
+    sendFileLogModeOption("off", "Off", Esp32BaseFileLog::OFF);
+#if ESP32BASE_LOG_LEVEL >= ESP32BASE_LOG_WARN
+    sendFileLogModeOption("warn", "WARN", Esp32BaseFileLog::WARN);
+#endif
+#if ESP32BASE_LOG_LEVEL >= ESP32BASE_LOG_INFO
+    sendFileLogModeOption("info", "INFO", Esp32BaseFileLog::INFO);
+#endif
+    sendChunk("</div><p class='muted'>File log mode is capped by the build log level.</p><input type='submit' value='Save File Log'></form></section>");
+#else
+    sendChunk("<section class='panel'><h2>File log</h2><p class='muted'>File log is unavailable in this profile.</p></section>");
+#endif
     sendChunk("<section class='panel'><h2>Restart device</h2><p class='muted'>Restart the device through the normal lifecycle path.</p><form method='post' action='/esp32base/tools/reboot' onsubmit=\"return confirm('Reboot device now?')&&once(this)\"><input class='danger' type='submit' value='Restart device'></form></section>");
 #if ESP32BASE_ENABLE_FS
     sendChunk("<section class='panel'><h2>Format LittleFS</h2><p class='dangertext'>This deletes logs and all files stored in LittleFS. WiFi, Web Auth and NVS config are not cleared.</p><form method='post' action='/esp32base/tools/format-fs' onsubmit=\"return confirm('Format LittleFS? This deletes logs and all files stored in LittleFS.')&&once(this)\"><input class='danger' type='submit' value='Format LittleFS'></form></section>");
@@ -1345,6 +1397,28 @@ void handleToolsPage() {
     sendChunk("<section class='panel'><h2>Clear logs</h2><p class='muted'>File log is unavailable in this profile.</p></section>");
 #endif
     Esp32BaseWeb::sendFooter();
+}
+
+void handleToolsFileLogPost() {
+    markRequest();
+    if (!ensurePostAllowed("tools_filelog")) {
+        return;
+    }
+#if ESP32BASE_ENABLE_FILELOG
+    Esp32BaseFileLog::Mode mode = Esp32BaseFileLog::OFF;
+    if (!fileLogModeFromArg(g_server.arg("mode"), mode)) {
+        ESP32BASE_LOG_W("web", "filelog_mode_rejected source=tools value=%s", g_server.arg("mode").c_str());
+        redirectSeeOther("/esp32base/tools?error=filelog_invalid_mode");
+        return;
+    }
+    ESP32BASE_LOG_W("web", "filelog_mode_requested source=tools from=%s to=%s",
+                    Esp32BaseFileLog::modeName(),
+                    mode == Esp32BaseFileLog::OFF ? "OFF" : (mode == Esp32BaseFileLog::WARN ? "WARN" : "INFO"));
+    const bool ok = Esp32BaseFileLog::setMode(mode);
+    redirectSeeOther(ok ? "/esp32base/tools?filelog_saved=1" : "/esp32base/tools?error=filelog_save_failed");
+#else
+    redirectSeeOther("/esp32base/tools?error=filelog_unavailable");
+#endif
 }
 
 void handleToolsRebootPost() {
@@ -1717,7 +1791,7 @@ void handleRoot() {
         sendChunk("<br>");
         sendEscapedHtmlChunk(Esp32BaseFileLog::path());
         sendChunk(" / ");
-        sendEscapedHtmlChunk(Esp32BaseFileLog::levelName());
+        sendEscapedHtmlChunk(Esp32BaseFileLog::modeName());
         sendChunk(" / current ");
         sendEscapedHtmlChunk(sizeBuf);
     }
@@ -1826,10 +1900,11 @@ void sendLogSegmentTabs(uint8_t selected) {
                  i == selected ? " class='active'" : "",
                  static_cast<unsigned>(i));
         sendChunk(line);
+        sendChunk("<span class='segname'>");
         sendEscapedHtmlChunk(title);
-        sendChunk(" ");
+        sendChunk("</span><span class='segsize'>");
         sendEscapedHtmlChunk(sizeBuf);
-        sendChunk("</a>");
+        sendChunk("</span></a>");
     }
     sendChunk("</div>");
 }
@@ -1845,11 +1920,6 @@ void handleLogsPage() {
     sendEscapedHtmlChunk(g_builtinLabels[Esp32BaseWeb::BUILTIN_LOGS]);
     sendChunk("</h1></header>");
 #if ESP32BASE_ENABLE_FILELOG
-    if (!Esp32BaseFileLog::isEnabled()) {
-        sendChunk("<section class='panel'><p>File log: <b>disabled</b></p></section>");
-        Esp32BaseWeb::sendFooter();
-        return;
-    }
     Esp32BaseFileLog::flush();
     char maxBuf[48];
     char totalBuf[48];
@@ -1859,13 +1929,14 @@ void handleLogsPage() {
     formatReadableBytes(static_cast<uint64_t>(Esp32BaseFileLog::maxBytes()) * Esp32BaseFileLog::rotateFiles(), totalBuf, sizeof(totalBuf));
     formatReadableBytes(Esp32BaseFileLog::bufferUsed(), bufferUsed, sizeof(bufferUsed));
     formatReadableBytes(Esp32BaseFileLog::bufferSize(), bufferTotal, sizeof(bufferTotal));
-    char line[192];
-    snprintf(line, sizeof(line), "<p class='logmeta'>File log: <b>enabled</b><br>Path: ");
-    sendChunk(line);
+    char line[320];
+    sendChunk("<section class='panel'><table class='logmeta'><tr><th>File log</th><td><b>");
+    sendEscapedHtmlChunk(Esp32BaseFileLog::isEnabled() ? "enabled" : "disabled");
+    sendChunk("</b></td></tr><tr><th>Path</th><td>");
     sendEscapedHtmlChunk(Esp32BaseFileLog::path());
-    snprintf(line, sizeof(line), "<br>Rotation files: %u<br>File level: %s<br>Buffer: %s / %s<br>Flush interval: %lu ms<br>Max per file: %s<br>Max total: %s<br>Segments: ",
+    snprintf(line, sizeof(line), "</td></tr><tr><th>Rotation files</th><td>%u</td></tr><tr><th>Mode</th><td>%s</td></tr><tr><th>Buffer</th><td>%s / %s</td></tr><tr><th>Flush interval</th><td>%lu ms</td></tr><tr><th>Max per file</th><td>%s</td></tr><tr><th>Max total</th><td>%s</td></tr><tr><th>Segments</th><td>",
              static_cast<unsigned>(Esp32BaseFileLog::rotateFiles()),
-             Esp32BaseFileLog::levelName(),
+             Esp32BaseFileLog::modeName(),
              bufferUsed,
              bufferTotal,
              static_cast<unsigned long>(Esp32BaseFileLog::flushIntervalMs()),
@@ -1879,7 +1950,7 @@ void handleLogsPage() {
         sendChunk(line);
     }
     const uint8_t selectedSegment = selectedLogSegment();
-    sendChunk("</p></section><section class='panel'>");
+    sendChunk("</td></tr></table></section><section class='panel'>");
     sendLogSegmentTabs(selectedSegment);
     sendChunk("<pre>");
     char selectedTitle[16];
@@ -2004,6 +2075,7 @@ bool Esp32BaseWeb::begin() {
     g_server.on("/esp32base/auth", HTTP_POST, handleAuthSubmit);
     g_server.on("/esp32base/tools", HTTP_GET, handleToolsPage);
     g_server.on("/esp32base/tools/hostname", HTTP_POST, handleHostnameSubmit);
+    g_server.on("/esp32base/tools/filelog", HTTP_POST, handleToolsFileLogPost);
     g_server.on("/esp32base/tools/reboot", HTTP_POST, handleToolsRebootPost);
     g_server.on("/esp32base/tools/format-fs", HTTP_POST, handleToolsFormatFsPost);
     g_server.on("/esp32base/tools/logs-clear", HTTP_POST, handleToolsLogsClearPost);

@@ -132,12 +132,15 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "next OTA");
     RUN_SELFTEST("GET", "/esp32base/wifi", nullptr, true, 200, "<title>Network</title>");
     RUN_SELFTEST("GET", "/esp32base/wifi", nullptr, true, 200, "Password (optional)");
-    RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "File log: <b>enabled</b>");
+    RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "<section class='panel'><table class='logmeta'>");
+    RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "<th>File log</th><td><b>enabled</b>");
     RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "class='logmeta'");
-    RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "Max per file: 32.00 KB");
-    RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "class='active'>current-0");
-    RUN_SELFTEST("GET", "/esp32base/logs?segment=1", nullptr, true, 200, "class='active'>history-1");
-    RUN_SELFTEST("GET", "/esp32base/logs?segment=99", nullptr, true, 200, "class='active'>current-0");
+    RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "class='segname'");
+    RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "class='segsize'");
+    RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "<th>Max per file</th><td>32.00 KB");
+    RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "class='active' href='/esp32base/logs?segment=0'><span class='segname'>current-0");
+    RUN_SELFTEST("GET", "/esp32base/logs?segment=1", nullptr, true, 200, "class='active' href='/esp32base/logs?segment=1'><span class='segname'>history-1");
+    RUN_SELFTEST("GET", "/esp32base/logs?segment=99", nullptr, true, 200, "class='active' href='/esp32base/logs?segment=0'><span class='segname'>current-0");
     RUN_SELFTEST("GET", "/esp32base/auth", nullptr, true, 200, "<title>Auth</title>");
     RUN_SELFTEST("GET", "/esp32base/auth", nullptr, true, 200, "type='password'");
     RUN_SELFTEST("GET", "/esp32base/auth", nullptr, true, 200, "Confirm new auth password");
@@ -293,11 +296,11 @@ void setup() {
     Esp32BaseConfig::enableConfigAudit(true);
     Esp32Base::begin();
 #if ESP32BASE_ENABLE_FILELOG
-    if (!Esp32BaseFileLog::enable("/logs/eb_app.log", 32UL * 1024UL, Esp32BaseLog::INFO, 4)) {
+    if (!Esp32BaseFileLog::isEnabled()) {
 #if ESP32BASE_ENABLE_FS
-        ESP32BASE_LOG_W("example", "filelog_enable_failed fs_ready=%s", Esp32BaseFs::isReady() ? "yes" : "no");
+        ESP32BASE_LOG_W("example", "filelog_unavailable fs_ready=%s", Esp32BaseFs::isReady() ? "yes" : "no");
         if (!Esp32BaseFs::isReady() && Esp32BaseFs::format() && Esp32BaseFs::begin()) {
-            Esp32BaseFileLog::enable("/logs/eb_app.log", 32UL * 1024UL, Esp32BaseLog::INFO, 4);
+            Esp32BaseFileLog::setMode(Esp32BaseFileLog::INFO);
         }
 #endif
     }

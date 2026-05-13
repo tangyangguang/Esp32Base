@@ -119,8 +119,8 @@
 - FS profile 默认启用 WARN 文件日志。
 - 示例中 INFO 文件日志生效。
 - 默认 `4 × 32KB` 轮转正确。
-- INFO/DEBUG 仅在 file level 降低后写文件。
-- INFO/DEBUG 使用 `1KB / 2s` 缓存。
+- INFO 仅在 FileLog 模式为 INFO 后写文件；DEBUG/VERBOSE 不作为文件日志模式。
+- INFO 使用 `1KB / 2s` 缓存。
 - WARN/ERROR 立即写入。
 - clear 幂等。
 - restart、deep sleep、OTA success、rollback restart 前 flush。
@@ -192,7 +192,7 @@ CI 应覆盖核心矩阵，release 前执行完整矩阵。
 - 每秒 1 次 NVS deferred 写。
 - 每 10 分钟 1 次 Web 状态查询。
 - 每 30 秒 1 次 `health.tick` bus 事件。
-- Health tick 未超过 loop 阈值时，默认每 30 分钟最多输出 1 条 DEBUG 日志，不污染 INFO 文件日志，也避免 DEBUG 文件日志刷屏。
+- Health tick 未超过 loop 阈值时，默认每 30 分钟最多输出 1 条 DEBUG 日志；DEBUG 不进入文件日志模式。
 - Health tick 窗口内最大 loop 间隔超过 `ESP32BASE_HEALTH_LOOP_WARN_MS` 时输出 WARN。
 - `ESP32BASE_HEALTH_LOOP_WARN_MS` 默认 3000ms；高实时性业务可自行降到 1000/2000ms，长操作较多的应用可升到 5000ms。
 - `ESP32BASE_HEALTH_DEBUG_LOG_INTERVAL_MS` 默认 1800000ms；设为 0 可关闭普通 DEBUG tick 日志。
@@ -235,7 +235,8 @@ CI 应覆盖核心矩阵，release 前执行完整矩阵。
 - 字节数同时显示 raw bytes 与 KB/MB。
 - NTP 对时成功后输出实际时间、当前 uptime、推算 boot wall time。
 - WiFi 连接、断开、重连 backoff、进入/退出 config portal 都必须有清晰日志。
-- 文件日志默认 WARN；现场调试示例可开启串口 DEBUG，并将文件日志设为 INFO 方便通过 Logs 页面观察。
+- 文件日志默认 WARN；现场调试可通过 Web System 页或 `Esp32BaseFileLog::setMode(Esp32BaseFileLog::INFO)` 切到 INFO，方便通过 Logs 页面观察。
+- FileLog 模式变更必须输出 WARN 级审计日志，包含上一次模式和新模式。
 - Serial 日志和 FileLog 必须可独立控制；量产设备可通过 `Esp32BaseLog::setSerialLevel(Esp32BaseLog::NONE)` 关闭串口，同时保持 FileLog WARN/ERROR 或 INFO 正常写入。
 - `ESP32BASE_LOG_LEVEL` 是编译期上限；如果编译为 `ESP32BASE_LOG_NONE`，日志宏被移除，FileLog 也不会收到日志。
 - 普通页面 GET 慢请求、认证成功、路由注册和配置审计 skipped/read/deferred 属于 DEBUG 诊断；配置实际写入、flush、启动认证加载、WiFi/OTA/NTP/mDNS 状态、格式化、重启和认证失败应保留 INFO/WARN/ERROR。

@@ -51,12 +51,11 @@ build_flags =
 
 Web/API 保存的 hostname 存储在 `eb_sys.hostname`，重启后覆盖构建默认值；出厂重置清除该配置后恢复 `ESP32BASE_DEFAULT_HOSTNAME`。
 
-启用 FS 的 profile 会默认启用 Runtime 文件日志：`/logs/eb_app.log`，默认 `4 × 32KB`，文件等级 WARN。示例会显式改为 INFO：
+启用 FS 的 profile 会默认启用 Runtime 文件日志：`/logs/eb_app.log`，默认 `4 × 32KB`，模式 WARN。示例通过构建参数把默认模式改为 INFO：
 
-```cpp
-#if ESP32BASE_ENABLE_FILELOG
-Esp32BaseFileLog::enable("/logs/eb_app.log", 32UL * 1024UL, Esp32BaseLog::INFO, 4);
-#endif
+```ini
+build_flags =
+  -D ESP32BASE_EB_FILELOG_DEFAULT_MODE=ESP32BASE_FILELOG_MODE_INFO
 ```
 
 ## 支持目标

@@ -4,9 +4,6 @@
 void setup() {
     Esp32Base::setFirmwareInfo("net-runtime", "1.0.0");
     Esp32Base::begin();
-#if ESP32BASE_ENABLE_FILELOG
-    Esp32BaseFileLog::enable("/logs/eb_app.log", 32UL * 1024UL, Esp32BaseLog::INFO, 4);
-#endif
     ESP32BASE_LOG_I("example", "net runtime example ready");
 }
 

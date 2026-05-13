@@ -186,8 +186,8 @@ System 维护页：
 - 重启按钮必须有二次确认，并通过统一 lifecycle restart 执行；POST 响应必须替换浏览器历史到 GET URL，避免刷新重复提交。
 - 重启和格式化等危险操作必须分组显示，避免按钮与下一项标题贴得太近。
 - 启用 FS 的 profile 显示 `Format LittleFS`，该操作会删除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth 或 NVS 配置。
-- 启用 FileLog 的 profile 显示 `Clear logs`，清空日志只接受 POST，表单使用 `confirm()` 和 `once(form)`，成功后回到 System 页面显示结果。
-- 格式化 FS 是显式 POST 操作；执行前 flush 文件日志，成功后重新 mount FS，并重新加载文件日志配置；成功提示应明确显示在 System 页面，同时输出 WARN 级维护日志记录请求、format/mount/FileLog reload 结果。重启请求同样输出 WARN 级维护日志。
+- 启用 FileLog 的 profile 显示 File log 模式设置和 `Clear logs`；模式设置只接受 OFF、WARN、INFO，保存后立即生效并写入 `eb_log.mode`，清空日志只接受 POST，表单使用 `confirm()` 和 `once(form)`，成功后回到 System 页面显示结果。
+- 格式化 FS 是显式 POST 操作；执行前 flush 文件日志，成功后重新 mount FS，并重新加载 FileLog 模式；成功提示应明确显示在 System 页面，同时输出 WARN 级维护日志记录请求、format/mount/FileLog reload 结果。重启请求同样输出 WARN 级维护日志。
 - 普通 `GET` 页面慢请求只输出 DEBUG；`POST` 等操作慢请求继续输出 WARN。
 - API 层仍建议要求 POST，不使用 GET 触发重启。
 - 内置危险 POST 包括 WiFi 保存/清除、Hostname 保存、Auth 保存、重启、System 操作、Logs clear、Web OTA upload/done；跨站 `Origin` 或 `Referer` 会被拒绝。
@@ -205,10 +205,11 @@ Logs 页面：
 
 - 需要 Basic Auth。
 - FS/FileLog 不可用时显示 `File log: unavailable`。
+- FileLog 模式为 OFF 时，Logs 页面仍展示已有历史日志；OFF 只表示停止后续写入。
 - 读取日志内容前必须调用 `Esp32BaseFileLog::flush()`。
-- 显示 enabled、path、file level、rotate files、buffer used/total、flush interval、max per file、max total、每段大小。
-- 文件日志状态信息使用紧凑小字号展示；其中的容量值只显示 KB/MB/B 人性化值，不重复 raw bytes。
-- 页面顶部以标签展示所有 segment，顺序为 `current-0`、`history-1`、`history-2` 到最旧 history；标签里的大小只显示 KB/MB/B 人性化值，不重复 raw bytes。
+- 显示 enabled、path、mode、rotate files、buffer used/total、flush interval、max per file、max total、每段大小。
+- 文件日志状态信息使用 panel 内紧凑小字号表格展示，label/value 纵向对齐；其中的容量值只显示 KB/MB/B 人性化值，不重复 raw bytes。
+- 页面顶部以标签展示所有 segment，顺序为 `current-0`、`history-1`、`history-2` 到最旧 history；标签里的文件名和大小分开展示，大小只显示 KB/MB/B 人性化值。
 - 默认显示 `current-0`；可通过 `?segment=N` 查看单个历史文件，非法或越界 segment 回落到 `current-0`。
 - 日志内容必须 HTML escape。
 - 清空日志入口位于 System 页面；Logs 页面只负责查看日志。
