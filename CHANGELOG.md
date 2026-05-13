@@ -13,6 +13,7 @@
 - Reset Watchdog Trip 写入 `wdt_trip_base` / `wdt_trip_time` 后会立即回读确认，失败时返回错误提示。
 - Web OTA 在 `startUpload()` 阶段失败时记录拒绝原因，后续 chunk 不再继续写入，最终 JSON 返回明确错误。
 - Status 页将 `OTA headroom` 改名为 `OTA slot minus current sketch`；`Max OTA upload` 才是上传硬上限。
+- 文档资源表同步刷新 ESP32 Core 2.x 7 profile、ESP32-C3 FULL 和 ESP32 Core 3.x FULL 的当前 size；历史条目中的 `OTA headroom` 指的就是改名前的同一状态页指标。
 - Web 路由文档补齐 `/esp32base/tools/filelog` 和 `/esp32base/tools/logs-clear`，并标明 `/esp32base/logs/clear` 是保留直达入口。
 
 关键边界：
