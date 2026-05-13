@@ -122,9 +122,8 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "AP MAC</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "max alloc");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Watchdog</th>");
-    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "lifetime resets");
-    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "trip resets");
-    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "trip reset at");
+    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "resets ");
+    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "since clear");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Current firmware</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "OTA headroom</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Rollback</th>");
@@ -159,10 +158,9 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Firmware OTA");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Hostname");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Save Hostname");
-    RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Watchdog trip");
-    RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Reset Watchdog Trip");
-    RUN_SELFTEST("POST", "/esp32base/tools/watchdog-trip-reset", nullptr, true, 303, "Location: /esp32base/tools?watchdog_trip_reset=1");
-    RUN_SELFTEST("GET", "/esp32base/tools?watchdog_trip_reset=1", nullptr, true, 200, "Watchdog trip reset.");
+    RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Clear Watchdog Reset Count");
+    RUN_SELFTEST("POST", "/esp32base/tools/watchdog-reset-count-clear", nullptr, true, 303, "Location: /esp32base/tools?watchdog_reset_count_cleared=1");
+    RUN_SELFTEST("GET", "/esp32base/tools?watchdog_reset_count_cleared=1", nullptr, true, 200, "Watchdog reset count cleared.");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Restart device");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Format LittleFS");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Free heap:");

@@ -11,5 +11,6 @@ public:
     static bool restoreCurrentTaskAfterLongOperation();
     static bool isEnabled();
     static bool wasWatchdogReset();
-    static uint32_t lifetimeResetCount();
+    static uint32_t resetCount();
+    static bool clearResetCount();
 };

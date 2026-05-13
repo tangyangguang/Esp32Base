@@ -623,65 +623,6 @@ void sendStatusSectionEnd() {
     sendChunk("</table></section>");
 }
 
-#if ESP32BASE_ENABLE_WATCHDOG
-struct WatchdogTripState {
-    uint32_t lifetime;
-    uint32_t base;
-    uint32_t trip;
-    uint32_t resetTime;
-    bool hasBase;
-};
-
-WatchdogTripState readWatchdogTripState() {
-    WatchdogTripState state = {};
-    state.lifetime = Esp32BaseWatchdog::lifetimeResetCount();
-    Preferences prefs;
-    if (prefs.begin("eb_sys", true)) {
-        state.hasBase = prefs.isKey("wdt_trip_base");
-        state.base = static_cast<uint32_t>(prefs.getInt("wdt_trip_base", 0));
-        state.resetTime = static_cast<uint32_t>(prefs.getInt("wdt_trip_time", 0));
-        prefs.end();
-    }
-    state.trip = state.lifetime >= state.base ? state.lifetime - state.base : 0;
-    return state;
-}
-
-bool formatEpochTime(uint32_t epoch, char* out, size_t len) {
-    if (!out || len == 0 || epoch == 0) {
-        return false;
-    }
-    const time_t raw = static_cast<time_t>(epoch);
-    struct tm tmValue;
-    localtime_r(&raw, &tmValue);
-    return strftime(out, len, "%Y-%m-%d %H:%M:%S", &tmValue) > 0;
-}
-
-void formatWatchdogTripResetAt(const WatchdogTripState& state, char* out, size_t len) {
-    if (!out || len == 0) {
-        return;
-    }
-    if (!state.hasBase) {
-        strlcpy(out, "never", len);
-        return;
-    }
-#if ESP32BASE_ENABLE_NTP
-    if (state.resetTime >= ESP32BASE_NTP_SYNC_MIN_EPOCH && formatEpochTime(state.resetTime, out, len)) {
-        return;
-    }
-#endif
-    strlcpy(out, "unknown", len);
-}
-
-uint32_t currentWatchdogTripResetTime() {
-#if ESP32BASE_ENABLE_NTP
-    if (Esp32BaseNtp::isTimeSynced()) {
-        return Esp32BaseNtp::timestamp();
-    }
-#endif
-    return 0;
-}
-#endif
-
 void formatMac(uint64_t mac, char* out, size_t len) {
     if (!out || len == 0) {
         return;
@@ -1373,18 +1314,13 @@ bool fileLogModeFromArg(const String& raw, Esp32BaseFileLog::Mode& mode) {
 #endif
 
 #if ESP32BASE_ENABLE_WATCHDOG
-void sendWatchdogTripPanel() {
-    const WatchdogTripState state = readWatchdogTripState();
-    char count[24];
-    char resetAt[32];
-    formatWatchdogTripResetAt(state, resetAt, sizeof(resetAt));
-    sendChunk("<section class='panel'><h2>Watchdog trip</h2><table class='kv'>");
-    snprintf(count, sizeof(count), "%lu", static_cast<unsigned long>(state.lifetime));
-    sendInfoRow("Lifetime resets", count);
-    snprintf(count, sizeof(count), "%lu", static_cast<unsigned long>(state.trip));
-    sendInfoRow("Trip resets", count);
-    sendInfoRow("Trip reset at", resetAt);
-    sendChunk("</table><form method='post' action='/esp32base/tools/watchdog-trip-reset' onsubmit=\"return confirm('Reset Watchdog trip counter? Lifetime resets are kept.')&&once(this)\"><input type='submit' value='Reset Watchdog Trip'></form></section>");
+void sendWatchdogPanel() {
+    char count[32];
+    snprintf(count, sizeof(count), "%lu since clear",
+             static_cast<unsigned long>(Esp32BaseWatchdog::resetCount()));
+    sendChunk("<section class='panel'><h2>Watchdog</h2><table class='kv'>");
+    sendInfoRow("Reset count", count);
+    sendChunk("</table><form method='post' action='/esp32base/tools/watchdog-reset-count-clear' onsubmit=\"return confirm('Clear Watchdog reset count?')&&once(this)\"><input type='submit' value='Clear Watchdog Reset Count'></form></section>");
 }
 #endif
 
@@ -1420,8 +1356,8 @@ void handleToolsPage() {
         sendChunk("<p class='ok'><b>Logs cleared.</b></p>");
     } else if (g_server.hasArg("filelog_saved")) {
         sendChunk("<p class='ok'><b>File log mode saved.</b></p>");
-    } else if (g_server.hasArg("watchdog_trip_reset")) {
-        sendChunk("<p class='ok'><b>Watchdog trip reset.</b></p>");
+    } else if (g_server.hasArg("watchdog_reset_count_cleared")) {
+        sendChunk("<p class='ok'><b>Watchdog reset count cleared.</b></p>");
     } else if (g_server.hasArg("error")) {
         sendChunk("<p class='err'>System action failed: ");
         sendEscapedHtmlChunk(g_server.arg("error").c_str());
@@ -1448,7 +1384,7 @@ void handleToolsPage() {
     sendEscapedHtmlChunk(hasStoredHostname && storedHostname[0] ? storedHostname : Esp32Base::hostname());
     sendChunk("'><p class='muted'>Saved hostname takes effect after restart.</p><input type='submit' value='Save Hostname'></form></section>");
 #if ESP32BASE_ENABLE_WATCHDOG
-    sendWatchdogTripPanel();
+    sendWatchdogPanel();
 #endif
 #if ESP32BASE_ENABLE_FILELOG
     sendChunk("<section class='panel'><h2>File log</h2><table class='kv'>");
@@ -1516,20 +1452,15 @@ void handleToolsRebootPost() {
 }
 
 #if ESP32BASE_ENABLE_WATCHDOG
-void handleToolsWatchdogTripResetPost() {
+void handleToolsWatchdogResetCountClearPost() {
     markRequest();
-    if (!ensurePostAllowed("tools_watchdog_trip_reset")) {
+    if (!ensurePostAllowed("tools_watchdog_reset_count_clear")) {
         return;
     }
-    const uint32_t lifetime = Esp32BaseWatchdog::lifetimeResetCount();
-    const uint32_t resetTime = currentWatchdogTripResetTime();
-    const bool ok = Esp32BaseConfig::setInt("eb_sys", "wdt_trip_base", static_cast<int32_t>(lifetime)) &&
-                    Esp32BaseConfig::setInt("eb_sys", "wdt_trip_time", static_cast<int32_t>(resetTime));
-    ESP32BASE_LOG_W("web", "watchdog_trip_reset_requested source=tools lifetime=%lu time=%lu result=%s",
-                    static_cast<unsigned long>(lifetime),
-                    static_cast<unsigned long>(resetTime),
+    const bool ok = Esp32BaseWatchdog::clearResetCount();
+    ESP32BASE_LOG_W("web", "watchdog_reset_count_clear_requested source=tools result=%s",
                     ok ? "success" : "failed");
-    redirectSeeOther(ok ? "/esp32base/tools?watchdog_trip_reset=1" : "/esp32base/tools?error=watchdog_trip_reset_failed");
+    redirectSeeOther(ok ? "/esp32base/tools?watchdog_reset_count_cleared=1" : "/esp32base/tools?error=watchdog_reset_count_clear_failed");
 }
 #endif
 
@@ -1830,16 +1761,10 @@ void handleRoot() {
     snprintf(value, sizeof(value), "free %s, min %s, max alloc %s, total %s", freeHeap, minHeap, maxAllocHeap, totalHeap);
     sendInfoRow("Heap", value);
 #if ESP32BASE_ENABLE_WATCHDOG
-    const WatchdogTripState watchdogTrip = readWatchdogTripState();
-    char tripResetAt[32];
-    formatWatchdogTripResetAt(watchdogTrip, tripResetAt, sizeof(tripResetAt));
     sendInfoRowStart("Watchdog");
-    snprintf(value, sizeof(value), "enabled, lifetime resets %lu, trip resets %lu",
-             static_cast<unsigned long>(watchdogTrip.lifetime),
-             static_cast<unsigned long>(watchdogTrip.trip));
+    snprintf(value, sizeof(value), "enabled, resets %lu since clear",
+             static_cast<unsigned long>(Esp32BaseWatchdog::resetCount()));
     sendEscapedHtmlChunk(value);
-    sendChunk("<br>trip reset at ");
-    sendEscapedHtmlChunk(tripResetAt);
     sendInfoRowEnd();
 #endif
 #if ESP32BASE_ENABLE_NTP
@@ -2192,7 +2117,7 @@ bool Esp32BaseWeb::begin() {
     g_server.on("/esp32base/tools/filelog", HTTP_POST, handleToolsFileLogPost);
     g_server.on("/esp32base/tools/reboot", HTTP_POST, handleToolsRebootPost);
 #if ESP32BASE_ENABLE_WATCHDOG
-    g_server.on("/esp32base/tools/watchdog-trip-reset", HTTP_POST, handleToolsWatchdogTripResetPost);
+    g_server.on("/esp32base/tools/watchdog-reset-count-clear", HTTP_POST, handleToolsWatchdogResetCountClearPost);
 #endif
     g_server.on("/esp32base/tools/format-fs", HTTP_POST, handleToolsFormatFsPost);
     g_server.on("/esp32base/tools/logs-clear", HTTP_POST, handleToolsLogsClearPost);
