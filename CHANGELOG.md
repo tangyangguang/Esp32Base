@@ -27,8 +27,8 @@
 优化：
 
 - Status 页重构为只读设备体检页，按 Overview、Hardware、Firmware & OTA、Network、Storage & Logs、Partition Table、Boot Reasons 分组展示。
-- Status 页新增芯片型号、revision、CPU、SDK、eFuse MAC、STA MAC、AP MAC、heap max alloc、Watchdog reset count、OTA headroom 和完整运行时分区表。
-- Web System 页新增 Watchdog reset count 清零；清零 `eb_sys.wdt_cnt` 和当前内存计数。Status 页显示 `resets N since clear`，不再提供 lifetime/trip 双计数。
+- Status 页新增芯片型号、revision、CPU、SDK、eFuse MAC、STA MAC、AP MAC、heap max alloc、Watchdog total/trip reset count、OTA headroom 和完整运行时分区表。
+- Web System 页新增 Watchdog trip 清零；`total resets` 记录 factory reset 以来累计 Watchdog 重启次数，`trip resets` 记录上次手动 Clear Trip 以来的 Watchdog 重启次数。不记录 trip 清零时间，避免 NTP 未同步时出现 `unknown`。
 - Status 页移除常驻 `OTA status` 行，保留 OTA 内部状态机和 `/esp32base/api/ota` 诊断字段；异常时仍显示 `Last OTA error`。
 - eFuse MAC 按常见网络 MAC 顺序展示，便于和 STA MAC、AP MAC 直接对照调试。
 - 修正 config portal 默认 AP SSID 后缀，`ESP32-Config-XXXX` 的 `XXXX` 现在取可读 eFuse MAC 的最后两个字节，而不是 `ESP.getEfuseMac()` 整数低 16 位。

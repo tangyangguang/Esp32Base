@@ -1316,11 +1316,14 @@ bool fileLogModeFromArg(const String& raw, Esp32BaseFileLog::Mode& mode) {
 #if ESP32BASE_ENABLE_WATCHDOG
 void sendWatchdogPanel() {
     char count[32];
-    snprintf(count, sizeof(count), "%lu since clear",
-             static_cast<unsigned long>(Esp32BaseWatchdog::resetCount()));
+    snprintf(count, sizeof(count), "%lu",
+             static_cast<unsigned long>(Esp32BaseWatchdog::totalResetCount()));
     sendChunk("<section class='panel'><h2>Watchdog</h2><table class='kv'>");
-    sendInfoRow("Reset count", count);
-    sendChunk("</table><form method='post' action='/esp32base/tools/watchdog-reset-count-clear' onsubmit=\"return confirm('Clear Watchdog reset count?')&&once(this)\"><input type='submit' value='Clear Watchdog Reset Count'></form></section>");
+    sendInfoRow("Total resets", count);
+    snprintf(count, sizeof(count), "%lu",
+             static_cast<unsigned long>(Esp32BaseWatchdog::tripResetCount()));
+    sendInfoRow("Trip resets", count);
+    sendChunk("</table><form method='post' action='/esp32base/tools/watchdog-trip-clear' onsubmit=\"return confirm('Clear Watchdog trip counter? Total resets are kept.')&&once(this)\"><input type='submit' value='Clear Watchdog Trip'></form></section>");
 }
 #endif
 
@@ -1356,8 +1359,8 @@ void handleToolsPage() {
         sendChunk("<p class='ok'><b>Logs cleared.</b></p>");
     } else if (g_server.hasArg("filelog_saved")) {
         sendChunk("<p class='ok'><b>File log mode saved.</b></p>");
-    } else if (g_server.hasArg("watchdog_reset_count_cleared")) {
-        sendChunk("<p class='ok'><b>Watchdog reset count cleared.</b></p>");
+    } else if (g_server.hasArg("watchdog_trip_cleared")) {
+        sendChunk("<p class='ok'><b>Watchdog trip cleared.</b></p>");
     } else if (g_server.hasArg("error")) {
         sendChunk("<p class='err'>System action failed: ");
         sendEscapedHtmlChunk(g_server.arg("error").c_str());
@@ -1452,15 +1455,15 @@ void handleToolsRebootPost() {
 }
 
 #if ESP32BASE_ENABLE_WATCHDOG
-void handleToolsWatchdogResetCountClearPost() {
+void handleToolsWatchdogTripClearPost() {
     markRequest();
-    if (!ensurePostAllowed("tools_watchdog_reset_count_clear")) {
+    if (!ensurePostAllowed("tools_watchdog_trip_clear")) {
         return;
     }
-    const bool ok = Esp32BaseWatchdog::clearResetCount();
-    ESP32BASE_LOG_W("web", "watchdog_reset_count_clear_requested source=tools result=%s",
+    const bool ok = Esp32BaseWatchdog::clearTripResetCount();
+    ESP32BASE_LOG_W("web", "watchdog_trip_clear_requested source=tools result=%s",
                     ok ? "success" : "failed");
-    redirectSeeOther(ok ? "/esp32base/tools?watchdog_reset_count_cleared=1" : "/esp32base/tools?error=watchdog_reset_count_clear_failed");
+    redirectSeeOther(ok ? "/esp32base/tools?watchdog_trip_cleared=1" : "/esp32base/tools?error=watchdog_trip_clear_failed");
 }
 #endif
 
@@ -1762,8 +1765,9 @@ void handleRoot() {
     sendInfoRow("Heap", value);
 #if ESP32BASE_ENABLE_WATCHDOG
     sendInfoRowStart("Watchdog");
-    snprintf(value, sizeof(value), "enabled, resets %lu since clear",
-             static_cast<unsigned long>(Esp32BaseWatchdog::resetCount()));
+    snprintf(value, sizeof(value), "enabled, total resets %lu, trip resets %lu",
+             static_cast<unsigned long>(Esp32BaseWatchdog::totalResetCount()),
+             static_cast<unsigned long>(Esp32BaseWatchdog::tripResetCount()));
     sendEscapedHtmlChunk(value);
     sendInfoRowEnd();
 #endif
@@ -2117,7 +2121,7 @@ bool Esp32BaseWeb::begin() {
     g_server.on("/esp32base/tools/filelog", HTTP_POST, handleToolsFileLogPost);
     g_server.on("/esp32base/tools/reboot", HTTP_POST, handleToolsRebootPost);
 #if ESP32BASE_ENABLE_WATCHDOG
-    g_server.on("/esp32base/tools/watchdog-reset-count-clear", HTTP_POST, handleToolsWatchdogResetCountClearPost);
+    g_server.on("/esp32base/tools/watchdog-trip-clear", HTTP_POST, handleToolsWatchdogTripClearPost);
 #endif
     g_server.on("/esp32base/tools/format-fs", HTTP_POST, handleToolsFormatFsPost);
     g_server.on("/esp32base/tools/logs-clear", HTTP_POST, handleToolsLogsClearPost);

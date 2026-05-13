@@ -163,7 +163,7 @@ System:
 - `GET /esp32base/tools`
 - `POST /esp32base/tools/hostname`
 - `POST /esp32base/tools/reboot`
-- `POST /esp32base/tools/watchdog-reset-count-clear`
+- `POST /esp32base/tools/watchdog-trip-clear`
 - `POST /esp32base/tools/format-fs`
 - `POST /esp32base/api/restart`
 
@@ -186,7 +186,7 @@ System 维护页：
 - Hostname 设置区显示当前 hostname、构建默认 hostname、已保存 hostname 和是否需要重启；保存只写入 `eb_sys.hostname`，不热切换当前 mDNS/OTA/Web 身份，页面必须提示重启后生效。
 - 重启按钮必须有二次确认，并通过统一 lifecycle restart 执行；POST 响应必须替换浏览器历史到 GET URL，避免刷新重复提交。
 - 重启和格式化等危险操作必须分组显示，避免按钮与下一项标题贴得太近。
-- 启用 Watchdog 的 profile 显示 Watchdog reset count 维护；Clear Watchdog Reset Count 清零 `eb_sys.wdt_cnt` 和当前内存计数。
+- 启用 Watchdog 的 profile 显示 Watchdog total/trip 计数维护；Clear Watchdog Trip 只清零 `eb_sys.wdt_trip_cnt` 和当前 trip 内存计数，不修改 total。
 - 启用 FS 的 profile 显示 `Format LittleFS`，该操作会删除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth 或 NVS 配置。
 - 启用 FileLog 的 profile 显示 File log 模式设置和 `Clear logs`；模式设置只接受 OFF、WARN、INFO，保存后立即生效并写入 `eb_log.mode`，清空日志只接受 POST，表单使用 `confirm()` 和 `once(form)`，成功后回到 System 页面显示结果。
 - 格式化 FS 是显式 POST 操作；执行前 flush 文件日志，成功后重新 mount FS，并重新加载 FileLog 模式；成功提示应明确显示在 System 页面，同时输出 WARN 级维护日志记录请求、format/mount/FileLog reload 结果。重启请求同样输出 WARN 级维护日志。
@@ -230,7 +230,7 @@ Logs 页面：
 - `/esp32base` 是只读设备体检页，按 Overview、Hardware、Firmware & OTA、Network、Storage & Logs、Partition Table、Boot Reasons 分组展示调试信息。
 - Hardware 显示芯片型号、revision、CPU、SDK、Flash、PSRAM 和 eFuse MAC；Network 显示 WiFi/IP/RSSI、power save、STA MAC 和 AP MAC。
 - Firmware & OTA 显示当前固件大小、运行 app slot、下一 OTA slot、Max OTA upload、OTA headroom、rollback 状态，以及仅在存在错误时显示的 Last OTA error。
-- Runtime Health 显示 heap free/min/max alloc/total；启用 Watchdog 时显示 `enabled, resets N since clear`。
+- Runtime Health 显示 heap free/min/max alloc/total；启用 Watchdog 时显示 `enabled, total resets N, trip resets M`。
 - Partition Table 使用运行时分区表展示 Name、Type、SubType、Offset、Size、Role；Role 用于标识 running app、next OTA、app data、NVS config、OTA state、coredump 等。
 - 未启用的模块不显示对应行，避免非 FULL profile 引入额外依赖。
 
