@@ -126,7 +126,7 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "trip resets");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "trip reset at");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Current firmware</th>");
-    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "OTA headroom</th>");
+    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "OTA slot minus current sketch</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Rollback</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "WiFi</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "File log</th>");

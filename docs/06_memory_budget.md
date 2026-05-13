@@ -152,12 +152,12 @@ ESP32-C3 4MB 要控制 Web/OTA/Fs 组合的体积。
 
 | Target | 分区表 | OTA app slot | 当前代表 FULL firmware.bin | 余量 |
 | --- | --- | ---: | ---: | ---: |
-| ESP32 4MB, Core 2.x | `partitions/esp32-4mb-ota-balanced.csv` | 1310720 | 909936 | 400784 |
+| ESP32 4MB, Core 2.x | `partitions/esp32-4mb-ota-balanced.csv` | 1310720 | 964496 | 346224 |
 | ESP32 4MB, Core 3.x | `partitions/esp32-4mb-ota-balanced.csv` | 1310720 | 1124528 | 186192 |
 | ESP32-S3 8MB, Core 2.x | `partitions/esp32-s3-8mb-ota-balanced.csv` | 2359296 | 862096 | 1497200 |
-| ESP32-C3 4MB, Core 2.x | `partitions/esp32-c3-4mb-ota-balanced.csv` | 1310720 | 934160 | 376560 |
+| ESP32-C3 4MB, Core 2.x | `partitions/esp32-c3-4mb-ota-balanced.csv` | 1310720 | 1002208 | 308512 |
 
-ESP32 4MB + Arduino Core 3.x 的 FULL 余量已经明显收窄。应用若继续增加大页面、证书、图片或大型业务逻辑，应优先改用更大的 app slot 或 8MB Flash 板型，而不是压缩本库核心逻辑。
+4MB FULL profile 的 OTA slot 余量已经明显收窄，Core 3.x 和 C3 尤其需要持续看 size。应用若继续增加大页面、证书、图片或大型业务逻辑，应优先改用更大的 app slot 或 8MB Flash 板型，而不是压缩本库核心逻辑。
 
 ## 7. 自动构建资源记录
 

@@ -2,6 +2,25 @@
 
 本文从 2026-05-06 起记录 Esp32Base 新增和优化的能力，面向正在接入本库的业务项目。业务项目应优先查看本文，了解最近可用的新 API、行为变化和推荐接入方式。
 
+## 2026-05-13
+
+### 冻结前诊断资产与 OTA/Web 边界收紧
+
+调整：
+
+- `factoryReset()` / `clearSystemConfig()` 不再清空整个 `eb_sys` namespace，只清理 `eb_sys.hostname`，保留 boot/restart/watchdog 统计和诊断 key。
+- Watchdog trip 当 `wdt_trip_base` 大于 lifetime reset count 时显示 `invalid baseline`，不再把异常基线折算成 `0`。
+- Reset Watchdog Trip 写入 `wdt_trip_base` / `wdt_trip_time` 后会立即回读确认，失败时返回错误提示。
+- Web OTA 在 `startUpload()` 阶段失败时记录拒绝原因，后续 chunk 不再继续写入，最终 JSON 返回明确错误。
+- Status 页将 `OTA headroom` 改名为 `OTA slot minus current sketch`；`Max OTA upload` 才是上传硬上限。
+- Web 路由文档补齐 `/esp32base/tools/filelog` 和 `/esp32base/tools/logs-clear`，并标明 `/esp32base/logs/clear` 是保留直达入口。
+
+关键边界：
+
+- 出厂重置保护基础库诊断资产，但仍会清理 WiFi、Web Auth、FileLog 模式和 hostname 配置。
+- `/esp32base/api/wifi` 仍是表单提交兼容端点，返回 303 到 HTML 页面，不是 JSON API。
+- Core 3.x、实机 OTA/WDT/WiFi/AP/LittleFS/soak 仍需按发布清单继续验证。
+
 ## 2026-05-11
 
 ### FileLog 运行时模式收口

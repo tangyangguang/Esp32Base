@@ -156,13 +156,15 @@ OTA:
 Logs:
 
 - `GET /esp32base/logs`
-- `POST /esp32base/logs/clear`
+- `POST /esp32base/logs/clear`，保留直达入口，成功后回到 Logs 页面
 
 System:
 
 - `GET /esp32base/tools`
 - `POST /esp32base/tools/hostname`
 - `POST /esp32base/tools/reboot`
+- `POST /esp32base/tools/filelog`
+- `POST /esp32base/tools/logs-clear`，System 页面主入口，成功后回到 System 页面
 - `POST /esp32base/tools/watchdog-trip-reset`
 - `POST /esp32base/tools/format-fs`
 - `POST /esp32base/api/restart`
@@ -179,14 +181,16 @@ WiFi 配置页：
 - 服务端 API 必须重复校验 SSID 非空，密码允许为空。
 - 空 SSID 返回错误，不保存凭证。
 - SSID 超过 32 字节或密码超过 64 字节时返回错误，不静默截断。
+- `/esp32base/wifi` 和 `/esp32base/api/wifi` 都是表单提交端点，成功/失败使用 303 跳转到 HTML 页面；它们不是 JSON API。
 
 System 维护页：
 
 - 默认底部系统导航只展示 Status、Logs、System；WiFi、Auth、OTA 是低频配置/维护入口，收在 System 页面中并显示为 WiFi Setup、Web Auth、Firmware OTA，但保留原直达 URL。
 - Hostname 设置区显示当前 hostname、构建默认 hostname、已保存 hostname 和是否需要重启；保存只写入 `eb_sys.hostname`，不热切换当前 mDNS/OTA/Web 身份，页面必须提示重启后生效。
 - 重启按钮必须有二次确认，并通过统一 lifecycle restart 执行；POST 响应必须替换浏览器历史到 GET URL，避免刷新重复提交。
+- `/esp32base/api/restart` 是脚本兼容入口，返回纯文本并立即进入重启流程，不提供 JSON 错误模型。
 - 重启和格式化等危险操作必须分组显示，避免按钮与下一项标题贴得太近。
-- 启用 Watchdog 的 profile 显示 Watchdog lifetime/trip 小计维护；Reset Watchdog Trip 只写入 `eb_sys.wdt_trip_base` 和 `eb_sys.wdt_trip_time`，不清 `eb_sys.wdt_cnt`。
+- 启用 Watchdog 的 profile 显示 Watchdog lifetime/trip 小计维护；当 `wdt_trip_base` 大于 lifetime 时显示 `invalid baseline`，Reset Watchdog Trip 写入并回读确认 `eb_sys.wdt_trip_base` 和 `eb_sys.wdt_trip_time`，不清 `eb_sys.wdt_cnt`。
 - 启用 FS 的 profile 显示 `Format LittleFS`，该操作会删除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth 或 NVS 配置。
 - 启用 FileLog 的 profile 显示 File log 模式设置和 `Clear logs`；模式设置只接受 OFF、WARN、INFO，保存后立即生效并写入 `eb_log.mode`，清空日志只接受 POST，表单使用 `confirm()` 和 `once(form)`，成功后回到 System 页面显示结果。
 - 格式化 FS 是显式 POST 操作；执行前 flush 文件日志，成功后重新 mount FS，并重新加载 FileLog 模式；成功提示应明确显示在 System 页面，同时输出 WARN 级维护日志记录请求、format/mount/FileLog reload 结果。重启请求同样输出 WARN 级维护日志。
@@ -229,8 +233,8 @@ Logs 页面：
 
 - `/esp32base` 是只读设备体检页，按 Overview、Hardware、Firmware & OTA、Network、Storage & Logs、Partition Table、Boot Reasons 分组展示调试信息。
 - Hardware 显示芯片型号、revision、CPU、SDK、Flash、PSRAM 和 eFuse MAC；Network 显示 WiFi/IP/RSSI、power save、STA MAC 和 AP MAC。
-- Firmware & OTA 显示当前固件大小、运行 app slot、下一 OTA slot、Max OTA upload、OTA headroom、rollback 状态，以及仅在存在错误时显示的 Last OTA error。
-- Runtime Health 显示 heap free/min/max alloc/total；启用 Watchdog 时显示 `enabled, lifetime resets N, trip resets M` 和 trip reset time；Reset Trip 保存时间使用和页面 Time 行一致的可信 epoch 判断，无可用时间则显示 `unknown (time unavailable)`。
+- Firmware & OTA 显示当前固件大小、运行 app slot、下一 OTA slot、Max OTA upload、OTA slot minus current sketch、rollback 状态，以及仅在存在错误时显示的 Last OTA error；Max OTA upload 才是上传硬上限。
+- Runtime Health 显示 heap free/min/max alloc/total；启用 Watchdog 时显示 `enabled, lifetime resets N, trip resets M` 或 invalid baseline 和 trip reset time；Reset Trip 保存时间使用和页面 Time 行一致的可信 epoch 判断，无可用时间则显示 `unknown (time unavailable)`。
 - Partition Table 使用运行时分区表展示 Name、Type、SubType、Offset、Size、Role；Role 用于标识 running app、next OTA、app data、NVS config、OTA state、coredump 等。
 - 未启用的模块不显示对应行，避免非 FULL profile 引入额外依赖。
 
@@ -310,7 +314,7 @@ Esp32BaseWeb::addPage("/config", "配置", handleConfigPage);
 - 配置业务首页后，导航品牌链接指向业务首页，业务主导航不会重复显示同一个首页入口。
 - `SYSTEM_NAV_SECTION` 会在页面底部以小字系统入口与 `Free heap`、`Up`、`RSSI` 同行展示；窄屏下系统入口和状态摘要可自然换行，避免遮挡和横向滚动。
 - 基础库页面复用同一套导航框架，业务页和系统页保持一致入口结构。
-- `/esp32base` 系统页按 Overview、Hardware、Firmware & OTA、Network、Storage & Logs、Partition Table、Boot Reasons 分组展示设备调试信息，包括 MAC、OTA headroom 和运行时分区表。
+- `/esp32base` 系统页按 Overview、Hardware、Firmware & OTA、Network、Storage & Logs、Partition Table、Boot Reasons 分组展示设备调试信息，包括 MAC、OTA slot minus current sketch 和运行时分区表。
 - `/esp32base/api/status` 保留 `resetReason` / `wakeReason` 原始字段，并提供 `resetReasonText` / `wakeReasonText` 中文说明字段。
 - `/esp32base/api/hostname` 返回 `currentHostname`、`defaultHostname`、`storedHostname`、`storedValid`、`restartRequired` 和校验规则；POST 参数 `hostname` 必须符合 1-32 位小写字母、数字和短横线规则，不能首尾短横线，不能包含 `.local`。
 

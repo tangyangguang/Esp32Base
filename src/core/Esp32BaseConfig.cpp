@@ -689,7 +689,17 @@ bool Esp32BaseConfig::clearWebAuthConfig() {
 }
 
 bool Esp32BaseConfig::clearSystemConfig() {
-    return clearNamespace("eb_sys");
+    clearPendingKey("eb_sys", "hostname");
+    if (!namespaceExists("eb_sys")) {
+        return true;
+    }
+    Preferences prefs;
+    if (!prefs.begin("eb_sys", false)) {
+        return false;
+    }
+    const bool ok = !prefs.isKey("hostname") || prefs.remove("hostname");
+    prefs.end();
+    return ok;
 }
 
 bool Esp32BaseConfig::clearLogConfig() {

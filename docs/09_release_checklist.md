@@ -115,8 +115,9 @@
 - deferred 写后立即读返回 pending 新值。
 - restart 前全部落盘。
 - NVS 写满返回 false。
-- `factoryReset()` 清理 `eb_wifi`、`eb_web`、`eb_sys`、`eb_log`。
-- 单项清理 API 只影响对应 namespace。
+- `factoryReset()` 清理 `eb_wifi`、`eb_web`、`eb_log` 和 `eb_sys.hostname`。
+- `factoryReset()` 保留 `eb_sys` 中的 boot/restart/watchdog 统计诊断 key。
+- 单项清理 API 只影响对应配置范围；`clearSystemConfig()` 只清 hostname，不清统计诊断 key。
 - namespace 不存在时出厂重置返回成功，不创建空 namespace。
 - `factoryReset()` 不误删业务 namespace，不格式化 LittleFS，不删除 FileLog 日志文件内容。
 - `clearLibraryNamespaces()` 与 `factoryReset()` 行为一致。

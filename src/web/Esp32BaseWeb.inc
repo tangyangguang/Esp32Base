@@ -81,6 +81,7 @@ bool g_requestContextActive = false;
 bool g_responseActive = false;
 bool g_authLoggedForRequest = false;
 bool g_otaUploadForbidden = false;
+bool g_otaUploadStartFailed = false;
 
 static const char WEB_HEAD[] PROGMEM =
     "<meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
@@ -630,6 +631,7 @@ struct WatchdogTripState {
     uint32_t trip;
     uint32_t resetTime;
     bool hasBase;
+    bool invalidBase;
 };
 
 WatchdogTripState readWatchdogTripState() {
@@ -639,7 +641,8 @@ WatchdogTripState readWatchdogTripState() {
     state.hasBase = base >= 0;
     state.base = state.hasBase ? static_cast<uint32_t>(base) : 0;
     state.resetTime = static_cast<uint32_t>(Esp32BaseConfig::getInt("eb_sys", "wdt_trip_time", 0));
-    state.trip = state.lifetime >= state.base ? state.lifetime - state.base : 0;
+    state.invalidBase = state.hasBase && state.base > state.lifetime;
+    state.trip = (!state.invalidBase && state.lifetime >= state.base) ? state.lifetime - state.base : 0;
     return state;
 }
 
@@ -659,6 +662,10 @@ void formatWatchdogTripResetAt(const WatchdogTripState& state, char* out, size_t
     }
     if (!state.hasBase) {
         strlcpy(out, "never", len);
+        return;
+    }
+    if (state.invalidBase) {
+        strlcpy(out, "invalid baseline", len);
         return;
     }
 #if ESP32BASE_ENABLE_NTP
@@ -1380,9 +1387,13 @@ void sendWatchdogPanel() {
              static_cast<unsigned long>(state.lifetime));
     sendChunk("<section class='panel'><h2>Watchdog trip</h2><table class='kv'>");
     sendInfoRow("Lifetime resets", count);
-    snprintf(count, sizeof(count), "%lu",
-             static_cast<unsigned long>(state.trip));
-    sendInfoRow("Trip resets", count);
+    if (state.invalidBase) {
+        sendInfoRow("Trip resets", "invalid baseline");
+    } else {
+        snprintf(count, sizeof(count), "%lu",
+                 static_cast<unsigned long>(state.trip));
+        sendInfoRow("Trip resets", count);
+    }
     sendInfoRow("Trip reset at", resetAt);
     sendChunk("</table><form method='post' action='/esp32base/tools/watchdog-trip-reset' onsubmit=\"return confirm('Reset Watchdog trip counter? Lifetime resets are kept.')&&once(this)\"><input type='submit' value='Reset Watchdog Trip'></form></section>");
 }
@@ -1523,8 +1534,11 @@ void handleToolsWatchdogTripResetPost() {
     }
     const uint32_t lifetime = Esp32BaseWatchdog::lifetimeResetCount();
     const uint32_t resetTime = currentWatchdogTripResetTime();
-    const bool ok = Esp32BaseConfig::setInt("eb_sys", "wdt_trip_base", static_cast<int32_t>(lifetime)) &&
-                    Esp32BaseConfig::setInt("eb_sys", "wdt_trip_time", static_cast<int32_t>(resetTime));
+    const bool writeOk = Esp32BaseConfig::setInt("eb_sys", "wdt_trip_base", static_cast<int32_t>(lifetime)) &&
+                         Esp32BaseConfig::setInt("eb_sys", "wdt_trip_time", static_cast<int32_t>(resetTime));
+    const bool verifyOk = Esp32BaseConfig::getInt("eb_sys", "wdt_trip_base", -1) == static_cast<int32_t>(lifetime) &&
+                          Esp32BaseConfig::getInt("eb_sys", "wdt_trip_time", -1) == static_cast<int32_t>(resetTime);
+    const bool ok = writeOk && verifyOk;
     ESP32BASE_LOG_W("web", "watchdog_trip_reset_requested source=tools lifetime=%lu time=%lu result=%s",
                     static_cast<unsigned long>(lifetime),
                     static_cast<unsigned long>(resetTime),
@@ -1630,10 +1644,13 @@ void handleOtaUploadDone() {
     if (g_otaUploadForbidden || !requestSameOrigin()) {
         ESP32BASE_LOG_W("web", "post_rejected context=ota_upload reason=cross_origin");
         g_otaUploadForbidden = false;
+        g_otaUploadStartFailed = false;
         g_server.send(403, "application/json", "{\"ok\":false,\"error\":\"forbidden\"}");
         return;
     }
     g_otaUploadForbidden = false;
+    const bool startFailed = g_otaUploadStartFailed;
+    g_otaUploadStartFailed = false;
     const bool ok = Esp32BaseOta::status() == Esp32BaseOta::SUCCESS;
     if (ok) {
         if (beginResponse(200, "application/json", nullptr)) {
@@ -1645,7 +1662,7 @@ void handleOtaUploadDone() {
     } else {
         if (beginResponse(500, "application/json", nullptr)) {
             sendChunk("{\"ok\":false,\"error\":\"");
-            sendEscapedJsonChunk(Esp32BaseOta::lastError());
+            sendEscapedJsonChunk(startFailed && !Esp32BaseOta::lastError()[0] ? "ota upload rejected" : Esp32BaseOta::lastError());
             sendChunk("\"}");
             endResponse();
         }
@@ -1666,6 +1683,7 @@ void handleOtaUpload() {
     HTTPUpload& upload = g_server.upload();
     if (upload.status == UPLOAD_FILE_START) {
         g_otaUploadForbidden = false;
+        g_otaUploadStartFailed = false;
         if (!requestSameOrigin()) {
             g_otaUploadForbidden = true;
             ESP32BASE_LOG_W("web", "post_rejected context=ota_upload reason=cross_origin");
@@ -1682,14 +1700,18 @@ void handleOtaUpload() {
         if (firmwareSize == 0 && g_server.hasHeader("X-Firmware-Size")) {
             firmwareSize = static_cast<size_t>(strtoul(g_server.header("X-Firmware-Size").c_str(), nullptr, 10));
         }
-        Esp32BaseOta::startUpload(firmwareSize, sha256[0] ? sha256 : nullptr);
+        if (!Esp32BaseOta::startUpload(firmwareSize, sha256[0] ? sha256 : nullptr)) {
+            g_otaUploadStartFailed = true;
+            ESP32BASE_LOG_W("web", "ota_upload_start_rejected error=%s", Esp32BaseOta::lastError());
+            return;
+        }
     } else if (upload.status == UPLOAD_FILE_WRITE) {
-        if (g_otaUploadForbidden) {
+        if (g_otaUploadForbidden || g_otaUploadStartFailed) {
             return;
         }
         Esp32BaseOta::writeChunk(upload.buf, upload.currentSize);
     } else if (upload.status == UPLOAD_FILE_END) {
-        if (g_otaUploadForbidden) {
+        if (g_otaUploadForbidden || g_otaUploadStartFailed) {
             return;
         }
         Esp32BaseOta::finishUpload();
@@ -1801,14 +1823,14 @@ void handleRoot() {
         if (nextPartition->size >= ESP.getSketchSize()) {
             char headroom[48];
             formatReadableBytes(nextPartition->size - ESP.getSketchSize(), headroom, sizeof(headroom));
-            sendInfoRow("OTA headroom", headroom);
+            sendInfoRow("OTA slot minus current sketch", headroom);
         } else {
-            sendInfoRow("OTA headroom", "0 B");
+            sendInfoRow("OTA slot minus current sketch", "0 B");
         }
     } else {
         sendInfoRow("OTA target slot", "unavailable");
         sendInfoRow("Max OTA upload", "unavailable");
-        sendInfoRow("OTA headroom", "unknown");
+        sendInfoRow("OTA slot minus current sketch", "unknown");
     }
 #if ESP32BASE_ENABLE_OTA
     sendInfoRow("Rollback", Esp32BaseOta::isRollbackPossible() ? "possible" : "not possible");
@@ -1834,9 +1856,14 @@ void handleRoot() {
     char tripResetAt[32];
     formatWatchdogTripResetAt(watchdogTrip, tripResetAt, sizeof(tripResetAt));
     sendInfoRowStart("Watchdog");
-    snprintf(value, sizeof(value), "enabled, lifetime resets %lu, trip resets %lu",
-             static_cast<unsigned long>(watchdogTrip.lifetime),
-             static_cast<unsigned long>(watchdogTrip.trip));
+    if (watchdogTrip.invalidBase) {
+        snprintf(value, sizeof(value), "enabled, lifetime resets %lu, trip resets invalid baseline",
+                 static_cast<unsigned long>(watchdogTrip.lifetime));
+    } else {
+        snprintf(value, sizeof(value), "enabled, lifetime resets %lu, trip resets %lu",
+                 static_cast<unsigned long>(watchdogTrip.lifetime),
+                 static_cast<unsigned long>(watchdogTrip.trip));
+    }
     sendEscapedHtmlChunk(value);
     sendChunk("<br>trip reset at ");
     sendEscapedHtmlChunk(tripResetAt);
