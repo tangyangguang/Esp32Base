@@ -703,7 +703,7 @@ Route 缓冲机制：
 - `setBuiltinLabel()` 覆盖内置导航标签，可用于中文本地化；系统工具页统一使用 `BUILTIN_TOOLS`，不提供旧 Reboot 历史别名。
 - `setHeadExtraCallback()` 设置额外 head 输出回调；`sendHeader()` 在默认 `WEB_HEAD` 后、`</head><body>` 和顶部导航前调用它，业务项目可在这里输出 `<style>`，避免页面刷新时先显示基础库默认导航样式。
 - 导航会给当前匹配项输出 `active` class；匹配规则为 path 完全相等，或当前路径以 `path + "/"` 开头，多个匹配时选择最长 path。`SYSTEM_NAV_SECTION` 下 WiFi/Auth/OTA 二级页会把底部 System 入口标记为 active。
-- `/esp32base` Status 页是只读设备体检页，按 Overview、Hardware、Firmware & OTA、Network、Storage & Logs、Partition Table、Boot Reasons 分组展示固件、芯片、MAC、heap、WiFi、FS、FileLog、OTA headroom、运行时分区表和启动原因；页面容量值只显示 KB/MB/B 人性化格式。
+- `/esp32base` Status 页是只读设备体检页，按 Overview、Hardware、Firmware & OTA、Runtime Health、Network、Storage & Logs、Partition Table、Boot Reasons 分组展示固件、芯片、MAC、heap、max alloc、Watchdog resets、WiFi、FS、FileLog、OTA headroom、运行时分区表和启动原因；页面容量值只显示 KB/MB/B 人性化格式。
 - `/esp32base/tools` System 页承载低频维护入口和操作，包括 WiFi Setup、Web Auth、Firmware OTA 直达入口、hostname 保存、重启设备；启用 FS 的 profile 还提供手动格式化 LittleFS 操作，会清除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth 或 NVS 配置。
 - `/esp32base/auth` 是内置认证管理页面，受当前 Basic Auth 保护，提交成功后新账号密码立即生效。
 - Web Auth 认证优先级为：已保存认证 > 应用默认认证 > 库默认 `admin/admin`。

@@ -1722,12 +1722,18 @@ void handleRoot() {
     sendStatusSectionStart("Runtime Health");
     char freeHeap[48];
     char minHeap[48];
+    char maxAllocHeap[48];
     char totalHeap[48];
     formatReadableBytes(Esp32BaseSystem::freeHeap(), freeHeap, sizeof(freeHeap));
     formatReadableBytes(Esp32BaseSystem::minFreeHeap(), minHeap, sizeof(minHeap));
+    formatReadableBytes(ESP.getMaxAllocHeap(), maxAllocHeap, sizeof(maxAllocHeap));
     formatReadableBytes(Esp32BaseSystem::totalHeap(), totalHeap, sizeof(totalHeap));
-    snprintf(value, sizeof(value), "free %s, min %s, total %s", freeHeap, minHeap, totalHeap);
+    snprintf(value, sizeof(value), "free %s, min %s, max alloc %s, total %s", freeHeap, minHeap, maxAllocHeap, totalHeap);
     sendInfoRow("Heap", value);
+#if ESP32BASE_ENABLE_WATCHDOG
+    snprintf(value, sizeof(value), "enabled, resets %lu", static_cast<unsigned long>(Esp32BaseWatchdog::lifetimeResetCount()));
+    sendInfoRow("Watchdog", value);
+#endif
 #if ESP32BASE_ENABLE_NTP
     const uint32_t epoch = Esp32BaseNtp::timestamp();
     const bool synced = epoch >= ESP32BASE_NTP_SYNC_MIN_EPOCH;

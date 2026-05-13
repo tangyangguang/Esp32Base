@@ -228,6 +228,7 @@ Logs 页面：
 - `/esp32base` 是只读设备体检页，按 Overview、Hardware、Firmware & OTA、Network、Storage & Logs、Partition Table、Boot Reasons 分组展示调试信息。
 - Hardware 显示芯片型号、revision、CPU、SDK、Flash、PSRAM 和 eFuse MAC；Network 显示 WiFi/IP/RSSI、power save、STA MAC 和 AP MAC。
 - Firmware & OTA 显示当前固件大小、运行 app slot、下一 OTA slot、Max OTA upload、OTA headroom、rollback 状态，以及仅在存在错误时显示的 Last OTA error。
+- Runtime Health 显示 heap free/min/max alloc/total；启用 Watchdog 时显示 Watchdog enabled 和历史 resets 次数。
 - Partition Table 使用运行时分区表展示 Name、Type、SubType、Offset、Size、Role；Role 用于标识 running app、next OTA、app data、NVS config、OTA state、coredump 等。
 - 未启用的模块不显示对应行，避免非 FULL profile 引入额外依赖。
 

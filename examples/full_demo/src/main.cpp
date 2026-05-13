@@ -120,6 +120,8 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "eFuse MAC</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "STA MAC</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "AP MAC</th>");
+    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "max alloc");
+    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Watchdog</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Current firmware</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "OTA headroom</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Rollback</th>");
