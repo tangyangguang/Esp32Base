@@ -1772,8 +1772,10 @@ bool validateSubmittedField(const AppConfigFieldSlot& field, const char* submitt
 void sendAppConfigScript() {
     sendChunk("<script>"
               "function acVal(e){return e.type=='checkbox'?(e.checked?'true':'false'):e.value;}"
+              "function acText(e){if(e.tagName=='SELECT')return e.options[e.selectedIndex]?e.options[e.selectedIndex].text:e.value;if(e.type=='checkbox')return e.checked?'Enabled':'Disabled';return e.value;}"
               "function acEsc(s){return String(s).replace(/[&<>\"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c];});}"
-              "function acConfirm(f){var rows='',n=0;f.querySelectorAll('[data-ac]').forEach(function(e){var a=e.dataset.initial||'',b=acVal(e);if(a!=b){n++;rows+='<tr><td>'+acEsc(e.dataset.label)+'</td><td>'+acEsc(a)+'</td><td>'+acEsc(b)+'</td></tr>';}});if(!n){alert('No App Config changes.');return false;}var b=document.getElementById('acbox'),t=document.getElementById('acrows');if(!f.dataset.confirmed){t.innerHTML=rows;b.style.display='block';b.scrollIntoView({block:'nearest'});return false;}return once(f);}"
+              "function acConfirm(f){var rows='',n=0;f.querySelectorAll('[data-ac]').forEach(function(e){var a=e.dataset.initial||'',b=acVal(e);if(a!=b){n++;rows+='<tr><td>'+acEsc(e.dataset.label)+'</td><td>'+acEsc(e.dataset.initialText||a)+'</td><td>'+acEsc(acText(e))+'</td></tr>';}});if(!n){alert('No App Config changes.');return false;}var b=document.getElementById('acbox'),t=document.getElementById('acrows'),s=document.getElementById('acsavebar');if(!f.dataset.confirmed){t.innerHTML=rows;b.style.display='block';if(s)s.style.display='none';b.scrollIntoView({block:'nearest'});return false;}return once(f);}"
+              "function acCancel(){var b=document.getElementById('acbox'),s=document.getElementById('acsavebar');b.style.display='none';if(s)s.style.display='block';}"
               "function acSubmit(f){f.dataset.confirmed='1';f.requestSubmit?f.requestSubmit():f.submit();}"
               "</script>");
 }
@@ -1848,6 +1850,8 @@ void sendAppConfigPage(const char* errorMessage = nullptr) {
                 sendEscapedHtmlChunk(field.label);
                 sendChunk("' data-initial='");
                 sendEscapedHtmlChunk(boolean ? "true" : "false");
+                sendChunk("' data-initial-text='");
+                sendEscapedHtmlChunk(boolean ? "Enabled" : "Disabled");
                 sendChunk("'");
                 if (boolean) {
                     sendChunk(" checked");
@@ -1862,6 +1866,14 @@ void sendAppConfigPage(const char* errorMessage = nullptr) {
                 sendEscapedHtmlChunk(field.label);
                 sendChunk("' data-initial='");
                 sendEscapedHtmlChunk(value);
+                sendChunk("' data-initial-text='");
+                for (uint8_t o = 0; o < field.spec.enumField.optionCount; ++o) {
+                    const Esp32BaseAppConfig::EnumOption& opt = field.spec.enumField.options[o];
+                    if (strcmp(value, opt.value) == 0) {
+                        sendEscapedHtmlChunk(opt.label);
+                        break;
+                    }
+                }
                 sendChunk("'>");
                 for (uint8_t o = 0; o < field.spec.enumField.optionCount; ++o) {
                     const Esp32BaseAppConfig::EnumOption& opt = field.spec.enumField.options[o];
@@ -1937,7 +1949,7 @@ void sendAppConfigPage(const char* errorMessage = nullptr) {
         }
         sendChunk("</section>");
     }
-    sendChunk("<div id='acbox' class='confirmbox'><h2>Confirm changes</h2><table><thead><tr><th>Parameter</th><th>Old</th><th>New</th></tr></thead><tbody id='acrows'></tbody></table><div class='actions'><input type='button' value='Confirm Save' onclick='acSubmit(this.form)'> <input type='button' value='Cancel' onclick=\"document.getElementById('acbox').style.display='none'\"></div></div><div class='actions'><input type='submit' value='Save App Config'></div></form>");
+    sendChunk("<div id='acbox' class='confirmbox'><h2>Confirm changes</h2><table><thead><tr><th>Parameter</th><th>Old</th><th>New</th></tr></thead><tbody id='acrows'></tbody></table><div class='actions'><input type='button' value='Confirm Save' onclick='acSubmit(this.form)'> <input type='button' value='Cancel' onclick='acCancel()'></div></div><div id='acsavebar' class='actions'><input type='submit' value='Save App Config'></div></form>");
     Esp32BaseWeb::sendFooter();
 }
 

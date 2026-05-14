@@ -44,7 +44,7 @@ bool validateAppConfigPage(char* error, size_t errorLen) {
         strlcpy(error, "Submitted App Config values are unavailable.", errorLen);
         return false;
     }
-    if (ratio > limit * 10) {
+    if (ratio > limit * 100) {
         strlcpy(error, "Ratio cannot be greater than limit.", errorLen);
         return false;
     }
@@ -371,7 +371,7 @@ void setup() {
                                    "Letters, digits, underscore and hyphen only.", false, validateAsciiValue});
     Esp32BaseAppConfig::addInt({"control", APP_NS, APP_KEY_LIMIT, "Limit", 50, 0, 100, 1, nullptr,
                                 "Integer range 0..100.", false, nullptr});
-    Esp32BaseAppConfig::addDecimal({"control", APP_NS, APP_KEY_RATIO, "Ratio", 125, 0, 1000, 5, 2, "x",
+    Esp32BaseAppConfig::addDecimal({"control", APP_NS, APP_KEY_RATIO, "Ratio", 125, 0, 1000, 1, 2, "x",
                                     "Fixed-point decimal stored as int32 raw value.", false, nullptr});
     Esp32BaseAppConfig::addBool({"control", APP_NS, APP_KEY_ENABLED, "Enabled", true,
                                  "Boolean field stored in NVS.", false, nullptr});
