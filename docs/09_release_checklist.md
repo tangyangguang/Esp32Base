@@ -197,6 +197,7 @@
 - App Config 注册校验覆盖非法 namespace、重复 `ns/key`、非法长度/范围/step/decimal scale/enum option 和超容量。
 - App Config POST 必须服务端重新校验；字段级 validator 和页面级 validator 失败时零写入、零 change 回调。
 - App Config 保存只写变化字段，未变化字段不写 NVS；旧页面 revision 提交被拒绝。
+- App Config 修改 `restartRequired` 字段后，未重启会话内重新进入页面仍显示待重启提示、运行中旧值和已保存新值；改回旧值后提示消失。
 - App Config callback 能拿到正确旧值和新值；decimal raw、bool、enum 值语义正确。
 - 格式化 FS 等破坏性维护操作必须输出 WARN 级日志，记录发起、结果和关键恢复步骤。
 - 自定义路由 begin 前注册。

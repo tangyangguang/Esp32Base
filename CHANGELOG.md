@@ -13,6 +13,8 @@
 - 新增 `Esp32BaseAppConfig`，支持 string、int、decimal、bool、enum 字段，字段用结构体注册并绑定业务 `Esp32BaseConfig` namespace/key。
 - System 页新增 `App Config` 入口，固定页面为 `GET/POST /esp32base/app-config`。
 - 保存前前端显示变更核对清单；后端重新解析、校验、读取和比较，只保存实际变化字段，未变化字段不写 NVS。
+- `restartRequired` 字段保存后，未重启会话内会持续显示待重启提示、运行中旧值和已保存新值；改回旧值后提示消失。
+- App Config 页面使用窄单列布局，数字字段使用紧凑输入宽度，单位紧贴输入框；System 页中 App Config 入口显示在首位。
 - 支持字段级校验回调、页面级校验回调、逐字段 change 回调和保存 summary 回调；change 回调提供旧值和新值。
 - `full_demo` 启用 App Config 示例，覆盖 string/int/decimal/bool/enum、字段校验、页面校验、重启提示和回调。
 

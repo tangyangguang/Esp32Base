@@ -221,6 +221,7 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "WiFi Setup");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Web Auth");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "App Config");
+    RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "<a href='/esp32base/app-config'>App Config</a><a href='/esp32base/wifi'>WiFi Setup</a>");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Firmware OTA");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Hostname");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Save Hostname");
@@ -235,6 +236,7 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Stored value");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Device code");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Confirm changes");
+    RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Save App Config");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Multiplier");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Offset");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Timeout");

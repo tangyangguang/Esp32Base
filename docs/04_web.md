@@ -187,8 +187,8 @@ WiFi 配置页：
 
 System 维护页：
 
-- 默认底部系统导航只展示 Status、Logs、System；WiFi、Auth、OTA 是低频配置/维护入口，收在 System 页面中并显示为 WiFi Setup、Web Auth、Firmware OTA，但保留原直达 URL。
-- 启用 App Config 时，System 页面显示 App Config 入口；App Config 是业务持久化参数配置页，不和基础库维护参数混在 System 长页面中。
+- 默认底部系统导航只展示 Status、Logs、System；App Config、WiFi、Auth、OTA 是低频配置/维护入口，收在 System 页面中并显示为 App Config、WiFi Setup、Web Auth、Firmware OTA，但保留原直达 URL。
+- 启用 App Config 时，System 页面首位显示 App Config 入口；App Config 是业务持久化参数配置页，不和基础库维护参数混在 System 长页面中。
 - Hostname 设置区显示当前 hostname、构建默认 hostname、已保存 hostname 和是否需要重启；保存只写入 `eb_sys.hostname`，不热切换当前 mDNS/OTA/Web 身份，页面必须提示重启后生效。
 - 重启按钮必须有二次确认，并通过统一 lifecycle restart 执行；POST 响应必须替换浏览器历史到 GET URL，避免刷新重复提交。
 - `/esp32base/api/restart` 是脚本兼容入口，返回纯文本并立即进入重启流程，不提供 JSON 错误模型。
@@ -212,7 +212,7 @@ App Config 页面：
 - 任一校验失败时零写入；校验通过后只保存变化字段，未变化字段绝不写 NVS。
 - 保存成功字段会触发 `ChangeCallback`，回调包含旧值和新值；整次保存结束触发 `SaveCallback` summary。
 - 页面带 RAM revision；旧页面提交会被拒绝并提示刷新，避免覆盖已经变化的配置。
-- 字段可标记 `restartRequired`；保存后页面提示部分参数重启后生效，但不会自动重启。
+- 字段可标记 `restartRequired`；保存后不会自动重启，但未重启会话内页面会持续提示这些字段仍待重启生效，并显示运行中旧值和已保存新值。
 - 第一版不提供单字段弹窗、多配置页、敏感字段隐藏或 CSRF token；安全边界为 Web Auth、POST only 和 Origin/Referer 同源检查。
 
 OTA 上传页：

@@ -119,8 +119,17 @@ struct AppConfigFieldSlot {
     } spec;
 };
 
+struct AppConfigPendingRestartSlot {
+    bool active;
+    uint8_t fieldIndex;
+    int32_t oldRaw;
+    bool oldBool;
+    char* oldText;
+};
+
 AppConfigGroupSlot g_appConfigGroups[ESP32BASE_APP_CONFIG_MAX_GROUPS];
 AppConfigFieldSlot g_appConfigFields[ESP32BASE_APP_CONFIG_MAX_FIELDS];
+AppConfigPendingRestartSlot g_appConfigPendingRestart[ESP32BASE_APP_CONFIG_MAX_FIELDS];
 uint8_t g_appConfigGroupCount = 0;
 uint8_t g_appConfigFieldCount = 0;
 uint32_t g_appConfigRevision = 1;
@@ -149,7 +158,7 @@ static const char WEB_HEAD[] PROGMEM =
     ".kv{border-collapse:collapse;width:100%;margin:0}.kv th,.kv td{border-bottom:1px solid #d8e0e6;padding:7px 5px;text-align:left;vertical-align:top}.kv tr:last-child th,.kv tr:last-child td{border-bottom:0}.kv th{width:30%;color:#64707d;font-weight:600}"
     ".part{border-collapse:collapse;width:100%;font-size:13px}.part th,.part td{border-bottom:1px solid #d8e0e6;padding:6px 5px;text-align:left;vertical-align:top}.part th{color:#64707d;font-weight:600}.part tr:last-child td{border-bottom:0}"
     ".tabs,.quicklinks{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 10px}.tabs a,.quicklinks a{font-size:13px;padding:5px 8px;margin:0;background:#f1f4f3;color:#64707d;border-radius:5px}.tabs a{display:inline-flex;align-items:center;gap:8px}.tabs a.active{background:#e5f0eb;color:#245f52;font-weight:600}.segsize{padding-left:7px;border-left:1px solid #d8e0e6;font-variant-numeric:tabular-nums}"
-    ".appcfg{max-width:720px;margin:0 auto}.appcfg .pagehead,.appcfg .panel{margin:10px 0}.appcfg .panel{padding:12px 14px}.appcfg .acfield{margin:0 0 11px}.appcfg .acfield:last-child{margin-bottom:0}.appcfg .acfield>label{margin:0 0 3px}.appcfg input:not([type]),.appcfg input[type=text],.appcfg input[type=number],.appcfg select{font-size:14px;padding:6px 8px;margin:0;border:1px solid #ccd5dd;border-radius:5px;box-sizing:border-box;background:#fff;color:#1f2933}.appcfg input:not([type]),.appcfg input[type=text],.appcfg input[type=number]{width:100%}.appcfg select{max-width:260px;width:auto}.appcfg .acrow{display:flex;gap:7px;align-items:center;max-width:100%}.appcfg .acrow input{flex:1 1 auto;min-width:0}.appcfg .unit{color:#64707d;font-size:13px;flex:0 0 auto}.appcfg .help{color:#64707d;font-size:13px;margin:4px 0 0}.appcfg .restart{color:#8a5a00;font-size:13px}.appcfg .confirmbox{display:none;border:1px solid #d8e0e6;background:#f8faf9;border-radius:6px;padding:10px;margin:10px 0;overflow-x:auto}.appcfg .confirmbox table{border-collapse:collapse;width:100%;font-size:13px}.appcfg .confirmbox th,.appcfg .confirmbox td{border-bottom:1px solid #d8e0e6;padding:5px;text-align:left;vertical-align:top}.appcfg .confirmbox tr:last-child td{border-bottom:0}@media(max-width:640px){.appcfg{max-width:none}.appcfg select{width:100%;max-width:none}.appcfg .acrow{align-items:flex-start}.appcfg .unit{padding-top:7px}}"
+    ".appcfg{max-width:720px;margin:0 auto}.appcfg .pagehead,.appcfg .panel{margin:10px 0}.appcfg .panel{padding:12px 14px}.appcfg .acfield{margin:0 0 11px}.appcfg .acfield:last-child{margin-bottom:0}.appcfg .acfield>label{margin:0 0 3px}.appcfg input:not([type]),.appcfg input[type=text],.appcfg input[type=number],.appcfg select{font-size:14px;padding:6px 8px;margin:0;border:1px solid #ccd5dd;border-radius:5px;box-sizing:border-box;background:#fff;color:#1f2933}.appcfg input:not([type]),.appcfg input[type=text],.appcfg input[type=number]{width:100%}.appcfg select{max-width:260px;width:auto}.appcfg .acrow{display:flex;gap:7px;align-items:center;max-width:100%}.appcfg .acrow input{flex:1 1 auto;min-width:0}.appcfg .acrow input[type=number]{flex:0 1 14ch;width:14ch}.appcfg .unit{color:#64707d;font-size:13px;flex:0 0 auto}.appcfg .help{color:#64707d;font-size:13px;margin:4px 0 0}.appcfg .restart{color:#8a5a00;font-size:13px}.appcfg .confirmbox{display:none;border:1px solid #d8e0e6;background:#f8faf9;border-radius:6px;padding:10px;margin:10px 0;overflow-x:auto}.appcfg .confirmbox table,.appcfg .pendingbox table{border-collapse:collapse;width:100%;font-size:13px}.appcfg .confirmbox th,.appcfg .confirmbox td,.appcfg .pendingbox th,.appcfg .pendingbox td{border-bottom:1px solid #d8e0e6;padding:5px;text-align:left;vertical-align:top}.appcfg .confirmbox tr:last-child td,.appcfg .pendingbox tr:last-child td{border-bottom:0}.appcfg .pendingbox{border-color:#e1c46d;background:#fffdf6;overflow-x:auto}@media(max-width:640px){.appcfg{max-width:none}.appcfg select{width:100%;max-width:none}.appcfg .acrow{align-items:flex-start}.appcfg .acrow input[type=number]{max-width:100%}.appcfg .unit{padding-top:7px}}"
     ".logmeta{border-collapse:collapse;font-size:13px;line-height:1.45;margin:0}.logmeta th,.logmeta td{padding:2px 10px 2px 0;text-align:left;vertical-align:top}.logmeta th{width:112px;color:#64707d;font-weight:600}.logmeta td{color:#1f2933}.statusline{min-height:1.45em}.toolsection{padding:12px;margin:12px 0;background:#fff;border:1px solid #d8e0e6;border-radius:6px}"
     "pre{white-space:pre;overflow-x:auto;word-break:normal;font-size:12px;line-height:1.45;background:#f1f4f3;border:1px solid #d8e0e6;border-radius:5px;padding:9px}"
     "</style>"
@@ -1707,6 +1716,125 @@ void readAppConfigValue(const AppConfigFieldSlot& field, char* textOut, size_t t
     }
 }
 
+const char* appConfigEnumLabel(const AppConfigFieldSlot& field, const char* value) {
+    if (field.type == APP_CFG_ENUM && value) {
+        for (uint8_t i = 0; i < field.spec.enumField.optionCount; ++i) {
+            const Esp32BaseAppConfig::EnumOption& opt = field.spec.enumField.options[i];
+            if (opt.value && strcmp(opt.value, value) == 0) {
+                return opt.label ? opt.label : opt.value;
+            }
+        }
+    }
+    return value ? value : "";
+}
+
+void appConfigDisplayText(const AppConfigFieldSlot& field, const char* text, bool boolean, char* out, size_t len) {
+    if (!out || len == 0) {
+        return;
+    }
+    switch (field.type) {
+        case APP_CFG_BOOL:
+            strlcpy(out, boolean ? "Enabled" : "Disabled", len);
+            break;
+        case APP_CFG_ENUM:
+            strlcpy(out, appConfigEnumLabel(field, text), len);
+            break;
+        default:
+            strlcpy(out, text ? text : "", len);
+            break;
+    }
+}
+
+void clearAppConfigPendingRestart(AppConfigPendingRestartSlot& slot) {
+    if (slot.oldText) {
+        free(slot.oldText);
+        slot.oldText = nullptr;
+    }
+    slot.active = false;
+    slot.fieldIndex = 0;
+    slot.oldRaw = 0;
+    slot.oldBool = false;
+}
+
+AppConfigPendingRestartSlot* findAppConfigPendingRestart(uint8_t fieldIndex) {
+    for (uint8_t i = 0; i < ESP32BASE_APP_CONFIG_MAX_FIELDS; ++i) {
+        if (g_appConfigPendingRestart[i].active && g_appConfigPendingRestart[i].fieldIndex == fieldIndex) {
+            return &g_appConfigPendingRestart[i];
+        }
+    }
+    return nullptr;
+}
+
+AppConfigPendingRestartSlot* allocAppConfigPendingRestart(uint8_t fieldIndex) {
+    AppConfigPendingRestartSlot* existing = findAppConfigPendingRestart(fieldIndex);
+    if (existing) {
+        return existing;
+    }
+    for (uint8_t i = 0; i < ESP32BASE_APP_CONFIG_MAX_FIELDS; ++i) {
+        if (!g_appConfigPendingRestart[i].active) {
+            g_appConfigPendingRestart[i].active = true;
+            g_appConfigPendingRestart[i].fieldIndex = fieldIndex;
+            return &g_appConfigPendingRestart[i];
+        }
+    }
+    return nullptr;
+}
+
+bool appConfigValueMatchesPendingOriginal(const AppConfigFieldSlot& field, const AppConfigPendingRestartSlot& slot,
+                                          const char* newText, int32_t newRaw, bool newBool) {
+    switch (field.type) {
+        case APP_CFG_STRING:
+        case APP_CFG_ENUM:
+            return strcmp(slot.oldText ? slot.oldText : "", newText ? newText : "") == 0;
+        case APP_CFG_INT:
+        case APP_CFG_DECIMAL:
+            return slot.oldRaw == newRaw;
+        case APP_CFG_BOOL:
+            return slot.oldBool == newBool;
+    }
+    return false;
+}
+
+void updateAppConfigPendingRestart(const AppConfigFieldSlot& field, uint8_t index,
+                                   const char* oldText, int32_t oldRaw, bool oldBool,
+                                   const char* newText, int32_t newRaw, bool newBool) {
+    if (!field.restartRequired) {
+        return;
+    }
+    AppConfigPendingRestartSlot* slot = findAppConfigPendingRestart(index);
+    if (!slot) {
+        slot = allocAppConfigPendingRestart(index);
+        if (!slot) {
+            ESP32BASE_LOG_W("appcfg", "pending_restart_full key=%s", field.key ? field.key : "-");
+            return;
+        }
+        slot->oldRaw = oldRaw;
+        slot->oldBool = oldBool;
+        if (field.type == APP_CFG_STRING || field.type == APP_CFG_ENUM) {
+            const char* value = oldText ? oldText : "";
+            slot->oldText = static_cast<char*>(malloc(strlen(value) + 1));
+            if (!slot->oldText) {
+                clearAppConfigPendingRestart(*slot);
+                ESP32BASE_LOG_W("appcfg", "pending_restart_alloc_failed key=%s", field.key ? field.key : "-");
+                return;
+            }
+            strcpy(slot->oldText, value);
+        }
+    }
+    if (appConfigValueMatchesPendingOriginal(field, *slot, newText, newRaw, newBool)) {
+        clearAppConfigPendingRestart(*slot);
+    }
+}
+
+bool hasAppConfigPendingRestart() {
+    for (uint8_t i = 0; i < ESP32BASE_APP_CONFIG_MAX_FIELDS; ++i) {
+        if (g_appConfigPendingRestart[i].active) {
+            return true;
+        }
+    }
+    return false;
+}
+
 Esp32BaseAppConfig::FieldValue makeFieldValue(const AppConfigFieldSlot& field, const char* text, int32_t raw, bool boolean) {
     Esp32BaseAppConfig::FieldValue value = {publicFieldType(field.type), text, raw, boolean};
     return value;
@@ -1786,10 +1914,54 @@ void sendAppConfigTopMessage() {
     } else if (g_server.hasArg("partial")) {
         sendChunk("<p class='err'><b>Some App Config values were not saved.</b></p>");
     } else if (g_server.hasArg("restart")) {
-        sendChunk("<p class='ok'><b>App Config saved.</b> Some values take effect after restart.</p>");
+        sendChunk("<p class='ok'><b>App Config saved.</b></p>");
     } else if (g_server.hasArg("stale")) {
         sendChunk("<p class='err'>Config page was stale. Reload and try again.</p>");
     }
+}
+
+void sendAppConfigPendingRestartNotice() {
+    if (!hasAppConfigPendingRestart()) {
+        return;
+    }
+    sendChunk("<section class='panel pendingbox'><h2>Restart required</h2><p class='muted'>Some saved App Config values take effect after restart.</p><table><thead><tr><th>Parameter</th><th>Running</th><th>Saved</th></tr></thead><tbody>");
+    for (uint8_t i = 0; i < ESP32BASE_APP_CONFIG_MAX_FIELDS; ++i) {
+        const AppConfigPendingRestartSlot& slot = g_appConfigPendingRestart[i];
+        if (!slot.active || slot.fieldIndex >= g_appConfigFieldCount) {
+            continue;
+        }
+        const AppConfigFieldSlot& field = g_appConfigFields[slot.fieldIndex];
+        char oldText[Esp32BaseAppConfig::STRING_MAX_LENGTH + 1];
+        char newText[Esp32BaseAppConfig::STRING_MAX_LENGTH + 1];
+        char display[Esp32BaseAppConfig::STRING_MAX_LENGTH + 1];
+        int32_t raw = 0;
+        bool boolean = false;
+        switch (field.type) {
+            case APP_CFG_INT:
+                snprintf(oldText, sizeof(oldText), "%ld", static_cast<long>(slot.oldRaw));
+                break;
+            case APP_CFG_DECIMAL:
+                formatDecimalRaw(slot.oldRaw, field.spec.decimalField.scale, oldText, sizeof(oldText));
+                break;
+            case APP_CFG_BOOL:
+                strlcpy(oldText, slot.oldBool ? "Enabled" : "Disabled", sizeof(oldText));
+                break;
+            case APP_CFG_STRING:
+            case APP_CFG_ENUM:
+                appConfigDisplayText(field, slot.oldText ? slot.oldText : "", false, oldText, sizeof(oldText));
+                break;
+        }
+        readAppConfigValue(field, newText, sizeof(newText), raw, boolean);
+        appConfigDisplayText(field, newText, boolean, display, sizeof(display));
+        sendChunk("<tr><td>");
+        sendEscapedHtmlChunk(field.label);
+        sendChunk("</td><td>");
+        sendEscapedHtmlChunk(oldText);
+        sendChunk("</td><td>");
+        sendEscapedHtmlChunk(display);
+        sendChunk("</td></tr>");
+    }
+    sendChunk("</tbody></table></section>");
 }
 
 void sendAppConfigPage(const char* errorMessage = nullptr) {
@@ -1804,6 +1976,7 @@ void sendAppConfigPage(const char* errorMessage = nullptr) {
     sendEscapedHtmlChunk(g_appConfigTitle);
     sendChunk("</h1></header>");
     sendAppConfigTopMessage();
+    sendAppConfigPendingRestartNotice();
     if (errorMessage && errorMessage[0]) {
         sendChunk("<p class='err'>");
         sendEscapedHtmlChunk(errorMessage);
@@ -2030,6 +2203,7 @@ bool writeSubmittedField(const AppConfigFieldSlot& field, uint8_t index, Esp32Ba
     }
     summary.savedCount++;
     summary.restartRequired = summary.restartRequired || field.restartRequired;
+    updateAppConfigPendingRestart(field, index, oldText, oldRaw, oldBool, normalized, newRaw, newBool);
     if (g_appConfigChangeCallback) {
         Esp32BaseAppConfig::Change change;
         change.field = makeFieldRef(field);
@@ -2099,11 +2273,11 @@ void handleToolsPage() {
     sendEscapedHtmlChunk(g_builtinLabels[Esp32BaseWeb::BUILTIN_TOOLS]);
     sendChunk("</h1></header>");
     sendChunk("<section class='panel'><h2>System settings</h2><div class='quicklinks'>");
-    sendNavLink("/esp32base/wifi", "WiFi Setup", false, nullptr);
-    sendNavLink("/esp32base/auth", "Web Auth", false, nullptr);
 #if ESP32BASE_ENABLE_APP_CONFIG
     sendNavLink("/esp32base/app-config", "App Config", false, nullptr);
 #endif
+    sendNavLink("/esp32base/wifi", "WiFi Setup", false, nullptr);
+    sendNavLink("/esp32base/auth", "Web Auth", false, nullptr);
 #if ESP32BASE_ENABLE_OTA
     sendNavLink("/esp32base/ota", "Firmware OTA", false, nullptr);
 #endif

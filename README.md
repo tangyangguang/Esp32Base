@@ -58,7 +58,7 @@ build_flags =
   -D ESP32BASE_EB_FILELOG_DEFAULT_MODE=ESP32BASE_FILELOG_MODE_INFO
 ```
 
-需要业务持久化参数配置页时，可启用 App Config。业务显式声明容量并在 `Esp32Base::begin()` 前注册分组和字段，基础库会在 System 页提供 `App Config` 入口：
+需要业务持久化参数配置页时，可启用 App Config。业务显式声明容量并在 `Esp32Base::begin()` 前注册分组和字段，基础库会在 System 页首位提供 `App Config` 入口：
 
 ```ini
 build_flags =
@@ -67,7 +67,7 @@ build_flags =
   -D ESP32BASE_APP_CONFIG_MAX_FIELDS=8
 ```
 
-App Config 支持 string、int、decimal 定点数、bool 和 enum 字段；保存时后端重新校验并只写入实际变化字段，适合低频修改的小型业务配置。
+App Config 支持 string、int、decimal 定点数、bool 和 enum 字段；保存时后端重新校验并只写入实际变化字段。标记为重启后生效的字段保存后会在未重启会话内持续提示旧值和已保存新值，适合低频修改的小型业务配置。
 
 ## 支持目标
 
