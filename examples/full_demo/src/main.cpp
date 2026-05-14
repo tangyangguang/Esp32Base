@@ -6,10 +6,15 @@ static const char* APP_NS = "demo";
 static const char* APP_KEY_BOOT = "boot";
 static const char* APP_KEY_META = "meta";
 static const char* APP_KEY_VALUE = "value";
+static const char* APP_KEY_CODE = "code";
 static const char* APP_KEY_LIMIT = "limit";
-static const char* APP_KEY_RATIO = "ratio";
+static const char* APP_KEY_MULTIPLIER = "mult";
+static const char* APP_KEY_OFFSET = "offset";
+static const char* APP_KEY_TIMEOUT = "timeout";
 static const char* APP_KEY_ENABLED = "enabled";
+static const char* APP_KEY_SAFE = "safe";
 static const char* APP_KEY_MODE = "mode";
+static const char* APP_KEY_PROFILE = "profile";
 
 struct DemoMeta {
     uint32_t boot;
@@ -21,6 +26,12 @@ const Esp32BaseAppConfig::EnumOption MODE_OPTIONS[] = {
     {"auto", "Auto"},
     {"manual", "Manual"},
     {"service", "Service"}
+};
+
+const Esp32BaseAppConfig::EnumOption PROFILE_OPTIONS[] = {
+    {"quiet", "Quiet"},
+    {"balanced", "Balanced"},
+    {"fast", "Fast"}
 };
 
 bool validateAsciiValue(const Esp32BaseAppConfig::FieldRef&, const Esp32BaseAppConfig::FieldValue& value, char* error, size_t errorLen) {
@@ -38,14 +49,14 @@ bool validateAsciiValue(const Esp32BaseAppConfig::FieldRef&, const Esp32BaseAppC
 
 bool validateAppConfigPage(char* error, size_t errorLen) {
     int32_t limit = 0;
-    int32_t ratio = 0;
+    int32_t multiplier = 0;
     if (!Esp32BaseAppConfig::submittedInt(APP_NS, APP_KEY_LIMIT, limit) ||
-        !Esp32BaseAppConfig::submittedDecimal(APP_NS, APP_KEY_RATIO, ratio)) {
+        !Esp32BaseAppConfig::submittedDecimal(APP_NS, APP_KEY_MULTIPLIER, multiplier)) {
         strlcpy(error, "Submitted App Config values are unavailable.", errorLen);
         return false;
     }
-    if (ratio > limit * 100) {
-        strlcpy(error, "Ratio cannot be greater than limit.", errorLen);
+    if (multiplier > limit * 100) {
+        strlcpy(error, "Multiplier cannot be greater than limit.", errorLen);
         return false;
     }
     return true;
@@ -222,9 +233,14 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "RSSI:");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "<title>App Config</title>");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Stored value");
+    RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Device code");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Confirm changes");
-    RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Ratio");
+    RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Multiplier");
+    RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Offset");
+    RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Timeout");
+    RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Safe mode");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Mode");
+    RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Profile");
     RUN_SELFTEST("GET", "/dashboard", nullptr, true, 200, "<title>Dashboard</title>");
     RUN_SELFTEST("GET", "/control", nullptr, true, 200, "<title>Control</title>");
     RUN_SELFTEST("GET", "/control", nullptr, true, 200, "<style id='full-demo-head-extra'>");
@@ -367,16 +383,27 @@ void setup() {
     Esp32BaseAppConfig::setSaveCallback(onAppConfigSave);
     Esp32BaseAppConfig::addGroup({"general", "General"});
     Esp32BaseAppConfig::addGroup({"control", "Control"});
+    Esp32BaseAppConfig::addGroup({"advanced", "Advanced"});
     Esp32BaseAppConfig::addString({"general", APP_NS, APP_KEY_VALUE, "Stored value", "demo", 1, 48,
                                    "Letters, digits, underscore and hyphen only.", false, validateAsciiValue});
+    Esp32BaseAppConfig::addString({"general", APP_NS, APP_KEY_CODE, "Device code", "A1", 2, 8,
+                                   "Short ASCII code, 2..8 characters.", true, validateAsciiValue});
     Esp32BaseAppConfig::addInt({"control", APP_NS, APP_KEY_LIMIT, "Limit", 50, 0, 100, 1, nullptr,
                                 "Integer range 0..100.", false, nullptr});
-    Esp32BaseAppConfig::addDecimal({"control", APP_NS, APP_KEY_RATIO, "Ratio", 125, 0, 1000, 1, 2, "x",
-                                    "Fixed-point decimal stored as int32 raw value.", false, nullptr});
+    Esp32BaseAppConfig::addDecimal({"control", APP_NS, APP_KEY_MULTIPLIER, "Multiplier", 125, 0, 1000, 1, 2, nullptr,
+                                    "Decimal scale 2, step 0.01, stored as int32 raw value.", false, nullptr});
+    Esp32BaseAppConfig::addDecimal({"control", APP_NS, APP_KEY_OFFSET, "Offset", -50, -500, 500, 25, 2, "V",
+                                    "Signed decimal with 0.25 step.", false, nullptr});
+    Esp32BaseAppConfig::addInt({"advanced", APP_NS, APP_KEY_TIMEOUT, "Timeout", 30, 5, 300, 5, "s",
+                                "Step-limited integer with seconds unit.", false, nullptr});
     Esp32BaseAppConfig::addBool({"control", APP_NS, APP_KEY_ENABLED, "Enabled", true,
                                  "Boolean field stored in NVS.", false, nullptr});
+    Esp32BaseAppConfig::addBool({"advanced", APP_NS, APP_KEY_SAFE, "Safe mode", false,
+                                 "Boolean field marked restart-required.", true, nullptr});
     Esp32BaseAppConfig::addEnum({"control", APP_NS, APP_KEY_MODE, "Mode", "auto", MODE_OPTIONS, 3,
                                  "Enum field stored as option value.", true, nullptr});
+    Esp32BaseAppConfig::addEnum({"advanced", APP_NS, APP_KEY_PROFILE, "Profile", "balanced", PROFILE_OPTIONS, 3,
+                                 "Second enum for option rendering.", false, nullptr});
     Esp32Base::begin();
 #if ESP32BASE_ENABLE_FILELOG
     if (!Esp32BaseFileLog::isEnabled()) {
