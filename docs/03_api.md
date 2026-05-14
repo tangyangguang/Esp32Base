@@ -733,7 +733,78 @@ Route 缓冲机制：
 - `sendHeader()` 输出的默认 input 样式只覆盖文本类控件；checkbox、radio、file、range、color、hidden 等非文本控件不被拉伸成文本输入框。
 - `sendHeader()` 的基础样式保持简洁中性：普通链接不默认渲染为蓝色按钮，导航 active 使用浅绿灰背景和深绿灰文字；业务视觉仍推荐通过 `setHeadExtraCallback()` 注入 CSS。
 
-## 10. Esp32BaseOta
+## 10. Esp32BaseAppConfig
+
+仅在 `ESP32BASE_ENABLE_APP_CONFIG=1` 时可用，依赖 Web。启用后必须显式设置：
+
+```cpp
+ESP32BASE_APP_CONFIG_MAX_GROUPS
+ESP32BASE_APP_CONFIG_MAX_FIELDS
+```
+
+容量硬上限为 16 组、128 字段；业务 namespace 不能使用 `eb_` 前缀。注册必须在 `Esp32Base::begin()` 前完成。
+
+职责：
+
+- 业务注册可持久化修改的应用参数。
+- 基础库在 `/esp32base/app-config` 输出紧凑配置页。
+- 保存前显示变更核对清单。
+- 后端重新解析、校验、读取当前值并只保存变化字段。
+
+公开 API 位于 `web/Esp32BaseAppConfig.h`，统一通过 `#include <Esp32Base.h>` 暴露。字段使用结构体注册，避免长参数列表。支持类型：
+
+- `StringField`：`minLength`、`maxLength`，最大 256 bytes。
+- `IntField`：`minValue`、`maxValue`、`step`。
+- `DecimalField`：定点数，底层保存 `int32_t raw`，`scale=0..6`。
+- `BoolField`。
+- `EnumField`：option value 最大 31 bytes。
+
+回调：
+
+- `FieldValidateCallback`：字段级业务校验，例如只允许英文数字。
+- `PageValidateCallback`：页面级跨字段校验；回调中可用 `submittedString()`、`submittedInt()`、`submittedDecimal()`、`submittedBool()`、`submittedEnum()` 读取本次 POST 值。
+- `ChangeCallback`：字段成功保存后调用，包含旧值和新值；其中 `text` 指针只在回调期间有效。
+- `SaveCallback`：整次保存结束后调用，提供 changed/saved/failed 统计和是否涉及重启后生效字段。
+
+保存语义：
+
+- GET 只读，不产生副作用。
+- POST 必须通过 Web Auth、POST method 和 Origin/Referer 同源检查。
+- 页面带 RAM revision；过期页面提交会被拒绝并要求刷新。
+- 任一字段或页面级校验失败时不写任何字段，也不触发 change 回调。
+- 校验全部通过后，只写入后端计算出的变化字段；未变化字段不写 NVS。
+- 部分 NVS 写失败时，已成功字段保留，只对成功字段触发 change 回调。
+
+示例：
+
+```cpp
+const Esp32BaseAppConfig::EnumOption MODES[] = {
+    {"auto", "Auto"},
+    {"manual", "Manual"}
+};
+
+bool validateName(const Esp32BaseAppConfig::FieldRef&, const Esp32BaseAppConfig::FieldValue& value, char* error, size_t errorLen) {
+    for (const char* p = value.text; p && *p; ++p) {
+        const char c = *p;
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))) {
+            strlcpy(error, "Only letters and digits are allowed.", errorLen);
+            return false;
+        }
+    }
+    return true;
+}
+
+void setup() {
+    Esp32BaseAppConfig::setTitle("App Config");
+    Esp32BaseAppConfig::addGroup({"main", "Main"});
+    Esp32BaseAppConfig::addString({"main", "app_cfg", "name", "Name", "device1", 1, 32, nullptr, false, validateName});
+    Esp32BaseAppConfig::addInt({"main", "app_cfg", "limit", "Limit", 50, 0, 100, 1, nullptr, nullptr, false, nullptr});
+    Esp32BaseAppConfig::addEnum({"main", "app_cfg", "mode", "Mode", "auto", MODES, 2, nullptr, true, nullptr});
+    Esp32Base::begin();
+}
+```
+
+## 11. Esp32BaseOta
 
 ```cpp
 class Esp32BaseOta {

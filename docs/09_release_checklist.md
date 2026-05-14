@@ -193,6 +193,11 @@
 - 内置 Status/WiFi/OTA/Logs/Tools/Auth 标签可覆盖，用于本地化。
 - Tools 维护页中的重启和格式化 FS 按钮都有二次确认。
 - Tools 维护页可保存 hostname，显示当前值、默认值、已保存值和重启需求；保存后不热切换当前运行时 hostname。
+- 启用 `ESP32BASE_ENABLE_APP_CONFIG` 后，System 页显示 App Config 入口，`/esp32base/app-config` 可按 group 展示业务参数。
+- App Config 注册校验覆盖非法 namespace、重复 `ns/key`、非法长度/范围/step/decimal scale/enum option 和超容量。
+- App Config POST 必须服务端重新校验；字段级 validator 和页面级 validator 失败时零写入、零 change 回调。
+- App Config 保存只写变化字段，未变化字段不写 NVS；旧页面 revision 提交被拒绝。
+- App Config callback 能拿到正确旧值和新值；decimal raw、bool、enum 值语义正确。
 - 格式化 FS 等破坏性维护操作必须输出 WARN 级日志，记录发起、结果和关键恢复步骤。
 - 自定义路由 begin 前注册。
 - 自定义路由 Web ready 后注册。
@@ -208,6 +213,7 @@
 - `examples/basic` 继续覆盖 profile/芯片/Core 版本矩阵。
 - `examples/basic` 的 `deps_*.cpp` 哨兵继续验证裁剪。
 - `examples/full_demo` 可在自身目录 `pio run`。
+- `examples/full_demo` 覆盖 App Config string/int/decimal/bool/enum、字段级校验、页面级校验、重启提示和回调。
 - `examples/web_logs_ota` 可在自身目录 `pio run`。
 - `examples/net_runtime` 可在自身目录 `pio run`。
 - 所有启用 FS 的示例通过 `ESP32BASE_EB_FILELOG_DEFAULT_MODE=ESP32BASE_FILELOG_MODE_INFO` 将文件日志默认模式设为 INFO。

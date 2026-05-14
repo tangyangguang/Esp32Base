@@ -6,12 +6,65 @@ static const char* APP_NS = "demo";
 static const char* APP_KEY_BOOT = "boot";
 static const char* APP_KEY_META = "meta";
 static const char* APP_KEY_VALUE = "value";
+static const char* APP_KEY_LIMIT = "limit";
+static const char* APP_KEY_RATIO = "ratio";
+static const char* APP_KEY_ENABLED = "enabled";
+static const char* APP_KEY_MODE = "mode";
 
 struct DemoMeta {
     uint32_t boot;
     uint32_t nextId;
     uint32_t marker;
 };
+
+const Esp32BaseAppConfig::EnumOption MODE_OPTIONS[] = {
+    {"auto", "Auto"},
+    {"manual", "Manual"},
+    {"service", "Service"}
+};
+
+bool validateAsciiValue(const Esp32BaseAppConfig::FieldRef&, const Esp32BaseAppConfig::FieldValue& value, char* error, size_t errorLen) {
+    const char* s = value.text ? value.text : "";
+    for (size_t i = 0; s[i]; ++i) {
+        const char c = s[i];
+        const bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-';
+        if (!ok) {
+            strlcpy(error, "Value may contain only letters, digits, underscore and hyphen.", errorLen);
+            return false;
+        }
+    }
+    return true;
+}
+
+bool validateAppConfigPage(char* error, size_t errorLen) {
+    int32_t limit = 0;
+    int32_t ratio = 0;
+    if (!Esp32BaseAppConfig::submittedInt(APP_NS, APP_KEY_LIMIT, limit) ||
+        !Esp32BaseAppConfig::submittedDecimal(APP_NS, APP_KEY_RATIO, ratio)) {
+        strlcpy(error, "Submitted App Config values are unavailable.", errorLen);
+        return false;
+    }
+    if (ratio > limit * 10) {
+        strlcpy(error, "Ratio cannot be greater than limit.", errorLen);
+        return false;
+    }
+    return true;
+}
+
+void onAppConfigChange(const Esp32BaseAppConfig::Change& change) {
+    ESP32BASE_LOG_I("appcfg", "changed key=%s old=%s new=%s",
+                    change.field.key,
+                    change.oldValue.text ? change.oldValue.text : "-",
+                    change.newValue.text ? change.newValue.text : "-");
+}
+
+void onAppConfigSave(const Esp32BaseAppConfig::SaveSummary& summary) {
+    ESP32BASE_LOG_I("appcfg", "save changed=%u saved=%u failed=%u restart=%s",
+                    summary.changedCount,
+                    summary.savedCount,
+                    summary.failedCount,
+                    summary.restartRequired ? "yes" : "no");
+}
 
 #ifndef ESP32BASE_FULL_DEMO_SELFTEST
 #define ESP32BASE_FULL_DEMO_SELFTEST 0
@@ -156,6 +209,7 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "System settings");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "WiFi Setup");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Web Auth");
+    RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "App Config");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Firmware OTA");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Hostname");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Save Hostname");
@@ -166,6 +220,11 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Format LittleFS");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Free heap:");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "RSSI:");
+    RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "<title>App Config</title>");
+    RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Stored value");
+    RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Confirm changes");
+    RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Ratio");
+    RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Mode");
     RUN_SELFTEST("GET", "/dashboard", nullptr, true, 200, "<title>Dashboard</title>");
     RUN_SELFTEST("GET", "/control", nullptr, true, 200, "<title>Control</title>");
     RUN_SELFTEST("GET", "/control", nullptr, true, 200, "<style id='full-demo-head-extra'>");
@@ -302,6 +361,22 @@ void setup() {
     Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_TOOLS, "System");
     Esp32BaseWeb::setHeadExtraCallback(handleHeadExtra);
     Esp32BaseConfig::enableConfigAudit(true);
+    Esp32BaseAppConfig::setTitle("App Config");
+    Esp32BaseAppConfig::setPageValidateCallback(validateAppConfigPage);
+    Esp32BaseAppConfig::setChangeCallback(onAppConfigChange);
+    Esp32BaseAppConfig::setSaveCallback(onAppConfigSave);
+    Esp32BaseAppConfig::addGroup({"general", "General"});
+    Esp32BaseAppConfig::addGroup({"control", "Control"});
+    Esp32BaseAppConfig::addString({"general", APP_NS, APP_KEY_VALUE, "Stored value", "demo", 1, 48,
+                                   "Letters, digits, underscore and hyphen only.", false, validateAsciiValue});
+    Esp32BaseAppConfig::addInt({"control", APP_NS, APP_KEY_LIMIT, "Limit", 50, 0, 100, 1, nullptr,
+                                "Integer range 0..100.", false, nullptr});
+    Esp32BaseAppConfig::addDecimal({"control", APP_NS, APP_KEY_RATIO, "Ratio", 125, 0, 1000, 5, 2, "x",
+                                    "Fixed-point decimal stored as int32 raw value.", false, nullptr});
+    Esp32BaseAppConfig::addBool({"control", APP_NS, APP_KEY_ENABLED, "Enabled", true,
+                                 "Boolean field stored in NVS.", false, nullptr});
+    Esp32BaseAppConfig::addEnum({"control", APP_NS, APP_KEY_MODE, "Mode", "auto", MODE_OPTIONS, 3,
+                                 "Enum field stored as option value.", true, nullptr});
     Esp32Base::begin();
 #if ESP32BASE_ENABLE_FILELOG
     if (!Esp32BaseFileLog::isEnabled()) {

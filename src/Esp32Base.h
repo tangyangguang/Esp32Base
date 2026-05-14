@@ -42,6 +42,9 @@
 #if ESP32BASE_ENABLE_WEB
 #include "web/Esp32BaseWeb.h"
 #endif
+#if ESP32BASE_ENABLE_APP_CONFIG
+#include "web/Esp32BaseAppConfig.h"
+#endif
 #if ESP32BASE_ENABLE_OTA
 #include "update/Esp32BaseOta.h"
 #endif

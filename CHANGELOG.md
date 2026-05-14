@@ -2,6 +2,27 @@
 
 本文从 2026-05-06 起记录 Esp32Base 新增和优化的能力，面向正在接入本库的业务项目。业务项目应优先查看本文，了解最近可用的新 API、行为变化和推荐接入方式。
 
+## 2026-05-14
+
+### App Config 内置业务配置页
+
+新增：
+
+- 新增可裁剪能力 `ESP32BASE_ENABLE_APP_CONFIG`，用于业务注册可持久化修改的应用参数，并由基础库生成内置配置页。
+- 启用后必须显式设置 `ESP32BASE_APP_CONFIG_MAX_GROUPS` 和 `ESP32BASE_APP_CONFIG_MAX_FIELDS`；硬上限为 16 组、128 字段。
+- 新增 `Esp32BaseAppConfig`，支持 string、int、decimal、bool、enum 字段，字段用结构体注册并绑定业务 `Esp32BaseConfig` namespace/key。
+- System 页新增 `App Config` 入口，固定页面为 `GET/POST /esp32base/app-config`。
+- 保存前前端显示变更核对清单；后端重新解析、校验、读取和比较，只保存实际变化字段，未变化字段不写 NVS。
+- 支持字段级校验回调、页面级校验回调、逐字段 change 回调和保存 summary 回调；change 回调提供旧值和新值。
+- `full_demo` 启用 App Config 示例，覆盖 string/int/decimal/bool/enum、字段校验、页面校验、重启提示和回调。
+
+关键边界：
+
+- 业务 namespace 不能使用 `eb_` 前缀；字段注册必须在 `Esp32Base::begin()` 前完成。
+- decimal 是定点数，底层使用 `int32_t raw` 保存，`scale` 支持 `0..6`。
+- 第一版不做单字段弹窗、多配置页、敏感字段隐藏或 CSRF token；安全边界为 Web Auth、POST only 和 Origin/Referer 同源检查。
+- `ChangeCallback` 中的 text 指针只在回调期间有效；需要长期保存时由业务自行复制。
+
 ## 2026-05-13
 
 ### 冻结前诊断资产与 OTA/Web 边界收紧
