@@ -149,7 +149,7 @@ static const char WEB_HEAD[] PROGMEM =
     ".kv{border-collapse:collapse;width:100%;margin:0}.kv th,.kv td{border-bottom:1px solid #d8e0e6;padding:7px 5px;text-align:left;vertical-align:top}.kv tr:last-child th,.kv tr:last-child td{border-bottom:0}.kv th{width:30%;color:#64707d;font-weight:600}"
     ".part{border-collapse:collapse;width:100%;font-size:13px}.part th,.part td{border-bottom:1px solid #d8e0e6;padding:6px 5px;text-align:left;vertical-align:top}.part th{color:#64707d;font-weight:600}.part tr:last-child td{border-bottom:0}"
     ".tabs,.quicklinks{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 10px}.tabs a,.quicklinks a{font-size:13px;padding:5px 8px;margin:0;background:#f1f4f3;color:#64707d;border-radius:5px}.tabs a{display:inline-flex;align-items:center;gap:8px}.tabs a.active{background:#e5f0eb;color:#245f52;font-weight:600}.segsize{padding-left:7px;border-left:1px solid #d8e0e6;font-variant-numeric:tabular-nums}"
-    ".acfield{margin:0 0 12px}.acrow{display:flex;gap:8px;align-items:center}.acrow input{flex:1 1 auto}.unit{color:#64707d;font-size:13px;min-width:0}.help{color:#64707d;font-size:13px;margin:-6px 0 10px}.restart{color:#8a5a00;font-size:13px}.confirmbox{display:none;border:1px solid #d8e0e6;background:#f8faf9;border-radius:6px;padding:10px;margin:10px 0}.confirmbox table{border-collapse:collapse;width:100%;font-size:13px}.confirmbox th,.confirmbox td{border-bottom:1px solid #d8e0e6;padding:5px;text-align:left;vertical-align:top}.confirmbox tr:last-child td{border-bottom:0}"
+    ".appcfg{max-width:720px;margin:0 auto}.appcfg .pagehead,.appcfg .panel{margin:10px 0}.appcfg .panel{padding:12px 14px}.appcfg .acfield{margin:0 0 11px}.appcfg .acfield:last-child{margin-bottom:0}.appcfg .acfield>label{margin:0 0 3px}.appcfg input:not([type]),.appcfg input[type=text],.appcfg input[type=number],.appcfg select{font-size:14px;padding:6px 8px;margin:0;border:1px solid #ccd5dd;border-radius:5px;box-sizing:border-box;background:#fff;color:#1f2933}.appcfg input:not([type]),.appcfg input[type=text],.appcfg input[type=number]{width:100%}.appcfg select{max-width:260px;width:auto}.appcfg .acrow{display:flex;gap:7px;align-items:center;max-width:100%}.appcfg .acrow input{flex:1 1 auto;min-width:0}.appcfg .unit{color:#64707d;font-size:13px;flex:0 0 auto}.appcfg .help{color:#64707d;font-size:13px;margin:4px 0 0}.appcfg .restart{color:#8a5a00;font-size:13px}.appcfg .confirmbox{display:none;border:1px solid #d8e0e6;background:#f8faf9;border-radius:6px;padding:10px;margin:10px 0;overflow-x:auto}.appcfg .confirmbox table{border-collapse:collapse;width:100%;font-size:13px}.appcfg .confirmbox th,.appcfg .confirmbox td{border-bottom:1px solid #d8e0e6;padding:5px;text-align:left;vertical-align:top}.appcfg .confirmbox tr:last-child td{border-bottom:0}@media(max-width:640px){.appcfg{max-width:none}.appcfg select{width:100%;max-width:none}.appcfg .acrow{align-items:flex-start}.appcfg .unit{padding-top:7px}}"
     ".logmeta{border-collapse:collapse;font-size:13px;line-height:1.45;margin:0}.logmeta th,.logmeta td{padding:2px 10px 2px 0;text-align:left;vertical-align:top}.logmeta th{width:112px;color:#64707d;font-weight:600}.logmeta td{color:#1f2933}.statusline{min-height:1.45em}.toolsection{padding:12px;margin:12px 0;background:#fff;border:1px solid #d8e0e6;border-radius:6px}"
     "pre{white-space:pre;overflow-x:auto;word-break:normal;font-size:12px;line-height:1.45;background:#f1f4f3;border:1px solid #d8e0e6;border-radius:5px;padding:9px}"
     "</style>"
@@ -1799,6 +1799,7 @@ void sendAppConfigPage(const char* errorMessage = nullptr) {
     }
     Esp32BaseWeb::sendHeader(g_appConfigTitle);
     sendAppConfigScript();
+    sendChunk("<div class='appcfg'>");
     sendChunk("<header class='pagehead'><h1>");
     sendEscapedHtmlChunk(g_appConfigTitle);
     sendChunk("</h1></header>");
@@ -1810,6 +1811,7 @@ void sendAppConfigPage(const char* errorMessage = nullptr) {
     }
     if (g_appConfigGroupCount == 0 || g_appConfigFieldCount == 0) {
         sendChunk("<section class='panel'><p class='muted'>No App Config fields registered.</p></section>");
+        sendChunk("</div>");
         Esp32BaseWeb::sendFooter();
         return;
     }
@@ -1949,7 +1951,7 @@ void sendAppConfigPage(const char* errorMessage = nullptr) {
         }
         sendChunk("</section>");
     }
-    sendChunk("<div id='acbox' class='confirmbox'><h2>Confirm changes</h2><table><thead><tr><th>Parameter</th><th>Old</th><th>New</th></tr></thead><tbody id='acrows'></tbody></table><div class='actions'><input type='button' value='Confirm Save' onclick='acSubmit(this.form)'> <input type='button' value='Cancel' onclick='acCancel()'></div></div><div id='acsavebar' class='actions'><input type='submit' value='Save App Config'></div></form>");
+    sendChunk("<div id='acbox' class='confirmbox'><h2>Confirm changes</h2><table><thead><tr><th>Parameter</th><th>Old</th><th>New</th></tr></thead><tbody id='acrows'></tbody></table><div class='actions'><input type='button' value='Confirm Save' onclick='acSubmit(this.form)'> <input type='button' value='Cancel' onclick='acCancel()'></div></div><div id='acsavebar' class='actions'><input type='submit' value='Save App Config'></div></form></div>");
     Esp32BaseWeb::sendFooter();
 }
 
