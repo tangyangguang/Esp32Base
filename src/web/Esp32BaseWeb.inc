@@ -1625,12 +1625,15 @@ bool parseDecimalRaw(const char* text, uint8_t scale, int32_t& rawOut) {
         neg = *p == '-';
         ++p;
     }
+    const int32_t factor = pow10Int(scale);
+    const int64_t maxAbsRaw = neg ? (static_cast<int64_t>(INT32_MAX) + 1LL) : static_cast<int64_t>(INT32_MAX);
     int64_t whole = 0;
     bool hadDigit = false;
     while (*p >= '0' && *p <= '9') {
         hadDigit = true;
-        whole = whole * 10 + (*p - '0');
-        if (whole > INT32_MAX) {
+        const int digit = *p - '0';
+        whole = whole * 10 + digit;
+        if (whole > maxAbsRaw / factor) {
             return false;
         }
         ++p;
@@ -1655,7 +1658,10 @@ bool parseDecimalRaw(const char* text, uint8_t scale, int32_t& rawOut) {
         frac *= 10;
         ++fracDigits;
     }
-    int64_t raw = whole * pow10Int(scale) + frac;
+    int64_t raw = whole * factor + frac;
+    if (raw > maxAbsRaw) {
+        return false;
+    }
     if (neg) {
         raw = -raw;
     }

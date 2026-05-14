@@ -15,6 +15,7 @@ static const char* APP_KEY_ENABLED = "enabled";
 static const char* APP_KEY_SAFE = "safe";
 static const char* APP_KEY_MODE = "mode";
 static const char* APP_KEY_PROFILE = "profile";
+static const char* APP_KEY_MIN_RAW = "minraw";
 
 struct DemoMeta {
     uint32_t boot;
@@ -245,6 +246,9 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Safe mode");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Mode");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Profile");
+    RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Raw minimum");
+    RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "-2147483648");
+    RUN_SELFTEST("POST", "/esp32base/app-config", "rev=1&f0=demo&f1=A1&f2=50&f3=1.25&f4=-0.50&f5=30&f6=1&f8=auto&f9=balanced&f10=-2147483648", true, 303, "Location: /esp32base/app-config");
     RUN_SELFTEST("GET", "/dashboard", nullptr, true, 200, "<title>Dashboard</title>");
     RUN_SELFTEST("GET", "/control", nullptr, true, 200, "<title>Control</title>");
     RUN_SELFTEST("GET", "/control", nullptr, true, 200, "<style id='full-demo-head-extra'>");
@@ -408,6 +412,8 @@ void setup() {
                                  "Enum field stored as option value.", true, nullptr});
     Esp32BaseAppConfig::addEnum({"advanced", APP_NS, APP_KEY_PROFILE, "Profile", "balanced", PROFILE_OPTIONS, 3,
                                  "Second enum for option rendering.", false, nullptr});
+    Esp32BaseAppConfig::addDecimal({"advanced", APP_NS, APP_KEY_MIN_RAW, "Raw minimum", INT32_MIN, INT32_MIN, INT32_MIN, 1, 0, nullptr,
+                                    "Scale 0 INT32_MIN parser boundary.", false, nullptr});
     Esp32Base::begin();
 #if ESP32BASE_ENABLE_FILELOG
     if (!Esp32BaseFileLog::isEnabled()) {
