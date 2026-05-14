@@ -237,6 +237,8 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Device code");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Confirm changes");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Save App Config");
+    RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "data-group='General'");
+    RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "class=\\\"acgroup\\\"");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Multiplier");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Offset");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Timeout");
