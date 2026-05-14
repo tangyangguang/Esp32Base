@@ -750,7 +750,7 @@ ESP32BASE_APP_CONFIG_MAX_FIELDS
 - 基础库在 `/esp32base/app-config` 输出紧凑配置页。
 - 保存前显示变更核对清单。
 - 后端重新解析、校验、读取当前值并只保存变化字段。
-- `restartRequired` 字段保存后，在当前未重启会话内持续显示运行中旧值和已保存新值。
+- `restartRequired` 字段保存后，在当前未重启会话内持续显示运行中旧值和已保存新值；极低内存下 string/enum 旧值可能显示为 `unavailable`，提示仍保留到重启。
 
 公开 API 位于 `web/Esp32BaseAppConfig.h`，统一通过 `#include <Esp32Base.h>` 暴露。字段使用结构体注册，避免长参数列表。支持类型：
 
