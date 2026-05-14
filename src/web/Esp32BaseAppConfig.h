@@ -8,6 +8,9 @@ class Esp32BaseAppConfig {
 public:
     static constexpr uint16_t STRING_MAX_LENGTH = 256;
     static constexpr uint8_t ENUM_VALUE_MAX_LENGTH = 31;
+    static constexpr uint8_t LABEL_MAX_LENGTH = 31;
+    static constexpr uint8_t HELP_MAX_LENGTH = 96;
+    static constexpr uint8_t UNIT_MAX_LENGTH = 12;
     static constexpr uint8_t DECIMAL_SCALE_MAX = 6;
 
     enum FieldType : uint8_t {
@@ -52,6 +55,9 @@ public:
     using ChangeCallback = void (*)(const Change& change);
     using SaveCallback = void (*)(const SaveSummary& summary);
 
+    // Registration strings and EnumOption arrays are referenced, not copied.
+    // Keep every const char* passed to addGroup/add* alive for the firmware lifetime
+    // (normally static const storage).
     struct Group {
         const char* id;
         const char* title;

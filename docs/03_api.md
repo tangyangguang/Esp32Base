@@ -742,7 +742,7 @@ ESP32BASE_APP_CONFIG_MAX_GROUPS
 ESP32BASE_APP_CONFIG_MAX_FIELDS
 ```
 
-容量硬上限为 16 组、128 字段；业务 namespace 不能使用 `eb_` 前缀。注册必须在 `Esp32Base::begin()` 前完成。
+容量硬上限为 16 组、128 字段；业务 namespace 不能使用 `eb_` 前缀。注册必须在 `Esp32Base::begin()` 前完成。注册结构体中的字符串指针和 enum option 数组只被引用、不被复制，必须在固件生命周期内一直有效，推荐使用 `static const`。
 
 职责：
 
@@ -760,10 +760,12 @@ ESP32BASE_APP_CONFIG_MAX_FIELDS
 - `BoolField`。
 - `EnumField`：option value 最大 31 bytes。
 
+显示文本限制：group title、字段 label、enum option label 最大 31 bytes；help 最大 96 bytes；unit 最大 12 bytes。
+
 回调：
 
 - `FieldValidateCallback`：字段级业务校验，例如只允许英文数字。
-- `PageValidateCallback`：页面级跨字段校验；回调中可用 `submittedString()`、`submittedInt()`、`submittedDecimal()`、`submittedBool()`、`submittedEnum()` 读取本次 POST 值。
+- `PageValidateCallback`：页面级跨字段校验；回调中可用 `submittedString()`、`submittedInt()`、`submittedDecimal()`、`submittedBool()`、`submittedEnum()` 读取本次 POST 值；string buffer 至少应为 `STRING_MAX_LENGTH + 1`，enum buffer 至少应为 `ENUM_VALUE_MAX_LENGTH + 1`，buffer 过小时会返回 false。
 - `ChangeCallback`：字段成功保存后调用，包含旧值和新值；其中 `text` 指针只在回调期间有效。
 - `SaveCallback`：整次保存结束后调用，提供 changed/saved/failed 统计和是否涉及重启后生效字段。
 

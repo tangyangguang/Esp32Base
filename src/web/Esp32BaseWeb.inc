@@ -124,6 +124,7 @@ struct AppConfigPendingRestartSlot {
     uint8_t fieldIndex;
     int32_t oldRaw;
     bool oldBool;
+    bool oldTextUnavailable;
     char* oldText;
 };
 
@@ -1511,10 +1512,19 @@ bool fieldExists(const char* ns, const char* key) {
 }
 
 bool validFieldCommon(const char* groupId, const char* ns, const char* key, const char* label) {
-    if (!groupExists(groupId) || !appNsAllowed(ns) || !validConfigName(key) || !label || !label[0] || strlen(label) > 31) {
+    if (!groupExists(groupId) || !appNsAllowed(ns) || !validConfigName(key) || !label || !label[0] ||
+        strlen(label) > Esp32BaseAppConfig::LABEL_MAX_LENGTH) {
         return false;
     }
     return !fieldExists(ns, key);
+}
+
+bool validOptionalHelp(const char* help) {
+    return !help || strlen(help) <= Esp32BaseAppConfig::HELP_MAX_LENGTH;
+}
+
+bool validOptionalUnit(const char* unit) {
+    return !unit || strlen(unit) <= Esp32BaseAppConfig::UNIT_MAX_LENGTH;
 }
 
 void appConfigLogRegisterFailed(const char* type, const char* ns, const char* key) {
@@ -1540,7 +1550,8 @@ bool validEnumOptions(const Esp32BaseAppConfig::EnumField& field) {
     for (uint8_t i = 0; i < field.optionCount; ++i) {
         const char* value = field.options[i].value;
         const char* label = field.options[i].label;
-        if (!value || !value[0] || strlen(value) > Esp32BaseAppConfig::ENUM_VALUE_MAX_LENGTH || !label || !label[0]) {
+        if (!value || !value[0] || strlen(value) > Esp32BaseAppConfig::ENUM_VALUE_MAX_LENGTH ||
+            !label || !label[0] || strlen(label) > Esp32BaseAppConfig::LABEL_MAX_LENGTH) {
             return false;
         }
         for (uint8_t j = static_cast<uint8_t>(i + 1); j < field.optionCount; ++j) {
@@ -1666,15 +1677,13 @@ bool getSubmittedRaw(const AppConfigFieldSlot& field, uint8_t index, char* out, 
     char name[8];
     appConfigFieldName(index, name, sizeof(name));
     if (field.type == APP_CFG_BOOL) {
-        strlcpy(out, g_server.hasArg(name) ? "1" : "0", len);
-        return true;
+        return strlcpy(out, g_server.hasArg(name) ? "1" : "0", len) < len;
     }
     if (!g_server.hasArg(name)) {
         out[0] = '\0';
         return false;
     }
-    strlcpy(out, g_server.arg(name).c_str(), len);
-    return true;
+    return strlcpy(out, g_server.arg(name).c_str(), len) < len;
 }
 
 bool findSubmittedRaw(const char* ns, const char* key, char* out, size_t len, const AppConfigFieldSlot** fieldOut = nullptr) {
@@ -1754,6 +1763,7 @@ void clearAppConfigPendingRestart(AppConfigPendingRestartSlot& slot) {
     slot.fieldIndex = 0;
     slot.oldRaw = 0;
     slot.oldBool = false;
+    slot.oldTextUnavailable = false;
 }
 
 AppConfigPendingRestartSlot* findAppConfigPendingRestart(uint8_t fieldIndex) {
@@ -1785,6 +1795,9 @@ bool appConfigValueMatchesPendingOriginal(const AppConfigFieldSlot& field, const
     switch (field.type) {
         case APP_CFG_STRING:
         case APP_CFG_ENUM:
+            if (slot.oldTextUnavailable) {
+                return false;
+            }
             return strcmp(slot.oldText ? slot.oldText : "", newText ? newText : "") == 0;
         case APP_CFG_INT:
         case APP_CFG_DECIMAL:
@@ -1814,7 +1827,7 @@ void updateAppConfigPendingRestart(const AppConfigFieldSlot& field, uint8_t inde
             const char* value = oldText ? oldText : "";
             slot->oldText = static_cast<char*>(malloc(strlen(value) + 1));
             if (!slot->oldText) {
-                clearAppConfigPendingRestart(*slot);
+                slot->oldTextUnavailable = true;
                 ESP32BASE_LOG_W("appcfg", "pending_restart_alloc_failed key=%s", field.key ? field.key : "-");
                 return;
             }
@@ -1902,8 +1915,10 @@ void sendAppConfigScript() {
               "function acVal(e){return e.type=='checkbox'?(e.checked?'true':'false'):e.value;}"
               "function acText(e){if(e.tagName=='SELECT')return e.options[e.selectedIndex]?e.options[e.selectedIndex].text:e.value;if(e.type=='checkbox')return e.checked?'Enabled':'Disabled';return e.value;}"
               "function acEsc(s){return String(s).replace(/[&<>\"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c];});}"
-              "function acConfirm(f){var rows='',n=0,g='';f.querySelectorAll('[data-ac]').forEach(function(e){var a=e.dataset.initial||'',b=acVal(e),eg=e.dataset.group||'';if(a!=b){if(eg!=g){g=eg;rows+='<tr class=\"acgroup\"><th colspan=\"3\">'+acEsc(g)+'</th></tr>';}n++;rows+='<tr><td>'+acEsc(e.dataset.label)+'</td><td>'+acEsc(e.dataset.initialText||a)+'</td><td>'+acEsc(acText(e))+'</td></tr>';}});if(!n){alert('No App Config changes.');return false;}var b=document.getElementById('acbox'),t=document.getElementById('acrows'),s=document.getElementById('acsavebar');if(!f.dataset.confirmed){t.innerHTML=rows;b.style.display='block';if(s)s.style.display='none';b.scrollIntoView({block:'nearest'});return false;}return once(f);}"
-              "function acCancel(){var b=document.getElementById('acbox'),s=document.getElementById('acsavebar');b.style.display='none';if(s)s.style.display='block';}"
+              "function acBuild(f){var rows='',n=0,g='',snap='';f.querySelectorAll('[data-ac]').forEach(function(e){var a=e.dataset.initial||'',b=acVal(e),eg=e.dataset.group||'';snap+=e.name+'='+b+'\\n';if(a!=b){if(eg!=g){g=eg;rows+='<tr class=\"acgroup\"><th colspan=\"3\">'+acEsc(g)+'</th></tr>';}n++;rows+='<tr><td>'+acEsc(e.dataset.label)+'</td><td>'+acEsc(e.dataset.initialText||a)+'</td><td>'+acEsc(acText(e))+'</td></tr>';}});return {rows:rows,n:n,snap:snap};}"
+              "function acConfirm(f){var r=acBuild(f);if(!r.n){alert('No App Config changes.');return false;}var b=document.getElementById('acbox'),t=document.getElementById('acrows'),s=document.getElementById('acsavebar');if(!f.dataset.confirmed){t.innerHTML=r.rows;f.dataset.snapshot=r.snap;b.style.display='block';if(s)s.style.display='none';b.scrollIntoView({block:'nearest'});return false;}if(f.dataset.snapshot!=r.snap){delete f.dataset.confirmed;t.innerHTML=r.rows;f.dataset.snapshot=r.snap;b.style.display='block';alert('App Config changed. Review changes again.');return false;}return once(f);}"
+              "function acCancel(f){f=f||document.querySelector('form');var b=document.getElementById('acbox'),s=document.getElementById('acsavebar');if(f){delete f.dataset.confirmed;delete f.dataset.snapshot;}b.style.display='none';if(s)s.style.display='block';}"
+              "function acDirty(f){if(f.dataset.snapshot||f.dataset.confirmed)acCancel(f);}"
               "function acSubmit(f){f.dataset.confirmed='1';f.requestSubmit?f.requestSubmit():f.submit();}"
               "</script>");
 }
@@ -1948,7 +1963,11 @@ void sendAppConfigPendingRestartNotice() {
                 break;
             case APP_CFG_STRING:
             case APP_CFG_ENUM:
-                appConfigDisplayText(field, slot.oldText ? slot.oldText : "", false, oldText, sizeof(oldText));
+                if (slot.oldTextUnavailable) {
+                    strlcpy(oldText, "unavailable", sizeof(oldText));
+                } else {
+                    appConfigDisplayText(field, slot.oldText ? slot.oldText : "", false, oldText, sizeof(oldText));
+                }
                 break;
         }
         readAppConfigValue(field, newText, sizeof(newText), raw, boolean);
@@ -1989,7 +2008,7 @@ void sendAppConfigPage(const char* errorMessage = nullptr) {
         return;
     }
     char buf[32];
-    sendChunk("<form method='post' action='/esp32base/app-config' onsubmit='return acConfirm(this)'><input type='hidden' name='rev' value='");
+    sendChunk("<form method='post' action='/esp32base/app-config' onsubmit='return acConfirm(this)' oninput='acDirty(this)' onchange='acDirty(this)'><input type='hidden' name='rev' value='");
     snprintf(buf, sizeof(buf), "%lu", static_cast<unsigned long>(g_appConfigRevision));
     sendEscapedHtmlChunk(buf);
     sendChunk("'>");
@@ -2130,7 +2149,7 @@ void sendAppConfigPage(const char* errorMessage = nullptr) {
         }
         sendChunk("</section>");
     }
-    sendChunk("<div id='acbox' class='confirmbox'><h2>Confirm changes</h2><table><thead><tr><th>Parameter</th><th>Old</th><th>New</th></tr></thead><tbody id='acrows'></tbody></table><div class='actions'><input type='button' value='Confirm Save' onclick='acSubmit(this.form)'> <input type='button' value='Cancel' onclick='acCancel()'></div></div><div id='acsavebar' class='actions'><input type='submit' value='Save App Config'></div></form></div>");
+    sendChunk("<div id='acbox' class='confirmbox'><h2>Confirm changes</h2><table><thead><tr><th>Parameter</th><th>Old</th><th>New</th></tr></thead><tbody id='acrows'></tbody></table><div class='actions'><input type='button' value='Confirm Save' onclick='acSubmit(this.form)'> <input type='button' value='Cancel' onclick='acCancel(this.form)'></div></div><div id='acsavebar' class='actions'><input type='submit' value='Save App Config'></div></form></div>");
     Esp32BaseWeb::sendFooter();
 }
 
@@ -3511,7 +3530,8 @@ bool Esp32BaseAppConfig::setSaveCallback(SaveCallback callback) {
 }
 
 bool Esp32BaseAppConfig::addGroup(const Group& group) {
-    if (!group.id || !group.id[0] || strlen(group.id) > 15 || !group.title || !group.title[0] || strlen(group.title) > 31 ||
+    if (!group.id || !group.id[0] || strlen(group.id) > 15 || !group.title || !group.title[0] ||
+        strlen(group.title) > LABEL_MAX_LENGTH ||
         g_appConfigGroupCount >= ESP32BASE_APP_CONFIG_MAX_GROUPS || groupExists(group.id)) {
         ESP32BASE_LOG_W("appcfg", "group_register_failed id=%s", group.id ? group.id : "-");
         return false;
@@ -3526,6 +3546,7 @@ bool Esp32BaseAppConfig::addGroup(const Group& group) {
 bool Esp32BaseAppConfig::addString(const StringField& field) {
     if (g_appConfigFieldCount >= ESP32BASE_APP_CONFIG_MAX_FIELDS ||
         !validFieldCommon(field.groupId, field.ns, field.key, field.label) ||
+        !validOptionalHelp(field.help) ||
         field.minLength > field.maxLength || field.maxLength > STRING_MAX_LENGTH ||
         !field.defaultValue || strlen(field.defaultValue) < field.minLength || strlen(field.defaultValue) > field.maxLength) {
         appConfigLogRegisterFailed("string", field.ns, field.key);
@@ -3549,6 +3570,7 @@ bool Esp32BaseAppConfig::addString(const StringField& field) {
 bool Esp32BaseAppConfig::addInt(const IntField& field) {
     if (g_appConfigFieldCount >= ESP32BASE_APP_CONFIG_MAX_FIELDS ||
         !validFieldCommon(field.groupId, field.ns, field.key, field.label) ||
+        !validOptionalHelp(field.help) || !validOptionalUnit(field.unit) ||
         field.minValue > field.maxValue || field.defaultValue < field.minValue || field.defaultValue > field.maxValue ||
         field.step <= 0 || !stepMatches(field.defaultValue, field.minValue, field.step)) {
         appConfigLogRegisterFailed("int", field.ns, field.key);
@@ -3573,6 +3595,7 @@ bool Esp32BaseAppConfig::addInt(const IntField& field) {
 bool Esp32BaseAppConfig::addDecimal(const DecimalField& field) {
     if (g_appConfigFieldCount >= ESP32BASE_APP_CONFIG_MAX_FIELDS ||
         !validFieldCommon(field.groupId, field.ns, field.key, field.label) ||
+        !validOptionalHelp(field.help) || !validOptionalUnit(field.unit) ||
         field.scale > DECIMAL_SCALE_MAX || field.minRawValue > field.maxRawValue ||
         field.defaultRawValue < field.minRawValue || field.defaultRawValue > field.maxRawValue ||
         field.stepRaw <= 0 || !stepMatches(field.defaultRawValue, field.minRawValue, field.stepRaw)) {
@@ -3597,7 +3620,8 @@ bool Esp32BaseAppConfig::addDecimal(const DecimalField& field) {
 
 bool Esp32BaseAppConfig::addBool(const BoolField& field) {
     if (g_appConfigFieldCount >= ESP32BASE_APP_CONFIG_MAX_FIELDS ||
-        !validFieldCommon(field.groupId, field.ns, field.key, field.label)) {
+        !validFieldCommon(field.groupId, field.ns, field.key, field.label) ||
+        !validOptionalHelp(field.help)) {
         appConfigLogRegisterFailed("bool", field.ns, field.key);
         return false;
     }
@@ -3618,7 +3642,8 @@ bool Esp32BaseAppConfig::addBool(const BoolField& field) {
 
 bool Esp32BaseAppConfig::addEnum(const EnumField& field) {
     if (g_appConfigFieldCount >= ESP32BASE_APP_CONFIG_MAX_FIELDS ||
-        !validFieldCommon(field.groupId, field.ns, field.key, field.label) || !validEnumOptions(field)) {
+        !validFieldCommon(field.groupId, field.ns, field.key, field.label) ||
+        !validOptionalHelp(field.help) || !validEnumOptions(field)) {
         appConfigLogRegisterFailed("enum", field.ns, field.key);
         return false;
     }
