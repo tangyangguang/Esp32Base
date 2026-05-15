@@ -615,9 +615,6 @@ const char* activeNavPath(bool includeSystemLinks) {
         updateActivePath("/esp32base", currentPath, activePath, activeLen);
         if (navPathMatches("/esp32base/wifi", currentPath) ||
             navPathMatches("/esp32base/auth", currentPath)
-#if ESP32BASE_ENABLE_APP_CONFIG
-            || navPathMatches("/esp32base/app-config", currentPath)
-#endif
 #if ESP32BASE_ENABLE_OTA
             || navPathMatches("/esp32base/ota", currentPath)
 #endif
@@ -626,6 +623,9 @@ const char* activeNavPath(bool includeSystemLinks) {
             activeLen = strlen(activePath);
         }
         updateActivePath("/esp32base/logs", currentPath, activePath, activeLen);
+#if ESP32BASE_ENABLE_APP_CONFIG
+        updateActivePath("/esp32base/app-config", currentPath, activePath, activeLen);
+#endif
         updateActivePath("/esp32base/tools", currentPath, activePath, activeLen);
     }
     return activePath;
@@ -882,6 +882,9 @@ void sendAppLinks(bool paragraph, const char* activePath) {
 void sendSystemLinks(bool paragraph, const char* activePath = nullptr) {
     sendNavLink("/esp32base", g_builtinLabels[Esp32BaseWeb::BUILTIN_HOME], paragraph, activePath);
     sendNavLink("/esp32base/logs", g_builtinLabels[Esp32BaseWeb::BUILTIN_LOGS], paragraph, activePath);
+#if ESP32BASE_ENABLE_APP_CONFIG
+    sendNavLink("/esp32base/app-config", "App Config", paragraph, activePath);
+#endif
     sendNavLink("/esp32base/tools", g_builtinLabels[Esp32BaseWeb::BUILTIN_TOOLS], paragraph, activePath);
 }
 

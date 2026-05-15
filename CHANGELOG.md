@@ -49,6 +49,7 @@
 - App Config 页面使用窄单列布局，数字字段使用紧凑输入宽度，单位紧贴输入框；System 页中 App Config 入口显示在首位。
 - 支持字段级校验回调、页面级校验回调、逐字段 change 回调和保存 summary 回调；change 回调提供旧值和新值。
 - `full_demo` 启用 App Config 示例，覆盖 string/int/decimal/bool/enum、字段校验、页面校验、重启提示和回调。
+- 启用 App Config 时，底部系统导航增加 `App Config` 直达入口；System 页面原有 App Config 入口保持不变。
 
 关键边界：
 
