@@ -4,6 +4,13 @@
 
 ## 2026-05-15
 
+### Web 长响应发送稳定性
+
+修复：
+
+- Chunked 响应的文本缓冲、PROGMEM head、二进制块和结束块发送后都会主动 `yield()`，降低 App Config 等大 HTML/CSS 页面在 ESP32 实机上截断或短时间拖住 Web 服务的风险。
+- 客户端已断开时停止继续输出当前响应，并记录 `response_client_disconnected`，避免长页面继续占用 Web handler。
+
 ### 离线业务时间与同步回填基础能力
 
 修复：

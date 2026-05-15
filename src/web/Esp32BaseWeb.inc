@@ -80,6 +80,7 @@ Esp32BaseWeb::Method g_currentMethod = Esp32BaseWeb::METHOD_UNKNOWN;
 Esp32BaseWeb::Method g_lastRequestMethod = Esp32BaseWeb::METHOD_UNKNOWN;
 bool g_requestContextActive = false;
 bool g_responseActive = false;
+bool g_responseBroken = false;
 bool g_authLoggedForRequest = false;
 bool g_otaUploadForbidden = false;
 bool g_otaUploadStartFailed = false;
@@ -166,6 +167,7 @@ static const char WEB_HEAD[] PROGMEM =
     "<script>function once(f){if(f.dataset.busy)return false;f.dataset.busy=1;var b=f.querySelector('[type=submit]');if(b)b.disabled=true;return true;}</script>";
 
 void flushChunkBuffer();
+bool sendResponseContent(const char* data, size_t len);
 void markRequest();
 void sendChunk(const char* text);
 void sendEscapedHtmlChunk(const char* text);
@@ -953,13 +955,15 @@ void sendProgmem(const char* p) {
         buf[used++] = c;
         if (used == sizeof(buf) - 1) {
             buf[used] = '\0';
-            g_server.sendContent(buf);
+            if (!sendResponseContent(buf, used)) {
+                return;
+            }
             used = 0;
         }
     }
     if (used) {
         buf[used] = '\0';
-        g_server.sendContent(buf);
+        sendResponseContent(buf, used);
     }
 }
 
@@ -1033,8 +1037,33 @@ bool beginResponse(int code, const char* contentType, const char* filename) {
     }
     g_chunkUsed = 0;
     g_responseActive = true;
+    g_responseBroken = false;
     g_server.setContentLength(CONTENT_LENGTH_UNKNOWN);
     g_server.send(code, contentType, "");
+    yield();
+    return true;
+}
+
+bool responseClientConnected() {
+    return g_server.client().connected();
+}
+
+bool sendResponseContent(const char* data, size_t len) {
+    if (g_responseBroken) {
+        return false;
+    }
+    if (!responseClientConnected()) {
+        g_responseBroken = true;
+        ESP32BASE_LOG_W("web", "response_client_disconnected uri=%s", g_activeUri[0] ? g_activeUri : "-");
+        return false;
+    }
+    g_server.sendContent(data, len);
+    yield();
+    if (!responseClientConnected()) {
+        g_responseBroken = true;
+        ESP32BASE_LOG_W("web", "response_client_disconnected uri=%s", g_activeUri[0] ? g_activeUri : "-");
+        return false;
+    }
     return true;
 }
 
@@ -1043,7 +1072,7 @@ void flushChunkBuffer() {
         return;
     }
     g_chunkBuffer[g_chunkUsed] = '\0';
-    g_server.sendContent(g_chunkBuffer);
+    sendResponseContent(g_chunkBuffer, g_chunkUsed);
     g_chunkUsed = 0;
 }
 
@@ -1055,10 +1084,16 @@ void sendChunk(const char* text) {
         ESP32BASE_LOG_W("web", "send_chunk outside response");
         return;
     }
+    if (g_responseBroken) {
+        return;
+    }
     while (*text) {
         const size_t space = sizeof(g_chunkBuffer) - 1U - g_chunkUsed;
         if (space == 0) {
             flushChunkBuffer();
+            if (g_responseBroken) {
+                return;
+            }
             continue;
         }
         size_t len = strlen(text);
@@ -1077,8 +1112,15 @@ void endResponse() {
         return;
     }
     flushChunkBuffer();
-    g_server.sendContent("");
+    if (!g_responseBroken && responseClientConnected()) {
+        g_server.sendContent("");
+        yield();
+    } else if (!g_responseBroken) {
+        g_responseBroken = true;
+        ESP32BASE_LOG_W("web", "response_client_disconnected uri=%s", g_activeUri[0] ? g_activeUri : "-");
+    }
     g_responseActive = false;
+    g_responseBroken = false;
 }
 
 void markRequest() {
@@ -3453,9 +3495,12 @@ void Esp32BaseWeb::sendBytes(const uint8_t* data, size_t len) {
         ESP32BASE_LOG_W("web", "send_bytes outside response");
         return;
     }
+    if (g_responseBroken) {
+        return;
+    }
     flushChunkBuffer();
-    if (len > 0) {
-        g_server.sendContent(reinterpret_cast<const char*>(data), len);
+    if (!g_responseBroken && len > 0) {
+        sendResponseContent(reinterpret_cast<const char*>(data), len);
     }
 }
 

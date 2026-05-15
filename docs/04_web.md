@@ -300,6 +300,7 @@ void handleCsvApi() {
 - `beginResponse(code, contentType, filename)` 可输出 CSV、JSONL、HTML 片段或二进制下载等自定义响应；文本用 `sendChunk()`，二进制块用 `sendBytes()`。
 - `contentType` 必须非空且不超过 63 字节；`filename` 仅允许字母、数字、`.`、`_`、`-`，非法时返回 false。
 - handler 外调用 begin/end chunked 响应会安全失败或 no-op，并记录 WARN。
+- 长响应发送会在每次实际写入客户端后主动 `yield()`；客户端已断开时停止继续输出，避免大 HTML/CSS 页面长期占住 Web 处理。
 - JSON 可继续使用 `sendJson()` 一次性输出，或使用 `beginJson()` / `sendChunk()` / `writeJsonEscaped()` / `endJson()` 分块输出。
 
 业务入口：
