@@ -92,6 +92,10 @@ bool Esp32BaseWatchdog::restoreCurrentTaskAfterLongOperation() {
     return true;
 }
 
+bool Esp32BaseWatchdog::currentTaskRemovedForLongOperation() {
+    return g_removed;
+}
+
 bool Esp32BaseWatchdog::isEnabled() {
     return g_enabled;
 }

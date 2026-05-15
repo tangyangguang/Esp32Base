@@ -9,6 +9,7 @@ public:
     static void feed();
     static bool removeCurrentTaskForLongOperation();
     static bool restoreCurrentTaskAfterLongOperation();
+    static bool currentTaskRemovedForLongOperation();
     static bool isEnabled();
     static bool wasWatchdogReset();
     static uint32_t lifetimeResetCount();

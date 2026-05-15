@@ -210,6 +210,7 @@ App Config 页面：
 - 页面按 group 输出紧凑 panel，字段默认直接可编辑；点击 Save 时前端只展示变更核对清单，不作为服务端事实来源。
 - POST 保存时后端重新解析、执行内置校验、执行字段级和页面级业务校验、读取当前 NVS 并计算实际变化字段。
 - 任一校验失败时零写入；校验通过后只保存变化字段，未变化字段绝不写 NVS。
+- 校验通过后若发生 NVS 写入失败，已成功写入的字段不会回滚；`ChangeCallback` 只对成功字段触发，整次保存结束的 `SaveCallback` summary 会报告失败数量，页面返回 partial 提示。
 - 保存成功字段会触发 `ChangeCallback`，回调包含旧值和新值；整次保存结束触发 `SaveCallback` summary。
 - 页面带 RAM revision；旧页面提交会被拒绝并提示刷新，避免覆盖已经变化的配置。
 - 字段可标记 `restartRequired`；保存后不会自动重启，但未重启会话内页面会持续提示这些字段仍待重启生效，并显示运行中旧值和已保存新值；极低内存下 string/enum 旧值可能显示为 `unavailable`，提示仍保留到重启。

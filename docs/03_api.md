@@ -220,6 +220,7 @@ void loop() {
 - 库内部 namespace 全部使用 `eb_` 前缀，例如 `eb_wifi`、`eb_sys`、`eb_log`。
 - namespace 已表达库和模块归属，key 不重复模块前缀，例如 `eb_wifi.ssid`、`eb_wifi.pass`、`eb_sys.rst_cnt`、`eb_sys.wdt_cnt`、`eb_sys.wdt_trip_base`、`eb_sys.wdt_trip_time`、`eb_sys.time_boot_id`、`eb_log.mode`、`eb_web.auth_user`、`eb_web.auth_pass`。
 - 应用不得使用 `eb_` 前缀，避免被库维护 API 清理。
+- `Esp32BaseConfig` 不是跨任务线程安全 API；推荐和 `Esp32Base::begin()` / `handle()`、Web、Bus 固定在同一个 loop/system task 中调用，其他任务通过队列投递配置变更。
 
 建议 API：
 
@@ -901,6 +902,7 @@ public:
     static void feed();
     static bool removeCurrentTaskForLongOperation();
     static bool restoreCurrentTaskAfterLongOperation();
+    static bool currentTaskRemovedForLongOperation();
     static bool isEnabled();
     static bool wasWatchdogReset();
     static uint32_t lifetimeResetCount();
@@ -917,6 +919,8 @@ public:
 ```
 
 `Esp32BaseWatchdog::begin(timeoutMs)` 要求 `timeoutMs >= 1000`；更小值返回 false 并输出 WARN，避免 Arduino ESP32 2.x 下秒级 WDT 参数被截断为 0。
+
+`removeCurrentTaskForLongOperation()` / `restoreCurrentTaskAfterLongOperation()` 用于 OTA、FileLog 轮转等预期较长的 flash 操作；`currentTaskRemovedForLongOperation()` 可在嵌套长操作前检查当前任务是否已被其他模块临时移出 WDT，避免提前恢复别的模块移除的 WDT 状态。
 
 `begin()` 是轻量初始化，只记录 Sleep 模块进入统一生命周期管理，不配置任何默认 wake source。
 

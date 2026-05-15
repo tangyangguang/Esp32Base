@@ -6,6 +6,9 @@
 #include "Esp32BaseFs.h"
 #include "../core/Esp32BaseConfig.h"
 #include "../core/Esp32BaseLog.h"
+#if ESP32BASE_ENABLE_WATCHDOG
+#include "Esp32BaseWatchdog.h"
+#endif
 
 #include <LittleFS.h>
 
@@ -124,19 +127,46 @@ bool truncateCurrent() {
     return ok;
 }
 
+bool beginLongFsOperation() {
+#if ESP32BASE_ENABLE_WATCHDOG
+    if (Esp32BaseWatchdog::currentTaskRemovedForLongOperation()) {
+        return false;
+    }
+    return Esp32BaseWatchdog::removeCurrentTaskForLongOperation();
+#else
+    return true;
+#endif
+}
+
+void endLongFsOperation(bool active) {
+#if ESP32BASE_ENABLE_WATCHDOG
+    if (active) {
+        Esp32BaseWatchdog::restoreCurrentTaskAfterLongOperation();
+    }
+#else
+    (void)active;
+#endif
+}
+
 bool rotateFile() {
+    const bool watchdogReleased = beginLongFsOperation();
+    bool ok = true;
     if (g_fileLogRotateFiles <= 1) {
-        return truncateCurrent();
+        ok = truncateCurrent();
+        endLongFsOperation(watchdogReleased);
+        return ok;
     }
 
     char oldest[64];
     if (Esp32BaseFileLog::segmentPath(g_fileLogRotateFiles - 1, oldest, sizeof(oldest)) && Esp32BaseFs::exists(oldest)) {
         if (!Esp32BaseFs::removeFile(oldest)) {
-            return false;
+            ok = false;
+        } else {
+            yield();
         }
     }
 
-    for (int8_t i = static_cast<int8_t>(g_fileLogRotateFiles) - 2; i >= 0; --i) {
+    for (int8_t i = static_cast<int8_t>(g_fileLogRotateFiles) - 2; ok && i >= 0; --i) {
         char from[64];
         char to[64];
         if (!Esp32BaseFileLog::segmentPath(static_cast<uint8_t>(i), from, sizeof(from))) {
@@ -147,15 +177,23 @@ bool rotateFile() {
         }
         if (Esp32BaseFs::exists(from)) {
             if (Esp32BaseFs::exists(to) && !Esp32BaseFs::removeFile(to)) {
-                return false;
+                ok = false;
+                break;
             }
+            yield();
             if (!Esp32BaseFs::rename(from, to)) {
-                return false;
+                ok = false;
+                break;
             }
+            yield();
         }
     }
 
-    return truncateCurrent();
+    if (ok) {
+        ok = truncateCurrent();
+    }
+    endLongFsOperation(watchdogReleased);
+    return ok;
 }
 
 bool writeBytes(const char* data, size_t len) {
