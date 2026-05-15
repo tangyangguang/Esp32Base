@@ -17,10 +17,27 @@
 
 class Esp32BaseNtp {
 public:
+    struct TimeSnapshot {
+        bool synced;
+        uint32_t epochSec;
+        uint32_t uptimeSec;
+        uint16_t bootId;
+        uint32_t bootStartEpochSec;
+    };
+
+    typedef void (*TimeSyncCallback)(const TimeSnapshot& snapshot);
+
+    static bool initBootSession();
     static bool begin();
     static bool isStarted();
     static bool isTimeSynced();
+    static bool isRealTime();
     static uint32_t timestamp();
+    static TimeSnapshot snapshot();
+    static void onTimeSynced(TimeSyncCallback callback);
+    static bool isCurrentBootEvent(uint16_t bootId);
+    static bool canResolveCurrentBootEvent(uint16_t bootId);
+    static bool resolveCurrentBootEvent(uint16_t bootId, uint32_t uptimeSec, uint32_t* epochSec);
     static void setServers(const char* s1, const char* s2 = nullptr, const char* s3 = nullptr);
     static bool formatTime(char* out, size_t len, const char* fmt);
     static const char* logTimeString();

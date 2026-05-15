@@ -2,6 +2,26 @@
 
 本文从 2026-05-06 起记录 Esp32Base 新增和优化的能力，面向正在接入本库的业务项目。业务项目应优先查看本文，了解最近可用的新 API、行为变化和推荐接入方式。
 
+## 2026-05-15
+
+### 离线业务时间与同步回填基础能力
+
+新增：
+
+- `Esp32BaseNtp::TimeSnapshot`，包含 `synced`、`epochSec`、`uptimeSec`、`bootId` 和 `bootStartEpochSec`，供业务项目统一记录离线事件时间。
+- `Esp32Base::begin()` 会初始化当前 boot 时间会话，递增并持久化 `eb_sys.time_boot_id`；断网启动时业务仍可通过 `snapshot()` 获得当前 `bootId + uptimeSec`。
+- `Esp32BaseNtp::onTimeSynced(callback)` 在本次 boot 首次可信同步时回调，业务可扫描自己的日志并回填同一 boot 的相对时间。
+- `isRealTime()`、`isCurrentBootEvent()`、`canResolveCurrentBootEvent()`、`resolveCurrentBootEvent()` 明确区分当前 boot 可回填事件和历史未知时间。
+
+调整：
+
+- `/esp32base` Status 页 Time 行、Watchdog trip reset 写入时间、日志绝对时间切换和业务 `TimeSnapshot.synced` 使用同一个 NTP 可信同步语义，避免页面显示 synced 而业务 API 仍未同步。
+
+关键边界：
+
+- Esp32Base 不理解也不改写业务日志结构；业务只使用 bootId、uptimeSec、同步回调和转换 helper 自行回填。
+- helper 只转换当前 boot 的相对事件；历史 boot 或未知 bootId 不会被误修正为真实日期。
+
 ## 2026-05-14
 
 ### App Config 内置业务配置页

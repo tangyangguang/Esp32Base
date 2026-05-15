@@ -218,7 +218,7 @@ void loop() {
 - string value 可见内容长度不超过 3999 字节。
 - blob value 长度为 `1..256` 字节，用于小型固定大小 POD 元数据，不用于日志、记录正文或大块业务数据。
 - 库内部 namespace 全部使用 `eb_` 前缀，例如 `eb_wifi`、`eb_sys`、`eb_log`。
-- namespace 已表达库和模块归属，key 不重复模块前缀，例如 `eb_wifi.ssid`、`eb_wifi.pass`、`eb_sys.rst_cnt`、`eb_sys.wdt_cnt`、`eb_sys.wdt_trip_base`、`eb_sys.wdt_trip_time`、`eb_log.mode`、`eb_web.auth_user`、`eb_web.auth_pass`。
+- namespace 已表达库和模块归属，key 不重复模块前缀，例如 `eb_wifi.ssid`、`eb_wifi.pass`、`eb_sys.rst_cnt`、`eb_sys.wdt_cnt`、`eb_sys.wdt_trip_base`、`eb_sys.wdt_trip_time`、`eb_sys.time_boot_id`、`eb_log.mode`、`eb_web.auth_user`、`eb_web.auth_pass`。
 - 应用不得使用 `eb_` 前缀，避免被库维护 API 清理。
 
 建议 API：
@@ -296,7 +296,7 @@ deferred 语义：
 - `factoryReset()` 只清理基础库 NVS 配置，不重启、不格式化 LittleFS、不删除 FileLog 日志文件内容、不清理业务 namespace，不清理 boot/restart/watchdog 统计诊断资产。
 - `clearWifiConfig()` 清理 `eb_wifi`，包含 WiFi SSID/password。
 - `clearWebAuthConfig()` 清理 `eb_web`，包含 Web Auth user/password。
-- `clearSystemConfig()` 只清理 `eb_sys.hostname`；`eb_sys.rst_cnt`、restart log、`wdt_cnt`、`wdt_trip_base`、`wdt_trip_time` 等统计/诊断 key 必须保留。
+- `clearSystemConfig()` 只清理 `eb_sys.hostname`；`eb_sys.rst_cnt`、restart log、`wdt_cnt`、`wdt_trip_base`、`wdt_trip_time`、`time_boot_id` 等统计/诊断 key 必须保留。
 - `clearLogConfig()` 清理 `eb_log`，包含 FileLog 配置。
 - `clearLibraryNamespaces()` 等价于 `factoryReset()`，保留用于兼容旧代码。
 - `clearNamespace()` 和各出厂重置 API 在 namespace 不存在时返回成功，不创建空 namespace，也不输出底层 `NOT_FOUND` 噪声。
@@ -553,10 +553,27 @@ public:
 
 class Esp32BaseNtp {
 public:
+    struct TimeSnapshot {
+        bool synced;
+        uint32_t epochSec;
+        uint32_t uptimeSec;
+        uint16_t bootId;
+        uint32_t bootStartEpochSec;
+    };
+
+    typedef void (*TimeSyncCallback)(const TimeSnapshot& snapshot);
+
+    static bool initBootSession();
     static bool begin();
     static bool isStarted();
     static bool isTimeSynced();
+    static bool isRealTime();
     static uint32_t timestamp();
+    static TimeSnapshot snapshot();
+    static void onTimeSynced(TimeSyncCallback callback);
+    static bool isCurrentBootEvent(uint16_t bootId);
+    static bool canResolveCurrentBootEvent(uint16_t bootId);
+    static bool resolveCurrentBootEvent(uint16_t bootId, uint32_t uptimeSec, uint32_t* epochSec);
     static void setServers(const char* s1, const char* s2 = nullptr, const char* s3 = nullptr);
     static bool formatTime(char* out, size_t len, const char* fmt);
 };
@@ -575,6 +592,23 @@ public:
 NTP 默认使用 UTC+8，即 `ESP32BASE_NTP_GMT_OFFSET_SEC=(8L * 3600L)`、`ESP32BASE_NTP_DAYLIGHT_OFFSET_SEC=0L`；应用可在 include 前用宏覆盖。
 
 `isTimeSynced()` 默认要求当前 epoch >= `ESP32BASE_NTP_SYNC_MIN_EPOCH`，该宏默认 `1700000000UL`，避免把明显未同步或异常回退的时间误判为已同步。
+
+离线业务事件应使用 `snapshot()` 获取统一时间快照：
+
+- `synced=true` 表示当前时间已通过 Esp32Base 可信判定，和 `/esp32base` Status 页 Time 行使用同一语义。
+- `epochSec` 仅在 `synced=true` 时有效；未同步时为 `0`，业务不应伪造日期。
+- `uptimeSec` 和 `bootId` 在未同步时也可用，用于记录“本次开机 +N 秒”的业务事件。
+- `bootStartEpochSec` 仅在本次 boot 已同步后有效，值为 `epochSec - uptimeSec`。
+
+`Esp32Base::begin()` 会在配置初始化后调用 `initBootSession()`，递增并持久化 `eb_sys.time_boot_id`。`bootId=0` 保留为未知；正常启动使用 `1..65535` 并循环递增。业务项目不需要手动调用 `initBootSession()`，除非绕过 `Esp32Base::begin()` 直接使用 NTP 模块。
+
+`onTimeSynced(callback)` 注册一个轻量单回调；如果注册时当前 boot 已同步，会立即回调一次。回调参数是同步瞬间的 `TimeSnapshot`，业务可据此扫描自己的日志，把同一 `bootId` 的相对 `uptimeSec` 事件回填为真实时间。基础库不理解也不改写业务日志结构。
+
+回填 helper 语义：
+
+- `isCurrentBootEvent(bootId)` 只判断事件是否属于本次 boot。
+- `canResolveCurrentBootEvent(bootId)` 要求事件属于本次 boot 且已有 `bootStartEpochSec`。
+- `resolveCurrentBootEvent(bootId, uptimeSec, &epochSec)` 只转换本次 boot 的相对时间；历史 boot、未知 `bootId`、未同步状态都会返回 `false`，避免把历史未知时间误修正。
 
 NTP 日志策略：
 

@@ -3,6 +3,7 @@
 #if ESP32BASE_ENABLE_NTP
 
 #include "Esp32BaseNtp.h"
+#include "../core/Esp32BaseConfig.h"
 #include "../core/Esp32BaseLog.h"
 
 #include <esp_sntp.h>
@@ -11,12 +12,52 @@
 namespace {
 bool g_started = false;
 bool g_loggedSync = false;
+bool g_bootSessionReady = false;
 char g_s1[48] = "pool.ntp.org";
 char g_s2[48] = "time.nist.gov";
 char g_s3[48] = "";
+uint16_t g_bootId = 0;
+uint32_t g_bootStartEpochSec = 0;
+Esp32BaseNtp::TimeSyncCallback g_timeSyncCallback = nullptr;
+
+uint32_t currentUptimeSec() {
+    return millis() / 1000U;
+}
+
+bool trustedEpoch(uint32_t epoch) {
+    return epoch >= ESP32BASE_NTP_SYNC_MIN_EPOCH;
+}
+
+bool sntpCompletedWithTrustedEpoch(uint32_t* epochSec) {
+    const time_t now = time(nullptr);
+    const bool synced = sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED &&
+                        now >= static_cast<time_t>(ESP32BASE_NTP_SYNC_MIN_EPOCH);
+    if (epochSec) {
+        *epochSec = synced ? static_cast<uint32_t>(now) : 0;
+    }
+    return synced;
+}
+}
+
+bool Esp32BaseNtp::initBootSession() {
+    if (g_bootSessionReady) {
+        return true;
+    }
+    const int32_t stored = Esp32BaseConfig::getInt("eb_sys", "time_boot_id", 0);
+    const uint16_t previous = stored > 0 && stored <= 65535L ? static_cast<uint16_t>(stored) : 0;
+    g_bootId = previous >= 65535U ? 1U : static_cast<uint16_t>(previous + 1U);
+    const bool ok = Esp32BaseConfig::setInt("eb_sys", "time_boot_id", static_cast<int32_t>(g_bootId));
+    g_bootSessionReady = true;
+    if (ok) {
+        ESP32BASE_LOG_I("ntp", "time_boot_session boot_id=%u", static_cast<unsigned>(g_bootId));
+    } else {
+        ESP32BASE_LOG_W("ntp", "time_boot_session_persist_failed stored=%ld", static_cast<long>(stored));
+    }
+    return ok;
 }
 
 bool Esp32BaseNtp::begin() {
+    initBootSession();
     configTime(ESP32BASE_NTP_GMT_OFFSET_SEC,
                ESP32BASE_NTP_DAYLIGHT_OFFSET_SEC,
                g_s1,
@@ -36,14 +77,18 @@ bool Esp32BaseNtp::isStarted() {
 }
 
 bool Esp32BaseNtp::isTimeSynced() {
-    time_t now = time(nullptr);
-    const bool synced = sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED &&
-                        now >= static_cast<time_t>(ESP32BASE_NTP_SYNC_MIN_EPOCH);
+    uint32_t now = 0;
+    const bool synced = sntpCompletedWithTrustedEpoch(&now);
     if (synced && !g_loggedSync) {
+        if (!g_bootSessionReady) {
+            initBootSession();
+        }
+        const uint32_t upSec = currentUptimeSec();
+        g_bootStartEpochSec = now >= upSec ? now - upSec : 0;
         char actual[32];
         formatTime(actual, sizeof(actual), "%Y-%m-%d %H:%M:%S");
         const uint32_t up = millis();
-        const time_t bootWall = now - static_cast<time_t>(up / 1000U);
+        const time_t bootWall = static_cast<time_t>(g_bootStartEpochSec);
         struct tm bootTm;
         localtime_r(&bootWall, &bootTm);
         char boot[32];
@@ -53,12 +98,60 @@ bool Esp32BaseNtp::isTimeSynced() {
         g_loggedSync = true;
         Esp32BaseLog::setTimeProvider(logTimeString);
         ESP32BASE_LOG_I("ntp", "log_timestamp_mode=absolute_datetime");
+        if (g_timeSyncCallback) {
+            g_timeSyncCallback(snapshot());
+        }
     }
     return synced;
 }
 
+bool Esp32BaseNtp::isRealTime() {
+    return isTimeSynced();
+}
+
 uint32_t Esp32BaseNtp::timestamp() {
     return static_cast<uint32_t>(time(nullptr));
+}
+
+Esp32BaseNtp::TimeSnapshot Esp32BaseNtp::snapshot() {
+    TimeSnapshot value = {};
+    value.uptimeSec = currentUptimeSec();
+    value.bootId = g_bootId;
+    value.bootStartEpochSec = g_bootStartEpochSec;
+    value.synced = isTimeSynced();
+    value.epochSec = value.synced ? timestamp() : 0;
+    if (value.synced && value.bootStartEpochSec == 0 && value.epochSec >= value.uptimeSec) {
+        value.bootStartEpochSec = value.epochSec - value.uptimeSec;
+    }
+    return value;
+}
+
+void Esp32BaseNtp::onTimeSynced(TimeSyncCallback callback) {
+    g_timeSyncCallback = callback;
+    const bool alreadyNotified = g_loggedSync;
+    if (g_timeSyncCallback && isTimeSynced() && alreadyNotified) {
+        g_timeSyncCallback(snapshot());
+    }
+}
+
+bool Esp32BaseNtp::isCurrentBootEvent(uint16_t bootId) {
+    return bootId != 0 && bootId == g_bootId;
+}
+
+bool Esp32BaseNtp::canResolveCurrentBootEvent(uint16_t bootId) {
+    return isCurrentBootEvent(bootId) && snapshot().synced && g_bootStartEpochSec != 0;
+}
+
+bool Esp32BaseNtp::resolveCurrentBootEvent(uint16_t bootId, uint32_t uptimeSec, uint32_t* epochSec) {
+    if (!epochSec) {
+        return false;
+    }
+    *epochSec = 0;
+    if (!canResolveCurrentBootEvent(bootId)) {
+        return false;
+    }
+    *epochSec = g_bootStartEpochSec + uptimeSec;
+    return trustedEpoch(*epochSec);
 }
 
 void Esp32BaseNtp::setServers(const char* s1, const char* s2, const char* s3) {

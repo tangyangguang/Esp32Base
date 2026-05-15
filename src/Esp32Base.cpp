@@ -124,6 +124,9 @@ bool Esp32Base::begin() {
         return false;
     }
     ESP32BASE_LOG_D("base", "module_ready name=system");
+#if ESP32BASE_ENABLE_NTP
+    Esp32BaseNtp::initBootSession();
+#endif
 
 #if ESP32BASE_ENABLE_BUS
     ESP32BASE_LOG_D("base", "module_begin name=bus");

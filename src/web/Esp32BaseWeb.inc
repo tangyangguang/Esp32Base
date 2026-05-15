@@ -740,9 +740,9 @@ void formatWatchdogTripResetAt(const WatchdogTripState& state, char* out, size_t
 
 uint32_t currentWatchdogTripResetTime() {
 #if ESP32BASE_ENABLE_NTP
-    const uint32_t epoch = Esp32BaseNtp::timestamp();
-    if (epoch >= ESP32BASE_NTP_SYNC_MIN_EPOCH) {
-        return epoch;
+    const Esp32BaseNtp::TimeSnapshot time = Esp32BaseNtp::snapshot();
+    if (time.synced) {
+        return time.epochSec;
     }
 #endif
     return 0;
@@ -2758,11 +2758,10 @@ void handleRoot() {
     sendInfoRowEnd();
 #endif
 #if ESP32BASE_ENABLE_NTP
-    const uint32_t epoch = Esp32BaseNtp::timestamp();
-    const bool synced = epoch >= ESP32BASE_NTP_SYNC_MIN_EPOCH;
+    const Esp32BaseNtp::TimeSnapshot time = Esp32BaseNtp::snapshot();
     sendInfoRowStart("Time");
-    sendEscapedHtmlChunk(Esp32BaseNtp::isStarted() ? (synced ? "synced" : "pending") : "not started");
-    if (synced && Esp32BaseNtp::formatTime(value, sizeof(value), "%Y-%m-%d %H:%M:%S")) {
+    sendEscapedHtmlChunk(Esp32BaseNtp::isStarted() ? (time.synced ? "synced" : "pending") : "not started");
+    if (time.synced && Esp32BaseNtp::formatTime(value, sizeof(value), "%Y-%m-%d %H:%M:%S")) {
         sendChunk("<br>");
         sendEscapedHtmlChunk(value);
     }
