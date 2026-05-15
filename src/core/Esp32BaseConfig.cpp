@@ -491,11 +491,12 @@ bool Esp32BaseConfig::setStrDeferred(const char* ns, const char* key, const char
     if (slot < 0) {
         return false;
     }
-    char* copy = static_cast<char*>(malloc(strlen(value) + 1));
+    const size_t valueLen = strlen(value);
+    char* copy = static_cast<char*>(malloc(valueLen + 1));
     if (!copy) {
         return false;
     }
-    strcpy(copy, value);
+    memcpy(copy, value, valueLen + 1);
     clearPendingString(g_pending[slot]);
     clearPendingBlob(g_pending[slot]);
     g_pending[slot].type = PENDING_STR;

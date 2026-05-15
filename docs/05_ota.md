@@ -35,7 +35,7 @@ upload_flags =
   --auth=<password>
 ```
 
-命令行 OTA 使用 `Esp32Base::hostname()`、标准端口 3232 和现有 mDNS host 记录；ArduinoOTA 自身不重复启动 mDNS。hostname 默认值来自 `ESP32BASE_DEFAULT_HOSTNAME`，Web/API 保存的 hostname 需要重启后才会被 mDNS 和 ArduinoOTA 使用。业务不需要命令行 OTA 时，可显式 `-D ESP32BASE_ENABLE_ARDUINO_OTA=0`。
+命令行 OTA 使用 `Esp32Base::hostname()`、标准端口 3232 和现有 mDNS host 记录；ArduinoOTA 自身不重复启动 mDNS。hostname 默认值来自 `ESP32BASE_DEFAULT_HOSTNAME`，Web/API 保存的 hostname 需要重启后才会被 DHCP hostname、mDNS 和 ArduinoOTA 使用。业务不需要命令行 OTA 时，可显式 `-D ESP32BASE_ENABLE_ARDUINO_OTA=0`。
 
 espota 认证密码为当前生效的 Web Auth 密码；espota 没有用户名，因此 Web 用户名不参与。即使 Web Auth 被关闭，ArduinoOTA 仍要求密码，避免静默开放无密码 OTA。
 

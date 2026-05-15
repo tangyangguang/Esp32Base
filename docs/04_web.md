@@ -189,7 +189,7 @@ System 维护页：
 
 - 默认底部系统导航只展示 Status、Logs、System；App Config、WiFi、Auth、OTA 是低频配置/维护入口，收在 System 页面中并显示为 App Config、WiFi Setup、Web Auth、Firmware OTA，但保留原直达 URL。
 - 启用 App Config 时，System 页面首位显示 App Config 入口；App Config 是业务持久化参数配置页，不和基础库维护参数混在 System 长页面中。
-- Hostname 设置区显示当前 hostname、构建默认 hostname、已保存 hostname 和是否需要重启；保存只写入 `eb_sys.hostname`，不热切换当前 mDNS/OTA/Web 身份，页面必须提示重启后生效。
+- Hostname 设置区显示当前 hostname、构建默认 hostname、已保存 hostname 和是否需要重启；保存只写入 `eb_sys.hostname`，不热切换当前 DHCP hostname、mDNS、OTA 或 Web 身份，页面必须提示重启后生效。
 - 重启按钮必须有二次确认，并通过统一 lifecycle restart 执行；POST 响应必须替换浏览器历史到 GET URL，避免刷新重复提交。
 - `/esp32base/api/restart` 是脚本兼容入口，返回纯文本并立即进入重启流程，不提供 JSON 错误模型。
 - 重启和格式化等危险操作必须分组显示，避免按钮与下一项标题贴得太近。

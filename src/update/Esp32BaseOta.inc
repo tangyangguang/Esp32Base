@@ -545,7 +545,7 @@ uint8_t Esp32BaseOta::progress() {
     if (g_otaTotal == 0) {
         return 0;
     }
-    const size_t percent = (g_otaProcessed * 100U) / g_otaTotal;
+    const uint64_t percent = (static_cast<uint64_t>(g_otaProcessed) * 100ULL) / g_otaTotal;
     return percent > 100U ? 100U : static_cast<uint8_t>(percent);
 }
 

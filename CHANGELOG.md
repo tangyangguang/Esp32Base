@@ -10,6 +10,8 @@
 
 - 修复本 boot 已输出 `time_synchronized` 后，SNTP 内部状态回到 idle/reset 导致 `/esp32base` Status 页重新显示 pending、`Esp32BaseNtp::snapshot().synced` 不能稳定保持 true 的问题。
 - 首次可信同步仍由 SNTP completed 事件触发；完成后 `snapshot()`、`isRealTime()`、Status 页 Time 和 `resolveCurrentBootEvent()` 使用锁存的 `bootStartEpochSec` 与可信 epoch 判断，不再要求 `sntp_get_sync_status()` 持续等于 completed。
+- `TimeSnapshot.uptimeSec` 改用 ESP-IDF 64-bit 运行时间计数源，避免 Arduino `millis()` 约 49.7 天回卷后导致离线事件回填时间跳变。
+- OTA 进度百分比计算改用 64-bit 中间值，避免大分区固件上传时乘以 100 的中间结果溢出。
 
 新增：
 
@@ -21,6 +23,7 @@
 调整：
 
 - `/esp32base` Status 页 Time 行、Watchdog trip reset 写入时间、日志绝对时间切换和业务 `TimeSnapshot.synced` 使用同一个 NTP 可信同步语义，避免页面显示 synced 而业务 API 仍未同步。
+- WiFi STA 连接前会把当前 Esp32Base hostname 应用为 DHCP client hostname；Web/API 保存 hostname 后仍需重启才会影响 DHCP、mDNS 和 OTA。
 
 关键边界：
 

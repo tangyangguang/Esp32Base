@@ -3,6 +3,7 @@
 #if ESP32BASE_ENABLE_WIFI
 
 #include "Esp32BaseWiFi.h"
+#include "../Esp32Base.h"
 #include "../core/Esp32BaseConfig.h"
 #include "../core/Esp32BaseLog.h"
 
@@ -88,6 +89,9 @@ void beginSta() {
         return;
     }
     WiFi.mode(WIFI_STA);
+    if (!WiFi.setHostname(Esp32Base::hostname())) {
+        ESP32BASE_LOG_W("wifi", "hostname_apply_failed value=%s", Esp32Base::hostname());
+    }
     if (g_wifiPassword[0]) {
         WiFi.begin(g_wifiSsid, g_wifiPassword);
     } else {

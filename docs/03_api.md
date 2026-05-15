@@ -57,7 +57,7 @@ public:
 - Web/API 保存 hostname 只写入 `eb_sys.hostname`，不修改当前运行时 hostname；重启后完整生效。
 - `factoryReset()` 清理 `eb_sys.hostname` 后，重启恢复 `ESP32BASE_DEFAULT_HOSTNAME`。
 - 应用应显式调用 `setFirmwareInfo()`；未设置时状态页和日志会显示库默认固件名/版本，仅用于开发占位。
-- mDNS 和 ArduinoOTA 启动时读取当前 hostname；运行期不做 hostname 热切换。
+- WiFi STA 连接前会把当前 hostname 应用为 DHCP client hostname；mDNS 和 ArduinoOTA 启动时也读取当前 hostname。运行期不做 hostname 热切换。
 - `lastError()` 返回最近一次 begin 或关键模块启动失败原因；无错误时返回空字符串，不返回 `nullptr`。
 
 ## 3. Esp32BaseLog
@@ -597,7 +597,7 @@ NTP 默认使用 UTC+8，即 `ESP32BASE_NTP_GMT_OFFSET_SEC=(8L * 3600L)`、`ESP3
 
 - `synced=true` 表示当前时间已通过 Esp32Base 可信判定，和 `/esp32base` Status 页 Time 行使用同一语义。
 - `epochSec` 仅在 `synced=true` 时有效；未同步时为 `0`，业务不应伪造日期。
-- `uptimeSec` 和 `bootId` 在未同步时也可用，用于记录“本次开机 +N 秒”的业务事件。
+- `uptimeSec` 和 `bootId` 在未同步时也可用，用于记录“本次开机 +N 秒”的业务事件；`uptimeSec` 来自 ESP-IDF 64-bit 运行时间计数源，不受 Arduino `millis()` 约 49.7 天回卷影响。
 - `bootStartEpochSec` 仅在本次 boot 已同步后有效，值为 `epochSec - uptimeSec`。
 
 `Esp32Base::begin()` 会在配置初始化后调用 `initBootSession()`，递增并持久化 `eb_sys.time_boot_id`。`bootId=0` 保留为未知；正常启动使用 `1..2147483647` 并循环递增。业务项目不需要手动调用 `initBootSession()`，除非绕过 `Esp32Base::begin()` 直接使用 NTP 模块。

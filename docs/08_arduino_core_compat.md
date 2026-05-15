@@ -46,6 +46,8 @@ esp_task_wdt_init(&config);
 
 ## 4. WiFi event 差异
 
+STA 连接前会在 `WiFi.mode(WIFI_STA)` 后、`WiFi.begin()` 前调用 `WiFi.setHostname(Esp32Base::hostname())`，确保 Core 2.x / 3.x 下 DHCP client hostname 使用当前 Esp32Base hostname。
+
 Core 2.x 使用：
 
 - `SYSTEM_EVENT_*`

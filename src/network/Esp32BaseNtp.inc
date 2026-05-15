@@ -6,6 +6,7 @@
 #include "../core/Esp32BaseConfig.h"
 #include "../core/Esp32BaseLog.h"
 
+#include <esp_timer.h>
 #include <esp_sntp.h>
 #include <limits.h>
 #include <time.h>
@@ -22,7 +23,7 @@ uint32_t g_bootStartEpochSec = 0;
 Esp32BaseNtp::TimeSyncCallback g_timeSyncCallback = nullptr;
 
 uint32_t currentUptimeSec() {
-    return millis() / 1000U;
+    return static_cast<uint32_t>(esp_timer_get_time() / 1000000LL);
 }
 
 bool trustedEpoch(uint32_t epoch) {
