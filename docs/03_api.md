@@ -591,7 +591,7 @@ public:
 
 NTP 默认使用 UTC+8，即 `ESP32BASE_NTP_GMT_OFFSET_SEC=(8L * 3600L)`、`ESP32BASE_NTP_DAYLIGHT_OFFSET_SEC=0L`；应用可在 include 前用宏覆盖。
 
-`isTimeSynced()` 默认要求当前 epoch >= `ESP32BASE_NTP_SYNC_MIN_EPOCH`，该宏默认 `1700000000UL`，避免把明显未同步或异常回退的时间误判为已同步。
+`isTimeSynced()` 默认要求当前 epoch >= `ESP32BASE_NTP_SYNC_MIN_EPOCH`，该宏默认 `1700000000UL`，避免把明显未同步或异常回退的时间误判为已同步。首次同步确认仍依赖 SNTP completed 事件；本 boot 一旦完成可信同步并建立 `bootStartEpochSec`，后续 `isTimeSynced()` / `snapshot().synced` 不再要求 `sntp_get_sync_status()` 持续保持 completed，只要系统 epoch 仍可信就保持 true。
 
 离线业务事件应使用 `snapshot()` 获取统一时间快照：
 

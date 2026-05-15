@@ -38,6 +38,15 @@ bool sntpCompletedWithTrustedEpoch(uint32_t* epochSec) {
     }
     return synced;
 }
+
+bool currentTrustedEpoch(uint32_t* epochSec) {
+    const uint32_t now = static_cast<uint32_t>(time(nullptr));
+    const bool trusted = trustedEpoch(now);
+    if (epochSec) {
+        *epochSec = trusted ? now : 0;
+    }
+    return trusted;
+}
 }
 
 bool Esp32BaseNtp::initBootSession() {
@@ -79,8 +88,8 @@ bool Esp32BaseNtp::isStarted() {
 
 bool Esp32BaseNtp::isTimeSynced() {
     uint32_t now = 0;
-    const bool synced = sntpCompletedWithTrustedEpoch(&now);
-    if (synced && !g_loggedSync) {
+    const bool syncCompleted = sntpCompletedWithTrustedEpoch(&now);
+    if (syncCompleted && !g_loggedSync) {
         if (!g_bootSessionReady) {
             initBootSession();
         }
@@ -103,7 +112,10 @@ bool Esp32BaseNtp::isTimeSynced() {
             g_timeSyncCallback(snapshot());
         }
     }
-    return synced;
+    if (g_loggedSync) {
+        return currentTrustedEpoch(nullptr) && g_bootStartEpochSec != 0;
+    }
+    return syncCompleted;
 }
 
 bool Esp32BaseNtp::isRealTime() {
@@ -120,7 +132,7 @@ Esp32BaseNtp::TimeSnapshot Esp32BaseNtp::snapshot() {
     value.bootId = g_bootId;
     value.bootStartEpochSec = g_bootStartEpochSec;
     value.synced = isTimeSynced();
-    value.epochSec = value.synced ? timestamp() : 0;
+    value.epochSec = value.synced && currentTrustedEpoch(nullptr) ? timestamp() : 0;
     if (value.synced && value.bootStartEpochSec == 0 && value.epochSec >= value.uptimeSec) {
         value.bootStartEpochSec = value.epochSec - value.uptimeSec;
     }

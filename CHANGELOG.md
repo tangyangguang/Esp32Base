@@ -6,6 +6,11 @@
 
 ### 离线业务时间与同步回填基础能力
 
+修复：
+
+- 修复本 boot 已输出 `time_synchronized` 后，SNTP 内部状态回到 idle/reset 导致 `/esp32base` Status 页重新显示 pending、`Esp32BaseNtp::snapshot().synced` 不能稳定保持 true 的问题。
+- 首次可信同步仍由 SNTP completed 事件触发；完成后 `snapshot()`、`isRealTime()`、Status 页 Time 和 `resolveCurrentBootEvent()` 使用锁存的 `bootStartEpochSec` 与可信 epoch 判断，不再要求 `sntp_get_sync_status()` 持续等于 completed。
+
 新增：
 
 - `Esp32BaseNtp::TimeSnapshot`，包含 `synced`、`epochSec`、`uptimeSec`、`bootId` 和 `bootStartEpochSec`，供业务项目统一记录离线事件时间。

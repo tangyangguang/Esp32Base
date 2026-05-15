@@ -230,7 +230,7 @@ CI 应覆盖核心矩阵，release 前执行完整矩阵。
 - `DEBUG` 编译级别下，启动流程输出模块初始化顺序，以及 Web/NTP/mDNS/OTA 延迟启动或停止原因；这些日志用于开发诊断，默认 `INFO` 构建不输出。
 - NTP 对时前日志时间戳使用启动后毫秒数，例如 `[42442]`；对时后切换为绝对日期时间。
 - NTP 默认按 UTC+8 输出本地时间，应用可通过 `ESP32BASE_NTP_GMT_OFFSET_SEC` / `ESP32BASE_NTP_DAYLIGHT_OFFSET_SEC` 覆盖。
-- NTP 同步判断默认要求 epoch >= `ESP32BASE_NTP_SYNC_MIN_EPOCH`，默认值为 `1700000000UL`。
+- NTP 同步判断默认要求 epoch >= `ESP32BASE_NTP_SYNC_MIN_EPOCH`，默认值为 `1700000000UL`；本 boot 首次可信同步后会锁存时间映射，后续不要求 SNTP status 持续保持 completed。
 - NTP 未同步状态不输出周期性 WARN/DEBUG；只有明确的单次同步失败事件才应输出 WARN。
 - NTP profile 启动时递增并持久化 `eb_sys.time_boot_id`，日志输出 `time_boot_session boot_id=N`；业务离线事件应保存该 bootId 和 uptimeSec，避免跨 boot 混淆。
 - 字节数同时显示 raw bytes 与 KB/MB。
