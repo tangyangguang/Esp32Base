@@ -557,7 +557,7 @@ public:
         bool synced;
         uint32_t epochSec;
         uint32_t uptimeSec;
-        uint16_t bootId;
+        uint32_t bootId;
         uint32_t bootStartEpochSec;
     };
 
@@ -571,9 +571,9 @@ public:
     static uint32_t timestamp();
     static TimeSnapshot snapshot();
     static void onTimeSynced(TimeSyncCallback callback);
-    static bool isCurrentBootEvent(uint16_t bootId);
-    static bool canResolveCurrentBootEvent(uint16_t bootId);
-    static bool resolveCurrentBootEvent(uint16_t bootId, uint32_t uptimeSec, uint32_t* epochSec);
+    static bool isCurrentBootEvent(uint32_t bootId);
+    static bool canResolveCurrentBootEvent(uint32_t bootId);
+    static bool resolveCurrentBootEvent(uint32_t bootId, uint32_t uptimeSec, uint32_t* epochSec);
     static void setServers(const char* s1, const char* s2 = nullptr, const char* s3 = nullptr);
     static bool formatTime(char* out, size_t len, const char* fmt);
 };
@@ -600,7 +600,7 @@ NTP 默认使用 UTC+8，即 `ESP32BASE_NTP_GMT_OFFSET_SEC=(8L * 3600L)`、`ESP3
 - `uptimeSec` 和 `bootId` 在未同步时也可用，用于记录“本次开机 +N 秒”的业务事件。
 - `bootStartEpochSec` 仅在本次 boot 已同步后有效，值为 `epochSec - uptimeSec`。
 
-`Esp32Base::begin()` 会在配置初始化后调用 `initBootSession()`，递增并持久化 `eb_sys.time_boot_id`。`bootId=0` 保留为未知；正常启动使用 `1..65535` 并循环递增。业务项目不需要手动调用 `initBootSession()`，除非绕过 `Esp32Base::begin()` 直接使用 NTP 模块。
+`Esp32Base::begin()` 会在配置初始化后调用 `initBootSession()`，递增并持久化 `eb_sys.time_boot_id`。`bootId=0` 保留为未知；正常启动使用 `1..2147483647` 并循环递增。业务项目不需要手动调用 `initBootSession()`，除非绕过 `Esp32Base::begin()` 直接使用 NTP 模块。
 
 `onTimeSynced(callback)` 注册一个轻量单回调；如果注册时当前 boot 已同步，会立即回调一次。回调参数是同步瞬间的 `TimeSnapshot`，业务可据此扫描自己的日志，把同一 `bootId` 的相对 `uptimeSec` 事件回填为真实时间。基础库不理解也不改写业务日志结构。
 
