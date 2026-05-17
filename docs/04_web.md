@@ -150,7 +150,8 @@ Web:
 OTA:
 
 - `GET /esp32base/ota`
-- `POST /esp32base/ota`
+- `POST /esp32base/ota`，浏览器表单使用 multipart 上传
+- `POST /esp32base/ota/raw`，PlatformIO `webota` 使用 `application/octet-stream` 直接上传固件原文
 - `GET /esp32base/api/ota`
 
 Logs:

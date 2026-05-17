@@ -55,6 +55,8 @@ def main() -> int:
         errors.append("handleLogsRaw() must stream file log segments through the raw chunk path")
     if 'g_server.on("/esp32base/logs/raw"' not in source:
         errors.append("/esp32base/logs/raw route must be registered")
+    if 'g_server.on("/esp32base/ota/raw"' not in source:
+        errors.append("/esp32base/ota/raw route must be registered for raw Web OTA")
 
     if errors:
         for error in errors:

@@ -58,10 +58,10 @@ pio run -t webota
 
 `webota` target 由 Esp32Base 提供的可复用 PlatformIO extra_script 注册；业务项目不需要复制脚本或编写自定义 target。可用配置项：
 
-- `esp32base_webota_url`：完整 URL，例如 `http://192.168.2.112/esp32base/ota`。
+- `esp32base_webota_url`：完整 URL，例如 `http://192.168.2.112/esp32base/ota/raw`。
 - `esp32base_webota_host`：设备 IP 或 hostname；未设置 URL 时使用。
 - `esp32base_webota_port`：默认 `80`。
-- `esp32base_webota_path`：默认 `/esp32base/ota`。
+- `esp32base_webota_path`：默认 `/esp32base/ota/raw`；显式设为 `/esp32base/ota` 时走旧 multipart 兼容路径。
 - `esp32base_webota_user` / `esp32base_webota_password`：默认 `admin` / `admin`。
 - `esp32base_webota_auth`：可用 `user:password` 一次性设置 Basic Auth。
 - `esp32base_webota_sha256`：默认 `auto`，可设为 `off` 或 64 字符 SHA256。
@@ -76,7 +76,7 @@ pio run -t webota
 使用边界：
 
 - `espota` 是 ArduinoOTA 标准协议，兼容 PlatformIO/ArduinoOTA 常规工具链。
-- `webota` 是 Esp32Base 提供的 HTTP 上传方式，默认 64 KB 分块，通常比 espota 快；要求设备 Web 服务和 `/esp32base/ota` 可访问。
+- `webota` 是 Esp32Base 提供的 HTTP 上传方式，默认 64 KB 分块并使用 raw binary endpoint，通常比 espota 和浏览器 multipart Web OTA 快；要求设备 Web 服务和 `/esp32base/ota/raw` 可访问。
 - 两者都不影响浏览器 Web OTA 页面。
 - `webota` 命令行日志会显示友好容量单位、开始时间、结束时间、用时、平均速度，并按约 5% 粒度输出上传进度。
 - 设备端会在 Web OTA 开始前检查下一 OTA 分区容量；固件大于可写 app slot 时直接失败。上传过程中实际写入字节数也不得超过声明总大小。

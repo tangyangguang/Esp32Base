@@ -2689,6 +2689,51 @@ void handleOtaUpload() {
     }
 }
 
+void handleOtaRawUpload() {
+    if (!isAuthenticated()) {
+        if (g_server.raw().status == RAW_START) {
+            Esp32BaseOta::abortUpload("unauthorized ota raw upload");
+        }
+        return;
+    }
+    HTTPRaw& raw = g_server.raw();
+    if (raw.status == RAW_START) {
+        g_otaUploadForbidden = false;
+        g_otaUploadStartFailed = false;
+        if (!requestSameOrigin()) {
+            g_otaUploadForbidden = true;
+            ESP32BASE_LOG_W("web", "post_rejected context=ota_raw_upload reason=cross_origin");
+            Esp32BaseOta::abortUpload("forbidden ota raw upload origin");
+            return;
+        }
+        char sha256[65] = "";
+        size_t firmwareSize = 0;
+        if (g_server.hasHeader("X-Sha256")) {
+            strlcpy(sha256, g_server.header("X-Sha256").c_str(), sizeof(sha256));
+        }
+        if (g_server.hasHeader("X-Firmware-Size")) {
+            firmwareSize = static_cast<size_t>(strtoul(g_server.header("X-Firmware-Size").c_str(), nullptr, 10));
+        }
+        if (!Esp32BaseOta::startUpload(firmwareSize, sha256[0] ? sha256 : nullptr)) {
+            g_otaUploadStartFailed = true;
+            ESP32BASE_LOG_W("web", "ota_raw_upload_start_rejected error=%s", Esp32BaseOta::lastError());
+            return;
+        }
+    } else if (raw.status == RAW_WRITE) {
+        if (g_otaUploadForbidden || g_otaUploadStartFailed) {
+            return;
+        }
+        Esp32BaseOta::writeChunk(raw.buf, raw.currentSize);
+    } else if (raw.status == RAW_END) {
+        if (g_otaUploadForbidden || g_otaUploadStartFailed) {
+            return;
+        }
+        Esp32BaseOta::finishUpload();
+    } else if (raw.status == RAW_ABORTED) {
+        Esp32BaseOta::abortUpload("client aborted raw upload");
+    }
+}
+
 void handleOtaApi() {
     markRequest();
     if (!ensureAuth()) {
@@ -3153,7 +3198,7 @@ bool Esp32BaseWeb::begin() {
     }
     const uint8_t appRoutes = routeCount(false);
     const uint8_t appPages = routeCount(true);
-    uint8_t builtinRoutes = 23;
+    uint8_t builtinRoutes = 24;
 #if ESP32BASE_ENABLE_OTA
     builtinRoutes += 3;
 #endif
@@ -3203,6 +3248,7 @@ bool Esp32BaseWeb::begin() {
 #if ESP32BASE_ENABLE_OTA
     g_server.on("/esp32base/ota", HTTP_GET, handleOtaPage);
     g_server.on("/esp32base/ota", HTTP_POST, handleOtaUploadDone, handleOtaUpload);
+    g_server.on("/esp32base/ota/raw", HTTP_POST, handleOtaUploadDone, handleOtaRawUpload);
     g_server.on("/esp32base/api/ota", HTTP_GET, handleOtaApi);
 #endif
     for (uint8_t i = 0; i < ESP32BASE_WEB_MAX_ROUTES; ++i) {

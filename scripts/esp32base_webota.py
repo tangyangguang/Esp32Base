@@ -123,7 +123,7 @@ def _build_url():
             "missing OTA host: set esp32base_webota_host or esp32base_webota_url in platformio.ini"
         )
     port = _option("esp32base_webota_port", "80")
-    path = _option("esp32base_webota_path", "/esp32base/ota")
+    path = _option("esp32base_webota_path", "/esp32base/ota/raw")
     if not path.startswith("/"):
         path = "/" + path
     return "http://%s:%s%s" % (host, port, path)
@@ -133,7 +133,7 @@ def _status_path(upload_path):
     configured = _option("esp32base_webota_status_path")
     if configured:
         return configured if configured.startswith("/") else "/" + configured
-    if upload_path.rstrip("/") == "/esp32base/ota":
+    if upload_path.rstrip("/") in ("/esp32base/ota", "/esp32base/ota/raw"):
         return "/esp32base/api/ota"
     return upload_path
 
@@ -293,6 +293,44 @@ def _send_multipart(connection, parsed, firmware_path, firmware_size, headers, c
     connection.send(tail_bytes)
 
 
+def _send_raw(connection, parsed, firmware_path, firmware_size, headers, chunk_size, stats):
+    request_headers = dict(headers)
+    request_headers["Content-Type"] = "application/octet-stream"
+    request_headers["Content-Length"] = str(firmware_size)
+
+    connection.putrequest("POST", _request_target(parsed))
+    for key, value in request_headers.items():
+        connection.putheader(key, value)
+    connection.endheaders()
+
+    stats["sent_bytes"] = 0
+    stats["upload_started_at"] = time.time()
+    next_percent = 0
+    with open(firmware_path, "rb") as fh:
+        while True:
+            chunk = fh.read(chunk_size)
+            if not chunk:
+                break
+            connection.send(chunk)
+            stats["sent_bytes"] += len(chunk)
+            sent = stats["sent_bytes"]
+            percent = _upload_percent(sent, firmware_size)
+            if percent >= next_percent:
+                elapsed = time.time() - stats["upload_started_at"]
+                print(
+                    "Web OTA upload %d%% (%s / %s, %s, elapsed %s)"
+                    % (
+                        percent,
+                        _format_bytes(sent),
+                        _format_bytes(firmware_size),
+                        _format_speed(sent, elapsed),
+                        _format_duration(elapsed),
+                    )
+                )
+                stats["last_percent"] = percent
+                next_percent += 5
+
+
 def _run_webota(target, source, env):
     started_at = time.time()
     stats = {"sent_bytes": 0, "upload_started_at": None, "last_percent": 0}
@@ -340,11 +378,17 @@ def _run_webota(target, source, env):
     print("Web OTA firmware: %s (%s, %d bytes)" % (firmware, _format_bytes(firmware_size), firmware_size))
     print("Web OTA chunk size: %s (%d bytes)" % (_format_bytes(chunk_size), chunk_size))
     print("Web OTA timeouts: request %.1fs, upload %.1fs" % (timeout, upload_timeout))
+    upload_path = (parsed.path or "/").rstrip("/")
+    upload_mode = "multipart" if upload_path == "/esp32base/ota" else "raw"
+    print("Web OTA mode: %s" % upload_mode)
 
     try:
         _preflight(parsed, headers, timeout, verify_tls)
         conn = _open_connection(parsed, upload_timeout, verify_tls)
-        _send_multipart(conn, parsed, firmware, firmware_size, headers, chunk_size, stats)
+        if upload_mode == "multipart":
+            _send_multipart(conn, parsed, firmware, firmware_size, headers, chunk_size, stats)
+        else:
+            _send_raw(conn, parsed, firmware, firmware_size, headers, chunk_size, stats)
         response = conn.getresponse()
         conn.close()
     except PermissionError as exc:
