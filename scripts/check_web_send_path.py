@@ -13,7 +13,7 @@ WEB_INC = ROOT / "src" / "web" / "Esp32BaseWeb.inc"
 
 
 def function_body(source: str, name: str) -> str:
-    match = re.search(rf"\bvoid\s+{re.escape(name)}\s*\([^)]*\)\s*\{{", source)
+    match = re.search(rf"\b(?:void|bool)\s+{re.escape(name)}\s*\([^)]*\)\s*\{{", source)
     if not match:
         raise SystemExit(f"error: {name}() not found")
     depth = 1
@@ -33,6 +33,8 @@ def function_body(source: str, name: str) -> str:
 def main() -> int:
     source = WEB_INC.read_text()
     send_progmem = function_body(source, "sendProgmem")
+    send_response_content = function_body(source, "sendResponseContent")
+    end_response = function_body(source, "endResponse")
     handle_logs_page = function_body(source, "handleLogsPage")
     handle_logs_raw = function_body(source, "handleLogsRaw")
     errors: list[str] = []
@@ -47,6 +49,12 @@ def main() -> int:
         errors.append("Logs must not keep the old HTML-escaped inline segment path")
     if "sendLogSegment(" in handle_logs_page or "<pre>" in handle_logs_page:
         errors.append("handleLogsPage() must not inline full log contents into HTML")
+    if "g_server.sendContent(data, len);" in send_response_content:
+        after_send = send_response_content.split("g_server.sendContent(data, len);", 1)[1]
+        if "responseClientConnected()" in after_send:
+            errors.append("sendResponseContent() must not mark a response broken from a post-send connected() check")
+    if re.search(r"if\s*\([^)]*responseClientConnected\(\)[^)]*\)\s*\{\s*g_server\.sendContent\(\"\"\)", end_response, re.S):
+        errors.append("endResponse() must always attempt the final empty chunk unless the response is already broken")
     if "/esp32base/logs/raw" not in handle_logs_page or "iframe" not in handle_logs_page:
         errors.append("handleLogsPage() must embed the raw text log endpoint")
     if "text/plain; charset=utf-8" not in handle_logs_raw:

@@ -756,7 +756,8 @@ Route 缓冲机制：
 - `beginResponse(code, contentType, filename)` 开始通用 chunked 响应，后续使用 `sendChunk()` 输出文本或 `sendBytes()` 输出二进制块，最后必须调用 `endResponse()`。
 - `beginText(code)` 等价于 `text/plain; charset=utf-8` chunked 响应；`beginCsv(code, filename)` 等价于 `text/csv; charset=utf-8`，filename 非空时发送 `Content-Disposition: attachment`。
 - `beginResponse()` / `beginText()` / `beginCsv()` 只能在 handler 请求上下文中成功；handler 外、contentType 为空或超过 63 字节、filename 含不安全字符时返回 false 并记录 WARN。
-- 长响应的文本、PROGMEM head、二进制块和结束块发送过程中会主动让出调度；客户端断开后后续 `sendChunk()` / `sendBytes()` 会停止继续输出。
+- 长响应的文本、PROGMEM head、二进制块和结束块发送过程中会主动让出调度；客户端在发送前已经断开时后续 `sendChunk()` / `sendBytes()` 会停止继续输出。`endResponse()` 会在响应未标记为断开时发送最终 0-length chunk，保证 chunked 响应可被 HTTP 客户端正常判定结束。
+- 已经完整生成的小 JSON 优先使用 `sendJson(code, json)`；该路径发送固定 `Content-Length`，不进入 chunked 响应状态机。
 - CSV 字段必须用 `writeCsvEscaped()` 输出，避免逗号、换行或双引号破坏导出格式。
 - `redirectSeeOther(location)` 发送 `303 See Other`，用于 POST 成功后跳转到 GET 页面，避免浏览器刷新重复提交。
 - `beginJson(code)` 的状态码必须在 `endJson()` 发送时保留。

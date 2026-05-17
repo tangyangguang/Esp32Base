@@ -440,5 +440,7 @@ Arduino `WebServer` 是同步模型。
 
 - 基础库不对每个 HTTP 请求强制下发 `setNoDelay(true)`；实机回归显示该设置在弱链路下会降低 512 B chunked 响应吞吐。
 - `sendChunk()` / `sendProgmem()` 共用 512 B 静态 chunk buffer，并通过 Arduino `WebServer::sendContent()` 输出 chunked response；这样保留框架的 chunked 编码和连接收尾语义，同时避免 PROGMEM CSS/JS 被拆成大量 128 B 小 chunk。
+- `sendResponseContent()` 只在发送前检查客户端是否已经断开，发送后不再用 `client().connected()` 判定失败；`endResponse()` 在响应未标记断开时总是尝试发送最终 0-length chunk，避免同步 WebServer 下 curl/浏览器等待 chunked 响应结束直到超时。
+- 小 JSON 如果已经完整生成，使用 `sendJson()` 一次性返回固定 `Content-Length`；只有需要流式拼接或响应体较大时才使用 `beginResponse()` / `sendChunk()` / `endResponse()`。
 - WiFi modem sleep 默认关闭，避免按 DTIM 周期唤醒；电池业务可调用 `Esp32BaseWiFi::setPowerSave(true)` 显式恢复 modem sleep。
 - 内置基础 CSS 不再包含 App Config 专用样式；启用 `ESP32BASE_ENABLE_APP_CONFIG` 时 App Config 页会按需注入额外 `<style>`，其他页面不下发这部分字节。

@@ -4,6 +4,18 @@
 
 ## 2026-05-17
 
+### Web chunked 响应收尾稳定性
+
+修复：
+
+- `sendResponseContent()` 不再在 `WebServer::sendContent()` 之后立刻用 `client().connected()` 判定响应断开，避免 Arduino ESP32 Core 2.x 同步 WebServer 在已写出一个约 512 B chunk 后被误标记为 `response_client_disconnected`，导致后续业务 JSON/HTML chunk 被跳过。
+- `endResponse()` 在响应未标记为断开时总是尝试发送最终 0-length chunk，不再因为发送前的连接状态判断跳过 chunked 响应终止块。小 JSON、超过 512 B 的 JSON 和 HTML 分块输出都应能让 curl/浏览器正常看到响应结束。
+
+业务侧建议：
+
+- 已经完整生成在内存中的小 JSON 继续优先使用 `Esp32BaseWeb::sendJson(code, json)`，该路径由 Arduino WebServer 发送 `Content-Length`，不会使用 chunked transfer。
+- 需要流式拼接的大 JSON、HTML、CSV 或二进制内容继续使用 `beginResponse()` / `sendChunk()` / `sendBytes()` / `endResponse()`；业务代码必须保证每个成功 `beginResponse()` 最终调用 `endResponse()`。
+
 ### Web 首屏与请求路径性能优化
 
 优化：

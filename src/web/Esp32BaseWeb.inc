@@ -1079,10 +1079,6 @@ bool sendResponseContent(const char* data, size_t len) {
     }
     g_server.sendContent(data, len);
     yield();
-    if (!responseClientConnected()) {
-        markResponseClientDisconnected();
-        return false;
-    }
     return true;
 }
 
@@ -1148,11 +1144,9 @@ void endResponse() {
         return;
     }
     flushChunkBuffer();
-    if (!g_responseBroken && responseClientConnected()) {
+    if (!g_responseBroken) {
         g_server.sendContent("");
         yield();
-    } else if (!g_responseBroken) {
-        markResponseClientDisconnected();
     }
     g_responseActive = false;
     g_responseBroken = false;
