@@ -12,7 +12,7 @@
 - Web chunked 输出移除 raw `WiFiClient::write()` 快路径：实机回归确认直接绕过 `WebServer::sendContent()` 手写 `hex\r\n + payload + \r\n` 在 Arduino ESP32 Core 2.x 下会偶发挂起；本次稳定性修复将实际发送恢复为 `WebServer::sendContent()` 编码路径，并保留客户端断开检测、`yield()` 和 `response_client_disconnected` 日志。这样放弃单次 raw write 的极限优化，但避免 partial write 或底层 chunk 收尾语义导致 curl/浏览器等待到超时。
 - `sendBytes()` 等任意外部缓冲走 `sendResponseContent()` 旧 3 写入路径，同样带断连检查和 `yield()`，二进制下载稳定性不变。
 - 实机回归中 `setNoDelay(true)` 会让 512 B chunked 页面在弱链路下吞吐下降，Logs 等大页面更容易触发 20s 客户端超时；本次稳定性修复不再对每个 HTTP 请求强制关闭 Nagle。
-- Web chunk buffer 和 `sendProgmem()` 回到 2026-05-15 稳定发送形态；实机验证显示 1 KB 和 1.4 KB 级 chunk payload 以及让 PROGMEM 复用大 chunk buffer 仍会偶发挂起。稳定性优先于扩大 chunk 的极限吞吐优化（实际段数仍受 WebServer 编码、MSS、PMTU、lwIP 调度影响）。
+- Web chunk buffer 保持 512 B 稳定发送形态；`sendProgmem()` 改为复用该 buffer，避免内置 CSS/JS 走旧 128 B 临时 buffer 产生大量小 chunk。实机验证显示 1 KB 和 1.4 KB 级 chunk payload 会偶发挂起，因此稳定性优先于扩大 chunk 的极限吞吐优化（实际段数仍受 WebServer 编码、MSS、PMTU、lwIP 调度影响）。
 - 内置基础 CSS 移除 App Config 专用样式（约 700 B），改为只在 App Config 页面通过新增内部 head-injector 注入；其他 6 个内置页和业务页首屏字节数等量减少。App Config footer 入口仍由 `sendSystemLinks()` 注册，导航行为不变。
 
 业务侧影响：
@@ -24,7 +24,7 @@
 
 关键边界：
 
-- 静态 BSS 增加约 1 KB（chunk buffer 512 → ~1.5 KB），仍在 `docs/06_memory_budget.md` 资源预算内。
+- 静态 Web chunk buffer 仍为 512 B；本次 PROGMEM 发送优化不增加 chunk buffer BSS。
 - WiFi modem sleep 关闭后空闲电流增加约 20–50 mA，按需通过 `setPowerSave(true)` 回退。
 - 不改变 chunked transfer 编码：Arduino ESP32 WebServer 仍发 `Transfer-Encoding: chunked` 与 `Connection: close`（每次响应后关闭连接），外部 HTTP 客户端、curl、PlatformIO `webota` 行为一致。
 - ESP32 实机的首屏耗时、空闲电流、弱信号 WiFi 稳定性、OTA、Logs 大页面在合入前需在目标设备上回归测试，本次仅完成编译验证。

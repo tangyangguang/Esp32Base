@@ -953,26 +953,30 @@ void sendFooterStats() {
 }
 
 void sendProgmem(const char* p) {
-    flushChunkBuffer();
-    char buf[129];
-    size_t used = 0;
+    if (!p || !g_responseActive || g_responseBroken) {
+        return;
+    }
     while (true) {
-        const char c = static_cast<char>(pgm_read_byte(p++));
-        if (!c) {
-            break;
-        }
-        buf[used++] = c;
-        if (used == sizeof(buf) - 1) {
-            buf[used] = '\0';
-            if (!sendResponseContent(buf, used)) {
+        const size_t space = sizeof(g_chunkBuffer) - 1U - g_chunkUsed;
+        if (space == 0) {
+            flushChunkBuffer();
+            if (g_responseBroken) {
                 return;
             }
-            used = 0;
+            continue;
         }
-    }
-    if (used) {
-        buf[used] = '\0';
-        sendResponseContent(buf, used);
+
+        char* dest = g_chunkBuffer + g_chunkUsed;
+        size_t taken = 0;
+        while (taken < space) {
+            const char c = static_cast<char>(pgm_read_byte(p++));
+            if (!c) {
+                g_chunkUsed += taken;
+                return;
+            }
+            dest[taken++] = c;
+        }
+        g_chunkUsed += taken;
     }
 }
 
