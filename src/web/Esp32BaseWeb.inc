@@ -73,8 +73,18 @@ Esp32BaseWeb::HomeMode g_homeMode = Esp32BaseWeb::HOME_ESP32BASE;
 Esp32BaseWeb::SystemNavMode g_systemNavMode = Esp32BaseWeb::SYSTEM_NAV_SECTION;
 char g_builtinLabels[7][16] = {"Status", "WiFi", "OTA", "Logs", "System", "System", "Auth"};
 Esp32BaseWeb::Handler g_headExtraCallback = nullptr;
-char g_chunkBuffer[512];
+const char* g_pageHeadProgmem = nullptr;
+// Chunk buffer layout: [10B hex header slot][CHUNK_PAYLOAD_SIZE payload][2B trailing CRLF]
+// We compose a full HTTP chunked-transfer record into a single contiguous buffer so each
+// flush is a single client.write(), avoiding the three micro-writes (chunk hex / payload /
+// CRLF) plus malloc(11) that Arduino ESP32 WebServer::sendContent() emits per chunk.
+// Actual TCP segmentation still depends on MSS, PMTU and lwIP scheduling.
+constexpr size_t kChunkHeaderSlot = 10;
+constexpr size_t kChunkPayloadSize = 1460;
+constexpr size_t kChunkTrailerSize = 2;
+char g_chunkBuffer[kChunkHeaderSlot + kChunkPayloadSize + kChunkTrailerSize];
 size_t g_chunkUsed = 0;
+bool g_clientTuned = false;
 char g_activeUri[48] = "";
 Esp32BaseWeb::Method g_currentMethod = Esp32BaseWeb::METHOD_UNKNOWN;
 Esp32BaseWeb::Method g_lastRequestMethod = Esp32BaseWeb::METHOD_UNKNOWN;
@@ -160,11 +170,19 @@ static const char WEB_HEAD[] PROGMEM =
     ".kv{border-collapse:collapse;width:100%;margin:0}.kv th,.kv td{border-bottom:1px solid #d8e0e6;padding:7px 5px;text-align:left;vertical-align:top}.kv tr:last-child th,.kv tr:last-child td{border-bottom:0}.kv th{width:30%;color:#64707d;font-weight:600}"
     ".part{border-collapse:collapse;width:100%;font-size:13px}.part th,.part td{border-bottom:1px solid #d8e0e6;padding:6px 5px;text-align:left;vertical-align:top}.part th{color:#64707d;font-weight:600}.part tr:last-child td{border-bottom:0}"
     ".tabs,.quicklinks{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 10px}.tabs a,.quicklinks a{font-size:13px;padding:5px 8px;margin:0;background:#f1f4f3;color:#64707d;border-radius:5px}.tabs a{display:inline-flex;align-items:center;gap:8px}.tabs a.active{background:#e5f0eb;color:#245f52;font-weight:600}.segsize{padding-left:7px;border-left:1px solid #d8e0e6;font-variant-numeric:tabular-nums}"
-    ".appcfg{max-width:720px;margin:0 auto}.appcfg .pagehead,.appcfg .panel{margin:10px 0}.appcfg .panel{padding:12px 14px}.appcfg .acfield{margin:0 0 11px}.appcfg .acfield:last-child{margin-bottom:0}.appcfg .acfield>label{margin:0 0 3px}.appcfg input:not([type]),.appcfg input[type=text],.appcfg input[type=number],.appcfg select{font-size:14px;padding:6px 8px;margin:0;border:1px solid #ccd5dd;border-radius:5px;box-sizing:border-box;background:#fff;color:#1f2933}.appcfg input:not([type]),.appcfg input[type=text],.appcfg input[type=number]{width:100%}.appcfg select{max-width:260px;width:auto}.appcfg .acrow{display:flex;gap:7px;align-items:center;max-width:100%}.appcfg .acrow input{flex:1 1 auto;min-width:0}.appcfg .acrow input[type=number]{flex:0 1 14ch;width:14ch}.appcfg .unit{color:#64707d;font-size:13px;flex:0 0 auto}.appcfg .help{color:#64707d;font-size:13px;margin:4px 0 0}.appcfg .restart{color:#8a5a00;font-size:13px}.appcfg .confirmbox{display:none;border:1px solid #d8e0e6;background:#f8faf9;border-radius:6px;padding:10px;margin:10px 0;overflow-x:auto}.appcfg .confirmbox table,.appcfg .pendingbox table{border-collapse:collapse;width:100%;font-size:13px}.appcfg .confirmbox th,.appcfg .confirmbox td,.appcfg .pendingbox th,.appcfg .pendingbox td{border-bottom:1px solid #d8e0e6;padding:5px;text-align:left;vertical-align:top}.appcfg .confirmbox tr:last-child td,.appcfg .pendingbox tr:last-child td{border-bottom:0}.appcfg .acgroup th{background:#eef3f1;color:#64707d;font-size:12px;font-weight:700}.appcfg .pendingbox{border-color:#e1c46d;background:#fffdf6;overflow-x:auto}@media(max-width:640px){.appcfg{max-width:none}.appcfg select{width:100%;max-width:none}.appcfg .acrow{align-items:flex-start}.appcfg .acrow input[type=number]{max-width:100%}.appcfg .unit{padding-top:7px}}"
     ".logmeta{border-collapse:collapse;font-size:13px;line-height:1.45;margin:0}.logmeta th,.logmeta td{padding:2px 10px 2px 0;text-align:left;vertical-align:top}.logmeta th{width:112px;color:#64707d;font-weight:600}.logmeta td{color:#1f2933}.statusline{min-height:1.45em}.toolsection{padding:12px;margin:12px 0;background:#fff;border:1px solid #d8e0e6;border-radius:6px}"
     "pre{white-space:pre;overflow-x:auto;word-break:normal;font-size:12px;line-height:1.45;background:#f1f4f3;border:1px solid #d8e0e6;border-radius:5px;padding:9px}"
     "</style>"
     "<script>function once(f){if(f.dataset.busy)return false;f.dataset.busy=1;var b=f.querySelector('[type=submit]');if(b)b.disabled=true;return true;}</script>";
+
+#if ESP32BASE_ENABLE_APP_CONFIG
+// Page-scoped CSS for /esp32base/app-config. Kept out of WEB_HEAD so Status, Logs, WiFi,
+// Auth, OTA and Tools pages don't pay ~700 B per request for App Config-only styles.
+static const char WEB_APPCFG_STYLE[] PROGMEM =
+    "<style>"
+    ".appcfg{max-width:720px;margin:0 auto}.appcfg .pagehead,.appcfg .panel{margin:10px 0}.appcfg .panel{padding:12px 14px}.appcfg .acfield{margin:0 0 11px}.appcfg .acfield:last-child{margin-bottom:0}.appcfg .acfield>label{margin:0 0 3px}.appcfg input:not([type]),.appcfg input[type=text],.appcfg input[type=number],.appcfg select{font-size:14px;padding:6px 8px;margin:0;border:1px solid #ccd5dd;border-radius:5px;box-sizing:border-box;background:#fff;color:#1f2933}.appcfg input:not([type]),.appcfg input[type=text],.appcfg input[type=number]{width:100%}.appcfg select{max-width:260px;width:auto}.appcfg .acrow{display:flex;gap:7px;align-items:center;max-width:100%}.appcfg .acrow input{flex:1 1 auto;min-width:0}.appcfg .acrow input[type=number]{flex:0 1 14ch;width:14ch}.appcfg .unit{color:#64707d;font-size:13px;flex:0 0 auto}.appcfg .help{color:#64707d;font-size:13px;margin:4px 0 0}.appcfg .restart{color:#8a5a00;font-size:13px}.appcfg .confirmbox{display:none;border:1px solid #d8e0e6;background:#f8faf9;border-radius:6px;padding:10px;margin:10px 0;overflow-x:auto}.appcfg .confirmbox table,.appcfg .pendingbox table{border-collapse:collapse;width:100%;font-size:13px}.appcfg .confirmbox th,.appcfg .confirmbox td,.appcfg .pendingbox th,.appcfg .pendingbox td{border-bottom:1px solid #d8e0e6;padding:5px;text-align:left;vertical-align:top}.appcfg .confirmbox tr:last-child td,.appcfg .pendingbox tr:last-child td{border-bottom:0}.appcfg .acgroup th{background:#eef3f1;color:#64707d;font-size:12px;font-weight:700}.appcfg .pendingbox{border-color:#e1c46d;background:#fffdf6;overflow-x:auto}@media(max-width:640px){.appcfg{max-width:none}.appcfg select{width:100%;max-width:none}.appcfg .acrow{align-items:flex-start}.appcfg .acrow input[type=number]{max-width:100%}.appcfg .unit{padding-top:7px}}"
+    "</style>";
+#endif
 
 void flushChunkBuffer();
 bool sendResponseContent(const char* data, size_t len);
@@ -944,26 +962,32 @@ void sendFooterStats() {
 }
 
 void sendProgmem(const char* p) {
-    flushChunkBuffer();
-    char buf[129];
-    size_t used = 0;
+    if (!g_responseActive || g_responseBroken) {
+        return;
+    }
+    // Stream PROGMEM straight through the chunk buffer so a long static block goes out as
+    // few large TCP segments, not 22+ tiny WebServer::sendContent() chunks. flushChunkBuffer()
+    // sets g_responseBroken if the client disconnects mid-stream, so the outer loop bails.
     while (true) {
-        const char c = static_cast<char>(pgm_read_byte(p++));
-        if (!c) {
-            break;
-        }
-        buf[used++] = c;
-        if (used == sizeof(buf) - 1) {
-            buf[used] = '\0';
-            if (!sendResponseContent(buf, used)) {
+        const size_t space = kChunkPayloadSize - g_chunkUsed;
+        if (space == 0) {
+            flushChunkBuffer();
+            if (g_responseBroken) {
                 return;
             }
-            used = 0;
+            continue;
         }
-    }
-    if (used) {
-        buf[used] = '\0';
-        sendResponseContent(buf, used);
+        char* dest = g_chunkBuffer + kChunkHeaderSlot + g_chunkUsed;
+        size_t taken = 0;
+        while (taken < space) {
+            const char c = static_cast<char>(pgm_read_byte(p++));
+            if (!c) {
+                g_chunkUsed += taken;
+                return;
+            }
+            dest[taken++] = c;
+        }
+        g_chunkUsed += taken;
     }
 }
 
@@ -1071,8 +1095,43 @@ void flushChunkBuffer() {
     if (g_chunkUsed == 0) {
         return;
     }
-    g_chunkBuffer[g_chunkUsed] = '\0';
-    sendResponseContent(g_chunkBuffer, g_chunkUsed);
+    if (g_responseBroken) {
+        g_chunkUsed = 0;
+        return;
+    }
+    if (!responseClientConnected()) {
+        g_responseBroken = true;
+        ESP32BASE_LOG_W("web", "response_client_disconnected uri=%s", g_activeUri[0] ? g_activeUri : "-");
+        g_chunkUsed = 0;
+        return;
+    }
+    // Fast path: compose `hex\r\n + payload + \r\n` in a single contiguous buffer so the chunk
+    // record is handed to lwIP in one client.write() instead of WebServer::sendContent()'s
+    // three small writes plus malloc(11). Falls back to sendResponseContent() if the hex
+    // header somehow doesn't fit the reserved slot (unreachable for payload <= kChunkPayloadSize).
+    char header[12];
+    const int hdrLen = snprintf(header, sizeof(header), "%x\r\n", static_cast<unsigned>(g_chunkUsed));
+    if (hdrLen > 0 && static_cast<size_t>(hdrLen) <= kChunkHeaderSlot) {
+        const size_t hdrStart = kChunkHeaderSlot - static_cast<size_t>(hdrLen);
+        memcpy(g_chunkBuffer + hdrStart, header, static_cast<size_t>(hdrLen));
+        g_chunkBuffer[kChunkHeaderSlot + g_chunkUsed] = '\r';
+        g_chunkBuffer[kChunkHeaderSlot + g_chunkUsed + 1] = '\n';
+        WiFiClient client = g_server.client();
+        if (client) {
+            client.write(reinterpret_cast<const uint8_t*>(g_chunkBuffer + hdrStart),
+                         static_cast<size_t>(hdrLen) + g_chunkUsed + kChunkTrailerSize);
+        }
+        g_chunkUsed = 0;
+        yield();
+        if (!responseClientConnected()) {
+            g_responseBroken = true;
+            ESP32BASE_LOG_W("web", "response_client_disconnected uri=%s", g_activeUri[0] ? g_activeUri : "-");
+        }
+        return;
+    }
+    // Defensive fallback: use the WebServer chunk encoder path. Keeps disconnect logging.
+    g_chunkBuffer[kChunkHeaderSlot + g_chunkUsed] = '\0';
+    sendResponseContent(g_chunkBuffer + kChunkHeaderSlot, g_chunkUsed);
     g_chunkUsed = 0;
 }
 
@@ -1088,7 +1147,7 @@ void sendChunk(const char* text) {
         return;
     }
     while (*text) {
-        const size_t space = sizeof(g_chunkBuffer) - 1U - g_chunkUsed;
+        const size_t space = kChunkPayloadSize - g_chunkUsed;
         if (space == 0) {
             flushChunkBuffer();
             if (g_responseBroken) {
@@ -1100,7 +1159,7 @@ void sendChunk(const char* text) {
         if (len > space) {
             len = space;
         }
-        memcpy(g_chunkBuffer + g_chunkUsed, text, len);
+        memcpy(g_chunkBuffer + kChunkHeaderSlot + g_chunkUsed, text, len);
         g_chunkUsed += len;
         text += len;
     }
@@ -1123,6 +1182,20 @@ void endResponse() {
     g_responseBroken = false;
 }
 
+void tuneCurrentClient() {
+    if (g_clientTuned) {
+        return;
+    }
+    WiFiClient client = g_server.client();
+    if (!client) {
+        return;
+    }
+    // Flush small chunked writes immediately rather than waiting on Nagle. Combined with the
+    // single-write chunk encoder above this minimises small writes per buffer flush.
+    client.setNoDelay(true);
+    g_clientTuned = true;
+}
+
 void markRequest() {
     const Esp32BaseWeb::Method method = fromHttpMethod(g_server.method());
     g_lastRequestMethod = method;
@@ -1131,6 +1204,7 @@ void markRequest() {
         g_currentMethod = method;
     }
     strlcpy(g_activeUri, g_server.uri().c_str(), sizeof(g_activeUri));
+    tuneCurrentClient();
 }
 
 void redirectSeeOther(const char* url) {
@@ -2039,6 +2113,7 @@ void sendAppConfigPage(const char* errorMessage = nullptr) {
     if (!ensureAuth()) {
         return;
     }
+    g_pageHeadProgmem = WEB_APPCFG_STYLE;
     Esp32BaseWeb::sendHeader(g_appConfigTitle);
     sendAppConfigScript();
     sendChunk("<div class='appcfg'>");
@@ -3192,6 +3267,7 @@ void Esp32BaseWeb::handle() {
         g_requestContextActive = false;
         g_responseActive = false;
         g_authLoggedForRequest = false;
+        g_clientTuned = false;
         const uint32_t start = millis();
         g_server.handleClient();
         const uint32_t elapsed = millis() - start;
@@ -3440,6 +3516,10 @@ void Esp32BaseWeb::sendHeader(const char* title) {
     sendEscapedHtmlChunk(title ? title : g_deviceName);
     sendChunk("</title>");
     sendProgmem(WEB_HEAD);
+    if (g_pageHeadProgmem) {
+        sendProgmem(g_pageHeadProgmem);
+        g_pageHeadProgmem = nullptr;
+    }
     if (g_headExtraCallback) {
         g_headExtraCallback();
     }

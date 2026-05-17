@@ -2,6 +2,33 @@
 
 本文从 2026-05-06 起记录 Esp32Base 新增和优化的能力，面向正在接入本库的业务项目。业务项目应优先查看本文，了解最近可用的新 API、行为变化和推荐接入方式。
 
+## 2026-05-17
+
+### Web 首屏与请求路径性能优化
+
+优化：
+
+- WiFi modem sleep 默认关闭：`Esp32BaseWiFi::begin()` 在启动时显式 `WiFi.setSleep(false)`，并将 `g_wifiPowerSave` 默认值改为 `false`，避免 Arduino ESP32 默认 `WIFI_PS_MIN_MODEM` 引入 100–200 ms 的 DTIM 唤醒延迟。Status 页 `Power save` 行随之默认显示 `off`。
+- Web chunked 输出路径改为单次 `client.write()`：内部 chunk buffer 前后预留 chunk hex 头与 trailing CRLF 槽位，`flushChunkBuffer()` 把 `hex\r\n + payload + \r\n` 拼成一个连续段一次写入 TCP，省掉 `WebServer::sendContent()` 每 chunk 的 `malloc(11)` 与 3 个微小写入；2026-05-15 引入的客户端断开检测、`yield()` 和 `response_client_disconnected` 日志在新的快路径中保留，长 HTML/CSV/JSON 响应中途断连仍会立即停发并落日志。
+- `sendBytes()` 等任意外部缓冲走 `sendResponseContent()` 旧 3 写入路径，同样带断连检查和 `yield()`，二进制下载稳定性不变。
+- 每个 HTTP 请求开始时基础库下发 `setNoDelay(true)`，避免 Nagle 凑包延迟首字节。
+- Web chunk buffer 扩到 ~1460 B，`sendProgmem()` 直接复用同一 buffer 流式输出，WEB_HEAD 等大块静态内容明显减少小写入次数和 TCP 分片机会（实际段数仍受 MSS、PMTU、lwIP 调度影响）。
+- 内置基础 CSS 移除 App Config 专用样式（约 700 B），改为只在 App Config 页面通过新增内部 head-injector 注入；其他 6 个内置页和业务页首屏字节数等量减少。App Config footer 入口仍由 `sendSystemLinks()` 注册，导航行为不变。
+
+业务侧影响：
+
+- 同样 ESP32 板型在路由器旁的常规测试场景下，Web 首屏 TTFB 和总耗时预期明显下降；实际收益取决于路由器调度、信号强度和并发请求情况，建议业务在自己实机上量首屏耗时和 free heap 做最终评估。
+- 电池或弱网静默场景仍可调用 `Esp32BaseWiFi::setPowerSave(true)` 恢复 modem sleep；该 API 行为不变。
+- 公开 API（`Esp32BaseWeb::sendHeader/sendFooter/sendChunk/beginResponse/beginJson/beginCsv/sendBytes/writeHtmlEscaped/writeJsonEscaped` 等）签名、HTTP 响应内容与现有路由表均不变。
+- `setHeadExtraCallback()` 的业务覆盖仍在内部 head-injector 之后输出，业务 CSS 优先级不受影响。
+
+关键边界：
+
+- 静态 BSS 增加约 1 KB（chunk buffer 512 → ~1.5 KB），仍在 `docs/06_memory_budget.md` 资源预算内。
+- WiFi modem sleep 关闭后空闲电流增加约 20–50 mA，按需通过 `setPowerSave(true)` 回退。
+- 不改变 chunked transfer 编码：Arduino ESP32 WebServer 仍发 `Transfer-Encoding: chunked` 与 `Connection: close`（每次响应后关闭连接），外部 HTTP 客户端、curl、PlatformIO `webota` 行为一致。
+- ESP32 实机的首屏耗时、空闲电流、弱信号 WiFi 稳定性、OTA、Logs 大页面在合入前需在目标设备上回归测试，本次仅完成编译验证。
+
 ## 2026-05-15
 
 ### Web 长响应发送稳定性

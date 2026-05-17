@@ -109,6 +109,11 @@ Web JSON：
 - 避免大 `String` 拼接。
 - 状态 API 使用固定 buffer 或 chunked output。
 
+Web 发送 buffer：
+
+- HTML/JSON/CSV 共用约 1.5 KB 静态 chunk buffer；buffer 前后预留 chunk hex 头与 trailing CRLF，flush 时把整条 chunk 记录通过单次 `client.write()` 写出，避免 `WebServer::sendContent()` 每 chunk 触发的 `malloc(11)` + 3 个微小写入，明显减少小写入次数和 TCP 分片机会（具体段数仍由 MSS、PMTU、lwIP 调度决定）。
+- 不再为每页面下发 App Config 专用 CSS（~700 B），只在 App Config 页注入；其他 6 个内置页和业务页首屏均受益。
+
 ## 5. PSRAM
 
 第一版不依赖 PSRAM。

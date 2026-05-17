@@ -536,6 +536,7 @@ WiFi 凭证和重连策略：
 - `clearCredentials()` 只清空库管理的 WiFi 凭证，不立即触发重连、断线或 portal；NVS 清理失败时返回 false。
 - `connect(..., persist=true)` 必须先同步写入 NVS 保存凭证，写入失败时返回 false 且不切换连接；这是显式配置提交的可靠性取舍，避免页面提交后立即重启导致新凭证丢失。
 - `INFO` 日志明文输出 SSID 和密码，便于业务接入和现场调试。
+- `begin()` 默认禁用 WiFi modem sleep，并在启动时显式下发 `WiFi.setSleep(false)`，使 Web/OTA 请求不受 Arduino ESP32 默认 `WIFI_PS_MIN_MODEM` 的 DTIM 唤醒延迟影响；电池设备可调用 `setPowerSave(true)` 恢复 modem sleep，但需要接受 Web 首屏可见延迟。
 - 进入 deep sleep 后 STA、AP、DNS、Web 均不可用；唤醒相当于新一轮启动，按凭证状态恢复网络。
 - 默认无限重试，`FAILED` 状态在默认配置下不出现。
 - 仅当应用显式设置有限 maxRetries 且全部用尽，才进入 `FAILED`。

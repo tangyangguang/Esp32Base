@@ -433,3 +433,10 @@ Arduino `WebServer` 是同步模型。
 - Web handle 对超过 250ms 的慢请求输出日志。
 
 这属于已知限制，文档和示例必须体现。
+
+内部发送路径要点：
+
+- 每个请求开始时基础库会在 `WiFiClient` 上下发 `setNoDelay(true)`，避免 Nagle 凑包延迟首字节。
+- `sendChunk()` / `sendProgmem()` 使用约 1460 字节的内部缓冲，在 flush 时把 chunked transfer 的 `hex\r\n + payload + \r\n` 拼成一段调用一次 `client.write()`，省掉 `WebServer::sendContent()` 的 `malloc(11)` 与 3 个微小写入；实际 TCP 段数仍取决于 MSS、PMTU 和 lwIP 调度。
+- WiFi modem sleep 默认关闭，避免按 DTIM 周期唤醒；电池业务可调用 `Esp32BaseWiFi::setPowerSave(true)` 显式恢复 modem sleep。
+- 内置基础 CSS 不再包含 App Config 专用样式；启用 `ESP32BASE_ENABLE_APP_CONFIG` 时 App Config 页会按需注入额外 `<style>`，其他页面不下发这部分字节。
