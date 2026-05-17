@@ -291,6 +291,7 @@ def _send_multipart(connection, parsed, firmware_path, firmware_size, headers, c
                 stats["last_percent"] = percent
                 next_percent += 5
     connection.send(tail_bytes)
+    stats["client_send_finished_at"] = time.time()
 
 
 def _send_raw(connection, parsed, firmware_path, firmware_size, headers, chunk_size, stats):
@@ -329,6 +330,7 @@ def _send_raw(connection, parsed, firmware_path, firmware_size, headers, chunk_s
                 )
                 stats["last_percent"] = percent
                 next_percent += 5
+    stats["client_send_finished_at"] = time.time()
 
 
 def _run_webota(target, source, env):
@@ -389,7 +391,9 @@ def _run_webota(target, source, env):
             _send_multipart(conn, parsed, firmware, firmware_size, headers, chunk_size, stats)
         else:
             _send_raw(conn, parsed, firmware, firmware_size, headers, chunk_size, stats)
+        stats["response_wait_started_at"] = time.time()
         response = conn.getresponse()
+        stats["response_received_at"] = time.time()
         conn.close()
     except PermissionError as exc:
         print("Error: authentication failed: %s" % exc, file=sys.stderr)
@@ -424,10 +428,21 @@ def _run_webota(target, source, env):
 
     finished_at = time.time()
     duration = finished_at - started_at
+    send_started = stats.get("upload_started_at") or started_at
+    send_finished = stats.get("client_send_finished_at") or finished_at
+    response_started = stats.get("response_wait_started_at") or send_finished
+    response_received = stats.get("response_received_at") or finished_at
+    client_send_duration = max(0.0, send_finished - send_started)
+    response_wait_duration = max(0.0, response_received - response_started)
     print("Web OTA success: device accepted firmware and is restarting")
     print("Web OTA finished: %s" % _format_timestamp(finished_at))
     print(
-        "Web OTA duration: %s, uploaded %s, average %s"
+        "Web OTA client send: %s, %s"
+        % (_format_duration(client_send_duration), _format_speed(stats["sent_bytes"], client_send_duration))
+    )
+    print("Web OTA wait response: %s" % _format_duration(response_wait_duration))
+    print(
+        "Web OTA duration: %s, uploaded %s, end-to-end average %s"
         % (_format_duration(duration), _format_bytes(stats["sent_bytes"]), _format_speed(stats["sent_bytes"], duration))
     )
 

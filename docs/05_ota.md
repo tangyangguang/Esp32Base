@@ -78,7 +78,7 @@ pio run -t webota
 - `espota` 是 ArduinoOTA 标准协议，兼容 PlatformIO/ArduinoOTA 常规工具链。
 - `webota` 是 Esp32Base 提供的 HTTP 上传方式，默认 64 KB 分块并使用 raw binary endpoint，通常比 espota 和浏览器 multipart Web OTA 快；要求设备 Web 服务和 `/esp32base/ota/raw` 可访问。
 - 两者都不影响浏览器 Web OTA 页面。
-- `webota` 命令行日志会显示友好容量单位、开始时间、结束时间、用时、平均速度，并按约 5% 粒度输出上传进度。
+- `webota` 命令行日志会显示友好容量单位、开始时间、结束时间、客户端写入 socket 用时、等待设备响应用时、端到端用时和平均速度，并按约 5% 粒度输出上传进度。上传进度表示客户端已写入 socket 的字节数，不等同于设备已完成 flash 写入。
 - 设备端会在 Web OTA 开始前检查下一 OTA 分区容量；固件大于可写 app slot 时直接失败。上传过程中实际写入字节数也不得超过声明总大小。
 - `Update.begin()` 失败时会把底层 Update 错误字符串写入 `lastError()`，便于区分空间、flash 或 Update 状态问题。
 

@@ -2750,6 +2750,10 @@ void handleOtaApi() {
     sendBytesJsonChunk(static_cast<uint32_t>(Esp32BaseOta::bytesProcessed()));
     sendChunk(",\"totalSize\":");
     sendBytesJsonChunk(static_cast<uint32_t>(Esp32BaseOta::totalSize()));
+    sendChunk(",\"elapsedMs\":");
+    sendIntChunk(Esp32BaseOta::elapsedMs());
+    sendChunk(",\"averageBytesPerSecond\":");
+    sendIntChunk(Esp32BaseOta::averageBytesPerSecond());
     sendChunk(",\"error\":\"");
     sendEscapedJsonChunk(Esp32BaseOta::lastError());
     sendChunk("\"}");

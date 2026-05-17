@@ -15,6 +15,7 @@
 - Web chunk buffer 保持 512 B 稳定发送形态；`sendProgmem()` 改为复用该 buffer，避免内置 CSS/JS 走旧 128 B 临时 buffer 产生大量小 chunk。实机验证显示 1 KB 和 1.4 KB 级 chunk payload 会偶发挂起，因此稳定性优先于扩大 chunk 的极限吞吐优化（实际段数仍受 WebServer 编码、MSS、PMTU、lwIP 调度影响）。
 - Logs 页面改为小 HTML 外壳 + `/esp32base/logs/raw?segment=N` 的 `text/plain` iframe；日志正文不再逐字符 HTML escape 进主页面，raw endpoint 复用 512 B chunk buffer 流式输出原文，并保留 Basic Auth、`yield()` 和 Watchdog feed。
 - PlatformIO `webota` 默认改走 `/esp32base/ota/raw` 的 `application/octet-stream` 上传，跳过 multipart 解析；浏览器页面继续使用 `/esp32base/ota` multipart 路径，显式把 `esp32base_webota_path` 设为 `/esp32base/ota` 时也保留旧兼容路径。
+- Web OTA 统计口径拆分：命令行输出 client send、wait response 和端到端总耗时；`/esp32base/api/ota` 增加 `elapsedMs` 与 `averageBytesPerSecond`，用于区分客户端 socket 写入、设备端 OTA 处理和响应等待。
 - 内置基础 CSS 移除 App Config 专用样式（约 700 B），改为只在 App Config 页面通过新增内部 head-injector 注入；其他 6 个内置页和业务页首屏字节数等量减少。App Config footer 入口仍由 `sendSystemLinks()` 注册，导航行为不变。
 
 业务侧影响：

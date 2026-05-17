@@ -34,6 +34,8 @@ public:
     static uint8_t progress();
     static size_t bytesProcessed();
     static size_t totalSize();
+    static uint32_t elapsedMs();
+    static uint32_t averageBytesPerSecond();
     static const char* lastError();
 
     static bool markCurrentValid();

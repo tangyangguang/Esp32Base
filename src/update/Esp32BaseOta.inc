@@ -55,6 +55,7 @@ mbedtls_sha256_context g_otaSha;
 bool g_otaShaActive = false;
 bool g_otaPrevPowerSave = true;
 uint32_t g_otaTransferStartedMs = 0;
+uint32_t g_otaTransferFinishedMs = 0;
 bool g_otaSummaryLogged = false;
 uint32_t g_otaBootMs = 0;
 const esp_partition_t* g_otaBootPartition = nullptr;
@@ -157,7 +158,14 @@ void formatOtaBytesShort(double bytes, char* out, size_t len) {
 
 void resetOtaTransferStats() {
     g_otaTransferStartedMs = millis();
+    g_otaTransferFinishedMs = 0;
     g_otaSummaryLogged = false;
+}
+
+void finishOtaTransferStats() {
+    if (g_otaTransferStartedMs != 0 && g_otaTransferFinishedMs == 0) {
+        g_otaTransferFinishedMs = millis();
+    }
 }
 
 void logOtaTransferSummary(const char* prefix) {
@@ -165,7 +173,8 @@ void logOtaTransferSummary(const char* prefix) {
         return;
     }
     g_otaSummaryLogged = true;
-    const uint32_t durationMs = millis() - g_otaTransferStartedMs;
+    finishOtaTransferStats();
+    const uint32_t durationMs = g_otaTransferFinishedMs - g_otaTransferStartedMs;
     const double durationSec = static_cast<double>(durationMs) / 1000.0;
     char uploadedBuf[32];
     char speedBuf[40];
@@ -454,6 +463,7 @@ bool Esp32BaseOta::writeChunk(const uint8_t* data, size_t len) {
         return false;
     }
     if (Update.write(const_cast<uint8_t*>(data), len) != len) {
+        finishOtaTransferStats();
         abortUpload("Update.write failed");
         return false;
     }
@@ -489,6 +499,7 @@ bool Esp32BaseOta::finishUpload() {
     if (g_otaExpected[0] && strcmp(g_otaExpected, actual) != 0) {
         Update.abort();
         cleanupLongOps();
+        finishOtaTransferStats();
         setError("sha256 mismatch");
         logOtaTransferSummary("upload_failed");
         g_otaStatus = FAILED;
@@ -498,6 +509,7 @@ bool Esp32BaseOta::finishUpload() {
     if (g_otaProcessed != g_otaTotal) {
         Update.abort();
         cleanupLongOps();
+        finishOtaTransferStats();
         setError("ota size mismatch");
         logOtaTransferSummary("upload_failed");
         g_otaStatus = FAILED;
@@ -506,6 +518,7 @@ bool Esp32BaseOta::finishUpload() {
 
     if (!Update.end(true)) {
         cleanupLongOps();
+        finishOtaTransferStats();
         setError("Update.end failed");
         logOtaTransferSummary("upload_failed");
         g_otaStatus = FAILED;
@@ -513,6 +526,7 @@ bool Esp32BaseOta::finishUpload() {
     }
 
     cleanupLongOps();
+    finishOtaTransferStats();
     g_otaStatus = SUCCESS;
     char processedBuf[32];
     formatOtaBytes(g_otaProcessed, processedBuf, sizeof(processedBuf));
@@ -536,6 +550,7 @@ void Esp32BaseOta::abortUpload(const char* reason) {
     }
     Update.abort();
     cleanupLongOps();
+    finishOtaTransferStats();
     setError(reason ? reason : "ota aborted");
     logOtaTransferSummary("upload_aborted");
     g_otaStatus = FAILED;
@@ -555,6 +570,25 @@ size_t Esp32BaseOta::bytesProcessed() {
 
 size_t Esp32BaseOta::totalSize() {
     return g_otaTotal;
+}
+
+uint32_t Esp32BaseOta::elapsedMs() {
+    if (g_otaTransferStartedMs == 0) {
+        return 0;
+    }
+    if (g_otaTransferFinishedMs != 0) {
+        return g_otaTransferFinishedMs - g_otaTransferStartedMs;
+    }
+    return millis() - g_otaTransferStartedMs;
+}
+
+uint32_t Esp32BaseOta::averageBytesPerSecond() {
+    const uint32_t elapsed = elapsedMs();
+    if (elapsed == 0) {
+        return 0;
+    }
+    const uint64_t bytesPerSecond = (static_cast<uint64_t>(g_otaProcessed) * 1000ULL) / elapsed;
+    return bytesPerSecond > UINT32_MAX ? UINT32_MAX : static_cast<uint32_t>(bytesPerSecond);
 }
 
 const char* Esp32BaseOta::lastError() {
