@@ -74,17 +74,8 @@ Esp32BaseWeb::SystemNavMode g_systemNavMode = Esp32BaseWeb::SYSTEM_NAV_SECTION;
 char g_builtinLabels[7][16] = {"Status", "WiFi", "OTA", "Logs", "System", "System", "Auth"};
 Esp32BaseWeb::Handler g_headExtraCallback = nullptr;
 const char* g_pageHeadProgmem = nullptr;
-// Chunk buffer layout: [10B hex header slot][CHUNK_PAYLOAD_SIZE payload][2B trailing CRLF]
-// We compose a full HTTP chunked-transfer record into a single contiguous buffer so each
-// flush is a single client.write(), avoiding the three micro-writes (chunk hex / payload /
-// CRLF) plus malloc(11) that Arduino ESP32 WebServer::sendContent() emits per chunk.
-// Actual TCP segmentation still depends on MSS, PMTU and lwIP scheduling.
-constexpr size_t kChunkHeaderSlot = 10;
-constexpr size_t kChunkPayloadSize = 1460;
-constexpr size_t kChunkTrailerSize = 2;
-char g_chunkBuffer[kChunkHeaderSlot + kChunkPayloadSize + kChunkTrailerSize];
+char g_chunkBuffer[512];
 size_t g_chunkUsed = 0;
-bool g_clientTuned = false;
 char g_activeUri[48] = "";
 Esp32BaseWeb::Method g_currentMethod = Esp32BaseWeb::METHOD_UNKNOWN;
 Esp32BaseWeb::Method g_lastRequestMethod = Esp32BaseWeb::METHOD_UNKNOWN;
@@ -962,32 +953,26 @@ void sendFooterStats() {
 }
 
 void sendProgmem(const char* p) {
-    if (!g_responseActive || g_responseBroken) {
-        return;
-    }
-    // Stream PROGMEM straight through the chunk buffer so a long static block goes out as
-    // few large TCP segments, not 22+ tiny WebServer::sendContent() chunks. flushChunkBuffer()
-    // sets g_responseBroken if the client disconnects mid-stream, so the outer loop bails.
+    flushChunkBuffer();
+    char buf[129];
+    size_t used = 0;
     while (true) {
-        const size_t space = kChunkPayloadSize - g_chunkUsed;
-        if (space == 0) {
-            flushChunkBuffer();
-            if (g_responseBroken) {
+        const char c = static_cast<char>(pgm_read_byte(p++));
+        if (!c) {
+            break;
+        }
+        buf[used++] = c;
+        if (used == sizeof(buf) - 1) {
+            buf[used] = '\0';
+            if (!sendResponseContent(buf, used)) {
                 return;
             }
-            continue;
+            used = 0;
         }
-        char* dest = g_chunkBuffer + kChunkHeaderSlot + g_chunkUsed;
-        size_t taken = 0;
-        while (taken < space) {
-            const char c = static_cast<char>(pgm_read_byte(p++));
-            if (!c) {
-                g_chunkUsed += taken;
-                return;
-            }
-            dest[taken++] = c;
-        }
-        g_chunkUsed += taken;
+    }
+    if (used) {
+        buf[used] = '\0';
+        sendResponseContent(buf, used);
     }
 }
 
@@ -1072,20 +1057,25 @@ bool responseClientConnected() {
     return g_server.client().connected();
 }
 
+void markResponseClientDisconnected() {
+    if (!g_responseBroken) {
+        g_responseBroken = true;
+        ESP32BASE_LOG_W("web", "response_client_disconnected uri=%s", g_activeUri[0] ? g_activeUri : "-");
+    }
+}
+
 bool sendResponseContent(const char* data, size_t len) {
     if (g_responseBroken) {
         return false;
     }
     if (!responseClientConnected()) {
-        g_responseBroken = true;
-        ESP32BASE_LOG_W("web", "response_client_disconnected uri=%s", g_activeUri[0] ? g_activeUri : "-");
+        markResponseClientDisconnected();
         return false;
     }
     g_server.sendContent(data, len);
     yield();
     if (!responseClientConnected()) {
-        g_responseBroken = true;
-        ESP32BASE_LOG_W("web", "response_client_disconnected uri=%s", g_activeUri[0] ? g_activeUri : "-");
+        markResponseClientDisconnected();
         return false;
     }
     return true;
@@ -1100,38 +1090,12 @@ void flushChunkBuffer() {
         return;
     }
     if (!responseClientConnected()) {
-        g_responseBroken = true;
-        ESP32BASE_LOG_W("web", "response_client_disconnected uri=%s", g_activeUri[0] ? g_activeUri : "-");
+        markResponseClientDisconnected();
         g_chunkUsed = 0;
         return;
     }
-    // Fast path: compose `hex\r\n + payload + \r\n` in a single contiguous buffer so the chunk
-    // record is handed to lwIP in one client.write() instead of WebServer::sendContent()'s
-    // three small writes plus malloc(11). Falls back to sendResponseContent() if the hex
-    // header somehow doesn't fit the reserved slot (unreachable for payload <= kChunkPayloadSize).
-    char header[12];
-    const int hdrLen = snprintf(header, sizeof(header), "%x\r\n", static_cast<unsigned>(g_chunkUsed));
-    if (hdrLen > 0 && static_cast<size_t>(hdrLen) <= kChunkHeaderSlot) {
-        const size_t hdrStart = kChunkHeaderSlot - static_cast<size_t>(hdrLen);
-        memcpy(g_chunkBuffer + hdrStart, header, static_cast<size_t>(hdrLen));
-        g_chunkBuffer[kChunkHeaderSlot + g_chunkUsed] = '\r';
-        g_chunkBuffer[kChunkHeaderSlot + g_chunkUsed + 1] = '\n';
-        WiFiClient client = g_server.client();
-        if (client) {
-            client.write(reinterpret_cast<const uint8_t*>(g_chunkBuffer + hdrStart),
-                         static_cast<size_t>(hdrLen) + g_chunkUsed + kChunkTrailerSize);
-        }
-        g_chunkUsed = 0;
-        yield();
-        if (!responseClientConnected()) {
-            g_responseBroken = true;
-            ESP32BASE_LOG_W("web", "response_client_disconnected uri=%s", g_activeUri[0] ? g_activeUri : "-");
-        }
-        return;
-    }
-    // Defensive fallback: use the WebServer chunk encoder path. Keeps disconnect logging.
-    g_chunkBuffer[kChunkHeaderSlot + g_chunkUsed] = '\0';
-    sendResponseContent(g_chunkBuffer + kChunkHeaderSlot, g_chunkUsed);
+    g_chunkBuffer[g_chunkUsed] = '\0';
+    sendResponseContent(g_chunkBuffer, g_chunkUsed);
     g_chunkUsed = 0;
 }
 
@@ -1147,7 +1111,7 @@ void sendChunk(const char* text) {
         return;
     }
     while (*text) {
-        const size_t space = kChunkPayloadSize - g_chunkUsed;
+        const size_t space = sizeof(g_chunkBuffer) - 1U - g_chunkUsed;
         if (space == 0) {
             flushChunkBuffer();
             if (g_responseBroken) {
@@ -1159,7 +1123,7 @@ void sendChunk(const char* text) {
         if (len > space) {
             len = space;
         }
-        memcpy(g_chunkBuffer + kChunkHeaderSlot + g_chunkUsed, text, len);
+        memcpy(g_chunkBuffer + g_chunkUsed, text, len);
         g_chunkUsed += len;
         text += len;
     }
@@ -1175,25 +1139,10 @@ void endResponse() {
         g_server.sendContent("");
         yield();
     } else if (!g_responseBroken) {
-        g_responseBroken = true;
-        ESP32BASE_LOG_W("web", "response_client_disconnected uri=%s", g_activeUri[0] ? g_activeUri : "-");
+        markResponseClientDisconnected();
     }
     g_responseActive = false;
     g_responseBroken = false;
-}
-
-void tuneCurrentClient() {
-    if (g_clientTuned) {
-        return;
-    }
-    WiFiClient client = g_server.client();
-    if (!client) {
-        return;
-    }
-    // Flush small chunked writes immediately rather than waiting on Nagle. Combined with the
-    // single-write chunk encoder above this minimises small writes per buffer flush.
-    client.setNoDelay(true);
-    g_clientTuned = true;
 }
 
 void markRequest() {
@@ -1204,7 +1153,6 @@ void markRequest() {
         g_currentMethod = method;
     }
     strlcpy(g_activeUri, g_server.uri().c_str(), sizeof(g_activeUri));
-    tuneCurrentClient();
 }
 
 void redirectSeeOther(const char* url) {
@@ -3267,7 +3215,6 @@ void Esp32BaseWeb::handle() {
         g_requestContextActive = false;
         g_responseActive = false;
         g_authLoggedForRequest = false;
-        g_clientTuned = false;
         const uint32_t start = millis();
         g_server.handleClient();
         const uint32_t elapsed = millis() - start;

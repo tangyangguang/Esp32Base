@@ -111,7 +111,7 @@ Web JSON：
 
 Web 发送 buffer：
 
-- HTML/JSON/CSV 共用约 1.5 KB 静态 chunk buffer；buffer 前后预留 chunk hex 头与 trailing CRLF，flush 时把整条 chunk 记录通过单次 `client.write()` 写出，避免 `WebServer::sendContent()` 每 chunk 触发的 `malloc(11)` + 3 个微小写入，明显减少小写入次数和 TCP 分片机会（具体段数仍由 MSS、PMTU、lwIP 调度决定）。
+- HTML/JSON/CSV 使用 512 B 静态 chunk buffer，并走 Arduino `WebServer::sendContent()` 的 chunked 编码路径。本次 ESP32 实机回归显示 1 KB/1.4 KB 级 chunk payload、PROGMEM 复用大 chunk buffer，以及直接手写 `hex\r\n + payload + \r\n` 调用 raw `WiFiClient::write()` 的快路径都会偶发响应挂起，因此默认不使用；稳定性优先于省掉 `WebServer::sendContent()` 内部小写入和 `malloc(11)` 的极限优化。若 flush 前后检测到客户端断开，当前响应标记为 broken 并停止继续输出。
 - 不再为每页面下发 App Config 专用 CSS（~700 B），只在 App Config 页注入；其他 6 个内置页和业务页首屏均受益。
 
 ## 5. PSRAM

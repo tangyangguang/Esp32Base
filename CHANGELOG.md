@@ -9,10 +9,10 @@
 优化：
 
 - WiFi modem sleep 默认关闭：`Esp32BaseWiFi::begin()` 在启动时显式 `WiFi.setSleep(false)`，并将 `g_wifiPowerSave` 默认值改为 `false`，避免 Arduino ESP32 默认 `WIFI_PS_MIN_MODEM` 引入 100–200 ms 的 DTIM 唤醒延迟。Status 页 `Power save` 行随之默认显示 `off`。
-- Web chunked 输出路径改为单次 `client.write()`：内部 chunk buffer 前后预留 chunk hex 头与 trailing CRLF 槽位，`flushChunkBuffer()` 把 `hex\r\n + payload + \r\n` 拼成一个连续段一次写入 TCP，省掉 `WebServer::sendContent()` 每 chunk 的 `malloc(11)` 与 3 个微小写入；2026-05-15 引入的客户端断开检测、`yield()` 和 `response_client_disconnected` 日志在新的快路径中保留，长 HTML/CSV/JSON 响应中途断连仍会立即停发并落日志。
+- Web chunked 输出移除 raw `WiFiClient::write()` 快路径：实机回归确认直接绕过 `WebServer::sendContent()` 手写 `hex\r\n + payload + \r\n` 在 Arduino ESP32 Core 2.x 下会偶发挂起；本次稳定性修复将实际发送恢复为 `WebServer::sendContent()` 编码路径，并保留客户端断开检测、`yield()` 和 `response_client_disconnected` 日志。这样放弃单次 raw write 的极限优化，但避免 partial write 或底层 chunk 收尾语义导致 curl/浏览器等待到超时。
 - `sendBytes()` 等任意外部缓冲走 `sendResponseContent()` 旧 3 写入路径，同样带断连检查和 `yield()`，二进制下载稳定性不变。
-- 每个 HTTP 请求开始时基础库下发 `setNoDelay(true)`，避免 Nagle 凑包延迟首字节。
-- Web chunk buffer 扩到 ~1460 B，`sendProgmem()` 直接复用同一 buffer 流式输出，WEB_HEAD 等大块静态内容明显减少小写入次数和 TCP 分片机会（实际段数仍受 MSS、PMTU、lwIP 调度影响）。
+- 实机回归中 `setNoDelay(true)` 会让 512 B chunked 页面在弱链路下吞吐下降，Logs 等大页面更容易触发 20s 客户端超时；本次稳定性修复不再对每个 HTTP 请求强制关闭 Nagle。
+- Web chunk buffer 和 `sendProgmem()` 回到 2026-05-15 稳定发送形态；实机验证显示 1 KB 和 1.4 KB 级 chunk payload 以及让 PROGMEM 复用大 chunk buffer 仍会偶发挂起。稳定性优先于扩大 chunk 的极限吞吐优化（实际段数仍受 WebServer 编码、MSS、PMTU、lwIP 调度影响）。
 - 内置基础 CSS 移除 App Config 专用样式（约 700 B），改为只在 App Config 页面通过新增内部 head-injector 注入；其他 6 个内置页和业务页首屏字节数等量减少。App Config footer 入口仍由 `sendSystemLinks()` 注册，导航行为不变。
 
 业务侧影响：
