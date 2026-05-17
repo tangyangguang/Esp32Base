@@ -36,7 +36,7 @@ char g_configPortalSsid[32] = "";
 uint32_t g_wifiAttemptStartMs = 0;
 uint32_t g_wifiNextRetryMs = 0;
 uint8_t g_wifiRetryCount = 0;
-bool g_wifiPowerSave = true;
+bool g_wifiPowerSave = false;
 
 bool credentialsPresent() {
     return g_wifiSsid[0] != '\0';
@@ -138,6 +138,7 @@ const char* wlStatusName(wl_status_t status) {
 bool Esp32BaseWiFi::begin() {
     g_wifiReady = true;
     WiFi.persistent(false);
+    WiFi.setSleep(g_wifiPowerSave);
     if (loadCredentials()) {
         beginSta();
     } else {

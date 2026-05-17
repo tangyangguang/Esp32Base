@@ -71,6 +71,8 @@ App Config 支持 string、int、decimal 定点数、bool 和 enum 字段；保�
 
 联网 profile 可通过 `Esp32BaseNtp::snapshot()` 获取统一业务时间快照。断网启动时业务仍能记录当前 `bootId + uptimeSec`；本次 boot 后续 NTP 同步成功时，`onTimeSynced()` 会回调，业务可用 `resolveCurrentBootEvent()` 只回填同一 boot 的相对时间事件，历史未知时间不会被伪造为日期。
 
+WiFi 默认关闭 modem sleep，让 Web 首屏和 OTA 不被 Arduino ESP32 默认 `WIFI_PS_MIN_MODEM` 的 DTIM 唤醒抖动拖慢；电池设备可调用 `Esp32BaseWiFi::setPowerSave(true)` 恢复 modem sleep。
+
 ## 支持目标
 
 芯片：
