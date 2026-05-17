@@ -156,6 +156,7 @@ OTA:
 Logs:
 
 - `GET /esp32base/logs`
+- `GET /esp32base/logs/raw?segment=N`，以 `text/plain; charset=utf-8` 流式输出单个日志 segment，供 Logs 页面 iframe 和原文查看使用
 - `POST /esp32base/logs/clear`，保留直达入口，成功后回到 Logs 页面
 
 System:
@@ -235,10 +236,10 @@ Logs 页面：
 - 文件日志状态信息使用 panel 内紧凑小字号表格展示，label/value 纵向对齐；其中的容量值只显示 KB/MB/B 人性化值，不重复 raw bytes。
 - 页面顶部以标签展示所有 segment，顺序为 `current-0`、`history-1`、`history-2` 到最旧 history；标签里的文件名和大小分开展示，大小只显示 KB/MB/B 人性化值。
 - 默认显示 `current-0`；可通过 `?segment=N` 查看单个历史文件，非法或越界 segment 回落到 `current-0`。
-- 日志内容必须 HTML escape。
+- 日志正文不内联进主 HTML；Logs 页面通过 iframe 加载 `/esp32base/logs/raw?segment=N` 的 `text/plain` 原文，避免大日志逐字符 HTML escape。
 - 清空日志入口位于 System 页面；Logs 页面只负责查看日志。
-- 日志正文一次只展示一个 segment，并输出当前 segment 标题，包括 0 字节文件。
-- 日志内容只做 HTML escape，不折叠、不省略、不规整空白行，页面展示应忠实反映文件内容。
+- 日志正文一次只展示一个 segment，包括 0 字节文件；非法或越界 segment 回落到 `current-0`。
+- raw 日志内容不折叠、不省略、不规整空白行，页面展示应忠实反映文件内容。
 - 日志正文流式输出期间必须周期性 yield/feed Watchdog，避免大日志页面长请求触发看门狗。
 
 状态页/API：

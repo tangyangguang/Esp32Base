@@ -13,6 +13,7 @@
 - `sendBytes()` 等任意外部缓冲走 `sendResponseContent()` 旧 3 写入路径，同样带断连检查和 `yield()`，二进制下载稳定性不变。
 - 实机回归中 `setNoDelay(true)` 会让 512 B chunked 页面在弱链路下吞吐下降，Logs 等大页面更容易触发 20s 客户端超时；本次稳定性修复不再对每个 HTTP 请求强制关闭 Nagle。
 - Web chunk buffer 保持 512 B 稳定发送形态；`sendProgmem()` 改为复用该 buffer，避免内置 CSS/JS 走旧 128 B 临时 buffer 产生大量小 chunk。实机验证显示 1 KB 和 1.4 KB 级 chunk payload 会偶发挂起，因此稳定性优先于扩大 chunk 的极限吞吐优化（实际段数仍受 WebServer 编码、MSS、PMTU、lwIP 调度影响）。
+- Logs 页面改为小 HTML 外壳 + `/esp32base/logs/raw?segment=N` 的 `text/plain` iframe；日志正文不再逐字符 HTML escape 进主页面，raw endpoint 复用 512 B chunk buffer 流式输出原文，并保留 Basic Auth、`yield()` 和 Watchdog feed。
 - 内置基础 CSS 移除 App Config 专用样式（约 700 B），改为只在 App Config 页面通过新增内部 head-injector 注入；其他 6 个内置页和业务页首屏字节数等量减少。App Config footer 入口仍由 `sendSystemLinks()` 注册，导航行为不变。
 
 业务侧影响：

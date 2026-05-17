@@ -162,7 +162,7 @@ static const char WEB_HEAD[] PROGMEM =
     ".part{border-collapse:collapse;width:100%;font-size:13px}.part th,.part td{border-bottom:1px solid #d8e0e6;padding:6px 5px;text-align:left;vertical-align:top}.part th{color:#64707d;font-weight:600}.part tr:last-child td{border-bottom:0}"
     ".tabs,.quicklinks{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 10px}.tabs a,.quicklinks a{font-size:13px;padding:5px 8px;margin:0;background:#f1f4f3;color:#64707d;border-radius:5px}.tabs a{display:inline-flex;align-items:center;gap:8px}.tabs a.active{background:#e5f0eb;color:#245f52;font-weight:600}.segsize{padding-left:7px;border-left:1px solid #d8e0e6;font-variant-numeric:tabular-nums}"
     ".logmeta{border-collapse:collapse;font-size:13px;line-height:1.45;margin:0}.logmeta th,.logmeta td{padding:2px 10px 2px 0;text-align:left;vertical-align:top}.logmeta th{width:112px;color:#64707d;font-weight:600}.logmeta td{color:#1f2933}.statusline{min-height:1.45em}.toolsection{padding:12px;margin:12px 0;background:#fff;border:1px solid #d8e0e6;border-radius:6px}"
-    "pre{white-space:pre;overflow-x:auto;word-break:normal;font-size:12px;line-height:1.45;background:#f1f4f3;border:1px solid #d8e0e6;border-radius:5px;padding:9px}"
+    "pre{white-space:pre;overflow-x:auto;word-break:normal;font-size:12px;line-height:1.45;background:#f1f4f3;border:1px solid #d8e0e6;border-radius:5px;padding:9px}.logframe{display:block;width:100%;height:62vh;min-height:320px;border:1px solid #d8e0e6;border-radius:5px;background:#f1f4f3}"
     "</style>"
     "<script>function once(f){if(f.dataset.busy)return false;f.dataset.busy=1;var b=f.querySelector('[type=submit]');if(b)b.disabled=true;return true;}</script>";
 
@@ -178,6 +178,7 @@ static const char WEB_APPCFG_STYLE[] PROGMEM =
 void flushChunkBuffer();
 bool sendResponseContent(const char* data, size_t len);
 void markRequest();
+void sendChunk(const char* data, size_t len);
 void sendChunk(const char* text);
 void sendEscapedHtmlChunk(const char* text);
 void formatReadableBytes(uint64_t bytes, char* out, size_t len);
@@ -1103,8 +1104,8 @@ void flushChunkBuffer() {
     g_chunkUsed = 0;
 }
 
-void sendChunk(const char* text) {
-    if (!text) {
+void sendChunk(const char* data, size_t len) {
+    if (!data || len == 0) {
         return;
     }
     if (!g_responseActive) {
@@ -1114,7 +1115,7 @@ void sendChunk(const char* text) {
     if (g_responseBroken) {
         return;
     }
-    while (*text) {
+    while (len > 0) {
         const size_t space = sizeof(g_chunkBuffer) - 1U - g_chunkUsed;
         if (space == 0) {
             flushChunkBuffer();
@@ -1123,14 +1124,22 @@ void sendChunk(const char* text) {
             }
             continue;
         }
-        size_t len = strlen(text);
-        if (len > space) {
-            len = space;
+        size_t take = len;
+        if (take > space) {
+            take = space;
         }
-        memcpy(g_chunkBuffer + g_chunkUsed, text, len);
-        g_chunkUsed += len;
-        text += len;
+        memcpy(g_chunkBuffer + g_chunkUsed, data, take);
+        g_chunkUsed += take;
+        data += take;
+        len -= take;
     }
+}
+
+void sendChunk(const char* text) {
+    if (!text) {
+        return;
+    }
+    sendChunk(text, strlen(text));
 }
 
 void endResponse() {
@@ -2946,35 +2955,13 @@ uint8_t selectedLogSegment() {
     return static_cast<uint8_t>(value);
 }
 
-void sendLogEscapedChunk(const char* data, size_t len, void* user) {
+void sendRawLogChunk(const char* data, size_t len, void* user) {
     (void)user;
-    char one[2] = {0, 0};
-    for (size_t i = 0; i < len; ++i) {
-        switch (data[i]) {
-            case '&': sendChunk("&amp;"); break;
-            case '<': sendChunk("&lt;"); break;
-            case '>': sendChunk("&gt;"); break;
-            case '"': sendChunk("&quot;"); break;
-            default:
-                one[0] = data[i];
-                sendChunk(one);
-                break;
-        }
-        if ((i & 0x3f) == 0x3f) {
-            flushChunkBuffer();
+    sendChunk(data, len);
 #if ESP32BASE_ENABLE_WATCHDOG
-            Esp32BaseWatchdog::feed();
+    Esp32BaseWatchdog::feed();
 #endif
-            yield();
-        }
-    }
-}
-
-void sendLogSegment(uint8_t index, const char* title) {
-    sendChunk("\n\n----- ");
-    sendEscapedHtmlChunk(title);
-    sendChunk(" -----\n");
-    Esp32BaseFileLog::streamSegment(index, sendLogEscapedChunk);
+    yield();
 }
 
 void logSegmentTitle(uint8_t index, char* out, size_t len) {
@@ -3052,15 +3039,36 @@ void handleLogsPage() {
     const uint8_t selectedSegment = selectedLogSegment();
     sendChunk("</td></tr></table></section><section class='panel'>");
     sendLogSegmentTabs(selectedSegment);
-    sendChunk("<pre>");
-    char selectedTitle[16];
-    logSegmentTitle(selectedSegment, selectedTitle, sizeof(selectedTitle));
-    sendLogSegment(selectedSegment, selectedTitle);
-    sendChunk("</pre></section>");
+    snprintf(line, sizeof(line), "<p><a href='/esp32base/logs/raw?segment=%u'>Open raw log</a></p><iframe class='logframe' src='/esp32base/logs/raw?segment=%u'></iframe>",
+             static_cast<unsigned>(selectedSegment),
+             static_cast<unsigned>(selectedSegment));
+    sendChunk(line);
+    sendChunk("</section>");
 #else
     sendChunk("<section class='panel'><p>File log: <b>unavailable</b></p></section>");
 #endif
     Esp32BaseWeb::sendFooter();
+}
+
+void handleLogsRaw() {
+    markRequest();
+    if (!ensureAuth()) {
+        return;
+    }
+#if ESP32BASE_ENABLE_FILELOG
+    Esp32BaseFileLog::flush();
+    const uint8_t selectedSegment = selectedLogSegment();
+    g_server.sendHeader("X-Content-Type-Options", "nosniff");
+    if (!beginResponse(200, "text/plain; charset=utf-8", nullptr)) {
+        return;
+    }
+    if (!Esp32BaseFileLog::streamSegment(selectedSegment, sendRawLogChunk)) {
+        sendChunk("log unavailable\n");
+    }
+    endResponse();
+#else
+    g_server.send(404, "text/plain", "File log unavailable");
+#endif
 }
 
 void handleLogsClear() {
@@ -3145,7 +3153,7 @@ bool Esp32BaseWeb::begin() {
     }
     const uint8_t appRoutes = routeCount(false);
     const uint8_t appPages = routeCount(true);
-    uint8_t builtinRoutes = 22;
+    uint8_t builtinRoutes = 23;
 #if ESP32BASE_ENABLE_OTA
     builtinRoutes += 3;
 #endif
@@ -3170,6 +3178,7 @@ bool Esp32BaseWeb::begin() {
     g_server.on("/esp32base/api/wifi", HTTP_POST, handleWifiSubmit);
     g_server.on("/esp32base/api/wifi/clear", HTTP_POST, handleWifiClear);
     g_server.on("/esp32base/logs", HTTP_GET, handleLogsPage);
+    g_server.on("/esp32base/logs/raw", HTTP_GET, handleLogsRaw);
     g_server.on("/esp32base/logs/clear", HTTP_POST, handleLogsClear);
     g_server.on("/esp32base/auth", HTTP_GET, handleAuthPage);
     g_server.on("/esp32base/auth", HTTP_POST, handleAuthSubmit);
