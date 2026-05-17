@@ -76,6 +76,7 @@ Esp32BaseWeb::Handler g_headExtraCallback = nullptr;
 const char* g_pageHeadProgmem = nullptr;
 char g_chunkBuffer[512];
 size_t g_chunkUsed = 0;
+constexpr size_t kResponseChunkPayloadMax = 128U;
 char g_activeUri[48] = "";
 Esp32BaseWeb::Method g_currentMethod = Esp32BaseWeb::METHOD_UNKNOWN;
 Esp32BaseWeb::Method g_lastRequestMethod = Esp32BaseWeb::METHOD_UNKNOWN;
@@ -183,6 +184,7 @@ void sendChunk(const char* text);
 void sendEscapedHtmlChunk(const char* text);
 void formatReadableBytes(uint64_t bytes, char* out, size_t len);
 bool ensureAuth();
+size_t chunkBufferSpace();
 
 Esp32BaseWeb::Method fromHttpMethod(HTTPMethod method) {
     switch (method) {
@@ -958,7 +960,7 @@ void sendProgmem(const char* p) {
         return;
     }
     while (true) {
-        const size_t space = sizeof(g_chunkBuffer) - 1U - g_chunkUsed;
+        const size_t space = chunkBufferSpace();
         if (space == 0) {
             flushChunkBuffer();
             if (g_responseBroken) {
@@ -1062,6 +1064,11 @@ bool responseClientConnected() {
     return g_server.client().connected();
 }
 
+size_t chunkBufferSpace() {
+    const size_t capacity = kResponseChunkPayloadMax < sizeof(g_chunkBuffer) ? kResponseChunkPayloadMax : sizeof(g_chunkBuffer) - 1U;
+    return g_chunkUsed < capacity ? capacity - g_chunkUsed : 0U;
+}
+
 void markResponseClientDisconnected() {
     if (!g_responseBroken) {
         g_responseBroken = true;
@@ -1112,7 +1119,7 @@ void sendChunk(const char* data, size_t len) {
         return;
     }
     while (len > 0) {
-        const size_t space = sizeof(g_chunkBuffer) - 1U - g_chunkUsed;
+        const size_t space = chunkBufferSpace();
         if (space == 0) {
             flushChunkBuffer();
             if (g_responseBroken) {
