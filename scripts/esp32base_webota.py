@@ -291,7 +291,7 @@ def _print_failure_summary(stats, firmware_size, started_at):
 
 def _print_progress(percent, sent, total, elapsed):
     print(
-        "Web OTA progress: pct=%3d%% sent=%s/%s elapsed=%s rate=%s"
+        "Web OTA progress: pct=%3d%% sent=%s/%s elapsed=%s socketRate=%s"
         % (
             percent,
             _format_bytes(sent),
