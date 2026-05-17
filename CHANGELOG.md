@@ -4,17 +4,6 @@
 
 ## 2026-05-17
 
-### Web 长 chunk 发送卡住修复
-
-修复：
-
-- Web 文本响应继续共用静态 chunk buffer，但单个 `WebServer::sendContent()` payload 上限降为 128 B，避免 Arduino ESP32 Core 2.0.16 同步 WebServer 在 511 B payload 后续 CRLF/下一 chunk 写入处偶发卡住。FarmAuto `/app` 和 Esp32Base `/esp32base/logs` 的失败位置都落在内置 PROGMEM CSS 的 511 B 整块边界，因此本次优先恢复小 payload 稳定性。
-- `sendProgmem()` 和普通 `sendChunk()` 使用同一 payload 上限，基础库 HTML head、业务 HTML、流式 JSON 和 raw logs 不再输出 511 B 文本 chunk。`sendJson()` 小响应路径仍保持固定 `Content-Length`，不进入 chunked。
-
-代价：
-
-- 长 HTML/JSON 会产生更多 HTTP chunks，吞吐上限低于 512 B payload；当前阶段稳定结束连接优先于减少 chunk 数。
-
 ### Web chunked 响应收尾稳定性
 
 修复：

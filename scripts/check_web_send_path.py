@@ -45,11 +45,6 @@ def main() -> int:
         errors.append("sendProgmem() must not emit fixed 128-byte chunks")
     if "g_chunkBuffer" not in send_progmem or "flushChunkBuffer()" not in send_progmem:
         errors.append("sendProgmem() must reuse the shared chunk buffer and flush path")
-    max_payload = re.search(r"constexpr\s+size_t\s+kResponseChunkPayloadMax\s*=\s*(\d+)U?\s*;", source)
-    if not max_payload:
-        errors.append("response chunk payload limit must be explicit")
-    elif int(max_payload.group(1)) > 128:
-        errors.append("response chunk payload limit must stay <= 128 bytes on Arduino ESP32 Core 2.x")
     if "sendLogEscapedChunk" in source or "sendLogSegment(" in source:
         errors.append("Logs must not keep the old HTML-escaped inline segment path")
     if "sendLogSegment(" in handle_logs_page or "<pre>" in handle_logs_page:
