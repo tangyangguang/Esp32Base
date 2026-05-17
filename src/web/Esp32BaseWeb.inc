@@ -1278,6 +1278,8 @@ void handleStatus() {
     sendEscapedJsonChunk(Esp32BaseWiFi::stateName());
     sendChunk("\",\"connected\":");
     sendChunk(Esp32BaseWiFi::isConnected() ? "true" : "false");
+    sendChunk(",\"rssi\":");
+    sendIntChunk(Esp32BaseWiFi::isConnected() ? Esp32BaseWiFi::rssi() : 0);
     sendChunk("}}");
     endResponse();
 }
@@ -2625,7 +2627,13 @@ void handleOtaUploadDone() {
         if (beginResponse(200, "application/json", nullptr)) {
             sendChunk("{\"ok\":true,\"redirect\":\"");
             sendEscapedJsonChunk(configuredHomePath());
-            sendChunk("\"}");
+            sendChunk("\",\"rssi\":");
+            sendIntChunk(Esp32BaseWiFi::isConnected() ? Esp32BaseWiFi::rssi() : 0);
+            sendChunk(",\"elapsedMs\":");
+            sendIntChunk(Esp32BaseOta::elapsedMs());
+            sendChunk(",\"averageBytesPerSecond\":");
+            sendIntChunk(Esp32BaseOta::averageBytesPerSecond());
+            sendChunk("}");
             endResponse();
         }
     } else {

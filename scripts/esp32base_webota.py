@@ -208,6 +208,70 @@ def _read_error_body(response):
     return text.strip()
 
 
+def _request_json(parsed, path, headers, timeout, verify_tls):
+    conn = _open_connection(parsed, timeout, verify_tls)
+    try:
+        conn.request("GET", path, headers={"Authorization": headers["Authorization"]})
+        response = conn.getresponse()
+        data = response.read()
+    finally:
+        conn.close()
+    if response.status < 200 or response.status >= 300:
+        return None
+    try:
+        return json.loads(data.decode("utf-8", "replace") if data else "{}")
+    except Exception:
+        return None
+
+
+def _sample_device(parsed, headers, timeout, verify_tls):
+    status = _request_json(parsed, "/esp32base/api/status", headers, timeout, verify_tls) or {}
+    ota = _request_json(parsed, _status_path(parsed.path or "/"), headers, timeout, verify_tls) or {}
+    wifi = status.get("wifi") if isinstance(status, dict) else {}
+    rssi = wifi.get("rssi") if isinstance(wifi, dict) else None
+    if not isinstance(rssi, int):
+        rssi = None
+    return {
+        "rssi": rssi,
+        "otaElapsedMs": ota.get("elapsedMs") if isinstance(ota, dict) else None,
+        "otaAverageBytesPerSecond": ota.get("averageBytesPerSecond") if isinstance(ota, dict) else None,
+        "otaProgress": ota.get("progress") if isinstance(ota, dict) else None,
+    }
+
+
+def _sample_from_response(text):
+    try:
+        payload = json.loads(text) if text else {}
+    except Exception:
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    return {
+        "rssi": payload.get("rssi"),
+        "otaElapsedMs": payload.get("elapsedMs"),
+        "otaAverageBytesPerSecond": payload.get("averageBytesPerSecond"),
+        "otaProgress": 100 if payload.get("ok") is True else payload.get("progress"),
+    }
+
+
+def _format_rssi(value):
+    return "%d dBm" % value if isinstance(value, int) else "n/a"
+
+
+def _format_device_sample(label, sample):
+    parts = ["Web OTA device %s: rssi=%s" % (label, _format_rssi(sample.get("rssi")))]
+    elapsed = sample.get("otaElapsedMs")
+    avg = sample.get("otaAverageBytesPerSecond")
+    progress = sample.get("otaProgress")
+    if isinstance(progress, int):
+        parts.append("otaProgress=%d%%" % progress)
+    if isinstance(elapsed, int):
+        parts.append("otaElapsed=%s" % _format_duration(elapsed / 1000.0))
+    if isinstance(avg, int) and avg > 0:
+        parts.append("deviceAvg=%s/s" % _format_bytes(avg))
+    return ", ".join(parts)
+
+
 def _print_failure_summary(stats, firmware_size, started_at):
     finished_at = time.time()
     sent = int(stats.get("sent_bytes", 0))
@@ -222,6 +286,19 @@ def _print_failure_summary(stats, firmware_size, started_at):
             percent,
         ),
         file=sys.stderr,
+    )
+
+
+def _print_progress(percent, sent, total, elapsed):
+    print(
+        "Web OTA progress: pct=%3d%% sent=%s/%s elapsed=%s rate=%s"
+        % (
+            percent,
+            _format_bytes(sent),
+            _format_bytes(total),
+            _format_duration(elapsed),
+            _format_speed(sent, elapsed),
+        )
     )
 
 
@@ -278,16 +355,7 @@ def _send_multipart(connection, parsed, firmware_path, firmware_size, headers, c
             percent = _upload_percent(sent, firmware_size)
             if percent >= next_percent:
                 elapsed = time.time() - stats["upload_started_at"]
-                print(
-                    "Web OTA upload %d%% (%s / %s, %s, elapsed %s)"
-                    % (
-                        percent,
-                        _format_bytes(sent),
-                        _format_bytes(firmware_size),
-                        _format_speed(sent, elapsed),
-                        _format_duration(elapsed),
-                    )
-                )
+                _print_progress(percent, sent, firmware_size, elapsed)
                 stats["last_percent"] = percent
                 next_percent += 5
     connection.send(tail_bytes)
@@ -318,16 +386,7 @@ def _send_raw(connection, parsed, firmware_path, firmware_size, headers, chunk_s
             percent = _upload_percent(sent, firmware_size)
             if percent >= next_percent:
                 elapsed = time.time() - stats["upload_started_at"]
-                print(
-                    "Web OTA upload %d%% (%s / %s, %s, elapsed %s)"
-                    % (
-                        percent,
-                        _format_bytes(sent),
-                        _format_bytes(firmware_size),
-                        _format_speed(sent, elapsed),
-                        _format_duration(elapsed),
-                    )
-                )
+                _print_progress(percent, sent, firmware_size, elapsed)
                 stats["last_percent"] = percent
                 next_percent += 5
     stats["client_send_finished_at"] = time.time()
@@ -386,6 +445,11 @@ def _run_webota(target, source, env):
 
     try:
         _preflight(parsed, headers, timeout, verify_tls)
+        for sample_index in range(3):
+            sample_before = _sample_device(parsed, headers, timeout, verify_tls)
+            print(_format_device_sample("before-send %d/3" % (sample_index + 1), sample_before))
+            if sample_index < 2:
+                time.sleep(0.25)
         conn = _open_connection(parsed, upload_timeout, verify_tls)
         if upload_mode == "multipart":
             _send_multipart(conn, parsed, firmware, firmware_size, headers, chunk_size, stats)
@@ -434,8 +498,10 @@ def _run_webota(target, source, env):
     response_received = stats.get("response_received_at") or finished_at
     client_send_duration = max(0.0, send_finished - send_started)
     response_wait_duration = max(0.0, response_received - response_started)
+    sample_after_response = _sample_from_response(body_error)
     print("Web OTA success: device accepted firmware and is restarting")
     print("Web OTA finished: %s" % _format_timestamp(finished_at))
+    print(_format_device_sample("after-response", sample_after_response))
     print(
         "Web OTA client send: %s, %s"
         % (_format_duration(client_send_duration), _format_speed(stats["sent_bytes"], client_send_duration))
