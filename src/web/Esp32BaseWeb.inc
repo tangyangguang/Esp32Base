@@ -146,7 +146,7 @@ Esp32BaseAppConfig::SaveCallback g_appConfigSaveCallback = nullptr;
 static const char WEB_HEAD[] PROGMEM =
     "<meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
     "<style>"
-    "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:14px;line-height:1.45;margin:0;padding:14px;max-width:1040px;margin-inline:auto;color:#1f2933;background:#f6f8f7}"
+    "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:14px;line-height:1.45;margin:0;padding:14px;max-width:1040px;margin-inline:auto;color:#1f2933;background:#fff}"
     "h1,h2,h3{color:#111827;line-height:1.25;margin:0 0 8px}h1{font-size:18px}h2{font-size:16px}h3{font-size:15px}p{margin:0 0 10px}"
     "a{color:#25313f;text-decoration:none}.muted,.info{color:#64707d}.ok{color:#217a4f}.err,.dangertext{color:#b93a32}"
     "nav,.panel,.footerbar{background:#fff;border:1px solid #d8e0e6;border-radius:6px;box-shadow:0 1px 2px rgba(16,24,40,.04)}"

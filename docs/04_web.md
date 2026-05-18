@@ -262,7 +262,7 @@ Logs 页面：
 
 - 单栏设备控制台布局，正文、顶部导航和底部系统入口使用同一页面宽度。
 - 默认正文 14px，标题 18px/16px/15px，采用紧凑设备控制台尺度。
-- 默认页面最大宽度 1040px，浅灰背景配白色 panel，避免正文和操作块错位。
+- 默认页面最大宽度 1040px，白色页面背景配轻量边框 panel，避免正文和操作块错位。
 - 顶部导航使用中性色和浅绿灰 active 状态。
 - 内置状态、WiFi、Auth、OTA、Logs、System 页面使用统一标题、panel、按钮和表单节奏；页面标题本身使用白色 header panel，与正文 panel 内边距对齐。
 - 默认输入框样式只作用于文本类输入，例如未声明 type 的 input、text、password、number、email、url、tel、search。

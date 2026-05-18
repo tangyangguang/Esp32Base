@@ -4,6 +4,18 @@
 
 ## 2026-05-17
 
+### Web 默认页面背景
+
+优化：
+
+- `sendHeader()` 输出的内置基础 CSS 将页面 `body` 背景从灰绿色改为白色，内置 Status、WiFi、Auth、OTA、Logs、System 页面以及复用基础 header/footer 的业务页默认更干净。
+- 导航、页面标题、panel、footer、按钮、表单和 active 状态配色保持不变，继续通过轻量边框和阴影区分内容块。
+
+业务侧影响：
+
+- 公开 API、HTTP 路由、页面结构、业务 CSS 注入顺序和 `setHeadExtraCallback()` 行为不变。
+- 不新增主题系统、配置项或外部 CSS 资源；需要业务定制配色时仍通过 `setHeadExtraCallback()` 注入页面级 CSS。
+
 ### Web chunked 响应收尾稳定性
 
 修复：
