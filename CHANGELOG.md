@@ -8,7 +8,7 @@
 
 新增：
 
-- 增加轻量 Web UI helper API，用于页面标题、panel、notice、结果提示、指标网格、紧凑行和分页输出。
+- 增加轻量 Web UI helper API，用于页面标题、panel、notice、结果提示、指标网格、紧凑行、安全行内链接、单按钮 POST 表单和分页输出。
 - 内置 Web CSS 改为变量化的紧凑 UI baseline，保留 `pagehead`、`panel`、`kv`、`part`、`tabs`、`quicklinks`、`logmeta`、`logframe` 等旧类名兼容。
 - `examples/full_demo` 增加 UI baseline 示例页，覆盖状态概览、统计摘要、分页记录、配置编辑、操作命令、流程向导、诊断维护和访问控制状态。
 - 新增 [Web UI 页面结构与样式基线](docs/11_web_ui_baseline.md)，作为页面能力、样式、换肤和调整回路的长期文档入口。
@@ -17,6 +17,7 @@
 
 - 业务页面可继续使用 `addPage()`、`sendHeader()`、`sendFooter()` 和 `sendChunk()`；新 helper 是增量能力，不强制迁移。
 - 推荐新业务页面优先使用 helper，避免复制基础库 CSS 和重复手写分页、提示、配置行等结构。
+- 紧凑行内动作优先使用 `sendInfoRowCompactLink()` 或 `sendInfoRowCompactForm()`；`sendInfoRowCompact(..., trustedActionHtml)` 只用于可信静态 HTML。
 - 换肤走 CSS 变量覆盖，可通过 `setHeadExtraCallback()` 调整主色和背景；不新增运行时主题系统、前端框架或图表库。
 - 表单和命令提交仍推荐 `POST -> 303 -> GET`，刷新页面不应重复提交。
 

@@ -146,7 +146,14 @@ In `src/web/Esp32BaseWeb.h`, after `static void sendFooter();`, add:
     static void beginMetricGrid();
     static void sendMetric(const char* label, const char* value, const char* help = nullptr);
     static void endMetricGrid();
-    static void sendInfoRowCompact(const char* title, const char* help, const char* value = nullptr, const char* actionHtml = nullptr);
+    static void sendInfoRowCompact(const char* title, const char* help, const char* value = nullptr,
+                                   const char* trustedActionHtml = nullptr);
+    static void sendInfoRowCompactLink(const char* title, const char* help, const char* value,
+                                       const char* href, const char* label, UiTone tone = UI_INFO);
+    static void sendInfoRowCompactForm(const char* title, const char* help, const char* value,
+                                       const char* action, const char* label,
+                                       const char* hiddenName = nullptr, const char* hiddenValue = nullptr,
+                                       UiTone tone = UI_INFO);
     static void sendPagination(const Pagination& pagination);
 ```
 
@@ -391,30 +398,12 @@ void Esp32BaseWeb::endMetricGrid() {
 Add:
 
 ```cpp
-void Esp32BaseWeb::sendInfoRowCompact(const char* title, const char* help, const char* value, const char* actionHtml) {
-    sendChunk("<div class='urow'><div><b>");
-    writeHtmlEscaped(title ? title : "");
-    sendChunk("</b>");
-    if (help && help[0]) {
-        sendChunk("<small>");
-        writeHtmlEscaped(help);
-        sendChunk("</small>");
-    }
-    sendChunk("</div><div>");
-    if (value && value[0]) {
-        sendChunk("<span class='uvalue'>");
-        writeHtmlEscaped(value);
-        sendChunk("</span>");
-    }
-    if (actionHtml && actionHtml[0]) {
-        if (value && value[0]) {
-            sendChunk(" ");
-        }
-        sendChunk(actionHtml);
-    }
-    sendChunk("</div></div>");
-}
+void Esp32BaseWeb::sendInfoRowCompact(const char* title, const char* help, const char* value, const char* trustedActionHtml);
+void Esp32BaseWeb::sendInfoRowCompactLink(const char* title, const char* help, const char* value, const char* href, const char* label, UiTone tone);
+void Esp32BaseWeb::sendInfoRowCompactForm(const char* title, const char* help, const char* value, const char* action, const char* label, const char* hiddenName, const char* hiddenValue, UiTone tone);
 ```
+
+`trustedActionHtml` is a raw static escape hatch. Prefer the link/form helpers for business pages.
 
 - [ ] **Step 5: Build**
 
@@ -605,9 +594,9 @@ void handleUiConfigDemo() {
     Esp32BaseWeb::sendPageTitle("配置编辑模板", "简单字段行内改，多字段对象进入独立编辑页。");
     Esp32BaseWeb::sendResultNotice(DEMO_RESULTS, 2);
     Esp32BaseWeb::beginPanel("紧凑配置列表");
-    Esp32BaseWeb::sendInfoRowCompact("第 1 路名称", "用于页面和记录展示，不影响实际控制。", "花坛", "<a class='tag info' href='/ui-config?saved=1'>展开修改</a>");
-    Esp32BaseWeb::sendInfoRowCompact("默认浇水计划", "包含时间、通道、执行天数和目标量。", "3 条", "<a class='tag info' href='/ui-flow'>进入编辑页</a>");
-    Esp32BaseWeb::sendInfoRowCompact("恢复出厂", "高风险操作，必须进入确认保护页。", nullptr, "<a class='tag danger' href='/ui-maintenance'>确认页</a>");
+    Esp32BaseWeb::sendInfoRowCompactLink("第 1 路名称", "用于页面和记录展示，不影响实际控制。", "花坛", "/ui-config?saved=1", "展开修改");
+    Esp32BaseWeb::sendInfoRowCompactLink("默认浇水计划", "包含时间、通道、执行天数和目标量。", "3 条", "/ui-flow", "进入编辑页");
+    Esp32BaseWeb::sendInfoRowCompactLink("恢复出厂", "高风险操作，必须进入确认保护页。", nullptr, "/ui-maintenance", "确认页", Esp32BaseWeb::UI_DANGER);
     Esp32BaseWeb::endPanel();
     Esp32BaseWeb::sendFooter();
 }
@@ -619,7 +608,8 @@ void handleUiActionDemo() {
     Esp32BaseWeb::sendHeader("UI Action");
     Esp32BaseWeb::sendPageTitle("操作命令模板", "一次性动作与长期配置分离。");
     Esp32BaseWeb::beginPanel("立即执行");
-    Esp32BaseWeb::sendInfoRowCompact("可执行", "设备空闲、时间可信、无严重异常。", nullptr, "<form method='post' action='/api/control' onsubmit='return once(this)'><input type='submit' value='开始'></form>");
+    Esp32BaseWeb::sendResultNotice(DEMO_RESULTS, 2);
+    Esp32BaseWeb::sendInfoRowCompactForm("可执行", "设备空闲、时间可信、无严重异常。", nullptr, "/ui-action/run", "开始", "run", "1");
     Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_WARN, "拒绝执行示例", "当前时间未同步时，应说明原因和下一步。");
     Esp32BaseWeb::endPanel();
     Esp32BaseWeb::sendFooter();
@@ -849,7 +839,9 @@ For consistent layout, use:
 - `sendNotice(tone, title, message)` for success, warning, danger, info, and neutral states.
 - `sendResultNotice(notices, count)` after redirected GET requests.
 - `beginMetricGrid()` / `sendMetric()` / `endMetricGrid()` for status and statistics summaries.
-- `sendInfoRowCompact(title, help, value, actionHtml)` for configuration, operation, guided-flow, and diagnostic rows.
+- `sendInfoRowCompact(title, help, value)` for read-only configuration, operation, guided-flow, and diagnostic rows.
+- `sendInfoRowCompactLink(title, help, value, href, label, tone)` for escaped link actions.
+- `sendInfoRowCompactForm(title, help, value, action, label, hiddenName, hiddenValue, tone)` for single-button POST actions.
 - `sendPagination(pagination)` for page-count based lists.
 
 Forms and commands should use `POST -> 303 -> GET`. Front-end button disabling prevents double clicks only; server-side validation remains required.

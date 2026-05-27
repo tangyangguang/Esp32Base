@@ -263,10 +263,10 @@ Logs 页面：
 页面风格：
 
 - 单栏设备控制台布局，正文、顶部导航和底部系统入口使用同一页面宽度。
-- 默认正文 14px，标题 18px/16px/15px，采用紧凑设备控制台尺度。
-- 默认页面最大宽度 1040px，白色页面背景配轻量边框 panel，避免正文和操作块错位。
-- 顶部导航使用中性色和浅绿灰 active 状态。
-- 内置状态、WiFi、Auth、OTA、Logs、System 页面使用统一标题、panel、按钮和表单节奏；页面标题本身使用白色 header panel，与正文 panel 内边距对齐。
+- 默认正文 14px，标题约 23px/17px/15px，采用紧凑设备控制台尺度。
+- 默认页面最大宽度约 1180px，浅灰页面背景配白色轻量边框 panel，避免正文和操作块错位。
+- 顶部导航使用中性色和主色浅底 active 状态，主色由 CSS 变量控制。
+- 内置状态、WiFi、Auth、OTA、Logs、System 页面使用统一标题、panel、按钮和表单节奏；页面标题、正文 panel、导航和 footer 使用同一布局宽度。
 - 默认输入框样式只作用于文本类输入，例如未声明 type 的 input、text、password、number、email、url、tel、search。
 - checkbox、radio、file、range、color、hidden 等非文本控件保持浏览器原生尺寸和行为，业务页面不需要额外覆盖基础 CSS。
 - 统一 `.ok`、`.err`、`.info` 状态样式。
@@ -374,7 +374,9 @@ Esp32BaseWeb::addRoute("/api/faucet/config", Esp32BaseWeb::METHOD_ANY, handleCon
 - `sendNotice(tone, title, message)`：成功、警告、危险、信息和普通提示。
 - `sendResultNotice(notices, count)`：`POST -> 303 -> GET` 后的结果提示。
 - `beginMetricGrid()` / `sendMetric()` / `endMetricGrid()`：状态和统计摘要。
-- `sendInfoRowCompact(title, help, value, actionHtml)`：配置、操作、向导和诊断行。
+- `sendInfoRowCompact(title, help, value)`：只读配置、操作、向导和诊断行。
+- `sendInfoRowCompactLink(title, help, value, href, label, tone)`：带安全链接动作的紧凑行。
+- `sendInfoRowCompactForm(title, help, value, action, label, hiddenName, hiddenValue, tone)`：带单按钮 POST 动作的紧凑行，默认包含 `once()` 防重复点击。
 - `sendPagination(pagination)`：页码型列表分页。
 
 示例：
@@ -387,12 +389,14 @@ void handleBusinessPage() {
     Esp32BaseWeb::sendHeader("业务配置");
     Esp32BaseWeb::sendPageTitle("配置编辑模板", "简单字段行内改，多字段对象进入独立编辑页。");
     Esp32BaseWeb::beginPanel("紧凑配置列表");
-    Esp32BaseWeb::sendInfoRowCompact("第 1 路名称", "用于页面和记录展示，不影响实际控制。", "花坛",
-                                     "<a class='tag info' href='/config/name'>展开修改</a>");
+    Esp32BaseWeb::sendInfoRowCompactLink("第 1 路名称", "用于页面和记录展示，不影响实际控制。", "花坛",
+                                         "/config/name", "展开修改");
     Esp32BaseWeb::endPanel();
     Esp32BaseWeb::sendFooter();
 }
 ```
+
+`sendInfoRowCompact(..., trustedActionHtml)` 会原样输出 `trustedActionHtml`，只用于业务代码内写死的可信静态 HTML。任何来自配置、URL 参数、设备名、日志、用户输入或远端数据的内容，都必须使用 `writeHtmlEscaped()` 输出，或优先改用 `sendInfoRowCompactLink()` / `sendInfoRowCompactForm()`。
 
 表单和命令提交应使用 `POST -> 303 -> GET`。前端按钮禁用只能防连点，服务端仍必须重新校验参数、状态和权限。
 

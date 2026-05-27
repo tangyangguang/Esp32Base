@@ -161,7 +161,7 @@ static const char WEB_HEAD[] PROGMEM =
     ".syslinks{min-width:0;flex:1 1 auto;display:flex;flex-wrap:wrap;gap:5px;align-items:center}.syslinks a{font-size:13px;line-height:1.35;padding:4px 7px;margin:0;background:#f1f4f3;color:var(--eb-muted);border-radius:6px}.heap{flex:0 0 auto;margin-left:auto;white-space:nowrap;text-align:right;font-size:12px}"
     ".notice{border:1px solid var(--eb-line);background:var(--eb-soft);border-radius:8px;padding:9px 10px;margin:8px 0;color:var(--eb-ink)}.notice.ok{border-color:#bfe0d4;background:var(--eb-ok-soft);color:#185b4e}.notice.warn{border-color:#efcf96;background:var(--eb-warn-soft);color:#7a4608}.notice.danger{border-color:#ebb8b2;background:var(--eb-danger-soft);color:#84251f}.notice.info{border-color:#c6d7ea;background:var(--eb-info-soft);color:var(--eb-info)}"
     ".metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:8px 0}.metric{border:1px solid var(--eb-line-soft);border-radius:7px;background:#fff;padding:8px}.metric b{display:block;font-size:18px}.metric span{display:block;color:var(--eb-muted);font-size:12px}"
-    ".urow{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--eb-line-soft)}.urow:last-child{border-bottom:0}.urow small{display:block;color:var(--eb-muted);margin-top:2px}.uvalue{font-weight:800;white-space:nowrap}.pagination{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;border-top:1px solid var(--eb-line-soft);padding-top:8px;margin-top:8px}.pagination .right{text-align:right}"
+    ".urow{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--eb-line-soft)}.urow:last-child{border-bottom:0}.urow small{display:block;color:var(--eb-muted);margin-top:2px}.urow form{display:inline}.uvalue{font-weight:800;white-space:nowrap}.pagination{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;border-top:1px solid var(--eb-line-soft);padding-top:8px;margin-top:8px}.pagination .right{text-align:right}"
     ".tag{display:inline-flex;align-items:center;min-height:21px;padding:2px 7px;border-radius:999px;background:#eef2f4;color:#475467;font-size:11px;font-weight:750;white-space:nowrap}.tag.ok{background:var(--eb-ok-soft);color:var(--eb-ok)}.tag.warn{background:var(--eb-warn-soft);color:var(--eb-warn)}.tag.danger{background:var(--eb-danger-soft);color:var(--eb-danger)}.tag.info{background:var(--eb-info-soft);color:var(--eb-info)}"
     ".kv{border-collapse:collapse;width:100%;margin:0}.kv th,.kv td{border-bottom:1px solid var(--eb-line);padding:7px 5px;text-align:left;vertical-align:top}.kv tr:last-child th,.kv tr:last-child td{border-bottom:0}.kv th{width:30%;color:var(--eb-muted);font-weight:650}"
     ".part{border-collapse:collapse;width:100%;font-size:13px}.part th,.part td{border-bottom:1px solid var(--eb-line);padding:6px 5px;text-align:left;vertical-align:top}.part th{color:var(--eb-muted);font-weight:650}.part tr:last-child td{border-bottom:0}"
@@ -3675,28 +3675,86 @@ void Esp32BaseWeb::endMetricGrid() {
     sendChunk("</div>");
 }
 
-void Esp32BaseWeb::sendInfoRowCompact(const char* title, const char* help, const char* value, const char* actionHtml) {
+static bool sendInfoRowCompactStart(const char* title, const char* help, const char* value) {
     sendChunk("<div class='urow'><div><b>");
-    writeHtmlEscaped(title ? title : "");
+    sendEscapedHtmlChunk(title ? title : "");
     sendChunk("</b>");
     if (help && help[0]) {
         sendChunk("<small>");
-        writeHtmlEscaped(help);
+        sendEscapedHtmlChunk(help);
         sendChunk("</small>");
     }
     sendChunk("</div><div>");
-    if (value && value[0]) {
+    const bool hasValue = value && value[0];
+    if (hasValue) {
         sendChunk("<span class='uvalue'>");
-        writeHtmlEscaped(value);
+        sendEscapedHtmlChunk(value);
         sendChunk("</span>");
     }
-    if (actionHtml && actionHtml[0]) {
-        if (value && value[0]) {
-            sendChunk(" ");
-        }
-        sendChunk(actionHtml);
-    }
+    return hasValue;
+}
+
+static void sendInfoRowCompactEnd() {
     sendChunk("</div></div>");
+}
+
+static void sendInfoRowActionGap(bool hasValue) {
+    if (hasValue) {
+        sendChunk(" ");
+    }
+}
+
+static void sendInfoRowActionLink(const char* href, const char* label, Esp32BaseWeb::UiTone tone) {
+    sendChunk("<a class='tag");
+    sendChunk(uiToneClass(tone));
+    sendChunk("' href='");
+    sendEscapedHtmlChunk(href ? href : "#");
+    sendChunk("'>");
+    sendEscapedHtmlChunk(label ? label : "");
+    sendChunk("</a>");
+}
+
+void Esp32BaseWeb::sendInfoRowCompact(const char* title, const char* help, const char* value, const char* trustedActionHtml) {
+    const bool hasValue = sendInfoRowCompactStart(title, help, value);
+    if (trustedActionHtml && trustedActionHtml[0]) {
+        sendInfoRowActionGap(hasValue);
+        sendChunk(trustedActionHtml);
+    }
+    sendInfoRowCompactEnd();
+}
+
+void Esp32BaseWeb::sendInfoRowCompactLink(const char* title, const char* help, const char* value,
+                                          const char* href, const char* label, UiTone tone) {
+    const bool hasValue = sendInfoRowCompactStart(title, help, value);
+    sendInfoRowActionGap(hasValue);
+    sendInfoRowActionLink(href, label, tone);
+    sendInfoRowCompactEnd();
+}
+
+void Esp32BaseWeb::sendInfoRowCompactForm(const char* title, const char* help, const char* value,
+                                          const char* action, const char* label,
+                                          const char* hiddenName, const char* hiddenValue,
+                                          UiTone tone) {
+    const bool hasValue = sendInfoRowCompactStart(title, help, value);
+    sendInfoRowActionGap(hasValue);
+    sendChunk("<form method='post' action='");
+    sendEscapedHtmlChunk(action ? action : "");
+    sendChunk("' onsubmit='return once(this)'>");
+    if (hiddenName && hiddenName[0]) {
+        sendChunk("<input type='hidden' name='");
+        sendEscapedHtmlChunk(hiddenName);
+        sendChunk("' value='");
+        sendEscapedHtmlChunk(hiddenValue ? hiddenValue : "");
+        sendChunk("'>");
+    }
+    sendChunk("<input type='submit'");
+    if (tone == UI_DANGER) {
+        sendChunk(" class='danger'");
+    }
+    sendChunk(" value='");
+    sendEscapedHtmlChunk(label ? label : "");
+    sendChunk("'></form>");
+    sendInfoRowCompactEnd();
 }
 
 void Esp32BaseWeb::sendPagination(const Pagination& pagination) {

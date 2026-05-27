@@ -124,7 +124,14 @@ public:
     static void beginMetricGrid();
     static void sendMetric(const char* label, const char* value, const char* help = nullptr);
     static void endMetricGrid();
-    static void sendInfoRowCompact(const char* title, const char* help, const char* value = nullptr, const char* actionHtml = nullptr);
+    static void sendInfoRowCompact(const char* title, const char* help, const char* value = nullptr,
+                                   const char* trustedActionHtml = nullptr);
+    static void sendInfoRowCompactLink(const char* title, const char* help, const char* value,
+                                       const char* href, const char* label, UiTone tone = UI_INFO);
+    static void sendInfoRowCompactForm(const char* title, const char* help, const char* value,
+                                       const char* action, const char* label,
+                                       const char* hiddenName = nullptr, const char* hiddenValue = nullptr,
+                                       UiTone tone = UI_INFO);
     static void sendPagination(const Pagination& pagination);
     static bool beginResponse(int code, const char* contentType, const char* filename = nullptr);
     static bool beginText(int code);

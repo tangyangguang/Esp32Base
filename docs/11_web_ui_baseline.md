@@ -352,13 +352,16 @@ void handleHeadExtra() {
 
 新增能力应以 helper 形式提供，例如：
 
-- 页面标题。
-- panel。
-- notice。
-- result notice。
-- metric grid。
-- compact row。
-- pagination。
+- `sendPageTitle()`：页面标题。
+- `beginPanel()` / `endPanel()`：内容分组。
+- `sendNotice()` / `sendResultNotice()`：页面级反馈。
+- `beginMetricGrid()` / `sendMetric()` / `endMetricGrid()`：状态和统计摘要。
+- `sendInfoRowCompact()`：只读紧凑行。
+- `sendInfoRowCompactLink()`：带安全链接动作的紧凑行。
+- `sendInfoRowCompactForm()`：带单按钮 POST 动作的紧凑行。
+- `sendPagination()`：页码型分页。
+
+`sendInfoRowCompact(..., trustedActionHtml)` 只作为低层逃生口，`trustedActionHtml` 必须是业务代码内写死的可信静态 HTML。来自配置、URL、日志、设备名、用户输入或远端数据的内容不得拼入该参数；需要动态文本时使用安全 helper，或用 `writeHtmlEscaped()` 手动输出。
 
 业务项目仍负责：
 
