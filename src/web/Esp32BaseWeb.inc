@@ -1470,17 +1470,18 @@ void handleWifiPage() {
 
     Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_WIFI]);
     if (g_server.hasArg("saved")) {
-        sendChunk("<p class=ok>Saved. Credentials updated and connection started.</p>");
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "Saved", "Credentials updated and connection started.");
     } else if (g_server.hasArg("error")) {
         if (g_server.arg("error") == "clear_failed") {
-            sendChunk("<p class=err>WiFi credentials were not cleared.</p>");
+            Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_DANGER, "WiFi credentials were not cleared");
         } else {
-            sendChunk("<p class=err>WiFi settings were not saved.</p>");
+            Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_DANGER, "WiFi settings were not saved");
         }
     } else if (g_server.hasArg("cleared")) {
-        sendChunk("<p class=ok>Saved WiFi credentials were cleared.</p>");
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "Saved WiFi credentials were cleared");
     }
-    sendChunk("<header class='pagehead'><h1>WiFi Settings</h1></header><section class='panel'><form method='post' action='/esp32base/wifi' onsubmit=\"if(!this.ssid.value.trim()){alert('SSID cannot be empty');return false;}if(this.ssid.value.length>32||this.password.value.length>64){alert('SSID or password is too long');return false;}return once(this);\">");
+    Esp32BaseWeb::sendPageTitle("WiFi Settings");
+    sendChunk("<section class='panel'><form method='post' action='/esp32base/wifi' onsubmit=\"if(!this.ssid.value.trim()){alert('SSID cannot be empty');return false;}if(this.ssid.value.length>32||this.password.value.length>64){alert('SSID or password is too long');return false;}return once(this);\">");
     sendChunk("<label for='ssid'>SSID</label><input id='ssid' name='ssid' value='");
     sendEscapedHtmlChunk(ssid);
     sendChunk("' maxlength='32' autocomplete='off'><label for='wp'>Password (optional)</label><input id='wp' type='password' name='password' value='");
@@ -2417,9 +2418,7 @@ void handleToolsPage() {
         return;
     }
     Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_TOOLS]);
-    sendChunk("<header class='pagehead'><h1>");
-    sendEscapedHtmlChunk(g_builtinLabels[Esp32BaseWeb::BUILTIN_TOOLS]);
-    sendChunk("</h1></header>");
+    Esp32BaseWeb::sendPageTitle(g_builtinLabels[Esp32BaseWeb::BUILTIN_TOOLS]);
     sendChunk("<section class='panel'><h2>System settings</h2><div class='quicklinks'>");
 #if ESP32BASE_ENABLE_APP_CONFIG
     sendNavLink("/esp32base/app-config", "App Config", false, nullptr);
@@ -2431,22 +2430,22 @@ void handleToolsPage() {
 #endif
     sendChunk("</div><p class='muted'>Low-frequency device settings.</p></section>");
     if (g_server.hasArg("formatted")) {
-        sendChunk("<p class='ok'><b>LittleFS formatted.</b> FileLog mode was reloaded.</p>");
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "LittleFS formatted", "FileLog mode was reloaded.");
     } else if (g_server.hasArg("logs_cleared")) {
-        sendChunk("<p class='ok'><b>Logs cleared.</b></p>");
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "Logs cleared");
     } else if (g_server.hasArg("filelog_saved")) {
-        sendChunk("<p class='ok'><b>File log mode saved.</b></p>");
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "File log mode saved");
     } else if (g_server.hasArg("watchdog_trip_reset")) {
-        sendChunk("<p class='ok'><b>Watchdog trip reset.</b></p>");
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "Watchdog trip reset");
     } else if (g_server.hasArg("error")) {
         sendChunk("<p class='err'>System action failed: ");
         sendEscapedHtmlChunk(g_server.arg("error").c_str());
         sendChunk("</p>");
     } else if (g_server.hasArg("restarting")) {
-        sendChunk("<p class='ok'><b>Restart requested.</b> Device is restarting. Please wait a few seconds, then reload.</p>");
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "Restart requested", "Device is restarting. Please wait a few seconds, then reload.");
     }
     if (g_server.hasArg("hostname_saved")) {
-        sendChunk("<p class='ok'><b>Hostname saved.</b> Restart the device for mDNS, OTA and Web discovery to use it.</p>");
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "Hostname saved", "Restart the device for mDNS, OTA and Web discovery to use it.");
     } else if (g_server.hasArg("hostname_error")) {
         sendChunk("<p class='err'>Hostname was not saved: ");
         sendEscapedHtmlChunk(g_server.arg("hostname_error").c_str());
@@ -2525,7 +2524,9 @@ void handleToolsRebootPost() {
     }
     ESP32BASE_LOG_W("web", "restart_requested source=tools");
     Esp32BaseWeb::sendHeader("Rebooting");
-    sendChunk("<script>history.replaceState(null,'','/esp32base/tools?restarting=1');</script><header class='pagehead'><h1>Rebooting...</h1></header><section class='panel'><p>Device is restarting. Please wait a few seconds, then reload.</p></section>");
+    sendChunk("<script>history.replaceState(null,'','/esp32base/tools?restarting=1');</script>");
+    Esp32BaseWeb::sendPageTitle("Rebooting...");
+    sendChunk("<section class='panel'><p>Device is restarting. Please wait a few seconds, then reload.</p></section>");
     Esp32BaseWeb::sendFooter();
     delay(100);
     Esp32BaseSystem::restart("web");
@@ -2636,7 +2637,8 @@ void handleOtaPage() {
         return;
     }
     Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_OTA]);
-    sendChunk("<header class='pagehead'><h1>OTA Update</h1></header><section class='panel'><form id='f'><label for='fw'>Firmware file</label><input id='fw' type='file' name='firmware' accept='.bin' required><label for='sha'>SHA256</label><input id='sha' placeholder='Optional 64-character digest' maxlength='64'><input type='submit' value='Upload Firmware'></form><progress id='p' value='0' max='100' style='width:100%;display:none'></progress><p id='s' class='statusline muted'></p></section>");
+    Esp32BaseWeb::sendPageTitle("OTA Update");
+    sendChunk("<section class='panel'><form id='f'><label for='fw'>Firmware file</label><input id='fw' type='file' name='firmware' accept='.bin' required><label for='sha'>SHA256</label><input id='sha' placeholder='Optional 64-character digest' maxlength='64'><input type='submit' value='Upload Firmware'></form><progress id='p' value='0' max='100' style='width:100%;display:none'></progress><p id='s' class='statusline muted'></p></section>");
     sendChunk("<script>function h(n){var u=['B','KB','MB','GB'],i=0,x=n;while(x>=1024&&i<u.length-1){x/=1024;i++;}return n+' bytes ('+(i?x.toFixed(2):x)+' '+u[i]+')';}document.getElementById('f').onsubmit=function(e){e.preventDefault();if(this.dataset.busy)return false;this.dataset.busy=1;var f=document.getElementById('fw').files[0],st=document.getElementById('s'),pg=document.getElementById('p'),b=this.querySelector('[type=submit]');if(!f){this.dataset.busy='';return false;}var d=new FormData();d.append('firmware',f,f.name);var x=new XMLHttpRequest();if(b)b.disabled=true;pg.style.display='block';st.textContent='Uploading 0%';x.upload.onprogress=function(ev){if(ev.lengthComputable){var p=Math.floor(ev.loaded*100/ev.total);pg.value=p;st.textContent='Uploading '+p+'% '+h(ev.loaded)+' / '+h(ev.total);}};x.onload=function(){var r={};try{r=JSON.parse(x.responseText||'{}');}catch(e){}if(x.status==200){st.textContent='Upload successful. Restarting...';setTimeout(function(){location.href=r.redirect||'/esp32base';},8000);return;}st.textContent='Upload failed: '+(r.error||('HTTP '+x.status));document.getElementById('f').dataset.busy='';if(b)b.disabled=false;};x.onerror=function(){st.textContent='Upload failed: network error';document.getElementById('f').dataset.busy='';if(b)b.disabled=false;};x.open('POST','/esp32base/ota');x.setRequestHeader('X-Firmware-Size',String(f.size));var s=document.getElementById('sha').value;if(s)x.setRequestHeader('X-Sha256',s);x.send(d);return false;};</script>");
     Esp32BaseWeb::sendFooter();
 }
@@ -2813,9 +2815,7 @@ void handleRoot() {
         return;
     }
     Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_HOME]);
-    sendChunk("<header class='pagehead'><h1>");
-    sendEscapedHtmlChunk(g_deviceName);
-    sendChunk("</h1></header>");
+    Esp32BaseWeb::sendPageTitle(g_deviceName);
 
     char value[128];
     sendStatusSectionStart("Overview");
@@ -3094,9 +3094,7 @@ void handleLogsPage() {
         return;
     }
     Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_LOGS]);
-    sendChunk("<header class='pagehead'><h1>");
-    sendEscapedHtmlChunk(g_builtinLabels[Esp32BaseWeb::BUILTIN_LOGS]);
-    sendChunk("</h1></header>");
+    Esp32BaseWeb::sendPageTitle(g_builtinLabels[Esp32BaseWeb::BUILTIN_LOGS]);
 #if ESP32BASE_ENABLE_FILELOG
     Esp32BaseFileLog::flush();
     char maxBuf[48];
@@ -3181,11 +3179,9 @@ void handleAuthPage() {
         return;
     }
     Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_AUTH]);
-    sendChunk("<header class='pagehead'><h1>");
-    sendEscapedHtmlChunk(g_builtinLabels[Esp32BaseWeb::BUILTIN_AUTH]);
-    sendChunk("</h1></header>");
+    Esp32BaseWeb::sendPageTitle(g_builtinLabels[Esp32BaseWeb::BUILTIN_AUTH]);
     if (g_server.hasArg("saved")) {
-        sendChunk("<p class='ok'>Auth updated. Use the new credentials on the next auth prompt.</p>");
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "Auth updated", "Use the new credentials on the next auth prompt.");
     } else if (g_server.hasArg("error")) {
         sendChunk("<p class='err'>Auth update failed: ");
         sendEscapedHtmlChunk(g_server.arg("error").c_str());
