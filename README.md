@@ -19,6 +19,7 @@
 已知限制、明确不支持能力和风险边界详见 [已知限制](docs/10_known_limitations.md)。
 
 Web 页面结构、样式基线、业务页面模板和换肤策略详见 [Web UI 页面结构与样式基线](docs/11_web_ui_baseline.md)。
+业务项目接入前，建议先用 `examples/web_ui_gallery` 统一查看和验证状态、记录、配置、命令、流程、确认和空状态等页面样式；`examples/full_demo` 侧重完整功能集成。
 
 ## 快速开始
 

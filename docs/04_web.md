@@ -396,6 +396,8 @@ void handleBusinessPage() {
 }
 ```
 
+样式和页面能力优先在 `examples/web_ui_gallery` 中验证；`examples/full_demo` 用于验证 Web、App Config、OTA、日志等能力在完整示例中的集成效果。
+
 需要行内动作时优先使用 `sendInfoRowCompactLink()` 或 `sendInfoRowCompactForm()`。如果业务确实需要自定义 HTML，使用底层 `sendChunk()` 手动输出，并对来自配置、URL 参数、设备名、日志、用户输入或远端数据的内容使用 `writeHtmlEscaped()`。
 
 表单和命令提交应使用 `POST -> 303 -> GET`。前端按钮禁用只能防连点，服务端仍必须重新校验参数、状态和权限。

@@ -11,6 +11,7 @@
 - 增加轻量 Web UI helper API，用于页面标题、panel、notice、结果提示、指标网格、紧凑行、安全行内链接、单按钮 POST 表单和分页输出。
 - 内置 Web CSS 改为变量化的紧凑 UI baseline，保留 `pagehead`、`panel`、`kv`、`part`、`tabs`、`quicklinks`、`logmeta`、`logframe` 等旧类名兼容。
 - `examples/full_demo` 增加 UI baseline 示例页，覆盖状态概览、统计摘要、分页记录、配置编辑、操作命令、流程向导、诊断维护和访问控制状态。
+- 新增 `examples/web_ui_gallery` 独立样式样例，用于集中查看和验证状态、统计、分页记录、配置、命令、流程、维护、访问控制、确认、空状态和表单页面，并提供 selftest env 便于回归。
 - 新增 [Web UI 页面结构与样式基线](docs/11_web_ui_baseline.md)，作为页面能力、样式、换肤和调整回路的长期文档入口。
 
 业务侧影响：

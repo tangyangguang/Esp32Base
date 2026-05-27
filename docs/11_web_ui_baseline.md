@@ -411,7 +411,10 @@ POST -> 303 Redirect -> GET
 
 示例位置：
 
+- `examples/web_ui_gallery`：专门用于查看和验收 Web UI baseline 的页面能力与样式，覆盖状态、统计、分页记录、配置、命令、流程、维护、访问控制、确认、空状态和多字段表单。
 - `examples/full_demo`
+
+`examples/web_ui_gallery/README.md` 记录了本地构建、烧录查看和 selftest env 的使用方式。
 
 验证重点：
 
@@ -433,7 +436,7 @@ POST -> 303 Redirect -> GET
 - 其次改 helper 输出结构。
 - 不在业务页面堆一次性 CSS。
 - 不为了单个项目加入业务组件。
-- 每次样式调整先更新 `examples/full_demo`，再扩散到业务项目。
+- 每次样式调整先更新 `examples/web_ui_gallery`，必要时同步 `examples/full_demo`，再扩散到业务项目。
 
 影响判断：
 
