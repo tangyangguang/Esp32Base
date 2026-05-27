@@ -689,6 +689,29 @@ void sendNavLink(const char* path, const char* title, bool paragraph, const char
     sendLink(path, title, paragraph, className[0] ? className : nullptr);
 }
 
+void sendPaginationLink(const char* label, const Esp32BaseWeb::Pagination& pagination, uint32_t page, bool disabled) {
+    if (disabled) {
+        sendChunk("<span class='tag'>");
+        sendEscapedHtmlChunk(label);
+        sendChunk("</span>");
+        return;
+    }
+    sendChunk("<a class='tag info' href='");
+    sendEscapedHtmlChunk(pagination.path ? pagination.path : "/esp32base");
+    sendChunk("?");
+    if (pagination.query && pagination.query[0]) {
+        sendEscapedHtmlChunk(pagination.query);
+        sendChunk("&amp;");
+    }
+    char value[16];
+    snprintf(value, sizeof(value), "%lu", static_cast<unsigned long>(page));
+    sendChunk("page=");
+    sendChunk(value);
+    sendChunk("'>");
+    sendEscapedHtmlChunk(label);
+    sendChunk("</a>");
+}
+
 void sendInfoRowStart(const char* label) {
     sendChunk("<tr><th>");
     sendEscapedHtmlChunk(label);
@@ -3696,7 +3719,13 @@ void Esp32BaseWeb::sendPagination(const Pagination& pagination) {
     sendChunk("<div class='pagination'><span class='muted'>");
     writeHtmlEscaped(left);
     sendChunk("</span><span>");
-    sendChunk("<span class='tag'>首页</span> <span class='tag'>上一页</span> <span class='tag'>下一页</span> <span class='tag'>尾页</span>");
+    sendPaginationLink("首页", pagination, 1, page <= 1);
+    sendChunk(" ");
+    sendPaginationLink("上一页", pagination, page > 1 ? page - 1 : 1, page <= 1);
+    sendChunk(" ");
+    sendPaginationLink("下一页", pagination, page < totalPages ? page + 1 : totalPages, page >= totalPages);
+    sendChunk(" ");
+    sendPaginationLink("尾页", pagination, totalPages, page >= totalPages);
     sendChunk("</span><span class='right muted'>");
     writeHtmlEscaped(right);
     sendChunk("</span></div>");
