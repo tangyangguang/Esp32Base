@@ -363,7 +363,64 @@ void handleConfigApi() {
 Esp32BaseWeb::addRoute("/api/faucet/config", Esp32BaseWeb::METHOD_ANY, handleConfigApi);
 ```
 
-## 8. JSON 输出
+## 8. Web UI baseline helper
+
+业务页面继续使用 `Esp32BaseWeb::addPage()` 注册页面，并使用 `sendHeader()` / `sendFooter()` 输出基础壳层。
+
+为保持页面结构和样式统一，业务页面优先使用：
+
+- `sendPageTitle(title, subtitle)`：页面标题区。
+- `beginPanel(title)` / `endPanel()`：内容分组。
+- `sendNotice(tone, title, message)`：成功、警告、危险、信息和普通提示。
+- `sendResultNotice(notices, count)`：`POST -> 303 -> GET` 后的结果提示。
+- `beginMetricGrid()` / `sendMetric()` / `endMetricGrid()`：状态和统计摘要。
+- `sendInfoRowCompact(title, help, value, actionHtml)`：配置、操作、向导和诊断行。
+- `sendPagination(pagination)`：页码型列表分页。
+
+示例：
+
+```cpp
+void handleBusinessPage() {
+    if (!Esp32BaseWeb::checkAuth()) {
+        return;
+    }
+    Esp32BaseWeb::sendHeader("业务配置");
+    Esp32BaseWeb::sendPageTitle("配置编辑模板", "简单字段行内改，多字段对象进入独立编辑页。");
+    Esp32BaseWeb::beginPanel("紧凑配置列表");
+    Esp32BaseWeb::sendInfoRowCompact("第 1 路名称", "用于页面和记录展示，不影响实际控制。", "花坛",
+                                     "<a class='tag info' href='/config/name'>展开修改</a>");
+    Esp32BaseWeb::endPanel();
+    Esp32BaseWeb::sendFooter();
+}
+```
+
+表单和命令提交应使用 `POST -> 303 -> GET`。前端按钮禁用只能防连点，服务端仍必须重新校验参数、状态和权限。
+
+### 8.1 Skinning
+
+Web UI baseline 支持 CSS 变量级换肤。业务项目可通过 `setHeadExtraCallback()` 覆盖少量变量：
+
+```cpp
+void handleHeadExtra() {
+    Esp32BaseWeb::sendChunk("<style>:root{--eb-primary:#245f9e;--eb-primary-soft:#e8f0f8}</style>");
+}
+```
+
+不应替换语义色含义。成功、警告、危险和信息色必须保持可识别。
+
+### 8.2 视觉检查清单
+
+- PC 宽屏下控件不无意义拉满。
+- 手机端导航、行、分页自然堆叠或横向滚动，不出现文字重叠。
+- 按钮文字居中，动态内容不改变整体布局。
+- 简单字段行内编辑和多字段独立编辑页有明显区别。
+- 分页显示总条数、总页数、首页、上一页、下一页、尾页和当前页。
+- 重定向后的成功、失败、拒绝状态清楚可见。
+- 登录、权限不足和只读受限状态可理解。
+- 诊断维护页中的原始片段有长度边界，不成为主页面体验。
+- 覆盖 `--eb-primary` 和 `--eb-bg` 后页面仍保持语义清楚。
+
+## 9. JSON 输出
 
 必须 escape：
 
@@ -395,7 +452,7 @@ Esp32BaseWeb::endJson();
 
 `beginJson()` / `endJson()` 输出最外层 `{}`，中间使用 `sendChunk()` 拼接结构、`writeJsonEscaped()` 输出字符串值。
 
-## 9. WiFi 配网状态机
+## 10. WiFi 配网状态机
 
 进入 AP/config portal 的条件：
 
@@ -425,7 +482,7 @@ Esp32BaseWeb::endJson();
 - STA、AP、DNS、Web 全部不可访问。
 - 唤醒后重新执行 begin/handle 流程。
 
-## 10. Handler 性能边界
+## 11. Handler 性能边界
 
 Arduino `WebServer` 是同步模型。
 
