@@ -18,6 +18,8 @@
 
 已知限制、明确不支持能力和风险边界详见 [已知限制](docs/10_known_limitations.md)。
 
+Web 页面结构、样式基线、业务页面模板和换肤策略详见 [Web UI 页面结构与样式基线](docs/11_web_ui_baseline.md)。
+
 ## 快速开始
 
 最小应用：
