@@ -696,9 +696,10 @@ void sendPaginationLink(const char* label, const Esp32BaseWeb::Pagination& pagin
         sendChunk("</span>");
         return;
     }
+    const char* path = pagination.path ? pagination.path : "/esp32base";
     sendChunk("<a class='tag info' href='");
-    sendEscapedHtmlChunk(pagination.path ? pagination.path : "/esp32base");
-    sendChunk("?");
+    sendEscapedHtmlChunk(path);
+    sendChunk(strchr(path, '?') ? "&amp;" : "?");
     if (pagination.query && pagination.query[0]) {
         sendEscapedHtmlChunk(pagination.query);
         sendChunk("&amp;");
@@ -3714,12 +3715,8 @@ static void sendInfoRowActionLink(const char* href, const char* label, Esp32Base
     sendChunk("</a>");
 }
 
-void Esp32BaseWeb::sendInfoRowCompact(const char* title, const char* help, const char* value, const char* trustedActionHtml) {
-    const bool hasValue = sendInfoRowCompactStart(title, help, value);
-    if (trustedActionHtml && trustedActionHtml[0]) {
-        sendInfoRowActionGap(hasValue);
-        sendChunk(trustedActionHtml);
-    }
+void Esp32BaseWeb::sendInfoRowCompact(const char* title, const char* help, const char* value) {
+    sendInfoRowCompactStart(title, help, value);
     sendInfoRowCompactEnd();
 }
 

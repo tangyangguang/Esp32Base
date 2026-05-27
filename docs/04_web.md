@@ -396,7 +396,7 @@ void handleBusinessPage() {
 }
 ```
 
-`sendInfoRowCompact(..., trustedActionHtml)` 会原样输出 `trustedActionHtml`，只用于业务代码内写死的可信静态 HTML。任何来自配置、URL 参数、设备名、日志、用户输入或远端数据的内容，都必须使用 `writeHtmlEscaped()` 输出，或优先改用 `sendInfoRowCompactLink()` / `sendInfoRowCompactForm()`。
+需要行内动作时优先使用 `sendInfoRowCompactLink()` 或 `sendInfoRowCompactForm()`。如果业务确实需要自定义 HTML，使用底层 `sendChunk()` 手动输出，并对来自配置、URL 参数、设备名、日志、用户输入或远端数据的内容使用 `writeHtmlEscaped()`。
 
 表单和命令提交应使用 `POST -> 303 -> GET`。前端按钮禁用只能防连点，服务端仍必须重新校验参数、状态和权限。
 

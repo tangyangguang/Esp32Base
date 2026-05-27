@@ -361,7 +361,7 @@ void handleHeadExtra() {
 - `sendInfoRowCompactForm()`：带单按钮 POST 动作的紧凑行。
 - `sendPagination()`：页码型分页。
 
-`sendInfoRowCompact(..., trustedActionHtml)` 只作为低层逃生口，`trustedActionHtml` 必须是业务代码内写死的可信静态 HTML。来自配置、URL、日志、设备名、用户输入或远端数据的内容不得拼入该参数；需要动态文本时使用安全 helper，或用 `writeHtmlEscaped()` 手动输出。
+行内动作优先使用 `sendInfoRowCompactLink()` 或 `sendInfoRowCompactForm()`。如果业务确实需要自定义 HTML，使用底层 `sendChunk()` 手动输出；来自配置、URL、日志、设备名、用户输入或远端数据的内容不得直接拼接，必须使用 `writeHtmlEscaped()`。
 
 业务项目仍负责：
 

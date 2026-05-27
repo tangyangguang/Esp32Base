@@ -17,7 +17,7 @@
 
 - 业务页面可继续使用 `addPage()`、`sendHeader()`、`sendFooter()` 和 `sendChunk()`；新 helper 是增量能力，不强制迁移。
 - 推荐新业务页面优先使用 helper，避免复制基础库 CSS 和重复手写分页、提示、配置行等结构。
-- 紧凑行内动作优先使用 `sendInfoRowCompactLink()` 或 `sendInfoRowCompactForm()`；`sendInfoRowCompact(..., trustedActionHtml)` 只用于可信静态 HTML。
+- 紧凑行内动作使用 `sendInfoRowCompactLink()` 或 `sendInfoRowCompactForm()`；自定义 HTML 使用底层 `sendChunk()` 手动输出并自行 escape 动态内容。
 - 换肤走 CSS 变量覆盖，可通过 `setHeadExtraCallback()` 调整主色和背景；不新增运行时主题系统、前端框架或图表库。
 - 表单和命令提交仍推荐 `POST -> 303 -> GET`，刷新页面不应重复提交。
 

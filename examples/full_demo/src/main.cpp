@@ -528,7 +528,7 @@ void handleUiFlowDemo() {
     Esp32BaseWeb::sendPageTitle("流程向导模板", "用于校准、首次设置和复杂维护。");
     Esp32BaseWeb::sendResultNotice(DEMO_RESULTS, 2);
     Esp32BaseWeb::beginPanel("校准流程");
-    Esp32BaseWeb::sendInfoRowCompact("1. 依据", "展示旧值、数据来源和是否允许继续。", "通过", nullptr);
+    Esp32BaseWeb::sendInfoRowCompact("1. 依据", "展示旧值、数据来源和是否允许继续。", "通过");
     Esp32BaseWeb::sendInfoRowCompactLink("2. 实测", "录入真实测量结果，不塞进普通配置表。", nullptr,
                                          "/ui-flow", "继续");
     Esp32BaseWeb::sendInfoRowCompactLink("3. 核对保存", "展示旧值、新值、变化幅度和影响范围。", nullptr,
@@ -544,7 +544,7 @@ void handleUiMaintenanceDemo() {
     Esp32BaseWeb::sendHeader("UI Maintenance");
     Esp32BaseWeb::sendPageTitle("诊断维护模板", "只读优先，危险动作进入确认保护页。");
     Esp32BaseWeb::beginPanel("系统诊断");
-    Esp32BaseWeb::sendInfoRowCompact("WiFi", "连接状态、RSSI、IP。", "正常", nullptr);
+    Esp32BaseWeb::sendInfoRowCompact("WiFi", "连接状态、RSSI、IP。", "正常");
     Esp32BaseWeb::sendInfoRowCompactLink("维护任务", "导出、扫描、重启等长任务显示状态和下一步。", "空闲",
                                          "/esp32base/tools", "查看");
     Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_WARN, "原始数据受控", "限制长度，可复制或导出，不做无限滚动调试平台。");

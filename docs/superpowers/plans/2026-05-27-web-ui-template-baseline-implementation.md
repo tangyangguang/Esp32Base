@@ -4,6 +4,8 @@
 
 **Goal:** Add a lightweight reusable Web UI baseline to Esp32Base so built-in and business pages can share compact layout, styling, pagination, form-result notices, access-control states, statistics summaries, guided flows, and diagnostic-maintenance structures.
 
+**Execution status:** Implemented on branch `codex/web-ui-template-baseline`. The checklist below is retained as implementation history and future replay guidance; the current verification commands are listed in the Verification Matrix.
+
 **Architecture:** Keep the existing synchronous `WebServer` model and current `Esp32BaseWeb::sendHeader()` / `sendFooter()` / `sendChunk()` flow. Add small C++ output helpers and CSS classes inside `Esp32BaseWeb`, then demonstrate business usage through examples before migrating built-in pages opportunistically. Style iteration is expected: visual changes must stay concentrated in `WEB_HEAD` CSS variables/classes and helper markup, not copied into business project pages.
 
 **Tech Stack:** Arduino ESP32, synchronous `WebServer`, chunked HTML output through `Esp32BaseWeb::sendChunk()`, PROGMEM CSS, PlatformIO examples.
@@ -146,8 +148,7 @@ In `src/web/Esp32BaseWeb.h`, after `static void sendFooter();`, add:
     static void beginMetricGrid();
     static void sendMetric(const char* label, const char* value, const char* help = nullptr);
     static void endMetricGrid();
-    static void sendInfoRowCompact(const char* title, const char* help, const char* value = nullptr,
-                                   const char* trustedActionHtml = nullptr);
+    static void sendInfoRowCompact(const char* title, const char* help, const char* value = nullptr);
     static void sendInfoRowCompactLink(const char* title, const char* help, const char* value,
                                        const char* href, const char* label, UiTone tone = UI_INFO);
     static void sendInfoRowCompactForm(const char* title, const char* help, const char* value,
@@ -398,12 +399,12 @@ void Esp32BaseWeb::endMetricGrid() {
 Add:
 
 ```cpp
-void Esp32BaseWeb::sendInfoRowCompact(const char* title, const char* help, const char* value, const char* trustedActionHtml);
+void Esp32BaseWeb::sendInfoRowCompact(const char* title, const char* help, const char* value);
 void Esp32BaseWeb::sendInfoRowCompactLink(const char* title, const char* help, const char* value, const char* href, const char* label, UiTone tone);
 void Esp32BaseWeb::sendInfoRowCompactForm(const char* title, const char* help, const char* value, const char* action, const char* label, const char* hiddenName, const char* hiddenValue, UiTone tone);
 ```
 
-`trustedActionHtml` is a raw static escape hatch. Prefer the link/form helpers for business pages.
+Use `sendInfoRowCompactLink()` or `sendInfoRowCompactForm()` for row actions. Custom HTML remains possible through lower-level `sendChunk()` with explicit escaping for dynamic content.
 
 - [ ] **Step 5: Build**
 
@@ -634,7 +635,7 @@ void handleUiStatsDemo() {
     Esp32BaseWeb::sendMetric("成功率", "98%");
     Esp32BaseWeb::sendMetric("较上周", "+6%");
     Esp32BaseWeb::endMetricGrid();
-    Esp32BaseWeb::sendInfoRowCompact("分组汇总", "用紧凑表格或 CSS 条形表达，不依赖图表库。", "4 组", "<a class='tag info' href='/ui-records'>查看记录</a>");
+    Esp32BaseWeb::sendInfoRowCompactLink("分组汇总", "用紧凑表格或 CSS 条形表达，不依赖图表库。", "4 组", "/ui-records", "查看记录");
     Esp32BaseWeb::endPanel();
     Esp32BaseWeb::sendFooter();
 }
@@ -646,9 +647,9 @@ void handleUiFlowDemo() {
     Esp32BaseWeb::sendHeader("UI Flow");
     Esp32BaseWeb::sendPageTitle("流程向导模板", "用于校准、首次设置和复杂维护。");
     Esp32BaseWeb::beginPanel("校准流程");
-    Esp32BaseWeb::sendInfoRowCompact("1. 依据", "展示旧值、数据来源和是否允许继续。", "通过", nullptr);
-    Esp32BaseWeb::sendInfoRowCompact("2. 实测", "录入真实测量结果，不塞进普通配置表。", nullptr, "<a class='tag info' href='/ui-flow'>继续</a>");
-    Esp32BaseWeb::sendInfoRowCompact("3. 核对保存", "展示旧值、新值、变化幅度和影响范围。", nullptr, "<a class='tag info' href='/ui-flow?saved=1'>保存</a>");
+    Esp32BaseWeb::sendInfoRowCompact("1. 依据", "展示旧值、数据来源和是否允许继续。", "通过");
+    Esp32BaseWeb::sendInfoRowCompactLink("2. 实测", "录入真实测量结果，不塞进普通配置表。", nullptr, "/ui-flow", "继续");
+    Esp32BaseWeb::sendInfoRowCompactLink("3. 核对保存", "展示旧值、新值、变化幅度和影响范围。", nullptr, "/ui-flow?saved=1", "保存");
     Esp32BaseWeb::endPanel();
     Esp32BaseWeb::sendFooter();
 }
@@ -660,8 +661,8 @@ void handleUiMaintenanceDemo() {
     Esp32BaseWeb::sendHeader("UI Maintenance");
     Esp32BaseWeb::sendPageTitle("诊断维护模板", "只读优先，危险动作进入确认保护页。");
     Esp32BaseWeb::beginPanel("系统诊断");
-    Esp32BaseWeb::sendInfoRowCompact("WiFi", "连接状态、RSSI、IP。", "正常", nullptr);
-    Esp32BaseWeb::sendInfoRowCompact("维护任务", "导出、扫描、重启等长任务显示状态和下一步。", "空闲", "<a class='tag info' href='/esp32base/tools'>查看</a>");
+    Esp32BaseWeb::sendInfoRowCompact("WiFi", "连接状态、RSSI、IP。", "正常");
+    Esp32BaseWeb::sendInfoRowCompactLink("维护任务", "导出、扫描、重启等长任务显示状态和下一步。", "空闲", "/esp32base/tools", "查看");
     Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_WARN, "原始数据受控", "限制长度，可复制或导出，不做无限滚动调试平台。");
     Esp32BaseWeb::endPanel();
     Esp32BaseWeb::sendFooter();
@@ -672,7 +673,7 @@ void handleUiAccessDemo() {
     Esp32BaseWeb::sendPageTitle("访问控制模板", "覆盖登录、权限不足、会话失效和只读受限。");
     Esp32BaseWeb::beginPanel("受限状态");
     Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_WARN, "需要登录", "登录后可以继续执行配置和维护操作。");
-    Esp32BaseWeb::sendInfoRowCompact("只读访问", "无权限时展示原因和可继续查看的内容。", "允许", "<a class='tag info' href='/esp32base'>返回状态</a>");
+    Esp32BaseWeb::sendInfoRowCompactLink("只读访问", "无权限时展示原因和可继续查看的内容。", "允许", "/esp32base", "返回状态");
     Esp32BaseWeb::endPanel();
     Esp32BaseWeb::sendFooter();
 }
@@ -1012,7 +1013,7 @@ Use the same pattern as `examples/full_demo`:
 Esp32BaseWeb::sendHeader("Page title");
 Esp32BaseWeb::sendPageTitle("Page title", "Short page purpose.");
 Esp32BaseWeb::beginPanel("Section");
-Esp32BaseWeb::sendInfoRowCompact("Field", "One sentence explanation.", "Current value", "<a class='tag info' href='/edit'>编辑</a>");
+Esp32BaseWeb::sendInfoRowCompactLink("Field", "One sentence explanation.", "Current value", "/edit", "编辑");
 Esp32BaseWeb::endPanel();
 Esp32BaseWeb::sendFooter();
 ```
@@ -1060,11 +1061,21 @@ git commit -m "fix(web): refine UI baseline from irrigation trial"
 
 ## Verification Matrix
 
-- [ ] `pio run -d examples/full_demo`
-  - Expected: `SUCCESS`
-- [ ] `pio run -d examples/basic -e web`
-  - Expected: `SUCCESS` if the environment exists; if not, list available environments and choose the closest Web-enabled one.
-- [ ] Browser visual review for `full_demo` pages:
+- [ ] `git diff --check`
+  - Expected: no output, exit 0.
+- [ ] `python3 scripts/check_web_send_path.py`
+  - Expected: `web send path: OK`.
+- [ ] `pio run -d examples/full_demo -e esp32_full -e esp32_full_selftest`
+  - Expected: `SUCCESS`.
+- [ ] `pio run -d examples/full_demo -e esp32s3_full`
+  - Expected: `SUCCESS`.
+- [ ] `pio run -d examples/basic -e esp32_core -e esp32_runtime -e esp32_net -e esp32_web -e esp32_web_runtime`
+  - Expected: `SUCCESS`.
+- [ ] `python3 scripts/check_trim_symbols.py`
+  - Expected: all checked profiles `OK`.
+- [ ] `platformio pkg pack . -o /tmp/esp32base-pio-pack-check.tar.gz`
+  - Expected: tarball created; package excludes `.superpowers/`, `.pio/`, `.cache/`, `design-history/`, and includes `.inc`, `partitions/`, `examples/full_demo`, `examples/web_logs_ota`, `examples/net_runtime`.
+- [ ] Browser visual review for firmware-served `full_demo` pages:
   - `/ui-status`
   - `/ui-stats`
   - `/ui-records`
