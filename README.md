@@ -165,6 +165,7 @@ pio run -t webota
 9. [Arduino Core 兼容性](docs/08_arduino_core_compat.md)
 10. [发布检查清单](docs/09_release_checklist.md)
 11. [已知限制](docs/10_known_limitations.md)
+12. [Web UI 页面结构与样式基线](docs/11_web_ui_baseline.md)
 
 历史设计方案与评审记录已归档到 `design-history/`，只作为背景材料，不作为新实现的直接依据。
 
