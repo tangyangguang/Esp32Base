@@ -53,6 +53,30 @@ public:
         BUILTIN_AUTH
     };
 
+    enum UiTone : uint8_t {
+        UI_NEUTRAL,
+        UI_OK,
+        UI_WARN,
+        UI_DANGER,
+        UI_INFO
+    };
+
+    struct ResultNotice {
+        const char* param;
+        const char* value;
+        UiTone tone;
+        const char* title;
+        const char* message;
+    };
+
+    struct Pagination {
+        const char* path;
+        const char* query;
+        uint32_t page;
+        uint32_t perPage;
+        uint32_t total;
+    };
+
     using Handler = void (*)();
 
     static bool begin();
@@ -92,6 +116,16 @@ public:
 
     static void sendHeader(const char* title = nullptr);
     static void sendFooter();
+    static void sendPageTitle(const char* title, const char* subtitle = nullptr);
+    static void beginPanel(const char* title = nullptr);
+    static void endPanel();
+    static void sendNotice(UiTone tone, const char* title, const char* message = nullptr);
+    static void sendResultNotice(const ResultNotice* notices, uint8_t count);
+    static void beginMetricGrid();
+    static void sendMetric(const char* label, const char* value, const char* help = nullptr);
+    static void endMetricGrid();
+    static void sendInfoRowCompact(const char* title, const char* help, const char* value = nullptr, const char* actionHtml = nullptr);
+    static void sendPagination(const Pagination& pagination);
     static bool beginResponse(int code, const char* contentType, const char* filename = nullptr);
     static bool beginText(int code);
     static bool beginCsv(int code, const char* filename = nullptr);

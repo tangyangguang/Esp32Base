@@ -202,6 +202,17 @@ const char* methodName(Esp32BaseWeb::Method method) {
     }
 }
 
+const char* uiToneClass(Esp32BaseWeb::UiTone tone) {
+    switch (tone) {
+        case Esp32BaseWeb::UI_OK: return " ok";
+        case Esp32BaseWeb::UI_WARN: return " warn";
+        case Esp32BaseWeb::UI_DANGER: return " danger";
+        case Esp32BaseWeb::UI_INFO: return " info";
+        case Esp32BaseWeb::UI_NEUTRAL:
+        default: return "";
+    }
+}
+
 uint8_t routeCount(bool appPageOnly) {
     uint8_t count = 0;
     for (uint8_t i = 0; i < ESP32BASE_WEB_MAX_ROUTES; ++i) {
@@ -3556,6 +3567,133 @@ void Esp32BaseWeb::sendFooter() {
         sendChunk("</div></body></html>");
     }
     endResponse();
+}
+
+void Esp32BaseWeb::sendPageTitle(const char* title, const char* subtitle) {
+    sendChunk("<header class='pagehead'><h1>");
+    writeHtmlEscaped(title ? title : "");
+    sendChunk("</h1>");
+    if (subtitle && subtitle[0]) {
+        sendChunk("<p>");
+        writeHtmlEscaped(subtitle);
+        sendChunk("</p>");
+    }
+    sendChunk("</header>");
+}
+
+void Esp32BaseWeb::beginPanel(const char* title) {
+    sendChunk("<section class='panel'>");
+    if (title && title[0]) {
+        sendChunk("<h2>");
+        writeHtmlEscaped(title);
+        sendChunk("</h2>");
+    }
+}
+
+void Esp32BaseWeb::endPanel() {
+    sendChunk("</section>");
+}
+
+void Esp32BaseWeb::sendNotice(UiTone tone, const char* title, const char* message) {
+    sendChunk("<div class='notice");
+    sendChunk(uiToneClass(tone));
+    sendChunk("'><b>");
+    writeHtmlEscaped(title ? title : "");
+    sendChunk("</b>");
+    if (message && message[0]) {
+        sendChunk("<br>");
+        writeHtmlEscaped(message);
+    }
+    sendChunk("</div>");
+}
+
+void Esp32BaseWeb::sendResultNotice(const ResultNotice* notices, uint8_t count) {
+    if (!notices || count == 0) {
+        return;
+    }
+    char value[32];
+    for (uint8_t i = 0; i < count; ++i) {
+        const ResultNotice& notice = notices[i];
+        if (!notice.param || !notice.param[0]) {
+            continue;
+        }
+        if (!hasParam(notice.param)) {
+            continue;
+        }
+        if (notice.value && notice.value[0]) {
+            if (!getParam(notice.param, value, sizeof(value)) || strcmp(value, notice.value) != 0) {
+                continue;
+            }
+        }
+        sendNotice(notice.tone, notice.title, notice.message);
+        return;
+    }
+}
+
+void Esp32BaseWeb::beginMetricGrid() {
+    sendChunk("<div class='metrics'>");
+}
+
+void Esp32BaseWeb::sendMetric(const char* label, const char* value, const char* help) {
+    sendChunk("<div class='metric'><b>");
+    writeHtmlEscaped(value ? value : "");
+    sendChunk("</b><span>");
+    writeHtmlEscaped(label ? label : "");
+    if (help && help[0]) {
+        sendChunk(" · ");
+        writeHtmlEscaped(help);
+    }
+    sendChunk("</span></div>");
+}
+
+void Esp32BaseWeb::endMetricGrid() {
+    sendChunk("</div>");
+}
+
+void Esp32BaseWeb::sendInfoRowCompact(const char* title, const char* help, const char* value, const char* actionHtml) {
+    sendChunk("<div class='urow'><div><b>");
+    writeHtmlEscaped(title ? title : "");
+    sendChunk("</b>");
+    if (help && help[0]) {
+        sendChunk("<small>");
+        writeHtmlEscaped(help);
+        sendChunk("</small>");
+    }
+    sendChunk("</div><div>");
+    if (value && value[0]) {
+        sendChunk("<span class='uvalue'>");
+        writeHtmlEscaped(value);
+        sendChunk("</span>");
+    }
+    if (actionHtml && actionHtml[0]) {
+        if (value && value[0]) {
+            sendChunk(" ");
+        }
+        sendChunk(actionHtml);
+    }
+    sendChunk("</div></div>");
+}
+
+void Esp32BaseWeb::sendPagination(const Pagination& pagination) {
+    const uint32_t perPage = pagination.perPage == 0 ? 20 : pagination.perPage;
+    const uint32_t totalPages = pagination.total == 0 ? 1 : ((pagination.total + perPage - 1) / perPage);
+    uint32_t page = pagination.page == 0 ? 1 : pagination.page;
+    if (page > totalPages) {
+        page = totalPages;
+    }
+    char left[64];
+    snprintf(left, sizeof(left), "共 %lu 条 / %lu 页",
+             static_cast<unsigned long>(pagination.total),
+             static_cast<unsigned long>(totalPages));
+    char right[48];
+    snprintf(right, sizeof(right), "当前第 %lu 页", static_cast<unsigned long>(page));
+    sendChunk("<div class='pagination'><span class='muted'>");
+    writeHtmlEscaped(left);
+    sendChunk("</span><span>");
+    sendChunk("<span class='tag'>首页</span> <span class='tag'>上一页</span> <span class='tag'>下一页</span> <span class='tag'>尾页</span>");
+    sendChunk("</span><span class='right muted'>");
+    writeHtmlEscaped(right);
+    sendChunk("</span></div>");
 }
 
 bool Esp32BaseWeb::beginResponse(int code, const char* contentType, const char* filename) {
