@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>表单提交与防重复提交规范</title>
+  <style>
+    :root{
+      color-scheme:light;
+      --bg:#f6f7f8;
+      --surface:#fff;
+      --soft:#f8fafb;
+      --text:#17202a;
+      --muted:#667085;
+      --line:#d8dee6;
+      --line-soft:#edf1f4;
+      --primary:#14685d;
+      --primary-soft:#e7f2ef;
+      --danger:#b42318;
+      --warn:#a15c07;
+      --ok:#087443;
+      --shadow:0 1px 2px rgba(16,24,40,.04);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-size:14px;line-height:1.45}
+    .page{width:min(1180px,calc(100% - 28px));margin:0 auto;padding:18px 0 44px}
+    h1,h2,h3,p{margin-top:0}
+    h1{margin:0 0 5px;font-size:25px;line-height:1.22}
+    h2{margin:0 0 8px;font-size:17px}
+    h3{margin:0 0 6px;font-size:15px}
+    .sub{color:var(--muted);margin:0}
+    .top{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:16px}
+    .pill{display:inline-flex;align-items:center;min-height:26px;padding:3px 9px;border:1px solid var(--line);border-radius:999px;background:#fff;color:#475467;font-size:13px;white-space:nowrap}
+    .section{background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);padding:14px;margin-bottom:14px}
+    .flow{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+    .step{border:1px solid var(--line);border-radius:8px;background:#fff;padding:10px;min-height:126px}
+    .num{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:999px;background:var(--primary-soft);color:var(--primary);font-size:12px;font-weight:800;margin-bottom:7px}
+    .step b{display:block;margin-bottom:4px}.step span{display:block;color:var(--muted);font-size:13px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .card{border:1px solid var(--line);border-radius:8px;background:#fff;overflow:hidden;min-width:0}
+    .card-head{padding:11px 12px;border-bottom:1px solid var(--line);background:#fff}
+    .card-body{padding:12px;background:#f8fafb}
+    .mock{border:1px solid var(--line);border-radius:7px;background:#fff;overflow:hidden}
+    .mock-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 9px;border-bottom:1px solid var(--line-soft)}
+    .mock-title{font-weight:750;font-size:13px}
+    .badge{display:inline-flex;align-items:center;min-height:20px;padding:2px 7px;border-radius:999px;background:#eef2f4;color:#475467;font-size:11px;font-weight:700;white-space:nowrap}
+    .badge.ok{background:#e8f4ee;color:var(--ok)}
+    .badge.warn{background:#fff6e6;color:var(--warn)}
+    .badge.danger{background:#fff0ee;color:var(--danger)}
+    .mock-body{padding:10px}
+    .notice{border:1px solid #bee0d4;background:#f1faf7;color:#185b4e;border-radius:7px;padding:8px 10px;font-size:13px;margin-bottom:9px}
+    .notice.err{border-color:#f0b8b1;background:#fff3f1;color:#8f2d23}
+    .field-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px;border:1px solid var(--line-soft);border-radius:6px;background:#fff;margin-bottom:7px}
+    .field-row b{display:block;font-size:13px}.field-row small{display:block;color:var(--muted);font-size:11px}
+    .edit,.btn{display:inline-flex;align-items:center;justify-content:center;min-height:28px;padding:0 9px;border:1px solid #cfd6df;border-radius:6px;background:#fff;color:#344054;font-size:12px;font-weight:700;white-space:nowrap}
+    .btn.primary{border-color:var(--primary);background:var(--primary);color:#fff}.btn.danger{border-color:var(--danger);background:var(--danger);color:#fff}
+    .form{display:grid;gap:8px}.field{display:grid;gap:4px}.field label{font-size:12px;color:var(--muted);font-weight:700}
+    input{min-width:0;width:100%;min-height:32px;border:1px solid #cfd6df;border-radius:6px;background:#fff;padding:6px 8px;font:inherit;color:var(--text)}
+    .btns{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}
+    .rules{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+    .rule{border:1px solid var(--line);border-radius:8px;background:#fff;padding:11px}
+    .rule b{display:block;margin-bottom:4px}.rule span{display:block;color:var(--muted);font-size:13px}
+    .code{border:1px solid var(--line);border-radius:8px;background:#fff;padding:12px}
+    .code code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;line-height:1.5;white-space:pre-wrap;color:#344054}
+    @media(max-width:980px){.top{display:block}.page{width:min(100% - 20px,1180px);padding-top:12px}.flow,.grid,.rules{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="top">
+      <div>
+        <h1>表单提交与防重复提交规范</h1>
+        <p class="sub">独立编辑页和页面内展开编辑区都必须使用同一条硬规则：POST 后不直接返回表单页面，而是 303 跳回 GET 展示页。</p>
+      </div>
+      <span class="pill">硬性规则：POST -> 303 -> GET</span>
+    </header>
+
+    <section class="section">
+      <h2>一、标准流程</h2>
+      <div class="flow">
+        <div class="step"><span class="num">1</span><b>GET 展示页</b><span>用户查看列表页、详情页或编辑页。刷新是安全的。</span></div>
+        <div class="step"><span class="num">2</span><b>填写表单</b><span>提交按钮点击后立即禁用，避免手抖连点。</span></div>
+        <div class="step"><span class="num">3</span><b>POST 保存</b><span>服务端重新校验参数和业务状态，不信任前端。</span></div>
+        <div class="step"><span class="num">4</span><b>303 跳转</b><span>无论成功或失败，都跳回 GET 页面并带状态参数。</span></div>
+        <div class="step"><span class="num">5</span><b>GET 显示结果</b><span>刷新只会重新加载 GET，不会重复提交表单。</span></div>
+      </div>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <div class="card-head"><h2>独立编辑页提交后</h2><p class="sub">保存后回到原来的信息展示页或列表页。</p></div>
+        <div class="card-body">
+          <div class="mock">
+            <div class="mock-head"><span class="mock-title">第 1 路基础信息</span><span class="badge ok">已保存</span></div>
+            <div class="mock-body">
+              <div class="notice">已保存第 1 路基础信息。当前页面是 GET，可安全刷新。</div>
+              <div class="field-row"><div><b>每圈下料量</b><small>克数目标换算</small></div><span class="edit">68.5 g/rev</span></div>
+              <div class="field-row"><div><b>料桶容量</b><small>用于余量估算</small></div><span class="edit">5000 g</span></div>
+              <div class="btns"><span class="btn">继续修改</span><span class="btn primary">返回列表</span></div>
+            </div>
+          </div>
+        </div>
+      </article>
+      <article class="card">
+        <div class="card-head"><h2>页面内展开提交后</h2><p class="sub">展开表单不会留在刷新历史里，保存后回到普通展示状态。</p></div>
+        <div class="card-body">
+          <div class="mock">
+            <div class="mock-head"><span class="mock-title">灌溉第 1 路</span><span class="badge warn">修改失败示例</span></div>
+            <div class="mock-body">
+              <div class="notice err">保存失败：运行中不能修改无流量超时。当前页面是 GET，可安全刷新。</div>
+              <div class="field-row"><div><b>无流量超时</b><small>异常保护</small></div><span class="edit">10 s</span></div>
+              <div class="field-row"><div><b>快速浇水时长</b><small>本地按键默认值</small></div><span class="edit">300 s</span></div>
+              <div class="btns"><span class="btn">重新修改</span><span class="btn primary">查看状态</span></div>
+            </div>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section class="section">
+      <h2>二、基础库可以提供的通用约定</h2>
+      <div class="rules">
+        <div class="rule"><b>前端防连点</b><span>复用现有 `once(form)` 或增强版，提交后禁用按钮并显示保存中。</span></div>
+        <div class="rule"><b>统一状态提示</b><span>GET 页根据 `?saved=1`、`?error=busy`、`?error=invalid` 显示短提示。</span></div>
+        <div class="rule"><b>统一跳转 helper</b><span>业务 handler 保存后调用 `redirectSeeOther(returnUrl)`，不直接返回 HTML。</span></div>
+      </div>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <div class="card-head"><h2>业务 handler 规则</h2></div>
+        <div class="card-body">
+          <div class="code"><code>POST /base-info/edit
+1. checkAuth()
+2. 解析参数
+3. 校验范围
+4. 检查运行状态
+5. 保存或拒绝
+6. redirectSeeOther("/base-info?item=1&saved=1")
+
+失败也跳转：
+redirectSeeOther("/base-info?item=1&error=busy")</code></div>
+        </div>
+      </article>
+      <article class="card">
+        <div class="card-head"><h2>页面规则</h2></div>
+        <div class="card-body">
+          <div class="code"><code>展示页：
+- 只用 GET 输出
+- 可安全刷新
+- 显示 saved/error 提示
+- 展开编辑区只由 query 或按钮控制
+
+表单页：
+- method="post"
+- onsubmit="return once(this)"
+- 成功或失败都不直接留在 POST 响应</code></div>
+        </div>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

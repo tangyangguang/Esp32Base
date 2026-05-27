@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>业务配置编辑方式对比</title>
+  <style>
+    :root{
+      color-scheme:light;
+      --bg:#f6f7f8;
+      --surface:#fff;
+      --soft:#f8fafb;
+      --text:#17202a;
+      --muted:#667085;
+      --line:#d8dee6;
+      --line-soft:#edf1f4;
+      --primary:#14685d;
+      --primary-soft:#e7f2ef;
+      --danger:#b42318;
+      --warn:#a15c07;
+      --ok:#087443;
+      --shadow:0 1px 2px rgba(16,24,40,.04);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-size:14px;line-height:1.45}
+    .page{width:min(1240px,calc(100% - 28px));margin:0 auto;padding:18px 0 44px}
+    h1,h2,h3,p{margin-top:0}
+    h1{margin:0 0 5px;font-size:25px;line-height:1.22}
+    h2{margin:0 0 8px;font-size:17px}
+    h3{margin:0 0 6px;font-size:15px}
+    .sub{color:var(--muted);margin:0}
+    .top{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:16px}
+    .pill{display:inline-flex;align-items:center;min-height:26px;padding:3px 9px;border:1px solid var(--line);border-radius:999px;background:#fff;color:#475467;font-size:13px;white-space:nowrap}
+    .compare{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .card{background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);overflow:hidden;min-width:0}
+    .card.rec{border-color:#8bc9be;box-shadow:0 0 0 2px rgba(20,104,93,.08)}
+    .card-head{padding:12px 14px;border-bottom:1px solid var(--line);background:#fff}
+    .rec .card-head{background:#f4fbf9}
+    .card-body{padding:12px;background:#f8fafb}
+    .mock{border:1px solid var(--line);border-radius:8px;background:#fff;overflow:hidden}
+    .nav{display:flex;gap:4px;align-items:center;padding:7px 8px;border-bottom:1px solid var(--line-soft)}
+    .brand{font-weight:750;margin-right:5px}
+    .nav span:not(.brand){font-size:11px;padding:4px 6px;border-radius:5px;color:#55616a}
+    .nav .active{background:var(--primary-soft);color:var(--primary);font-weight:700}
+    .mock-body{padding:10px}
+    .pagehead{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:9px}
+    .badge{display:inline-flex;align-items:center;min-height:21px;padding:2px 7px;border-radius:999px;background:#eef2f4;color:#475467;font-size:11px;font-weight:700;white-space:nowrap}
+    .badge.ok{background:#e8f4ee;color:var(--ok)}
+    .badge.warn{background:#fff6e6;color:var(--warn)}
+    .summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--line);border-radius:7px;overflow:hidden;margin-bottom:9px}
+    .summary div{padding:6px 7px;border-right:1px solid var(--line-soft);min-width:0}
+    .summary div:last-child{border-right:0}
+    .summary span{display:block;color:var(--muted);font-size:11px}.summary b{display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .group{border:1px solid var(--line);border-radius:7px;overflow:hidden;margin-bottom:9px;background:#fff}
+    .group-title{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 9px;background:#f8fafb;border-bottom:1px solid var(--line-soft);font-size:13px;font-weight:750}
+    .config-row{display:grid;grid-template-columns:minmax(110px,.8fr) minmax(86px,.5fr) minmax(0,1.25fr) auto;gap:8px;align-items:center;padding:7px 9px;border-bottom:1px solid var(--line-soft)}
+    .config-row:last-child{border-bottom:0}
+    .name b{display:block;font-size:12px}.name small{display:block;color:var(--muted);font-size:11px}
+    .value{font-size:12px;font-weight:750;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .desc{color:var(--muted);font-size:11px;line-height:1.3}
+    .btn,.edit{display:inline-flex;align-items:center;justify-content:center;min-height:28px;padding:0 9px;border:1px solid var(--primary);border-radius:6px;background:var(--primary);color:#fff;font-size:12px;font-weight:700;white-space:nowrap}
+    .edit{background:#fff;color:#344054;border-color:#cfd6df}
+    .btn.secondary{background:#fff;color:#344054;border-color:#cfd6df}
+    .btn.danger{background:var(--danger);border-color:var(--danger)}
+    .form-page{border:1px solid var(--line);border-radius:7px;background:#fff;overflow:hidden}
+    .form-head{padding:9px 10px;border-bottom:1px solid var(--line-soft);background:#f8fafb}
+    .form-body{padding:10px}
+    .form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+    .field{display:grid;gap:4px}.field label{font-size:12px;color:var(--muted);font-weight:700}
+    input,select{min-width:0;width:100%;min-height:32px;border:1px solid #cfd6df;border-radius:6px;background:#fff;padding:6px 8px;font:inherit;color:var(--text)}
+    .suffix{display:grid;grid-template-columns:1fr auto;align-items:center;border:1px solid #cfd6df;border-radius:6px;background:#fff;overflow:hidden}
+    .suffix input{border:0;border-radius:0}.suffix em{font-style:normal;color:var(--muted);font-size:12px;padding-right:8px}
+    .actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+    .inline-edit{margin:0 9px 9px;padding:9px;border:1px solid #c9ded8;background:#f6fbf9;border-radius:7px}
+    .inline-edit .form-grid{grid-template-columns:1fr 1fr}
+    .mobile-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+    .phone{width:250px;margin:0 auto;border:1px solid var(--line);border-radius:16px;background:#fff;overflow:hidden}
+    .phone-top{height:20px;background:#17211f}
+    .phone .mock-body{padding:9px}
+    .phone .summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .phone .summary div:nth-child(2n){border-right:0}.phone .summary div:nth-child(-n+2){border-bottom:1px solid var(--line-soft)}
+    .phone .config-row{grid-template-columns:1fr auto;gap:5px 8px;padding:7px}
+    .phone .value{grid-column:1}.phone .desc{grid-column:1/-1}.phone .edit{grid-column:2;grid-row:1/span 2}
+    .phone .form-grid,.phone .inline-edit .form-grid{grid-template-columns:1fr}
+    .pros{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+    .pros div{border:1px solid var(--line-soft);border-radius:7px;background:#fff;padding:8px}
+    .pros b{display:block;margin-bottom:4px;font-size:13px}.pros span{display:block;color:var(--muted);font-size:12px}
+    .decision{margin-top:14px;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);padding:14px}
+    .decision-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:10px}
+    .decision-grid div{border:1px solid var(--line);border-radius:8px;padding:10px;background:#fff}
+    .decision-grid b{display:block;margin-bottom:4px}.decision-grid span{color:var(--muted);font-size:13px}
+    @media(max-width:1040px){.top{display:block}.page{width:min(100% - 20px,1240px);padding-top:12px}.compare,.mobile-row,.decision-grid,.pros{grid-template-columns:1fr}.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.summary div:nth-child(2n){border-right:0}.summary div:nth-child(-n+2){border-bottom:1px solid var(--line-soft)}.config-row{grid-template-columns:1fr auto;gap:6px 8px}.value{grid-column:1}.desc{grid-column:1/-1}.edit{grid-column:2;grid-row:1/span 2}.form-grid,.inline-edit .form-grid{grid-template-columns:1fr}.phone{display:none}}
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="top">
+      <div>
+        <h1>“修改”后的两种编辑方式</h1>
+        <p class="sub">同一个“第 1 路基础信息”，分别展示独立编辑页和页面内展开编辑区。重点比较 PC 与手机操作体验。</p>
+      </div>
+      <span class="pill">建议：默认独立编辑页，简单字段可展开</span>
+    </header>
+
+    <section class="compare">
+      <article class="card rec">
+        <div class="card-head">
+          <h2>A. 独立编辑页</h2>
+          <p class="sub">点击“修改”后进入一个专门页面，只编辑当前对象。</p>
+        </div>
+        <div class="card-body">
+          <div class="mock">
+            <div class="nav"><span class="brand">喂食器</span><span>首页</span><span class="active">基础信息</span><span>记录</span></div>
+            <div class="mock-body">
+              <div class="pagehead"><div><b>第 1 路基础信息</b><p class="sub">查看当前配置</p></div><span class="badge ok">可用</span></div>
+              <div class="summary"><div><span>通道</span><b>第 1 路</b></div><div><span>余量</span><b>82%</b></div><div><span>今日</span><b>42g</b></div><div><span>状态</span><b>空闲</b></div></div>
+              <div class="group">
+                <div class="group-title">基础信息</div>
+                <div class="config-row"><div class="name"><b>每圈下料量</b><small>手工标定</small></div><div class="value">68.5 g/rev</div><div class="desc">克数目标会根据该值换算为圈数。</div><span class="edit">修改</span></div>
+              </div>
+              <div class="form-page">
+                <div class="form-head"><b>编辑第 1 路基础信息</b><p class="sub">独立页面：只处理这一组字段</p></div>
+                <div class="form-body">
+                  <div class="form-grid">
+                    <div class="field"><label>通道名称</label><input value="一号料道"></div>
+                    <div class="field"><label>通道状态</label><select><option>启用</option><option>停用</option></select></div>
+                    <div class="field"><label>每圈信号数</label><span class="suffix"><input value="2160"><em>pulse/rev</em></span></div>
+                    <div class="field"><label>每圈下料量</label><span class="suffix"><input value="68.5"><em>g/rev</em></span></div>
+                  </div>
+                  <div class="actions"><span class="btn">保存</span><span class="btn secondary">取消返回</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="pros">
+            <div><b>优点</b><span>手机端最稳；字段多也不乱；URL 可直接打开；后端实现清晰。</span></div>
+            <div><b>代价</b><span>多一次页面跳转；简单值修改略显重。</span></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="card-head">
+          <h2>B. 当前页面展开编辑区</h2>
+          <p class="sub">点击某一行后，在列表下面展开小表单，不离开当前页面。</p>
+        </div>
+        <div class="card-body">
+          <div class="mock">
+            <div class="nav"><span class="brand">喂食器</span><span>首页</span><span class="active">基础信息</span><span>记录</span></div>
+            <div class="mock-body">
+              <div class="pagehead"><div><b>第 1 路基础信息</b><p class="sub">查看当前配置</p></div><span class="badge ok">可用</span></div>
+              <div class="summary"><div><span>通道</span><b>第 1 路</b></div><div><span>余量</span><b>82%</b></div><div><span>今日</span><b>42g</b></div><div><span>状态</span><b>空闲</b></div></div>
+              <div class="group">
+                <div class="group-title">基础信息</div>
+                <div class="config-row"><div class="name"><b>每圈下料量</b><small>手工标定</small></div><div class="value">68.5 g/rev</div><div class="desc">克数目标会根据该值换算为圈数。</div><span class="edit">修改</span></div>
+                <div class="inline-edit">
+                  <b>修改每圈下料量</b>
+                  <p class="sub" style="margin-bottom:7px">只修改这一项，保存后仍停留在当前页面。</p>
+                  <div class="form-grid">
+                    <div class="field"><label>新值</label><span class="suffix"><input value="68.5"><em>g/rev</em></span></div>
+                    <div class="field"><label>说明</label><input value="手工标定"></div>
+                  </div>
+                  <div class="actions"><span class="btn">保存</span><span class="btn secondary">收起</span></div>
+                </div>
+                <div class="config-row"><div class="name"><b>料桶容量</b><small>满桶估算</small></div><div class="value">5000 g</div><div class="desc">用于计算余量百分比和预计天数。</div><span class="edit">修改</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="pros">
+            <div><b>优点</b><span>修改单个简单值很快；上下文不中断；少一个页面。</span></div>
+            <div><b>代价</b><span>字段多时当前页会变长；展开多个区域容易乱；手机上容易挤。</span></div>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section class="mobile-row">
+      <article class="card rec">
+        <div class="card-head"><h2>手机：独立编辑页</h2><p class="sub">表单独占屏幕，输入更舒服。</p></div>
+        <div class="card-body">
+          <div class="phone">
+            <div class="phone-top"></div>
+            <div class="mock-body">
+              <div class="pagehead"><div><b>编辑第 1 路</b><p class="sub">基础信息</p></div></div>
+              <div class="form-page">
+                <div class="form-body">
+                  <div class="form-grid">
+                    <div class="field"><label>通道名称</label><input value="一号料道"></div>
+                    <div class="field"><label>每圈信号数</label><span class="suffix"><input value="2160"><em>pulse</em></span></div>
+                    <div class="field"><label>每圈下料量</label><span class="suffix"><input value="68.5"><em>g</em></span></div>
+                  </div>
+                  <div class="actions"><span class="btn">保存</span><span class="btn secondary">取消</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+      <article class="card">
+        <div class="card-head"><h2>手机：页面内展开</h2><p class="sub">简单值还可以，复杂字段会压缩当前页面。</p></div>
+        <div class="card-body">
+          <div class="phone">
+            <div class="phone-top"></div>
+            <div class="mock-body">
+              <div class="pagehead"><div><b>第 1 路</b><p class="sub">基础信息</p></div></div>
+              <div class="group">
+                <div class="config-row"><div class="name"><b>每圈下料量</b><small>手工标定</small></div><div class="value">68.5 g/rev</div><div class="desc">克数目标会根据该值换算。</div><span class="edit">修改</span></div>
+                <div class="inline-edit">
+                  <b>修改每圈下料量</b>
+                  <div class="form-grid" style="margin-top:7px"><div class="field"><label>新值</label><span class="suffix"><input value="68.5"><em>g</em></span></div></div>
+                  <div class="actions"><span class="btn">保存</span><span class="btn secondary">收起</span></div>
+                </div>
+                <div class="config-row"><div class="name"><b>料桶容量</b><small>满桶估算</small></div><div class="value">5000 g</div><div class="desc">用于估算余量。</div><span class="edit">修改</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section class="decision">
+      <h2>专业建议</h2>
+      <p class="sub">两种都保留，但不要让业务项目每次临时决定。定义默认规则即可。</p>
+      <div class="decision-grid">
+        <div><b>默认独立编辑页</b><span>计划、通道、滤芯、饲料桶、预设、一路信息，这些业务对象字段多，默认进入独立编辑页。</span></div>
+        <div><b>允许行内展开</b><span>只有单个简单字段，例如名称、启用状态、一个阈值，才使用页面内展开。</span></div>
+        <div><b>避免弹层优先</b><span>弹层在手机和 ESP32 简单页面里更容易出边界问题，除非后续确实需要。</span></div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

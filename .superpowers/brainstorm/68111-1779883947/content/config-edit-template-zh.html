@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>配置编辑模板</title>
+  <style>
+    :root{color-scheme:light;--bg:#f5f6f7;--surface:#fff;--soft:#f8fafb;--ink:#17202a;--muted:#667085;--line:#d7dde4;--line-soft:#edf1f4;--primary:#14685d;--primary-soft:#e6f2ef;--ok:#087443;--ok-soft:#e7f4ee;--warn:#9a5a0a;--warn-soft:#fff6e8;--danger:#ad3027;--danger-soft:#fff1ef;--blue:#245f9e;--blue-soft:#e8f0f8;--shadow:0 1px 2px rgba(16,24,40,.04);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.42}.page{width:min(1180px,calc(100% - 28px));margin:0 auto;padding:12px 0 42px}
+    h1,h2,h3,p{margin-top:0}h1{margin:0;font-size:23px;line-height:1.24}h2{margin:0 0 8px;font-size:17px}h3{margin:0 0 6px;font-size:15px}p{margin-bottom:9px}.muted{color:var(--muted)}
+    .devicebar{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;margin-bottom:8px}.identity{display:flex;align-items:center;gap:8px;min-width:0}.dot{width:10px;height:10px;border-radius:999px;background:var(--ok);box-shadow:0 0 0 3px var(--ok-soft);flex:0 0 auto}.name{font-weight:850}.meta{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .nav{display:flex;align-items:center;gap:4px;overflow:auto;white-space:nowrap;border:1px solid var(--line);background:#fff;border-radius:8px;padding:3px;margin-bottom:12px}.nav a{display:inline-flex;align-items:center;min-height:29px;padding:0 10px;border-radius:6px;color:#344054;text-decoration:none;font-weight:750;font-size:13px}.nav a.active{background:var(--primary-soft);color:var(--primary)}
+    .titlebar{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:end;margin:0 0 12px}.titlebar p{margin:4px 0 0;color:var(--muted)}
+    .tag{display:inline-flex;align-items:center;min-height:21px;padding:2px 7px;border-radius:999px;background:#eef2f4;color:#475467;font-size:11px;font-weight:750;white-space:nowrap}.tag.ok{background:var(--ok-soft);color:var(--ok)}.tag.warn{background:var(--warn-soft);color:var(--warn)}.tag.danger{background:var(--danger-soft);color:var(--danger)}.tag.blue{background:var(--blue-soft);color:var(--blue)}
+    .section{background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);padding:12px;margin-bottom:12px}.section.tight{padding:0;overflow:hidden}.section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-bottom:1px solid var(--line-soft)}.section-head h2{margin:0}.section-body{padding:12px}
+    .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}.grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+    .list{border:1px solid var(--line);border-radius:8px;background:#fff;overflow:hidden}.item{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:10px;border-bottom:1px solid var(--line-soft)}.item:last-child{border-bottom:0}.item b{font-size:13px}.item small{display:block;color:var(--muted);font-size:12px;margin-top:2px}.value{font-weight:800;color:#344054;white-space:nowrap}
+    .btn{display:inline-flex;align-items:center;justify-content:center;min-height:32px;padding:0 10px;border:1px solid #cfd6df;border-radius:6px;background:#fff;color:#344054;font-weight:750;font-size:13px;white-space:nowrap}.btn.primary{border-color:var(--primary);background:var(--primary);color:#fff}.btn.danger{border-color:var(--danger);background:var(--danger);color:#fff}
+    .inline-edit{border:1px solid #bfe0d4;background:#f7fcfa;border-radius:8px;padding:10px;margin:8px 0}.inline-field{display:grid;gap:4px}.inline-control{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}.field{display:grid;gap:4px}.field label,.inline-field label{font-size:12px;color:#475467;font-weight:750}.field .help,.inline-field .help{color:var(--muted);font-size:12px}.input,.select{width:100%;min-height:32px;border:1px solid #cfd6df;border-radius:6px;background:#fff;padding:6px 8px;font:inherit;color:var(--ink)}
+    .form{display:grid;gap:10px}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.note{border:1px solid #bfe0d4;background:#f1faf7;color:#185b4e;border-radius:8px;padding:9px 10px}.note.warn{border-color:#efcf96;background:#fff8ea;color:#7a4608}.actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+    .tile{border:1px solid var(--line);border-radius:8px;background:#fff;padding:10px}.tile strong{display:block;margin-bottom:4px}.tile span{display:block;color:var(--muted);font-size:13px}
+    .phone{width:320px;max-width:100%;margin:0 auto;border:1px solid var(--line);border-radius:18px;background:#fff;padding:10px}.phone-screen{border:1px solid var(--line-soft);border-radius:12px;background:#f8fafb;padding:9px;min-height:430px}.phone .meta,.phone .titlebar p{display:none}.phone .devicebar{display:flex;justify-content:space-between;margin-bottom:6px}.phone .nav{margin-bottom:8px}.phone .titlebar{display:block;margin-bottom:8px}.phone h1{font-size:20px}.phone .item{grid-template-columns:1fr}.phone .value{white-space:normal}.phone .inline-control,.phone .form-grid{grid-template-columns:1fr}.phone .actions{display:grid;grid-template-columns:1fr}.phone .btn{width:100%}
+    .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fff}table{width:100%;border-collapse:collapse;min-width:760px}th,td{padding:8px 10px;border-bottom:1px solid var(--line-soft);text-align:left;vertical-align:top}th{background:#f8fafb;color:#475467;font-size:12px}tr:last-child td{border-bottom:0}
+    @media(max-width:980px){.page{width:min(100% - 20px,1180px);padding-top:10px}.devicebar,.titlebar,.grid-2,.grid-3,.item,.inline-control,.form-grid{grid-template-columns:1fr}.actions{display:grid;grid-template-columns:1fr}.btn{width:100%}}
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="devicebar"><div class="identity"><span class="dot"></span><span class="name">设备名称</span><span class="meta">在线 / 本地控制台</span></div><span class="tag ok">在线</span></div>
+    <nav class="nav"><a>总览</a><a class="active">配置</a><a>记录</a><a>系统</a></nav>
+    <div class="titlebar"><div><h1>配置编辑模板</h1><p>用于业务配置、通道配置、计划配置和低频参数编辑。</p></div><span class="tag blue">能力模板</span></div>
+
+    <section class="section tight">
+      <div class="section-head"><h2>一、紧凑配置列表</h2><span class="tag ok">默认入口</span></div>
+      <div class="section-body">
+        <div class="list">
+          <div class="item"><div><b>第 1 路名称</b><small>用于记录和页面展示，不影响实际控制。</small></div><span class="value">花坛</span><button class="btn">展开修改</button></div>
+          <div class="inline-edit">
+            <div class="inline-field">
+              <label>名称</label>
+              <div class="inline-control">
+                <input class="input" value="花坛">
+                <div class="actions"><button class="btn">取消</button><button class="btn primary">保存</button></div>
+              </div>
+              <span class="help">最多 12 个中文字符；只影响页面和记录中的显示名称。</span>
+            </div>
+          </div>
+          <div class="item"><div><b>默认浇水计划</b><small>包含时间、参与通道、执行天数和目标量。</small></div><span class="value">3 条</span><button class="btn primary">进入编辑页</button></div>
+          <div class="item"><div><b>无流量保护</b><small>开阀后长时间无脉冲时自动停止并记录异常。</small></div><span class="value">10 秒</span><button class="btn">展开修改</button></div>
+          <div class="item"><div><b>恢复出厂</b><small>高风险操作，必须进入确认保护页。</small></div><span class="value">保留记录</span><button class="btn danger">确认页</button></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid-2">
+      <article class="section tight">
+        <div class="section-head"><h2>二、独立编辑页</h2><span class="tag blue">多字段对象</span></div>
+        <div class="section-body">
+          <div class="form">
+            <div class="note">计划编辑属于多字段配置，默认进入独立编辑页。保存后 POST -> 303 -> 返回计划列表。</div>
+            <div class="form-grid">
+              <div class="field"><label>计划名称</label><input class="input" value="傍晚浇水"></div>
+              <div class="field"><label>执行时间</label><input class="input" value="18:30"></div>
+              <div class="field"><label>参与通道</label><select class="select"><option>第 1 路 + 第 2 路</option></select></div>
+              <div class="field"><label>执行时长（秒）</label><input class="input" value="120"></div>
+            </div>
+            <div class="note warn">保存前应核对：会影响后续自动执行；如果设备正在运行，应拒绝保存或提示稍后再试。</div>
+            <div class="actions"><button class="btn">取消</button><button class="btn primary">保存并返回</button></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="section tight">
+        <div class="section-head"><h2>三、手机效果</h2><span class="tag ok">单列</span></div>
+        <div class="section-body">
+          <div class="phone">
+            <div class="phone-screen">
+              <div class="devicebar"><div class="identity"><span class="dot"></span><span class="name">设备</span></div><span class="tag ok">在线</span></div>
+              <nav class="nav"><a>总览</a><a class="active">配置</a><a>记录</a></nav>
+              <div class="titlebar"><h1>配置</h1><p>业务配置。</p></div>
+              <div class="list">
+                <div class="item"><div><b>第 1 路名称</b><small>用于记录和页面展示。</small></div><span class="value">花坛</span><button class="btn">修改</button></div>
+                <div class="item"><div><b>默认浇水计划</b><small>3 条计划，多字段编辑。</small></div><span class="value">3 条</span><button class="btn primary">编辑</button></div>
+                <div class="item"><div><b>无流量保护</b><small>异常保护阈值。</small></div><span class="value">10 秒</span><button class="btn">修改</button></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section class="section">
+      <h2>四、配置模板规则</h2>
+      <div class="grid-3">
+        <div class="tile"><strong>列表先行</strong><span>配置页默认先展示“当前值 + 说明 + 修改入口”，不要一上来就是大表单。</span></div>
+        <div class="tile"><strong>简单字段行内展开</strong><span>名称、阈值、开关、单个枚举适合行内编辑，保存后回到展示态。</span></div>
+        <div class="tile"><strong>多字段对象独立编辑</strong><span>计划、通道、滤芯、复杂策略进入独立编辑页，避免行内区域过长。</span></div>
+        <div class="tile"><strong>每项必须有一句说明</strong><span>说明字段影响范围，不写教程，不写长文。</span></div>
+        <div class="tile"><strong>保存统一 PRG</strong><span>成功和失败都 303 返回展示页，通过提示展示结果，刷新不重复提交。</span></div>
+        <div class="tile"><strong>高风险交给确认保护</strong><span>恢复出厂、重置计数、关键校准，不在普通配置表单里直接提交。</span></div>
+      </div>
+    </section>
+
+    <section class="section tight">
+      <div class="section-head"><h2>五、决策表</h2><span class="tag blue">如何选形态</span></div>
+      <div class="section-body">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>字段/对象类型</th><th>推荐形态</th><th>原因</th></tr></thead>
+            <tbody>
+              <tr><td>单个短文本、数字、开关</td><td>行内展开编辑</td><td>修改成本低，不需要离开列表。</td></tr>
+              <tr><td>多个字段组成一个对象</td><td>独立编辑页</td><td>字段之间有关联，需要更清楚的表单和保存前核对。</td></tr>
+              <tr><td>很低频、高风险参数</td><td>独立编辑页 + 确认保护</td><td>防误操作，便于展示影响范围。</td></tr>
+              <tr><td>系统级基础参数</td><td>优先 App Config</td><td>避免业务页重复实现内置配置能力。</td></tr>
+              <tr><td>业务运行状态</td><td>不放配置表单</td><td>运行状态应在状态页或操作页，不和长期配置混在一起。</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

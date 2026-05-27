@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>顶部壳层方案比较</title>
+  <style>
+    :root{color-scheme:light;--bg:#f5f6f7;--surface:#fff;--soft:#f8fafb;--ink:#17202a;--muted:#667085;--line:#d7dde4;--line-soft:#edf1f4;--primary:#14685d;--primary-soft:#e6f2ef;--ok:#087443;--ok-soft:#e7f4ee;--warn:#9a5a0a;--warn-soft:#fff6e8;--shadow:0 1px 2px rgba(16,24,40,.04);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.42}
+    .page{width:min(1180px,calc(100% - 28px));margin:0 auto;padding:14px 0 42px}
+    h1,h2,h3,p{margin-top:0}h1{margin:0;font-size:23px;line-height:1.24}h2{margin:0 0 8px;font-size:17px}h3{margin:0 0 6px;font-size:15px}p{margin-bottom:9px}.muted{color:var(--muted)}
+    .top{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin-bottom:12px}.top p{margin:4px 0 0;color:var(--muted)}
+    .pill,.tag{display:inline-flex;align-items:center;min-height:21px;padding:2px 7px;border-radius:999px;background:#eef2f4;color:#475467;font-size:11px;font-weight:750;white-space:nowrap}.pill{min-height:27px;padding:3px 10px;border:1px solid var(--line);background:#fff;font-size:13px}.tag.ok{background:var(--ok-soft);color:var(--ok)}.tag.warn{background:var(--warn-soft);color:var(--warn)}.tag.primary{background:var(--primary-soft);color:var(--primary)}
+    .section{background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);padding:12px;margin-bottom:12px}.grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .mock{border:1px solid var(--line);border-radius:8px;background:#fff;overflow:hidden}.mock-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 10px;border-bottom:1px solid var(--line-soft)}.mock-body{padding:10px;background:#f8fafb}
+    .devicebar{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;margin-bottom:7px}.identity{display:flex;align-items:center;gap:8px;min-width:0}.dot{width:10px;height:10px;border-radius:999px;background:var(--ok);box-shadow:0 0 0 3px var(--ok-soft);flex:0 0 auto}.name{font-weight:850;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.meta{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .nav{display:flex;align-items:center;gap:4px;overflow:auto;white-space:nowrap;border:1px solid var(--line);background:#fff;border-radius:8px;padding:3px;margin-bottom:9px}.nav a{display:inline-flex;align-items:center;min-height:29px;padding:0 10px;border-radius:6px;color:#344054;text-decoration:none;font-weight:750;font-size:13px}.nav a.active{background:var(--primary-soft);color:var(--primary)}
+    .titlebar{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end;margin-bottom:9px}.titlebar p{margin:4px 0 0;color:var(--muted)}
+    .combined{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;border:1px solid var(--line);background:#fff;border-radius:8px;padding:6px 8px;margin-bottom:9px}.combined .nav{border:0;margin:0;padding:0}
+    .simple-head{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;margin-bottom:9px}
+    .content{border:1px solid var(--line);border-radius:8px;background:#fff;padding:10px}.metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.metric{border:1px solid var(--line);border-radius:7px;background:#fff;padding:9px}.metric small{display:block;color:var(--muted);font-size:12px}.metric b{display:block;font-size:17px;margin-top:2px}
+    .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fff}table{width:100%;border-collapse:collapse;min-width:760px}th,td{padding:8px 10px;border-bottom:1px solid var(--line-soft);text-align:left;vertical-align:top}th{background:#f8fafb;color:#475467;font-size:12px}tr:last-child td{border-bottom:0}
+    .note{border:1px solid #bfe0d4;background:#f1faf7;color:#185b4e;border-radius:8px;padding:10px 11px}
+    @media(max-width:980px){.page{width:min(100% - 20px,1180px);padding-top:10px}.top,.titlebar,.devicebar,.combined,.simple-head{display:block}.grid-3,.grid-2,.metrics{grid-template-columns:1fr}.nav{margin-top:7px}.pill{margin-top:8px}}
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="top">
+      <div>
+        <h1>顶部壳层方案比较</h1>
+        <p>不是所有可行方案都值得采用。这里比较三种真实可用的顶部形态，并给出推荐。</p>
+      </div>
+      <span class="pill">推荐：三段式紧凑顶部</span>
+    </header>
+
+    <section class="grid-3">
+      <article class="mock">
+        <div class="mock-head"><b>A. 三段式紧凑顶部</b><span class="tag ok">推荐</span></div>
+        <div class="mock-body">
+          <div class="devicebar"><div class="identity"><span class="dot"></span><span class="name">设备名称</span><span class="meta">在线 / 本地控制台</span></div><span class="tag ok">在线</span></div>
+          <nav class="nav"><a class="active">总览</a><a>配置</a><a>记录</a><a>系统</a></nav>
+          <div class="titlebar"><div><h1>总览</h1><p>一句短说明。</p></div></div>
+          <div class="content"><div class="metrics"><div class="metric"><small>状态</small><b>空闲</b></div><div class="metric"><small>下一步</small><b>18:30</b></div><div class="metric"><small>异常</small><b>无</b></div></div></div>
+        </div>
+      </article>
+      <article class="mock">
+        <div class="mock-head"><b>B. 身份栏合并导航</b><span class="tag warn">可选</span></div>
+        <div class="mock-body">
+          <div class="combined">
+            <div class="identity"><span class="dot"></span><span class="name">设备名称</span></div>
+            <nav class="nav"><a class="active">总览</a><a>配置</a><a>记录</a></nav>
+          </div>
+          <div class="titlebar"><div><h1>总览</h1><p>一句短说明。</p></div><span class="tag ok">在线</span></div>
+          <div class="content"><div class="metrics"><div class="metric"><small>状态</small><b>空闲</b></div><div class="metric"><small>下一步</small><b>18:30</b></div><div class="metric"><small>异常</small><b>无</b></div></div></div>
+        </div>
+      </article>
+      <article class="mock">
+        <div class="mock-head"><b>C. 极简无常驻导航</b><span class="tag warn">不优先</span></div>
+        <div class="mock-body">
+          <div class="simple-head"><div class="identity"><span class="dot"></span><span class="name">设备名称</span></div><span class="tag ok">在线</span></div>
+          <div class="titlebar"><div><h1>总览</h1><p>导航折叠到页面底部或菜单。</p></div></div>
+          <div class="content"><div class="metrics"><div class="metric"><small>状态</small><b>空闲</b></div><div class="metric"><small>下一步</small><b>18:30</b></div><div class="metric"><small>异常</small><b>无</b></div></div></div>
+        </div>
+      </article>
+    </section>
+
+    <section class="section">
+      <h2>专业评估</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>方案</th><th>优点</th><th>问题</th><th>结论</th></tr></thead>
+          <tbody>
+            <tr><td>A 三段式紧凑顶部</td><td>信息层级最清楚；设备身份、导航、页面标题各司其职；手机端可自然降级。</td><td>比极简方案多一行导航，但这行信息有价值。</td><td><span class="tag ok">推荐作为基线</span></td></tr>
+            <tr><td>B 身份栏合并导航</td><td>PC 上更省一点高度。</td><td>设备名较长或导航项变多时会挤压；手机端容易换行混乱。</td><td><span class="tag warn">只适合页面很少的设备</span></td></tr>
+            <tr><td>C 极简无常驻导航</td><td>顶部最短，单页设备很清爽。</td><td>多页面设备切换成本高，记录/配置/系统入口不明显。</td><td><span class="tag warn">不适合你的基础库默认模板</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>我的推荐</h2>
+      <div class="note">
+        默认采用 A：三段式紧凑顶部。它不是最省高度，但信息结构最稳，适合基础库覆盖多种业务。B 可以作为“页面很少”的裁剪变体，C 不作为默认方案。
+      </div>
+    </section>
+  </main>
+</body>
+</html>

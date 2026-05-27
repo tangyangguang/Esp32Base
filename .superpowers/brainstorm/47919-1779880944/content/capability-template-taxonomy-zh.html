@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>按页面能力分类的模板体系</title>
+  <style>
+    :root{
+      color-scheme:light;
+      --bg:#f5f6f7;
+      --surface:#fff;
+      --soft:#f8fafb;
+      --ink:#17202a;
+      --muted:#667085;
+      --line:#d7dde4;
+      --line-soft:#edf1f4;
+      --primary:#14685d;
+      --primary-soft:#e6f2ef;
+      --blue:#245f9e;
+      --blue-soft:#e8f0f8;
+      --warn:#9a5a0a;
+      --warn-soft:#fff6e8;
+      --danger:#ad3027;
+      --danger-soft:#fff1ef;
+      --ok:#087443;
+      --ok-soft:#e7f4ee;
+      --shadow:0 1px 2px rgba(16,24,40,.04);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.43}
+    .page{width:min(1220px,calc(100% - 28px));margin:0 auto;padding:18px 0 46px}
+    h1,h2,h3,p{margin-top:0}
+    h1{margin:0 0 6px;font-size:25px;line-height:1.22}
+    h2{margin:0 0 8px;font-size:17px}
+    h3{margin:0 0 6px;font-size:15px}
+    p{margin-bottom:9px}
+    .muted{color:var(--muted)}
+    .top{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:15px}
+    .top p{margin:0;color:var(--muted)}
+    .pill{display:inline-flex;align-items:center;min-height:27px;padding:3px 10px;border:1px solid var(--line);border-radius:999px;background:#fff;color:#475467;font-size:13px;font-weight:700;white-space:nowrap}
+    .section{background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);padding:14px;margin-bottom:14px}
+    .section.compact{padding:0;overflow:hidden}
+    .section-head{padding:12px 14px;border-bottom:1px solid var(--line-soft);background:#fff}
+    .section-body{padding:12px 14px 14px}
+    .grid-4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+    .grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+    .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .tile{border:1px solid var(--line);border-radius:8px;background:#fff;padding:11px;min-width:0}
+    .tile strong{display:block;margin-bottom:5px}
+    .tile span{display:block;color:var(--muted);font-size:13px}
+    .tile.core{border-color:#bfe0d4;background:#f7fcfa}
+    .tile.optional{background:#fbfcfd}
+    .tag{display:inline-flex;align-items:center;min-height:21px;padding:2px 7px;border-radius:999px;background:#eef2f4;color:#475467;font-size:11px;font-weight:750;white-space:nowrap}
+    .tag.ok{background:var(--ok-soft);color:var(--ok)}
+    .tag.warn{background:var(--warn-soft);color:var(--warn)}
+    .tag.danger{background:var(--danger-soft);color:var(--danger)}
+    .tag.blue{background:var(--blue-soft);color:var(--blue)}
+    .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fff}
+    table{width:100%;border-collapse:collapse;min-width:920px}
+    th,td{padding:8px 10px;border-bottom:1px solid var(--line-soft);text-align:left;vertical-align:top}
+    th{background:#f8fafb;color:#475467;font-size:12px}
+    tr:last-child td{border-bottom:0}
+    td small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+    .mock{border:1px solid var(--line);border-radius:8px;background:#fff;overflow:hidden;min-width:0}
+    .mock-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 11px;border-bottom:1px solid var(--line-soft);background:#fff}
+    .mock-title{font-weight:800;font-size:13px}
+    .mock-body{padding:12px;background:#f8fafb}
+    .stack{display:grid;gap:8px}
+    .bar{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;border:1px solid var(--line);border-radius:8px;background:#fff;padding:9px 10px}
+    .bar b{font-size:13px}.bar small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+    .metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+    .metric{border:1px solid var(--line);border-radius:7px;background:#fff;padding:9px}
+    .metric small{display:block;color:var(--muted);font-size:12px}.metric b{display:block;font-size:18px;line-height:1.2;margin-top:2px}
+    .rows{border:1px solid var(--line);border-radius:8px;background:#fff;overflow:hidden}
+    .row{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:9px 10px;border-bottom:1px solid var(--line-soft)}
+    .row:last-child{border-bottom:0}
+    .row b{font-size:13px}.row small{display:block;color:var(--muted);font-size:12px}
+    .btn{display:inline-flex;align-items:center;justify-content:center;min-height:32px;padding:0 10px;border:1px solid #cfd6df;border-radius:6px;background:#fff;color:#344054;font-weight:750;font-size:13px;white-space:nowrap}
+    .btn.primary{border-color:var(--primary);background:var(--primary);color:#fff}
+    .note{border:1px solid #bfe0d4;background:#f1faf7;color:#185b4e;border-radius:8px;padding:10px 11px;margin-bottom:10px}
+    @media(max-width:980px){
+      .top{display:block}
+      .page{width:min(100% - 20px,1220px);padding-top:12px}
+      .grid-4,.grid-3,.grid-2,.metrics{grid-template-columns:1fr}
+      .bar{grid-template-columns:1fr}
+      .pill{margin-top:10px}
+      .btn{width:100%}
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="top">
+      <div>
+        <h1>按页面能力分类的模板体系</h1>
+        <p>模板不按业务功能分类，而按页面能力和交互特征分类。业务页面只是这些能力模板的组合结果。</p>
+      </div>
+      <span class="pill">分类维度：能力，不是业务</span>
+    </header>
+
+    <section class="section">
+      <h2>一、修正后的分类原则</h2>
+      <div class="grid-4">
+        <div class="tile core"><strong>页面能力优先</strong><span>先定义状态、列表、配置、操作、确认、流程、反馈这些能力。</span></div>
+        <div class="tile core"><strong>业务只做验证</strong><span>灌溉、风扇、接水、农场项目只用来检验模板是否覆盖高频场景。</span></div>
+        <div class="tile core"><strong>组合形成业务页</strong><span>设备首页、记录页、配置页不是单一模板，而是能力模板的组合。</span></div>
+        <div class="tile optional"><strong>避免过度绑定</strong><span>未定稿业务页面不进入模板清单，只抽象其通用交互特征。</span></div>
+      </div>
+    </section>
+
+    <section class="section compact">
+      <div class="section-head">
+        <h2>二、能力模板目录</h2>
+        <p class="muted">公共样式库应优先覆盖这些高频页面能力。每个能力模板可以在不同业务里复用。</p>
+      </div>
+      <div class="section-body">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>能力模板</th><th>解决的问题</th><th>典型结构</th><th>常见变体</th><th>优先级</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>状态显示类</td><td>让用户快速知道设备当前是否正常、正在做什么、下一步是什么。</td><td>状态条、关键指标、状态说明、主操作入口、异常摘要。</td><td>设备首页、通道状态、运行中状态、待机状态。</td><td><span class="tag ok">核心</span></td></tr>
+              <tr><td>列表展示类</td><td>展示多条业务对象或历史记录，并支持快速查找。</td><td>表头、筛选、排序/分组、分页、空状态、导出入口。</td><td>记录列表、计划列表、设备事件、配置对象列表。</td><td><span class="tag ok">核心</span></td></tr>
+              <tr><td>配置表单类</td><td>编辑参数、计划、通道、阈值等业务配置。</td><td>单行配置、分组表单、独立编辑页、行内展开、保存提示。</td><td>低频参数、多字段对象、开关/数值/时间/枚举。</td><td><span class="tag ok">核心</span></td></tr>
+              <tr><td>操作命令类</td><td>发起一次动作，而不是长期保存配置。</td><td>对象选择、动作参数、执行按钮、运行状态、停止/取消。</td><td>启动、停止、跳过一次、立即执行、测试动作。</td><td><span class="tag ok">核心</span></td></tr>
+              <tr><td>确认保护类</td><td>防止误触不可逆或高风险动作。</td><td>影响范围、当前状态、确认文本/token、POST 后跳转。</td><td>恢复出厂、重置计数、清异常、保存高风险校准。</td><td><span class="tag blue">核心</span></td></tr>
+              <tr><td>结果反馈类</td><td>提交或执行后给出明确结果，并避免重复提交。</td><td>成功/失败提示、返回入口、下一步动作、错误原因。</td><td>保存成功、参数无效、运行中拒绝、权限不足。</td><td><span class="tag ok">核心</span></td></tr>
+              <tr><td>空状态类</td><td>没有数据或条件不满足时，不让页面显得坏掉。</td><td>当前缺什么、为什么为空、主要下一步入口。</td><td>无记录、无计划、未配置、时间未同步、未校准。</td><td><span class="tag ok">核心</span></td></tr>
+              <tr><td>流程向导类</td><td>把多个步骤串起来，避免用户一次面对复杂表单。</td><td>步骤条、条件检查、输入、核对、保存、结果。</td><td>校准、首次设置、批量配置、维护流程。</td><td><span class="tag blue">按需</span></td></tr>
+              <tr><td>异常处理类</td><td>设备异常时展示原因、影响和可执行处理动作。</td><td>异常等级、原因、受影响能力、处理建议、解除入口。</td><td>传感器异常、执行器异常、时间无效、存储异常。</td><td><span class="tag blue">按需</span></td></tr>
+              <tr><td>诊断数据类</td><td>给维护者查看只读状态、原始数据和健康信息。</td><td>只读表格、状态摘要、最近错误、复制/导出。</td><td>传感器读数、存储状态、API JSON、日志片段。</td><td><span class="tag warn">可选</span></td></tr>
+              <tr><td>长任务进度类</td><td>处理导出、扫描、修复等耗时任务，避免页面假死。</td><td>任务状态、进度、结果、失败原因、禁止重复启动。</td><td>导出、索引修复、文件检查、OTA 进度。</td><td><span class="tag warn">可选</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid-2">
+      <article class="section">
+        <h2>三、常见业务页如何由能力组成</h2>
+        <div class="mock">
+          <div class="mock-head"><span class="mock-title">设备首页</span><span class="tag ok">组合页</span></div>
+          <div class="mock-body stack">
+            <div class="bar"><div><b>状态显示类</b><small>当前状态、下一计划、异常摘要。</small></div><span class="tag ok">必需</span></div>
+            <div class="metrics">
+              <div class="metric"><small>状态</small><b>空闲</b></div>
+              <div class="metric"><small>下一动作</small><b>18:30</b></div>
+              <div class="metric"><small>异常</small><b>无</b></div>
+            </div>
+            <div class="rows">
+              <div class="row"><div><b>操作命令类</b><small>提供有限、明确的立即动作入口。</small></div><button class="btn">操作</button></div>
+              <div class="row"><div><b>空状态/异常处理类</b><small>当缺少计划、时间未同步或异常时替换普通内容。</small></div><button class="btn">状态</button></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="section">
+        <h2>四、记录页和配置页如何组成</h2>
+        <div class="mock">
+          <div class="mock-head"><span class="mock-title">设备记录页 / 设备配置页</span><span class="tag blue">组合页</span></div>
+          <div class="mock-body stack">
+            <div class="bar"><div><b>设备记录页</b><small>列表展示类 + 空状态类 + 结果反馈类。需要时加入导出或诊断入口。</small></div><span class="tag ok">核心</span></div>
+            <div class="bar"><div><b>设备配置页</b><small>配置表单类 + 结果反馈类 + 确认保护类。复杂配置可拆成独立编辑页。</small></div><span class="tag ok">核心</span></div>
+            <div class="bar"><div><b>流程型页面</b><small>流程向导类 + 确认保护类 + 结果反馈类，例如校准或首次设置。</small></div><span class="tag blue">按需</span></div>
+            <div class="bar"><div><b>维护型页面</b><small>诊断数据类 + 长任务进度类，只面向调试或维护。</small></div><span class="tag warn">可选</span></div>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section class="section">
+      <h2>五、第一阶段建议定稿的模板</h2>
+      <div class="grid-3">
+        <div class="tile core"><strong>状态显示类</strong><span>作为设备首页、通道状态、运行状态的基础。</span></div>
+        <div class="tile core"><strong>列表展示类</strong><span>包含我们已经细化过的筛选、表头、分页、跳页、空状态。</span></div>
+        <div class="tile core"><strong>配置表单类</strong><span>包含单行配置、分组表单、行内展开、独立编辑页和 PRG。</span></div>
+        <div class="tile core"><strong>操作命令类</strong><span>用于一次性动作：开始、停止、跳过、测试、立即执行。</span></div>
+        <div class="tile core"><strong>确认保护类</strong><span>高风险动作独立确认页，配合一次性 token 和 POST 后跳转。</span></div>
+        <div class="tile core"><strong>结果反馈/空状态类</strong><span>补齐没有数据、提交成功、提交失败、条件不满足这些常见状态。</span></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>六、第二阶段再按需展开</h2>
+      <div class="grid-3">
+        <div class="tile"><strong>流程向导类</strong><span>校准只是它的一个典型用途；也可用于首次设置和复杂维护流程。</span></div>
+        <div class="tile"><strong>异常处理类</strong><span>不是某个业务页面，而是一种“异常状态下的处理模板”。</span></div>
+        <div class="tile optional"><strong>诊断数据/长任务类</strong><span>偏维护和开发，先定义边界，不急于做成第一批核心模板。</span></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>七、这版的关键结论</h2>
+      <div class="note">
+        “设备首页、设备记录页、设备配置页”应该作为常见组合页来设计；真正沉淀到公共库里的，是状态显示、列表展示、配置表单、操作命令、确认保护、结果反馈、空状态这些能力模板。
+      </div>
+    </section>
+  </main>
+</body>
+</html>

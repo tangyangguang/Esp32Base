@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>设备工作台密度方案</title>
+  <style>
+    :root{
+      color-scheme:light;
+      --bg:#f6f7f8;
+      --surface:#fff;
+      --soft:#f8fafb;
+      --text:#17202a;
+      --muted:#667085;
+      --line:#d8dee6;
+      --line-soft:#edf0f3;
+      --primary:#14685d;
+      --primary-soft:#e7f2ef;
+      --danger:#b42318;
+      --warn:#a15c07;
+      --ok:#087443;
+      --shadow:0 1px 2px rgba(16,24,40,.04);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-size:14px;line-height:1.45}
+    .page{width:min(1220px,calc(100% - 28px));margin:0 auto;padding:18px 0 42px}
+    h1,h2,h3,p{margin-top:0}
+    h1{margin:0 0 5px;font-size:25px;line-height:1.22}
+    h2{font-size:17px;margin-bottom:8px}
+    h3{font-size:15px;margin-bottom:6px}
+    .sub{color:var(--muted);margin:0}
+    .top{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:16px}
+    .rule{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:14px}
+    .rule div{background:#fff;border:1px solid var(--line);border-radius:8px;padding:10px 12px;box-shadow:var(--shadow)}
+    .rule b{display:block;margin-bottom:3px}
+    .rule span{color:var(--muted);font-size:13px}
+    .options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+    .option{background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);overflow:hidden}
+    .option.rec{border-color:#8bc9be;box-shadow:0 0 0 2px rgba(20,104,93,.08)}
+    .option-head{padding:12px 14px;border-bottom:1px solid var(--line);background:#fff}
+    .option.rec .option-head{background:#f4fbf9}
+    .mock{padding:12px;background:#f7f9fa}
+    .console{border:1px solid var(--line);border-radius:8px;background:#fff;overflow:hidden}
+    .nav{display:flex;align-items:center;gap:4px;padding:7px 8px;border-bottom:1px solid var(--line-soft)}
+    .brand{font-weight:750;margin-right:5px}
+    .nav span:not(.brand){font-size:11px;padding:4px 6px;border-radius:5px;color:#55616a}
+    .nav .active{background:var(--primary-soft);color:var(--primary);font-weight:700}
+    .body{padding:10px}
+    .pagehead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+    .badge{display:inline-flex;align-items:center;min-height:21px;padding:2px 7px;border-radius:999px;background:#eef2f4;color:#475467;font-size:11px;font-weight:700;white-space:nowrap}
+    .ok{background:#e8f4ee;color:var(--ok)}
+    .warn{background:#fff6e6;color:var(--warn)}
+    .danger{background:#fff0ee;color:var(--danger)}
+    .btns{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+    .btn{display:inline-flex;align-items:center;justify-content:center;min-height:28px;padding:0 9px;border:1px solid var(--primary);border-radius:6px;background:var(--primary);color:#fff;font-size:12px;font-weight:700}
+    .btn.secondary{background:#fff;color:#344054;border-color:#cfd6df}
+    .btn.dangerbtn{background:var(--danger);border-color:var(--danger)}
+    .big-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-bottom:8px}
+    .metric{padding:8px;border:1px solid var(--line-soft);border-radius:6px;background:#fbfcfd}
+    .metric span{display:block;color:var(--muted);font-size:11px}
+    .metric b{display:block;margin-top:2px;font-size:15px}
+    .strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--line);border-radius:7px;overflow:hidden;margin-bottom:8px}
+    .strip .item{padding:7px 8px;border-right:1px solid var(--line-soft);background:#fff;min-width:0}
+    .strip .item:last-child{border-right:0}
+    .strip span{display:block;color:var(--muted);font-size:11px;line-height:1.2}
+    .strip b{display:block;margin-top:1px;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .kvgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));border:1px solid var(--line);border-radius:7px;overflow:hidden;margin-bottom:8px}
+    .kv{display:grid;grid-template-columns:74px 1fr;gap:8px;padding:6px 8px;border-right:1px solid var(--line-soft);border-bottom:1px solid var(--line-soft);min-width:0}
+    .kv:nth-child(2n){border-right:0}
+    .kv:nth-last-child(-n+2){border-bottom:0}
+    .kv span{color:var(--muted);font-size:12px}
+    .kv b{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right}
+    .summary-table{border:1px solid var(--line);border-radius:7px;overflow:hidden;margin-bottom:8px}
+    .row{display:grid;grid-template-columns:1fr 64px 58px;gap:6px;padding:6px 8px;border-bottom:1px solid var(--line-soft);font-size:12px}
+    .row:last-child{border-bottom:0}
+    .row.head{background:#f7f9fa;color:var(--muted);font-weight:700}
+    .dense-row{display:grid;grid-template-columns:72px 1fr auto;gap:8px;align-items:center;padding:6px 8px;border-bottom:1px solid var(--line-soft);font-size:12px}
+    .dense-row:last-child{border-bottom:0}
+    .dense-row span:first-child{color:var(--muted)}
+    .alert{padding:7px 8px;border:1px solid #f0d6a7;background:#fff8e8;color:#70480f;border-radius:6px;font-size:12px;margin-bottom:8px}
+    .mobile{width:180px;margin:10px auto 0;border:1px solid var(--line);border-radius:14px;background:#fff;overflow:hidden}
+    .mobile-top{height:18px;background:#17211f}
+    .mobile .body{padding:9px}
+    .mobile .strip{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .mobile .strip .item:nth-child(2n){border-right:0}
+    .mobile .strip .item:nth-child(-n+2){border-bottom:1px solid var(--line-soft)}
+    .mobile .kvgrid{grid-template-columns:1fr}
+    .mobile .kv{border-right:0}
+    .mobile .kv:nth-last-child(2){border-bottom:1px solid var(--line-soft)}
+    .mobile .row{grid-template-columns:1fr auto;font-size:11px}
+    .mobile .row .hide{display:none}
+    .trade{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+    .trade div{border:1px solid var(--line-soft);border-radius:7px;padding:8px;background:#fff}
+    .trade b{display:block;margin-bottom:4px;font-size:13px}
+    .trade span{display:block;color:var(--muted);font-size:12px}
+    .decision{margin-top:14px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:14px;box-shadow:var(--shadow)}
+    .decision-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:10px}
+    .decision-grid div{border:1px solid var(--line);border-radius:7px;padding:10px;background:#fff}
+    .decision-grid b{display:block;margin-bottom:4px}
+    .decision-grid span{color:var(--muted);font-size:13px}
+    @media(max-width:1040px){.options,.rule,.decision-grid{grid-template-columns:1fr}.top{display:block}.page{width:min(100% - 20px,1220px);padding-top:12px}}
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="top">
+      <div>
+        <h1>设备工作台的密度方案</h1>
+        <p class="sub">保留“紧凑设备工作台”的信息架构，但不要默认使用大指标卡片。不同内容密度使用不同组件，避免 PC 宽屏空白过多。</p>
+      </div>
+    </header>
+
+    <section class="rule">
+      <div><b>短状态</b><span>空闲、18:30、正常这类短值，不应该占一张大卡。</span></div>
+      <div><b>重要指标</b><span>只有需要强调的 1-2 个数字才适合做大指标。</span></div>
+      <div><b>多通道</b><span>风扇档位、水路、喂食通道、门状态更适合矩阵或表格。</span></div>
+      <div><b>手机端</b><span>PC 上横向压缩，手机端自动变成纵向摘要。</span></div>
+    </section>
+
+    <section class="options">
+      <article class="option">
+        <div class="option-head">
+          <h2>方案 1：指标卡片为主</h2>
+          <p class="sub">现在 B 的问题来源。适合少量重要 KPI，不适合短文本状态。</p>
+        </div>
+        <div class="mock">
+          <div class="console">
+            <div class="nav"><span class="brand">灌溉</span><span class="active">总览</span><span>手动</span><span>计划</span><span>记录</span></div>
+            <div class="body">
+              <div class="pagehead"><strong>总览</strong><span class="badge warn">有提醒</span></div>
+              <div class="big-metrics">
+                <div class="metric"><span>当前状态</span><b>空闲</b></div>
+                <div class="metric"><span>下一计划</span><b>18:30</b></div>
+                <div class="metric"><span>今日用水</span><b>4.2 L</b></div>
+                <div class="metric"><span>记录空间</span><b>正常</b></div>
+              </div>
+              <div class="summary-table">
+                <div class="row head"><span>通道</span><span>状态</span><span>操作</span></div>
+                <div class="row"><span>第 1 路</span><span>可用</span><span>启动</span></div>
+                <div class="row"><span>第 2 路</span><span>停用</span><span>-</span></div>
+              </div>
+              <div class="btns"><span class="btn">开始手动</span><span class="btn secondary">记录</span></div>
+            </div>
+          </div>
+          <div class="trade"><div><b>优点</b><span>视觉直观，适合少量关键指标。</span></div><div><b>问题</b><span>PC 上短文本浪费空间，状态信息显得松散。</span></div></div>
+        </div>
+      </article>
+
+      <article class="option rec">
+        <div class="option-head">
+          <h2>方案 2：状态条 + 操作表（推荐）</h2>
+          <p class="sub">把短状态压进一行状态条，把业务主体放到通道表/操作表。</p>
+        </div>
+        <div class="mock">
+          <div class="console">
+            <div class="nav"><span class="brand">灌溉</span><span class="active">总览</span><span>手动</span><span>计划</span><span>记录</span></div>
+            <div class="body">
+              <div class="pagehead"><strong>总览</strong><span class="badge warn">计划待执行</span></div>
+              <div class="strip">
+                <div class="item"><span>状态</span><b>空闲</b></div>
+                <div class="item"><span>下一计划</span><b>18:30</b></div>
+                <div class="item"><span>今日用水</span><b>4.2 L</b></div>
+                <div class="item"><span>记录空间</span><b>正常</b></div>
+              </div>
+              <div class="alert">第 2 路已停用，计划执行时会自动跳过。</div>
+              <div class="summary-table">
+                <div class="row head"><span>通道</span><span>状态</span><span>操作</span></div>
+                <div class="row"><span>第 1 路 · 5 分钟</span><span>可用</span><span>启动</span></div>
+                <div class="row"><span>第 2 路 · 未启用</span><span>停用</span><span>-</span></div>
+              </div>
+              <div class="btns"><span class="btn">开始手动</span><span class="btn secondary">查看计划</span><span class="btn dangerbtn">停止全部</span></div>
+            </div>
+          </div>
+          <div class="mobile">
+            <div class="mobile-top"></div>
+            <div class="body">
+              <div class="pagehead"><strong>总览</strong><span class="badge warn">提醒</span></div>
+              <div class="strip">
+                <div class="item"><span>状态</span><b>空闲</b></div>
+                <div class="item"><span>计划</span><b>18:30</b></div>
+                <div class="item"><span>用水</span><b>4.2 L</b></div>
+                <div class="item"><span>记录</span><b>正常</b></div>
+              </div>
+              <div class="summary-table">
+                <div class="row"><span>第 1 路</span><span>可用</span><span class="hide">启动</span></div>
+                <div class="row"><span>第 2 路</span><span>停用</span><span class="hide">-</span></div>
+              </div>
+              <div class="btns"><span class="btn">开始</span><span class="btn dangerbtn">停止</span></div>
+            </div>
+          </div>
+          <div class="trade"><div><b>优点</b><span>PC 紧凑，手机仍可读；适合大多数总览和手动页。</span></div><div><b>代价</b><span>需要定义状态条、表格、操作区三个组件的规则。</span></div></div>
+        </div>
+      </article>
+
+      <article class="option">
+        <div class="option-head">
+          <h2>方案 3：键值矩阵 + 详情列表</h2>
+          <p class="sub">适合诊断、设置摘要、App Config 总览，信息密度最高。</p>
+        </div>
+        <div class="mock">
+          <div class="console">
+            <div class="nav"><span class="brand">自动门</span><span class="active">诊断</span><span>记录</span><span>校准</span></div>
+            <div class="body">
+              <div class="pagehead"><strong>业务诊断</strong><span class="badge ok">正常</span></div>
+              <div class="kvgrid">
+                <div class="kv"><span>门状态</span><b>已关闭</b></div>
+                <div class="kv"><span>位置</span><b>0 脉冲</b></div>
+                <div class="kv"><span>AT24C</span><b>在线</b></div>
+                <div class="kv"><span>记录</span><b>1052 条</b></div>
+                <div class="kv"><span>电流</span><b>320 mA</b></div>
+                <div class="kv"><span>保护</span><b>启用</b></div>
+              </div>
+              <div class="summary-table">
+                <div class="dense-row"><span>恢复快照</span><b>CRC 正常，位置可信</b><span class="badge ok">通过</span></div>
+                <div class="dense-row"><span>记录索引</span><b>最近记录连续</b><span class="badge ok">通过</span></div>
+                <div class="dense-row"><span>端点状态</span><b>上限位未安装</b><span class="badge warn">提醒</span></div>
+              </div>
+              <div class="btns"><span class="btn secondary">重新检查</span><span class="btn">下载诊断</span></div>
+            </div>
+          </div>
+          <div class="trade"><div><b>优点</b><span>非常紧凑，适合诊断和参数摘要。</span></div><div><b>问题</b><span>操作感较弱，不适合作为所有首页默认形态。</span></div></div>
+        </div>
+      </article>
+    </section>
+
+    <section class="decision">
+      <h2>建议采用“自适应密度”的 B 模式</h2>
+      <p class="sub">不是固定使用卡片，而是按内容类型选择组件。这样 PC 不空，手机不乱，样式也能统一。</p>
+      <div class="decision-grid">
+        <div><b>首页/手动页</b><span>默认用“状态条 + 通道/操作表 + 操作按钮”。只有特别重要的值才升级为大指标。</span></div>
+        <div><b>配置/App Config</b><span>默认用“分组 + 单项编辑/紧凑字段行”。避免一整页大表单占满屏幕。</span></div>
+        <div><b>记录/诊断页</b><span>默认用“筛选条 + 紧凑表格/键值矩阵”。PC 上信息密度高，手机转为纵向行。</span></div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
