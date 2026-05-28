@@ -4,6 +4,19 @@
 
 ## 2026-05-28
 
+### 内置页面 UI baseline 第二轮对齐
+
+优化：
+
+- WiFi、Auth、OTA 和 System 工具页切换到统一的 `formpanel`、`actionpanel`、`dangerpanel` 和 `uploadpanel` 结构；低频表单、只读维护信息、普通操作和危险操作的视觉边界更清楚。
+- System 页 Hostname、Footer bar、Watchdog、File log、Restart、Format LittleFS 和 Clear logs 区块统一使用 baseline 表格、表单和操作按钮样式；危险操作保留二次确认和 `POST -> 303 -> GET` 行为。
+- `docs/04_web.md` 和 `docs/11_web_ui_baseline.md` 补充内置低频表单、普通操作和危险操作的复用规则，业务页面遇到同类场景应优先复用基础能力块。
+
+业务侧影响：
+
+- URL、POST 参数、NVS key、认证逻辑、OTA 上传流程和 System 工具语义不变。
+- 业务项目如需类似“低频设置 + 当前值 + 危险维护动作”的页面，应先参考本轮内置页结构；找不到合适能力块时回到 Esp32Base 补基础能力。
+
 ### 内置页面 UI baseline 第一轮对齐
 
 优化：

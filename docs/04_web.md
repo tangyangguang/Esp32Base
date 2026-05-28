@@ -186,6 +186,7 @@ WiFi 配置页：
 
 - 回显当前 SSID。
 - 回显当前密码。
+- 页面使用 baseline 表单结构：`formpanel + editform + fieldgrid`；清除 WiFi 使用 `dangerpanel`。
 - 表单提交前用前端 JS 校验 SSID 非空；密码可为空，用于开放 WiFi。
 - 服务端 API 必须重复校验 SSID 非空，密码允许为空。
 - 空 SSID 返回错误，不保存凭证。
@@ -195,6 +196,7 @@ WiFi 配置页：
 System 维护页：
 
 - 默认底部系统导航展示 Status、Logs、System；启用 App Config 时额外展示 App Config 直达入口。WiFi、Auth、OTA 是低频配置/维护入口，收在 System 页面中并显示为 WiFi Setup、Web Auth、Firmware OTA，但保留原直达 URL。
+- System 页面使用 baseline 分块：低频入口和只读维护项使用 `actionpanel`，可编辑基础参数使用 `formpanel`，重启、格式化、清日志等危险操作使用 `dangerpanel`。
 - 启用 App Config 时，System 页面首位仍显示 App Config 入口；App Config 是业务持久化参数配置页，不和基础库维护参数混在 System 长页面中。
 - Hostname 设置区显示当前 hostname、构建默认 hostname、已保存 hostname 和是否需要重启；保存只写入 `eb_sys.hostname`，不热切换当前 DHCP hostname、mDNS、OTA 或 Web 身份，页面必须提示重启后生效。
 - Footer bar 模式设置只接受 Off、Status only、Links + status，保存后立即生效并写入 `eb_ui.footer_mode`；该设置只控制底部横条，不关闭直达 URL 或顶部业务导航。
@@ -227,6 +229,7 @@ App Config 页面：
 OTA 上传页：
 
 - 使用 Web Basic Auth，不额外要求单独认证。
+- 页面使用 `formpanel uploadpanel`，保持上传控件、SHA256 可选校验和进度反馈在同一任务块内。
 - 上传中显示进度。
 - 进度同时显示百分比、已处理字节数和总字节数。
 - 字节数必须同时给出 raw bytes 和 KB/MB 人性化格式。

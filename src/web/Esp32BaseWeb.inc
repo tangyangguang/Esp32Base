@@ -157,6 +157,7 @@ static const char WEB_CSS[] PROGMEM =
     "nav,.panel,.footerbar,.pagehead{background:var(--eb-surface);border:1px solid var(--eb-line);border-radius:8px;box-shadow:0 1px 2px rgba(16,24,40,.04)}"
     "nav{display:flex;align-items:center;gap:4px;overflow:auto;white-space:nowrap;margin:0 0 12px;padding:3px}.brand{font-weight:800}nav a{display:inline-flex;align-items:center;min-height:34px;padding:0 11px;margin:0;border-radius:6px;color:#344054;font-size:14px;font-weight:750}nav a.active{background:var(--eb-primary-soft);color:var(--eb-primary)}"
     ".page{margin:0}.pagehead{padding:11px 12px;margin:0 0 12px}.pagehead h1{margin:0}.pagehead p{margin:4px 0 0;color:var(--eb-muted);font-size:13px}.panel{padding:12px;margin:12px 0}.panel>:last-child{margin-bottom:0}.actions,.filterbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}.filterbar{margin:0 0 10px}.filterbar label{margin:0;color:var(--eb-muted);font-size:13px}.filterbar select,.filterbar input{width:auto;margin:0}.editform{max-width:760px}.fieldgrid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:10px 12px;align-items:start}.field{margin:0}.field input,.field select{margin:0}.field.short{grid-column:span 2}.field.med{grid-column:span 4}.field.long{grid-column:span 6}.field.full{grid-column:1/-1;max-width:720px}.field small{display:block;margin-top:4px;color:var(--eb-muted);font-size:12px}.tablewrap{overflow-x:auto;margin:0}"
+    ".formpanel form,.actionpanel form,.dangerpanel form{max-width:760px}.formpanel .fieldgrid{margin:0}.formpanel .kv,.actionpanel .kv{font-size:13px}.formpanel .kv th,.actionpanel .kv th{width:176px;max-width:38%}.dangerpanel{border-color:#ebb8b2;background:#fffafa}.dangerpanel h2{color:#84251f}.dangerpanel .dangertext{margin-bottom:8px}.uploadpanel progress{margin-top:10px}.radioopts label{display:inline-flex;align-items:center;gap:5px;margin:0 10px 6px 0;font-weight:500}.radioopts input{margin:0}"
     "button,input[type=submit],input[type=button]{font-size:14px;background:var(--eb-primary);color:#fff;min-height:32px;padding:0 11px;border:0;border-radius:7px;cursor:pointer;margin:0}button:hover,input[type=submit]:hover,input[type=button]:hover{background:#10574e}.dangerbtn,input.danger{background:#b93a32}.dangerbtn:hover,input.danger:hover{background:#9f2f29}"
     "label{display:block;font-weight:700;margin:0 0 4px}input:not([type]),input[type=text],input[type=password],input[type=number],input[type=email],input[type=url],input[type=tel],input[type=search],select{font-size:14px;min-height:32px;padding:6px 9px;margin:0 0 10px;border:1px solid #ccd5dd;border-radius:7px;background:#fff;color:#1f2933}"
     "input:not([type]),input[type=text],input[type=password],input[type=email],input[type=url],input[type=tel],input[type=search]{width:100%}input[type=number]{max-width:14ch}select{max-width:260px}"
@@ -1583,14 +1584,14 @@ void handleWifiPage() {
     } else if (g_server.hasArg("cleared")) {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "Saved WiFi credentials were cleared");
     }
-    Esp32BaseWeb::sendPageTitle("WiFi Settings");
-    sendChunk("<section class='panel'><form method='post' action='/esp32base/wifi' onsubmit=\"if(!this.ssid.value.trim()){alert('SSID cannot be empty');return false;}if(this.ssid.value.length>32||this.password.value.length>64){alert('SSID or password is too long');return false;}return once(this);\">");
-    sendChunk("<label for='ssid'>SSID</label><input id='ssid' name='ssid' value='");
+    Esp32BaseWeb::sendPageTitle("WiFi Settings", "Stored credentials used by station mode and WiFi recovery.");
+    sendChunk("<section class='panel formpanel'><h2>Credentials</h2><form class='editform' method='post' action='/esp32base/wifi' onsubmit=\"if(!this.ssid.value.trim()){alert('SSID cannot be empty');return false;}if(this.ssid.value.length>32||this.password.value.length>64){alert('SSID or password is too long');return false;}return once(this);\"><div class='fieldgrid'>");
+    sendChunk("<div class='field med'><label for='ssid'>SSID</label><input id='ssid' name='ssid' value='");
     sendEscapedHtmlChunk(ssid);
-    sendChunk("' maxlength='32' autocomplete='off'><label for='wp'>Password (optional)</label><input id='wp' type='password' name='password' value='");
+    sendChunk("' maxlength='32' autocomplete='off'><small>1-32 characters.</small></div><div class='field med'><label for='wp'>Password (optional)</label><input id='wp' type='password' name='password' value='");
     sendEscapedHtmlChunk(password);
-    sendChunk("' maxlength='64'><div class='actions'><input type='button' value='Show/Hide Password' onclick=\"var p=document.getElementById('wp');p.type=p.type=='password'?'text':'password'\"><input type='submit' value='Save &amp; Connect'></div></form></section>");
-    sendChunk("<section class='panel'><h2>Clear WiFi</h2><p class='muted'>Remove stored WiFi credentials from this device.</p><form method='post' action='/esp32base/api/wifi/clear' onsubmit=\"return confirm('Clear WiFi credentials?')&&once(this)\"><input class='danger' type='submit' value='Clear WiFi'></form></section>");
+    sendChunk("' maxlength='64'><small>Leave empty for open networks.</small></div></div><div class='actions'><input type='button' value='Show/Hide Password' onclick=\"var p=document.getElementById('wp');p.type=p.type=='password'?'text':'password'\"><input type='submit' value='Save &amp; Connect'></div></form></section>");
+    sendChunk("<section class='panel dangerpanel'><h2>Clear WiFi</h2><p class='muted'>Remove stored WiFi credentials from this device.</p><form method='post' action='/esp32base/api/wifi/clear' onsubmit=\"return confirm('Clear WiFi credentials?')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Clear WiFi'></div></form></section>");
     Esp32BaseWeb::sendFooter();
 }
 
@@ -1711,7 +1712,7 @@ void sendWatchdogPanel() {
     formatWatchdogTripResetAt(state, resetAt, sizeof(resetAt));
     snprintf(count, sizeof(count), "%lu",
              static_cast<unsigned long>(state.lifetime));
-    sendChunk("<section class='panel'><h2>Watchdog trip</h2><table class='kv'>");
+    sendChunk("<section class='panel actionpanel'><h2>Watchdog trip</h2><div class='tablewrap'><table class='kv'>");
     sendInfoRow("Lifetime resets", count);
     if (state.invalidBase) {
         sendInfoRow("Trip resets", "invalid baseline");
@@ -1721,7 +1722,7 @@ void sendWatchdogPanel() {
         sendInfoRow("Trip resets", count);
     }
     sendInfoRow("Trip reset at", resetAt);
-    sendChunk("</table><form method='post' action='/esp32base/tools/watchdog-trip-reset' onsubmit=\"return confirm('Reset Watchdog trip counter? Lifetime resets are kept.')&&once(this)\"><input type='submit' value='Reset Watchdog Trip'></form></section>");
+    sendChunk("</table></div><form method='post' action='/esp32base/tools/watchdog-trip-reset' onsubmit=\"return confirm('Reset Watchdog trip counter? Lifetime resets are kept.')&&once(this)\"><div class='actions'><input type='submit' value='Reset Watchdog Trip'></div></form></section>");
 }
 #endif
 
@@ -2561,8 +2562,8 @@ void handleToolsPage() {
         return;
     }
     Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_TOOLS]);
-    Esp32BaseWeb::sendPageTitle(g_builtinLabels[Esp32BaseWeb::BUILTIN_TOOLS]);
-    sendChunk("<section class='panel'><h2>System settings</h2><div class='quicklinks'>");
+    Esp32BaseWeb::sendPageTitle(g_builtinLabels[Esp32BaseWeb::BUILTIN_TOOLS], "Low-frequency device settings and maintenance actions.");
+    sendChunk("<section class='panel actionpanel'><h2>System settings</h2><div class='quicklinks'>");
 #if ESP32BASE_ENABLE_APP_CONFIG
     sendNavLink("/esp32base/app-config", "App Config", false, nullptr);
 #endif
@@ -2583,45 +2584,41 @@ void handleToolsPage() {
     } else if (g_server.hasArg("watchdog_trip_reset")) {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "Watchdog trip reset");
     } else if (g_server.hasArg("error")) {
-        sendChunk("<p class='err'>System action failed: ");
-        sendEscapedHtmlChunk(g_server.arg("error").c_str());
-        sendChunk("</p>");
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_DANGER, "System action failed", g_server.arg("error").c_str());
     } else if (g_server.hasArg("restarting")) {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "Restart requested", "Device is restarting. Please wait a few seconds, then reload.");
     }
     if (g_server.hasArg("hostname_saved")) {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "Hostname saved", "Restart the device for mDNS, OTA and Web discovery to use it.");
     } else if (g_server.hasArg("hostname_error")) {
-        sendChunk("<p class='err'>Hostname was not saved: ");
-        sendEscapedHtmlChunk(g_server.arg("hostname_error").c_str());
-        sendChunk("</p>");
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_DANGER, "Hostname was not saved", g_server.arg("hostname_error").c_str());
     }
     char storedHostname[64] = "";
     const bool hasStoredHostname = loadStoredHostname(storedHostname, sizeof(storedHostname));
-    sendChunk("<section class='panel'><h2>Hostname</h2><table class='kv'>");
+    sendChunk("<section class='panel formpanel'><h2>Hostname</h2><div class='tablewrap'><table class='kv'>");
     sendInfoRow("Current", Esp32Base::hostname());
     sendInfoRow("Default", Esp32Base::defaultHostname());
     sendInfoRow("Stored", hasStoredHostname && storedHostname[0] ? storedHostname : "-");
     sendInfoRow("Restart required", hostnameRestartRequired(storedHostname) ? "yes" : "no");
-    sendChunk("</table><form method='post' action='/esp32base/tools/hostname' onsubmit=\"var h=this.hostname.value.trim();if(!/^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/.test(h)){alert('Use 1-32 lowercase letters, digits and hyphen. No leading or trailing hyphen. Do not include .local.');return false;}this.hostname.value=h;return once(this);\">");
-    sendChunk("<label for='host'>New hostname</label><input id='host' name='hostname' maxlength='32' autocomplete='off' value='");
+    sendChunk("</table></div><form class='editform' method='post' action='/esp32base/tools/hostname' onsubmit=\"var h=this.hostname.value.trim();if(!/^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/.test(h)){alert('Use 1-32 lowercase letters, digits and hyphen. No leading or trailing hyphen. Do not include .local.');return false;}this.hostname.value=h;return once(this);\"><div class='fieldgrid'>");
+    sendChunk("<div class='field long'><label for='host'>New hostname</label><input id='host' name='hostname' maxlength='32' autocomplete='off' value='");
     sendEscapedHtmlChunk(hasStoredHostname && storedHostname[0] ? storedHostname : Esp32Base::hostname());
-    sendChunk("'><p class='muted'>Saved hostname takes effect after restart.</p><input type='submit' value='Save Hostname'></form></section>");
-    sendChunk("<section class='panel'><h2>Footer bar</h2><table class='kv'>");
+    sendChunk("'><small>Saved hostname takes effect after restart.</small></div></div><div class='actions'><input type='submit' value='Save Hostname'></div></form></section>");
+    sendChunk("<section class='panel actionpanel'><h2>Footer bar</h2><div class='tablewrap'><table class='kv'>");
     sendInfoRow("Current mode", Esp32BaseWeb::footerBarModeName());
-    sendChunk("</table><form method='post' action='/esp32base/tools/footer-bar' onsubmit=\"return once(this)\"><div class='quicklinks'>");
+    sendChunk("</table></div><form method='post' action='/esp32base/tools/footer-bar' onsubmit=\"return once(this)\"><div class='radioopts'>");
     sendFooterBarModeOption("off", "Off", Esp32BaseWeb::FOOTER_BAR_OFF);
     sendFooterBarModeOption("status", "Status only", Esp32BaseWeb::FOOTER_BAR_STATUS_ONLY);
     sendFooterBarModeOption("full", "Links + status", Esp32BaseWeb::FOOTER_BAR_FULL);
-    sendChunk("</div><p class='muted'>Controls the compact bottom bar on built-in and app pages.</p><input type='submit' value='Save Footer Bar'></form></section>");
+    sendChunk("</div><p class='muted'>Controls the compact bottom bar on built-in and app pages.</p><div class='actions'><input type='submit' value='Save Footer Bar'></div></form></section>");
 #if ESP32BASE_ENABLE_WATCHDOG
     sendWatchdogPanel();
 #endif
 #if ESP32BASE_ENABLE_FILELOG
-    sendChunk("<section class='panel'><h2>File log</h2><table class='kv'>");
+    sendChunk("<section class='panel actionpanel'><h2>File log</h2><div class='tablewrap'><table class='kv'>");
     sendInfoRow("Current mode", Esp32BaseFileLog::modeName());
     sendInfoRow("Path", Esp32BaseFileLog::path());
-    sendChunk("</table><form method='post' action='/esp32base/tools/filelog' onsubmit=\"return once(this)\"><div class='quicklinks'>");
+    sendChunk("</table></div><form method='post' action='/esp32base/tools/filelog' onsubmit=\"return once(this)\"><div class='radioopts'>");
     sendFileLogModeOption("off", "Off", Esp32BaseFileLog::OFF);
 #if ESP32BASE_LOG_LEVEL >= ESP32BASE_LOG_ERROR
     sendFileLogModeOption("error", "ERROR", Esp32BaseFileLog::ERROR);
@@ -2632,20 +2629,20 @@ void handleToolsPage() {
 #if ESP32BASE_LOG_LEVEL >= ESP32BASE_LOG_INFO
     sendFileLogModeOption("info", "INFO", Esp32BaseFileLog::INFO);
 #endif
-    sendChunk("</div><p class='muted'>File log mode is capped by the build log level.</p><input type='submit' value='Save File Log'></form></section>");
+    sendChunk("</div><p class='muted'>File log mode is capped by the build log level.</p><div class='actions'><input type='submit' value='Save File Log'></div></form></section>");
 #else
-    sendChunk("<section class='panel'><h2>File log</h2><p class='muted'>File log is unavailable in this profile.</p></section>");
+    sendChunk("<section class='panel actionpanel'><h2>File log</h2><p class='muted'>File log is unavailable in this profile.</p></section>");
 #endif
-    sendChunk("<section class='panel'><h2>Restart device</h2><p class='muted'>Restart the device through the normal lifecycle path.</p><form method='post' action='/esp32base/tools/reboot' onsubmit=\"return confirm('Reboot device now?')&&once(this)\"><input class='danger' type='submit' value='Restart device'></form></section>");
+    sendChunk("<section class='panel dangerpanel'><h2>Restart device</h2><p class='muted'>Restart the device through the normal lifecycle path.</p><form method='post' action='/esp32base/tools/reboot' onsubmit=\"return confirm('Reboot device now?')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Restart device'></div></form></section>");
 #if ESP32BASE_ENABLE_FS
-    sendChunk("<section class='panel'><h2>Format LittleFS</h2><p class='dangertext'>This deletes logs and all files stored in LittleFS. WiFi, Web Auth and NVS config are not cleared.</p><form method='post' action='/esp32base/tools/format-fs' onsubmit=\"return confirm('Format LittleFS? This deletes logs and all files stored in LittleFS.')&&once(this)\"><input class='danger' type='submit' value='Format LittleFS'></form></section>");
+    sendChunk("<section class='panel dangerpanel'><h2>Format LittleFS</h2><p class='dangertext'>This deletes logs and all files stored in LittleFS. WiFi, Web Auth and NVS config are not cleared.</p><form method='post' action='/esp32base/tools/format-fs' onsubmit=\"return confirm('Format LittleFS? This deletes logs and all files stored in LittleFS.')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Format LittleFS'></div></form></section>");
 #else
-    sendChunk("<section class='panel'><h2>Format LittleFS</h2><p class='muted'>LittleFS is unavailable in this profile.</p></section>");
+    sendChunk("<section class='panel actionpanel'><h2>Format LittleFS</h2><p class='muted'>LittleFS is unavailable in this profile.</p></section>");
 #endif
 #if ESP32BASE_ENABLE_FILELOG
-    sendChunk("<section class='panel'><h2>Clear logs</h2><p class='dangertext'>Delete all file log contents. Runtime settings and WiFi credentials are not changed.</p><form method='post' action='/esp32base/tools/logs-clear' onsubmit=\"return confirm('Clear log files?')&&once(this)\"><input class='danger' type='submit' value='Clear Logs'></form></section>");
+    sendChunk("<section class='panel dangerpanel'><h2>Clear logs</h2><p class='dangertext'>Delete all file log contents. Runtime settings and WiFi credentials are not changed.</p><form method='post' action='/esp32base/tools/logs-clear' onsubmit=\"return confirm('Clear log files?')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Clear Logs'></div></form></section>");
 #else
-    sendChunk("<section class='panel'><h2>Clear logs</h2><p class='muted'>File log is unavailable in this profile.</p></section>");
+    sendChunk("<section class='panel actionpanel'><h2>Clear logs</h2><p class='muted'>File log is unavailable in this profile.</p></section>");
 #endif
     Esp32BaseWeb::sendFooter();
 }
@@ -2817,8 +2814,8 @@ void handleOtaPage() {
         return;
     }
     Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_OTA]);
-    Esp32BaseWeb::sendPageTitle("OTA Update");
-    sendChunk("<section class='panel'><form id='f'><label for='fw'>Firmware file</label><input id='fw' type='file' name='firmware' accept='.bin' required><label for='sha'>SHA256</label><input id='sha' placeholder='Optional 64-character digest' maxlength='64'><input type='submit' value='Upload Firmware'></form><progress id='p' value='0' max='100' style='width:100%;display:none'></progress><p id='s' class='statusline muted'></p></section>");
+    Esp32BaseWeb::sendPageTitle("OTA Update", "Upload a firmware binary through the authenticated Web OTA endpoint.");
+    sendChunk("<section class='panel formpanel uploadpanel'><h2>Firmware upload</h2><form id='f' class='editform'><div class='fieldgrid'><div class='field full'><label for='fw'>Firmware file</label><input id='fw' type='file' name='firmware' accept='.bin' required></div><div class='field long'><label for='sha'>SHA256</label><input id='sha' placeholder='Optional 64-character digest' maxlength='64'><small>Optional integrity check for the uploaded firmware.</small></div></div><div class='actions'><input type='submit' value='Upload Firmware'></div></form><progress id='p' value='0' max='100' style='width:100%;display:none'></progress><p id='s' class='statusline muted'></p></section>");
     sendChunk("<script>function h(n){var u=['B','KB','MB','GB'],i=0,x=n;while(x>=1024&&i<u.length-1){x/=1024;i++;}return n+' bytes ('+(i?x.toFixed(2):x)+' '+u[i]+')';}document.getElementById('f').onsubmit=function(e){e.preventDefault();if(this.dataset.busy)return false;this.dataset.busy=1;var f=document.getElementById('fw').files[0],st=document.getElementById('s'),pg=document.getElementById('p'),b=this.querySelector('[type=submit]');if(!f){this.dataset.busy='';return false;}var d=new FormData();d.append('firmware',f,f.name);var x=new XMLHttpRequest();if(b)b.disabled=true;pg.style.display='block';st.textContent='Uploading 0%';x.upload.onprogress=function(ev){if(ev.lengthComputable){var p=Math.floor(ev.loaded*100/ev.total);pg.value=p;st.textContent='Uploading '+p+'% '+h(ev.loaded)+' / '+h(ev.total);}};x.onload=function(){var r={};try{r=JSON.parse(x.responseText||'{}');}catch(e){}if(x.status==200){st.textContent='Upload successful. Restarting...';setTimeout(function(){location.href=r.redirect||'/esp32base';},8000);return;}st.textContent='Upload failed: '+(r.error||('HTTP '+x.status));document.getElementById('f').dataset.busy='';if(b)b.disabled=false;};x.onerror=function(){st.textContent='Upload failed: network error';document.getElementById('f').dataset.busy='';if(b)b.disabled=false;};x.open('POST','/esp32base/ota');x.setRequestHeader('X-Firmware-Size',String(f.size));var s=document.getElementById('sha').value;if(s)x.setRequestHeader('X-Sha256',s);x.send(d);return false;};</script>");
     Esp32BaseWeb::sendFooter();
 }
@@ -3359,25 +3356,23 @@ void handleAuthPage() {
         return;
     }
     Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_AUTH]);
-    Esp32BaseWeb::sendPageTitle(g_builtinLabels[Esp32BaseWeb::BUILTIN_AUTH]);
+    Esp32BaseWeb::sendPageTitle(g_builtinLabels[Esp32BaseWeb::BUILTIN_AUTH], "Update the HTTP Basic Auth credentials used by built-in routes.");
     if (g_server.hasArg("saved")) {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "Auth updated", "Use the new credentials on the next auth prompt.");
     } else if (g_server.hasArg("error")) {
-        sendChunk("<p class='err'>Auth update failed: ");
-        sendEscapedHtmlChunk(g_server.arg("error").c_str());
-        sendChunk("</p>");
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_DANGER, "Auth update failed", g_server.arg("error").c_str());
     }
-    sendChunk("<section class='panel'><form method='post' action='/esp32base/auth' onsubmit=\"var f=this;function v(n){return f.elements[n].value.trim();}if(!v('current_user')||!v('current_pass')||!v('new_user')||!v('new_pass')||!v('confirm_pass')){alert('All auth fields are required');return false;}if(v('new_pass')!=v('confirm_pass')){alert('New passwords do not match');return false;}return once(this)\">");
-    sendChunk("<label for='current_user'>Current auth user</label><input id='current_user' name='current_user' maxlength='31' required value='");
+    sendChunk("<section class='panel formpanel'><h2>Credentials</h2><form class='editform' method='post' action='/esp32base/auth' onsubmit=\"var f=this;function v(n){return f.elements[n].value.trim();}if(!v('current_user')||!v('current_pass')||!v('new_user')||!v('new_pass')||!v('confirm_pass')){alert('All auth fields are required');return false;}if(v('new_pass')!=v('confirm_pass')){alert('New passwords do not match');return false;}return once(this)\"><div class='fieldgrid'>");
+    sendChunk("<div class='field med'><label for='current_user'>Current auth user</label><input id='current_user' name='current_user' maxlength='31' required value='");
     sendEscapedHtmlChunk(g_authUser);
-    sendChunk("'>");
-    sendChunk("<label for='current_pass'>Current auth password</label><input id='current_pass' type='password' name='current_pass' maxlength='63' autocomplete='current-password' required>");
-    sendChunk("<label for='new_user'>New auth user</label><input id='new_user' name='new_user' maxlength='31' required value='");
+    sendChunk("'></div>");
+    sendChunk("<div class='field med'><label for='current_pass'>Current auth password</label><input id='current_pass' type='password' name='current_pass' maxlength='63' autocomplete='current-password' required></div>");
+    sendChunk("<div class='field med'><label for='new_user'>New auth user</label><input id='new_user' name='new_user' maxlength='31' required value='");
     sendEscapedHtmlChunk(g_authUser);
-    sendChunk("'>");
-    sendChunk("<label for='new_pass'>New auth password</label><input id='new_pass' type='password' name='new_pass' maxlength='63' autocomplete='new-password' required>");
-    sendChunk("<label for='confirm_pass'>Confirm new auth password</label><input id='confirm_pass' type='password' name='confirm_pass' maxlength='63' autocomplete='new-password' required>");
-    sendChunk("<input type='submit' value='Save Auth'></form></section>");
+    sendChunk("'></div>");
+    sendChunk("<div class='field med'><label for='new_pass'>New auth password</label><input id='new_pass' type='password' name='new_pass' maxlength='63' autocomplete='new-password' required></div>");
+    sendChunk("<div class='field med'><label for='confirm_pass'>Confirm new auth password</label><input id='confirm_pass' type='password' name='confirm_pass' maxlength='63' autocomplete='new-password' required></div></div>");
+    sendChunk("<div class='actions'><input type='submit' value='Save Auth'></div></form></section>");
     Esp32BaseWeb::sendFooter();
 }
 

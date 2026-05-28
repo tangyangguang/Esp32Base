@@ -146,6 +146,8 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, "nav a{display:inline-flex;align-items:center;min-height:34px");
     RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".pagehead p{margin:4px 0 0;color:var(--eb-muted);font-size:13px}");
     RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".tablewrap{overflow-x:auto;margin:0}");
+    RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".formpanel form,.actionpanel form,.dangerpanel form{max-width:760px}");
+    RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".dangerpanel{border-color:#ebb8b2;background:#fffafa}");
     RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".statuspage{padding:10px 12px}");
     RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".footerbar{margin-top:10px;padding:5px 8px");
     RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".syslinks a{display:inline-flex;align-items:center;min-height:24px;font-size:12px");
