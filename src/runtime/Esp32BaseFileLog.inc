@@ -31,6 +31,7 @@ uint32_t g_fileLogLastFlushMs = 0;
 
 const char* modeName(Esp32BaseFileLog::Mode mode) {
     switch (mode) {
+        case Esp32BaseFileLog::ERROR: return "ERROR";
         case Esp32BaseFileLog::WARN: return "WARN";
         case Esp32BaseFileLog::INFO: return "INFO";
         case Esp32BaseFileLog::OFF:
@@ -39,7 +40,7 @@ const char* modeName(Esp32BaseFileLog::Mode mode) {
 }
 
 bool validMode(Esp32BaseFileLog::Mode mode) {
-    if (mode != Esp32BaseFileLog::OFF && mode != Esp32BaseFileLog::WARN && mode != Esp32BaseFileLog::INFO) {
+    if (mode != Esp32BaseFileLog::OFF && mode != Esp32BaseFileLog::ERROR && mode != Esp32BaseFileLog::WARN && mode != Esp32BaseFileLog::INFO) {
         return false;
     }
     return static_cast<uint8_t>(mode) <= ESP32BASE_LOG_LEVEL;
@@ -53,6 +54,7 @@ Esp32BaseFileLog::Mode readMode() {
 
 Esp32BaseLog::Level modeLevel(Esp32BaseFileLog::Mode mode) {
     switch (mode) {
+        case Esp32BaseFileLog::ERROR: return Esp32BaseLog::ERROR;
         case Esp32BaseFileLog::WARN: return Esp32BaseLog::WARN;
         case Esp32BaseFileLog::INFO: return Esp32BaseLog::INFO;
         case Esp32BaseFileLog::OFF:

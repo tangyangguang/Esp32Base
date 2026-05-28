@@ -143,27 +143,40 @@ Esp32BaseAppConfig::ChangeCallback g_appConfigChangeCallback = nullptr;
 Esp32BaseAppConfig::SaveCallback g_appConfigSaveCallback = nullptr;
 #endif
 
+#ifndef ESP32BASE_WEB_CSS_VERSION
+#define ESP32BASE_WEB_CSS_VERSION __TIME__
+#endif
+
+static const char WEB_CSS_TYPE[] PROGMEM = "text/css; charset=utf-8";
+static const char WEB_CSS[] PROGMEM =
+    ":root{color-scheme:light;--eb-bg:#f5f6f7;--eb-surface:#fff;--eb-soft:#f8fafb;--eb-ink:#17202a;--eb-muted:#667085;--eb-line:#d7dde4;--eb-line-soft:#edf1f4;--eb-primary:#14685d;--eb-primary-soft:#e6f2ef;--eb-ok:#087443;--eb-ok-soft:#e7f4ee;--eb-warn:#9a5a0a;--eb-warn-soft:#fff6e8;--eb-danger:#ad3027;--eb-danger-soft:#fff1ef;--eb-info:#245f9e;--eb-info-soft:#e8f0f8}"
+    "*{box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:14px;line-height:1.42;margin:0;padding:12px 14px 36px;color:var(--eb-ink);background:var(--eb-bg);max-width:1180px;margin-inline:auto}"
+    "h1,h2,h3{color:#111827;line-height:1.25;margin:0 0 8px}h1{font-size:18px}h2{font-size:16px}h3{font-size:15px}p{margin:0 0 9px}"
+    "a{color:#25313f;text-decoration:none}.muted,.info{color:var(--eb-muted)}.ok{color:var(--eb-ok)}.err,.dangertext{color:var(--eb-danger)}"
+    "nav,.panel,.footerbar,.pagehead{background:var(--eb-surface);border:1px solid var(--eb-line);border-radius:8px;box-shadow:0 1px 2px rgba(16,24,40,.04)}"
+    "nav{display:flex;align-items:center;gap:4px;overflow:auto;white-space:nowrap;margin:0 0 12px;padding:3px}.brand{font-weight:800}nav a{display:inline-flex;align-items:center;min-height:34px;padding:0 11px;margin:0;border-radius:6px;color:#344054;font-size:14px;font-weight:750}nav a.active{background:var(--eb-primary-soft);color:var(--eb-primary)}"
+    ".page{margin:0}.pagehead{padding:11px 12px;margin:0 0 12px}.pagehead h1{margin:0}.pagehead p{margin:4px 0 0;color:var(--eb-muted);font-size:13px}.panel{padding:12px;margin:12px 0}.panel>:last-child{margin-bottom:0}.actions,.filterbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}.filterbar{margin:0 0 10px}.filterbar label{margin:0;color:var(--eb-muted);font-size:13px}.filterbar select,.filterbar input{width:auto;margin:0}.editform{max-width:760px}.fieldgrid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:10px 12px;align-items:start}.field{margin:0}.field input,.field select{margin:0}.field.short{grid-column:span 2}.field.med{grid-column:span 4}.field.long{grid-column:span 6}.field.full{grid-column:1/-1;max-width:720px}.field small{display:block;margin-top:4px;color:var(--eb-muted);font-size:12px}"
+    "button,input[type=submit],input[type=button]{font-size:14px;background:var(--eb-primary);color:#fff;min-height:32px;padding:0 11px;border:0;border-radius:7px;cursor:pointer;margin:0}button:hover,input[type=submit]:hover,input[type=button]:hover{background:#10574e}.dangerbtn,input.danger{background:#b93a32}.dangerbtn:hover,input.danger:hover{background:#9f2f29}"
+    "label{display:block;font-weight:700;margin:0 0 4px}input:not([type]),input[type=text],input[type=password],input[type=number],input[type=email],input[type=url],input[type=tel],input[type=search],select{font-size:14px;min-height:32px;padding:6px 9px;margin:0 0 10px;border:1px solid #ccd5dd;border-radius:7px;background:#fff;color:#1f2933}"
+    "input:not([type]),input[type=text],input[type=password],input[type=email],input[type=url],input[type=tel],input[type=search]{width:100%}input[type=number]{max-width:14ch}select{max-width:260px}"
+    "input[type=file]{font-size:14px;margin:2px 0 12px;max-width:100%}progress{height:12px;border:0;border-radius:8px;overflow:hidden;background:#e7ebef}"
+    "details{margin:12px 0}summary{cursor:pointer;color:#25313f}.footerbar{margin-top:10px;padding:5px 8px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;color:var(--eb-muted);font-size:12px;border-color:var(--eb-line-soft);border-radius:6px;box-shadow:none}"
+    ".syslinks{min-width:0;flex:1 1 auto;display:flex;flex-wrap:wrap;gap:4px;align-items:center}.syslinks a{display:inline-flex;align-items:center;min-height:24px;font-size:12px;line-height:1.25;padding:0 6px;margin:0;background:#f3f5f5;color:var(--eb-muted);border-radius:4px}.heap{flex:0 0 auto;margin-left:auto;white-space:nowrap;text-align:right;font-size:11px}"
+    ".notice{border:1px solid var(--eb-line);background:var(--eb-soft);border-radius:8px;padding:9px 10px;margin:8px 0;color:var(--eb-ink)}.notice.ok{border-color:#bfe0d4;background:var(--eb-ok-soft);color:#185b4e}.notice.warn{border-color:#efcf96;background:var(--eb-warn-soft);color:#7a4608}.notice.danger{border-color:#ebb8b2;background:var(--eb-danger-soft);color:#84251f}.notice.info{border-color:#c6d7ea;background:var(--eb-info-soft);color:var(--eb-info)}"
+    ".metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:8px 0}.metric{border:1px solid var(--eb-line-soft);border-radius:7px;background:#fff;padding:8px}.metric b{display:block;font-size:17px}.metric span{display:block;color:var(--eb-muted);font-size:12px}"
+    ".urow{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--eb-line-soft)}.urow:last-child{border-bottom:0}.urow small{display:block;color:var(--eb-muted);margin-top:2px}.urow form{display:inline}.uactions{display:grid;grid-template-columns:4em 96px;gap:16px;align-items:center;justify-content:end;min-width:0}.uvalue{font-weight:700;white-space:nowrap}.uactions .uvalue{min-width:0;text-align:right;color:#344054}.uactions .btnlink,.uactions input[type=submit]{width:96px}.uactions form{display:block;width:96px;margin:0}.uactions form input[type=submit]{width:100%;margin:0}.uactions.readonly{grid-template-columns:4em 96px}.pagination{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;border-top:1px solid var(--eb-line-soft);padding-top:7px;margin-top:7px;font-size:12px;font-weight:400}.pagerlinks,.pagerform{display:flex;flex-wrap:wrap;align-items:center;gap:4px}.pagerlinks{justify-content:center}.pagerform{justify-content:flex-end}.pagination .muted,.pagination label{display:inline-flex;align-items:center;min-height:26px;margin:0;font-weight:400;line-height:1}.pagination .btnlink,.pagination button,.pagination select,.pagination input{font-size:12px;min-height:26px;border-radius:6px;font-weight:400;line-height:1.1}.pagination .btnlink{padding:0 7px;background:#f3f6f8;color:#526071}.pagination .btnlink.disabled{background:#f5f6f7;color:#9aa4b2}.pagination .current{background:#e6f2ef;color:#14685d;border:1px solid #bddbd3}.pagination button{padding:0 8px;background:#f3f6f8;color:#344054;border:1px solid var(--eb-line)}.pagination button:hover{background:#e9eef2}.pagination select,.pagination input{padding:2px 7px}.pagerform input[type=number]{width:6ch;margin:0}.pagerform select{width:auto;max-width:82px;margin:0}"
+    ".tag{display:inline-flex;align-items:center;min-height:21px;padding:2px 7px;border-radius:999px;background:#eef2f4;color:#475467;font-size:11px;font-weight:750;white-space:nowrap}.tag.ok{background:var(--eb-ok-soft);color:var(--eb-ok)}.tag.warn{background:var(--eb-warn-soft);color:var(--eb-warn)}.tag.danger{background:var(--eb-danger-soft);color:var(--eb-danger)}.tag.info{background:var(--eb-info-soft);color:var(--eb-info)}"
+    ".btnlink{display:inline-flex;align-items:center;justify-content:center;min-height:32px;padding:0 10px;border-radius:7px;background:var(--eb-info-soft);color:var(--eb-info);font-size:13px;font-weight:750;white-space:nowrap}.btnlink.ok{background:var(--eb-ok-soft);color:var(--eb-ok)}.btnlink.warn{background:var(--eb-warn-soft);color:var(--eb-warn)}.btnlink.danger{background:var(--eb-danger-soft);color:var(--eb-danger)}.btnlink.disabled{background:#eef2f4;color:#98a2b3}"
+    ".kv{border-collapse:collapse;width:100%;margin:0}.kv th,.kv td{border-bottom:1px solid var(--eb-line);padding:7px 5px;text-align:left;vertical-align:top}.kv tr:last-child th,.kv tr:last-child td{border-bottom:0}.kv th{width:30%;color:var(--eb-muted);font-weight:650}"
+    ".part{border-collapse:collapse;width:100%;font-size:13px}.part th,.part td{border-bottom:1px solid var(--eb-line);padding:6px 5px;text-align:left;vertical-align:top}.part th{color:var(--eb-muted);font-weight:650}.part tr:last-child td{border-bottom:0}"
+    ".tabs,.quicklinks{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 10px}.tabs a,.quicklinks a{font-size:13px;padding:5px 8px;margin:0;background:#f1f4f3;color:var(--eb-muted);border-radius:6px}.tabs a{display:inline-flex;align-items:center;gap:8px}.tabs a.active{background:var(--eb-primary-soft);color:var(--eb-primary);font-weight:700}.segsize{padding-left:7px;border-left:1px solid var(--eb-line);font-variant-numeric:tabular-nums}"
+    ".logmeta{border-collapse:collapse;font-size:13px;line-height:1.45;margin:0}.logmeta th,.logmeta td{padding:2px 10px 2px 0;text-align:left;vertical-align:top}.logmeta th{width:112px;color:var(--eb-muted);font-weight:650}.logmeta td{color:var(--eb-ink)}.statusline{min-height:1.45em}.toolsection{padding:12px;margin:12px 0;background:#fff;border:1px solid var(--eb-line);border-radius:8px}"
+    "pre{white-space:pre;overflow-x:auto;word-break:normal;font-size:12px;line-height:1.45;background:#f1f4f3;border:1px solid var(--eb-line);border-radius:7px;padding:9px}.logframe{display:block;width:100%;height:62vh;min-height:320px;border:1px solid var(--eb-line);border-radius:7px;background:#f1f4f3}"
+    "@media(max-width:760px){body{padding:10px}.metrics,.pagination,.urow{grid-template-columns:1fr}.fieldgrid{grid-template-columns:1fr}.field.short,.field.med,.field.long,.field.full{grid-column:auto;max-width:none}.uactions,.uactions.readonly{grid-template-columns:minmax(0,max-content) minmax(88px,96px);justify-content:flex-start}.uactions .uvalue{text-align:left}.pagerlinks,.pagerform{justify-content:flex-start}.pagination .btnlink,.pagination button,.pagination select,.pagination input{min-height:32px}.heap{margin-left:0;text-align:left;white-space:normal}nav a{font-size:14px;padding:0 10px}.tag{white-space:normal}}";
+
 static const char WEB_HEAD[] PROGMEM =
     "<meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
-    "<style>"
-    "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:14px;line-height:1.45;margin:0;padding:14px;max-width:1040px;margin-inline:auto;color:#1f2933;background:#fff}"
-    "h1,h2,h3{color:#111827;line-height:1.25;margin:0 0 8px}h1{font-size:18px}h2{font-size:16px}h3{font-size:15px}p{margin:0 0 10px}"
-    "a{color:#25313f;text-decoration:none}.muted,.info{color:#64707d}.ok{color:#217a4f}.err,.dangertext{color:#b93a32}"
-    "nav,.panel,.footerbar{background:#fff;border:1px solid #d8e0e6;border-radius:6px;box-shadow:0 1px 2px rgba(16,24,40,.04)}"
-    "nav{margin:0 0 14px;padding:8px 10px}nav a{font-size:14px;font-weight:600;display:inline-block;padding:6px 8px;margin:2px;border-radius:5px;color:#25313f}.brand{font-weight:700}nav a.active{background:#e5f0eb;color:#245f52}"
-    ".page{margin:0}.pagehead{background:#fff;border:1px solid #d8e0e6;border-radius:6px;box-shadow:0 1px 2px rgba(16,24,40,.04);padding:10px 12px;margin:0 0 12px}.pagehead h1{margin:0}.panel{padding:12px;margin:12px 0}.panel>:last-child{margin-bottom:0}.actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}"
-    "button,input[type=submit],input[type=button]{font-size:14px;background:#24303d;color:#fff;padding:7px 11px;border:0;border-radius:5px;cursor:pointer;margin:0 6px 6px 0}button:hover,input[type=submit]:hover,input[type=button]:hover{background:#111827}.dangerbtn,input.danger{background:#b93a32}.dangerbtn:hover,input.danger:hover{background:#9f2f29}"
-    "label{display:block;font-weight:600;margin:0 0 4px}input:not([type]),input[type=text],input[type=password],input[type=number],input[type=email],input[type=url],input[type=tel],input[type=search]{width:100%;font-size:14px;padding:7px 9px;margin:0 0 12px;border:1px solid #ccd5dd;border-radius:5px;box-sizing:border-box;background:#fff;color:#1f2933}"
-    "input[type=file]{font-size:14px;margin:2px 0 12px;max-width:100%}progress{height:12px;border:0;border-radius:8px;overflow:hidden;background:#e7ebef}"
-    "details{margin:12px 0}summary{cursor:pointer;color:#25313f}.footerbar{margin-top:14px;padding:8px 10px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;color:#64707d;font-size:13px}"
-    ".syslinks{min-width:0;flex:1 1 auto;display:flex;flex-wrap:wrap;gap:5px;align-items:center}.syslinks a{font-size:13px;line-height:1.35;padding:4px 7px;margin:0;background:#f1f4f3;color:#64707d;border-radius:5px}.heap{flex:0 0 auto;margin-left:auto;white-space:nowrap;text-align:right;font-size:12px}"
-    "@media(max-width:640px){body{padding:10px}nav a{font-size:14px;padding:6px 7px}.footerbar{align-items:flex-start}.heap{margin-left:0;text-align:left;white-space:normal}}"
-    ".kv{border-collapse:collapse;width:100%;margin:0}.kv th,.kv td{border-bottom:1px solid #d8e0e6;padding:7px 5px;text-align:left;vertical-align:top}.kv tr:last-child th,.kv tr:last-child td{border-bottom:0}.kv th{width:30%;color:#64707d;font-weight:600}"
-    ".part{border-collapse:collapse;width:100%;font-size:13px}.part th,.part td{border-bottom:1px solid #d8e0e6;padding:6px 5px;text-align:left;vertical-align:top}.part th{color:#64707d;font-weight:600}.part tr:last-child td{border-bottom:0}"
-    ".tabs,.quicklinks{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 10px}.tabs a,.quicklinks a{font-size:13px;padding:5px 8px;margin:0;background:#f1f4f3;color:#64707d;border-radius:5px}.tabs a{display:inline-flex;align-items:center;gap:8px}.tabs a.active{background:#e5f0eb;color:#245f52;font-weight:600}.segsize{padding-left:7px;border-left:1px solid #d8e0e6;font-variant-numeric:tabular-nums}"
-    ".logmeta{border-collapse:collapse;font-size:13px;line-height:1.45;margin:0}.logmeta th,.logmeta td{padding:2px 10px 2px 0;text-align:left;vertical-align:top}.logmeta th{width:112px;color:#64707d;font-weight:600}.logmeta td{color:#1f2933}.statusline{min-height:1.45em}.toolsection{padding:12px;margin:12px 0;background:#fff;border:1px solid #d8e0e6;border-radius:6px}"
-    "pre{white-space:pre;overflow-x:auto;word-break:normal;font-size:12px;line-height:1.45;background:#f1f4f3;border:1px solid #d8e0e6;border-radius:5px;padding:9px}.logframe{display:block;width:100%;height:62vh;min-height:320px;border:1px solid #d8e0e6;border-radius:5px;background:#f1f4f3}"
-    "</style>"
+    "<link rel='stylesheet' href='/esp32base/ui.css?v=" ESP32BASE_WEB_CSS_VERSION "'>"
     "<script>function once(f){if(f.dataset.busy)return false;f.dataset.busy=1;var b=f.querySelector('[type=submit]');if(b)b.disabled=true;return true;}</script>";
 
 #if ESP32BASE_ENABLE_APP_CONFIG
@@ -199,6 +212,17 @@ const char* methodName(Esp32BaseWeb::Method method) {
         case Esp32BaseWeb::METHOD_ANY: return "ANY";
         case Esp32BaseWeb::METHOD_UNKNOWN:
         default: return "UNKNOWN";
+    }
+}
+
+const char* uiToneClass(Esp32BaseWeb::UiTone tone) {
+    switch (tone) {
+        case Esp32BaseWeb::UI_OK: return " ok";
+        case Esp32BaseWeb::UI_WARN: return " warn";
+        case Esp32BaseWeb::UI_DANGER: return " danger";
+        case Esp32BaseWeb::UI_INFO: return " info";
+        case Esp32BaseWeb::UI_NEUTRAL:
+        default: return "";
     }
 }
 
@@ -670,6 +694,103 @@ void sendNavLink(const char* path, const char* title, bool paragraph, const char
         }
     }
     sendLink(path, title, paragraph, className[0] ? className : nullptr);
+}
+
+void sendPaginationLink(const char* label, const Esp32BaseWeb::Pagination& pagination, uint32_t page, bool disabled) {
+    if (disabled) {
+        sendChunk("<span class='btnlink disabled'>");
+        sendEscapedHtmlChunk(label);
+        sendChunk("</span>");
+        return;
+    }
+    const char* path = pagination.path ? pagination.path : "/esp32base";
+    sendChunk("<a class='btnlink' href='");
+    sendEscapedHtmlChunk(path);
+    sendChunk(strchr(path, '?') ? "&amp;" : "?");
+    if (pagination.query && pagination.query[0]) {
+        sendEscapedHtmlChunk(pagination.query);
+        sendChunk("&amp;");
+    }
+    char perValue[16];
+    snprintf(perValue, sizeof(perValue), "%lu", static_cast<unsigned long>(pagination.perPage == 0 ? 20 : pagination.perPage));
+    sendChunk("per=");
+    sendChunk(perValue);
+    sendChunk("&amp;");
+    char value[16];
+    snprintf(value, sizeof(value), "%lu", static_cast<unsigned long>(page));
+    sendChunk("page=");
+    sendChunk(value);
+    sendChunk("'>");
+    sendEscapedHtmlChunk(label);
+    sendChunk("</a>");
+}
+
+void sendPaginationPageNumber(const Esp32BaseWeb::Pagination& pagination, uint32_t page, uint32_t currentPage) {
+    char label[12];
+    snprintf(label, sizeof(label), "%lu", static_cast<unsigned long>(page));
+    if (page == currentPage) {
+        sendChunk("<span class='btnlink current' aria-current='page'>");
+        sendChunk(label);
+        sendChunk("</span>");
+        return;
+    }
+    sendPaginationLink(label, pagination, page, false);
+}
+
+void sendPaginationActionPath(const char* path) {
+    const char* p = path && path[0] ? path : "/esp32base";
+    sendChunk(" action='");
+    for (size_t i = 0; p[i] && p[i] != '?'; ++i) {
+        char c[2] = {p[i], '\0'};
+        sendEscapedHtmlChunk(c);
+    }
+    sendChunk("'");
+}
+
+void sendHiddenInput(const char* name, const char* value) {
+    if (!name || !name[0] || strcmp(name, "page") == 0 || strcmp(name, "per") == 0) {
+        return;
+    }
+    sendChunk("<input type='hidden' name='");
+    sendEscapedHtmlChunk(name);
+    sendChunk("' value='");
+    sendEscapedHtmlChunk(value ? value : "");
+    sendChunk("'>");
+}
+
+void sendQueryHiddenInputs(const char* query) {
+    if (!query || !query[0]) {
+        return;
+    }
+    const char* p = strchr(query, '?');
+    p = p ? p + 1 : query;
+    while (*p) {
+        char name[32] = "";
+        char value[80] = "";
+        size_t ni = 0;
+        while (*p && *p != '=' && *p != '&') {
+            if (ni + 1 < sizeof(name)) {
+                name[ni++] = *p;
+            }
+            ++p;
+        }
+        name[ni] = '\0';
+        if (*p == '=') {
+            ++p;
+            size_t vi = 0;
+            while (*p && *p != '&') {
+                if (vi + 1 < sizeof(value)) {
+                    value[vi++] = *p;
+                }
+                ++p;
+            }
+            value[vi] = '\0';
+        }
+        sendHiddenInput(name, value);
+        if (*p == '&') {
+            ++p;
+        }
+    }
 }
 
 void sendInfoRowStart(const char* label) {
@@ -1430,17 +1551,18 @@ void handleWifiPage() {
 
     Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_WIFI]);
     if (g_server.hasArg("saved")) {
-        sendChunk("<p class=ok>Saved. Credentials updated and connection started.</p>");
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "Saved", "Credentials updated and connection started.");
     } else if (g_server.hasArg("error")) {
         if (g_server.arg("error") == "clear_failed") {
-            sendChunk("<p class=err>WiFi credentials were not cleared.</p>");
+            Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_DANGER, "WiFi credentials were not cleared");
         } else {
-            sendChunk("<p class=err>WiFi settings were not saved.</p>");
+            Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_DANGER, "WiFi settings were not saved");
         }
     } else if (g_server.hasArg("cleared")) {
-        sendChunk("<p class=ok>Saved WiFi credentials were cleared.</p>");
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "Saved WiFi credentials were cleared");
     }
-    sendChunk("<header class='pagehead'><h1>WiFi Settings</h1></header><section class='panel'><form method='post' action='/esp32base/wifi' onsubmit=\"if(!this.ssid.value.trim()){alert('SSID cannot be empty');return false;}if(this.ssid.value.length>32||this.password.value.length>64){alert('SSID or password is too long');return false;}return once(this);\">");
+    Esp32BaseWeb::sendPageTitle("WiFi Settings");
+    sendChunk("<section class='panel'><form method='post' action='/esp32base/wifi' onsubmit=\"if(!this.ssid.value.trim()){alert('SSID cannot be empty');return false;}if(this.ssid.value.length>32||this.password.value.length>64){alert('SSID or password is too long');return false;}return once(this);\">");
     sendChunk("<label for='ssid'>SSID</label><input id='ssid' name='ssid' value='");
     sendEscapedHtmlChunk(ssid);
     sendChunk("' maxlength='32' autocomplete='off'><label for='wp'>Password (optional)</label><input id='wp' type='password' name='password' value='");
@@ -1499,6 +1621,12 @@ bool fileLogModeFromArg(const String& raw, Esp32BaseFileLog::Mode& mode) {
         mode = Esp32BaseFileLog::OFF;
         return true;
     }
+#if ESP32BASE_LOG_LEVEL >= ESP32BASE_LOG_ERROR
+    if (raw == "error") {
+        mode = Esp32BaseFileLog::ERROR;
+        return true;
+    }
+#endif
 #if ESP32BASE_LOG_LEVEL >= ESP32BASE_LOG_WARN
     if (raw == "warn") {
         mode = Esp32BaseFileLog::WARN;
@@ -1512,6 +1640,16 @@ bool fileLogModeFromArg(const String& raw, Esp32BaseFileLog::Mode& mode) {
     }
 #endif
     return false;
+}
+
+const char* fileLogModeName(Esp32BaseFileLog::Mode mode) {
+    switch (mode) {
+        case Esp32BaseFileLog::ERROR: return "ERROR";
+        case Esp32BaseFileLog::WARN: return "WARN";
+        case Esp32BaseFileLog::INFO: return "INFO";
+        case Esp32BaseFileLog::OFF:
+        default: return "OFF";
+    }
 }
 #endif
 
@@ -2377,9 +2515,7 @@ void handleToolsPage() {
         return;
     }
     Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_TOOLS]);
-    sendChunk("<header class='pagehead'><h1>");
-    sendEscapedHtmlChunk(g_builtinLabels[Esp32BaseWeb::BUILTIN_TOOLS]);
-    sendChunk("</h1></header>");
+    Esp32BaseWeb::sendPageTitle(g_builtinLabels[Esp32BaseWeb::BUILTIN_TOOLS]);
     sendChunk("<section class='panel'><h2>System settings</h2><div class='quicklinks'>");
 #if ESP32BASE_ENABLE_APP_CONFIG
     sendNavLink("/esp32base/app-config", "App Config", false, nullptr);
@@ -2391,22 +2527,22 @@ void handleToolsPage() {
 #endif
     sendChunk("</div><p class='muted'>Low-frequency device settings.</p></section>");
     if (g_server.hasArg("formatted")) {
-        sendChunk("<p class='ok'><b>LittleFS formatted.</b> FileLog mode was reloaded.</p>");
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "LittleFS formatted", "FileLog mode was reloaded.");
     } else if (g_server.hasArg("logs_cleared")) {
-        sendChunk("<p class='ok'><b>Logs cleared.</b></p>");
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "Logs cleared");
     } else if (g_server.hasArg("filelog_saved")) {
-        sendChunk("<p class='ok'><b>File log mode saved.</b></p>");
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "File log mode saved");
     } else if (g_server.hasArg("watchdog_trip_reset")) {
-        sendChunk("<p class='ok'><b>Watchdog trip reset.</b></p>");
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "Watchdog trip reset");
     } else if (g_server.hasArg("error")) {
         sendChunk("<p class='err'>System action failed: ");
         sendEscapedHtmlChunk(g_server.arg("error").c_str());
         sendChunk("</p>");
     } else if (g_server.hasArg("restarting")) {
-        sendChunk("<p class='ok'><b>Restart requested.</b> Device is restarting. Please wait a few seconds, then reload.</p>");
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "Restart requested", "Device is restarting. Please wait a few seconds, then reload.");
     }
     if (g_server.hasArg("hostname_saved")) {
-        sendChunk("<p class='ok'><b>Hostname saved.</b> Restart the device for mDNS, OTA and Web discovery to use it.</p>");
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "Hostname saved", "Restart the device for mDNS, OTA and Web discovery to use it.");
     } else if (g_server.hasArg("hostname_error")) {
         sendChunk("<p class='err'>Hostname was not saved: ");
         sendEscapedHtmlChunk(g_server.arg("hostname_error").c_str());
@@ -2432,6 +2568,9 @@ void handleToolsPage() {
     sendInfoRow("Path", Esp32BaseFileLog::path());
     sendChunk("</table><form method='post' action='/esp32base/tools/filelog' onsubmit=\"return once(this)\"><div class='quicklinks'>");
     sendFileLogModeOption("off", "Off", Esp32BaseFileLog::OFF);
+#if ESP32BASE_LOG_LEVEL >= ESP32BASE_LOG_ERROR
+    sendFileLogModeOption("error", "ERROR", Esp32BaseFileLog::ERROR);
+#endif
 #if ESP32BASE_LOG_LEVEL >= ESP32BASE_LOG_WARN
     sendFileLogModeOption("warn", "WARN", Esp32BaseFileLog::WARN);
 #endif
@@ -2470,7 +2609,7 @@ void handleToolsFileLogPost() {
     }
     ESP32BASE_LOG_W("web", "filelog_mode_requested source=tools from=%s to=%s",
                     Esp32BaseFileLog::modeName(),
-                    mode == Esp32BaseFileLog::OFF ? "OFF" : (mode == Esp32BaseFileLog::WARN ? "WARN" : "INFO"));
+                    fileLogModeName(mode));
     const bool ok = Esp32BaseFileLog::setMode(mode);
     redirectSeeOther(ok ? "/esp32base/tools?filelog_saved=1" : "/esp32base/tools?error=filelog_save_failed");
 #else
@@ -2485,7 +2624,9 @@ void handleToolsRebootPost() {
     }
     ESP32BASE_LOG_W("web", "restart_requested source=tools");
     Esp32BaseWeb::sendHeader("Rebooting");
-    sendChunk("<script>history.replaceState(null,'','/esp32base/tools?restarting=1');</script><header class='pagehead'><h1>Rebooting...</h1></header><section class='panel'><p>Device is restarting. Please wait a few seconds, then reload.</p></section>");
+    sendChunk("<script>history.replaceState(null,'','/esp32base/tools?restarting=1');</script>");
+    Esp32BaseWeb::sendPageTitle("Rebooting...");
+    sendChunk("<section class='panel'><p>Device is restarting. Please wait a few seconds, then reload.</p></section>");
     Esp32BaseWeb::sendFooter();
     delay(100);
     Esp32BaseSystem::restart("web");
@@ -2573,6 +2714,13 @@ void handleNoContent() {
     g_server.send(204, "text/plain", "");
 }
 
+void handleUiCss() {
+    markRequest();
+    g_server.sendHeader("Cache-Control", "public, max-age=86400");
+    g_server.sendHeader("X-Content-Type-Options", "nosniff");
+    g_server.send_P(200, WEB_CSS_TYPE, WEB_CSS);
+}
+
 void handleNotFound() {
     markRequest();
     const String uri = g_server.uri();
@@ -2596,7 +2744,8 @@ void handleOtaPage() {
         return;
     }
     Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_OTA]);
-    sendChunk("<header class='pagehead'><h1>OTA Update</h1></header><section class='panel'><form id='f'><label for='fw'>Firmware file</label><input id='fw' type='file' name='firmware' accept='.bin' required><label for='sha'>SHA256</label><input id='sha' placeholder='Optional 64-character digest' maxlength='64'><input type='submit' value='Upload Firmware'></form><progress id='p' value='0' max='100' style='width:100%;display:none'></progress><p id='s' class='statusline muted'></p></section>");
+    Esp32BaseWeb::sendPageTitle("OTA Update");
+    sendChunk("<section class='panel'><form id='f'><label for='fw'>Firmware file</label><input id='fw' type='file' name='firmware' accept='.bin' required><label for='sha'>SHA256</label><input id='sha' placeholder='Optional 64-character digest' maxlength='64'><input type='submit' value='Upload Firmware'></form><progress id='p' value='0' max='100' style='width:100%;display:none'></progress><p id='s' class='statusline muted'></p></section>");
     sendChunk("<script>function h(n){var u=['B','KB','MB','GB'],i=0,x=n;while(x>=1024&&i<u.length-1){x/=1024;i++;}return n+' bytes ('+(i?x.toFixed(2):x)+' '+u[i]+')';}document.getElementById('f').onsubmit=function(e){e.preventDefault();if(this.dataset.busy)return false;this.dataset.busy=1;var f=document.getElementById('fw').files[0],st=document.getElementById('s'),pg=document.getElementById('p'),b=this.querySelector('[type=submit]');if(!f){this.dataset.busy='';return false;}var d=new FormData();d.append('firmware',f,f.name);var x=new XMLHttpRequest();if(b)b.disabled=true;pg.style.display='block';st.textContent='Uploading 0%';x.upload.onprogress=function(ev){if(ev.lengthComputable){var p=Math.floor(ev.loaded*100/ev.total);pg.value=p;st.textContent='Uploading '+p+'% '+h(ev.loaded)+' / '+h(ev.total);}};x.onload=function(){var r={};try{r=JSON.parse(x.responseText||'{}');}catch(e){}if(x.status==200){st.textContent='Upload successful. Restarting...';setTimeout(function(){location.href=r.redirect||'/esp32base';},8000);return;}st.textContent='Upload failed: '+(r.error||('HTTP '+x.status));document.getElementById('f').dataset.busy='';if(b)b.disabled=false;};x.onerror=function(){st.textContent='Upload failed: network error';document.getElementById('f').dataset.busy='';if(b)b.disabled=false;};x.open('POST','/esp32base/ota');x.setRequestHeader('X-Firmware-Size',String(f.size));var s=document.getElementById('sha').value;if(s)x.setRequestHeader('X-Sha256',s);x.send(d);return false;};</script>");
     Esp32BaseWeb::sendFooter();
 }
@@ -2773,9 +2922,7 @@ void handleRoot() {
         return;
     }
     Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_HOME]);
-    sendChunk("<header class='pagehead'><h1>");
-    sendEscapedHtmlChunk(g_deviceName);
-    sendChunk("</h1></header>");
+    Esp32BaseWeb::sendPageTitle(g_deviceName);
 
     char value[128];
     sendStatusSectionStart("Overview");
@@ -3054,9 +3201,7 @@ void handleLogsPage() {
         return;
     }
     Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_LOGS]);
-    sendChunk("<header class='pagehead'><h1>");
-    sendEscapedHtmlChunk(g_builtinLabels[Esp32BaseWeb::BUILTIN_LOGS]);
-    sendChunk("</h1></header>");
+    Esp32BaseWeb::sendPageTitle(g_builtinLabels[Esp32BaseWeb::BUILTIN_LOGS]);
 #if ESP32BASE_ENABLE_FILELOG
     Esp32BaseFileLog::flush();
     char maxBuf[48];
@@ -3141,11 +3286,9 @@ void handleAuthPage() {
         return;
     }
     Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_AUTH]);
-    sendChunk("<header class='pagehead'><h1>");
-    sendEscapedHtmlChunk(g_builtinLabels[Esp32BaseWeb::BUILTIN_AUTH]);
-    sendChunk("</h1></header>");
+    Esp32BaseWeb::sendPageTitle(g_builtinLabels[Esp32BaseWeb::BUILTIN_AUTH]);
     if (g_server.hasArg("saved")) {
-        sendChunk("<p class='ok'>Auth updated. Use the new credentials on the next auth prompt.</p>");
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "Auth updated", "Use the new credentials on the next auth prompt.");
     } else if (g_server.hasArg("error")) {
         sendChunk("<p class='err'>Auth update failed: ");
         sendEscapedHtmlChunk(g_server.arg("error").c_str());
@@ -3204,7 +3347,7 @@ bool Esp32BaseWeb::begin() {
     }
     const uint8_t appRoutes = routeCount(false);
     const uint8_t appPages = routeCount(true);
-    uint8_t builtinRoutes = 24;
+    uint8_t builtinRoutes = 25;
 #if ESP32BASE_ENABLE_OTA
     builtinRoutes += 3;
 #endif
@@ -3251,6 +3394,7 @@ bool Esp32BaseWeb::begin() {
     g_server.on("/hotspot-detect.html", HTTP_GET, handleCaptiveProbe);
     g_server.on("/ncsi.txt", HTTP_GET, handleCaptiveProbe);
     g_server.on("/favicon.ico", HTTP_GET, handleNoContent);
+    g_server.on("/esp32base/ui.css", HTTP_GET, handleUiCss);
 #if ESP32BASE_ENABLE_OTA
     g_server.on("/esp32base/ota", HTTP_GET, handleOtaPage);
     g_server.on("/esp32base/ota", HTTP_POST, handleOtaUploadDone, handleOtaUpload);
@@ -3556,6 +3700,226 @@ void Esp32BaseWeb::sendFooter() {
         sendChunk("</div></body></html>");
     }
     endResponse();
+}
+
+void Esp32BaseWeb::sendPageTitle(const char* title, const char* subtitle) {
+    sendChunk("<header class='pagehead'><h1>");
+    writeHtmlEscaped(title ? title : "");
+    sendChunk("</h1>");
+    if (subtitle && subtitle[0]) {
+        sendChunk("<p>");
+        writeHtmlEscaped(subtitle);
+        sendChunk("</p>");
+    }
+    sendChunk("</header>");
+}
+
+void Esp32BaseWeb::beginPanel(const char* title) {
+    sendChunk("<section class='panel'>");
+    if (title && title[0]) {
+        sendChunk("<h2>");
+        writeHtmlEscaped(title);
+        sendChunk("</h2>");
+    }
+}
+
+void Esp32BaseWeb::endPanel() {
+    sendChunk("</section>");
+}
+
+void Esp32BaseWeb::sendNotice(UiTone tone, const char* title, const char* message) {
+    sendChunk("<div class='notice");
+    sendChunk(uiToneClass(tone));
+    sendChunk("'><b>");
+    writeHtmlEscaped(title ? title : "");
+    sendChunk("</b>");
+    if (message && message[0]) {
+        sendChunk("<br>");
+        writeHtmlEscaped(message);
+    }
+    sendChunk("</div>");
+}
+
+void Esp32BaseWeb::sendResultNotice(const ResultNotice* notices, uint8_t count) {
+    if (!notices || count == 0) {
+        return;
+    }
+    char value[32];
+    for (uint8_t i = 0; i < count; ++i) {
+        const ResultNotice& notice = notices[i];
+        if (!notice.param || !notice.param[0]) {
+            continue;
+        }
+        if (!hasParam(notice.param)) {
+            continue;
+        }
+        if (notice.value && notice.value[0]) {
+            if (!getParam(notice.param, value, sizeof(value)) || strcmp(value, notice.value) != 0) {
+                continue;
+            }
+        }
+        sendNotice(notice.tone, notice.title, notice.message);
+        return;
+    }
+}
+
+void Esp32BaseWeb::beginMetricGrid() {
+    sendChunk("<div class='metrics'>");
+}
+
+void Esp32BaseWeb::sendMetric(const char* label, const char* value, const char* help) {
+    sendChunk("<div class='metric'><b>");
+    writeHtmlEscaped(value ? value : "");
+    sendChunk("</b><span>");
+    writeHtmlEscaped(label ? label : "");
+    if (help && help[0]) {
+        sendChunk(" · ");
+        writeHtmlEscaped(help);
+    }
+    sendChunk("</span></div>");
+}
+
+void Esp32BaseWeb::endMetricGrid() {
+    sendChunk("</div>");
+}
+
+static bool sendInfoRowCompactStart(const char* title, const char* help, const char* value, bool hasAction) {
+    sendChunk("<div class='urow'><div><b>");
+    sendEscapedHtmlChunk(title ? title : "");
+    sendChunk("</b>");
+    if (help && help[0]) {
+        sendChunk("<small>");
+        sendEscapedHtmlChunk(help);
+        sendChunk("</small>");
+    }
+    sendChunk(hasAction ? "</div><div class='uactions'>" : "</div><div class='uactions readonly'>");
+    const bool hasValue = value && value[0];
+    if (hasValue) {
+        sendChunk("<span class='uvalue'>");
+        sendEscapedHtmlChunk(value);
+        sendChunk("</span>");
+    } else if (hasAction) {
+        sendChunk("<span class='uvalue empty'></span>");
+    }
+    return hasValue;
+}
+
+static void sendInfoRowCompactEnd() {
+    sendChunk("</div></div>");
+}
+
+static void sendInfoRowActionGap(bool hasValue) {
+    (void)hasValue;
+}
+
+static void sendInfoRowActionLink(const char* href, const char* label, Esp32BaseWeb::UiTone tone) {
+    sendChunk("<a class='btnlink");
+    sendChunk(uiToneClass(tone));
+    sendChunk("' href='");
+    sendEscapedHtmlChunk(href ? href : "#");
+    sendChunk("'>");
+    sendEscapedHtmlChunk(label ? label : "");
+    sendChunk("</a>");
+}
+
+void Esp32BaseWeb::sendInfoRowCompact(const char* title, const char* help, const char* value) {
+    sendInfoRowCompactStart(title, help, value, false);
+    sendInfoRowCompactEnd();
+}
+
+void Esp32BaseWeb::sendInfoRowCompactLink(const char* title, const char* help, const char* value,
+                                          const char* href, const char* label, UiTone tone) {
+    const bool hasValue = sendInfoRowCompactStart(title, help, value, true);
+    sendInfoRowActionGap(hasValue);
+    sendInfoRowActionLink(href, label, tone);
+    sendInfoRowCompactEnd();
+}
+
+void Esp32BaseWeb::sendInfoRowCompactForm(const char* title, const char* help, const char* value,
+                                          const char* action, const char* label,
+                                          const char* hiddenName, const char* hiddenValue,
+                                          UiTone tone) {
+    const bool hasValue = sendInfoRowCompactStart(title, help, value, true);
+    sendInfoRowActionGap(hasValue);
+    sendChunk("<form method='post' action='");
+    sendEscapedHtmlChunk(action ? action : "");
+    sendChunk("' onsubmit='return once(this)'>");
+    if (hiddenName && hiddenName[0]) {
+        sendChunk("<input type='hidden' name='");
+        sendEscapedHtmlChunk(hiddenName);
+        sendChunk("' value='");
+        sendEscapedHtmlChunk(hiddenValue ? hiddenValue : "");
+        sendChunk("'>");
+    }
+    sendChunk("<input type='submit'");
+    if (tone == UI_DANGER) {
+        sendChunk(" class='danger'");
+    }
+    sendChunk(" value='");
+    sendEscapedHtmlChunk(label ? label : "");
+    sendChunk("'></form>");
+    sendInfoRowCompactEnd();
+}
+
+void Esp32BaseWeb::sendPagination(const Pagination& pagination) {
+    const uint32_t perPage = pagination.perPage == 0 ? 20 : pagination.perPage;
+    const uint32_t totalPages = pagination.total == 0 ? 1 : ((pagination.total + perPage - 1) / perPage);
+    uint32_t page = pagination.page == 0 ? 1 : pagination.page;
+    if (page > totalPages) {
+        page = totalPages;
+    }
+    char left[64];
+    snprintf(left, sizeof(left), "共 %lu 条 / %lu 页",
+             static_cast<unsigned long>(pagination.total),
+             static_cast<unsigned long>(totalPages));
+    sendChunk("<div class='pagination'><span class='muted'>");
+    writeHtmlEscaped(left);
+    sendChunk("</span><span class='pagerlinks'>");
+    sendPaginationLink("首页", pagination, 1, page <= 1);
+    sendPaginationLink("上一页", pagination, page > 1 ? page - 1 : 1, page <= 1);
+    uint32_t startPage = page > 2 ? page - 2 : 1;
+    uint32_t endPage = startPage + 4;
+    if (endPage > totalPages) {
+        endPage = totalPages;
+    }
+    if (endPage >= 4 && endPage - startPage < 4) {
+        startPage = endPage > 4 ? endPage - 4 : 1;
+    }
+    for (uint32_t i = startPage; i <= endPage; ++i) {
+        sendPaginationPageNumber(pagination, i, page);
+    }
+    sendPaginationLink("下一页", pagination, page < totalPages ? page + 1 : totalPages, page >= totalPages);
+    sendPaginationLink("尾页", pagination, totalPages, page >= totalPages);
+    sendChunk("</span><form method='get' class='pagerform'");
+    sendPaginationActionPath(pagination.path);
+    sendChunk(">");
+    const char* pathQuery = pagination.path ? strchr(pagination.path, '?') : nullptr;
+    sendQueryHiddenInputs(pathQuery ? pathQuery + 1 : nullptr);
+    sendQueryHiddenInputs(pagination.query);
+    sendChunk("<label class='muted'>每页</label><select name='per'>");
+    const uint16_t options[] = {10, 20, 50};
+    for (uint8_t i = 0; i < 3; ++i) {
+        char opt[8];
+        snprintf(opt, sizeof(opt), "%u", static_cast<unsigned>(options[i]));
+        sendChunk("<option value='");
+        sendChunk(opt);
+        if (perPage == options[i]) {
+            sendChunk("' selected>");
+        } else {
+            sendChunk("'>");
+        }
+        sendChunk(opt);
+        sendChunk("</option>");
+    }
+    char pageValue[16];
+    char totalValue[16];
+    snprintf(pageValue, sizeof(pageValue), "%lu", static_cast<unsigned long>(page));
+    snprintf(totalValue, sizeof(totalValue), "%lu", static_cast<unsigned long>(totalPages));
+    sendChunk("</select><label class='muted'>跳至</label><input type='number' name='page' min='1' max='");
+    sendChunk(totalValue);
+    sendChunk("' value='");
+    sendChunk(pageValue);
+    sendChunk("'><button type='submit'>跳转</button></form></div>");
 }
 
 bool Esp32BaseWeb::beginResponse(int code, const char* contentType, const char* filename) {

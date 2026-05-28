@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>基础壳层顶部优化版</title>
+  <style>
+    :root{
+      color-scheme:light;
+      --bg:#f5f6f7;
+      --surface:#fff;
+      --soft:#f8fafb;
+      --ink:#17202a;
+      --muted:#667085;
+      --line:#d7dde4;
+      --line-soft:#edf1f4;
+      --primary:#14685d;
+      --primary-soft:#e6f2ef;
+      --warn:#9a5a0a;
+      --warn-soft:#fff6e8;
+      --danger:#ad3027;
+      --danger-soft:#fff1ef;
+      --ok:#087443;
+      --ok-soft:#e7f4ee;
+      --shadow:0 1px 2px rgba(16,24,40,.04);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.42}
+    .page{width:min(1180px,calc(100% - 28px));margin:0 auto;padding:12px 0 42px}
+    h1,h2,h3,p{margin-top:0}
+    h1{margin:0;font-size:23px;line-height:1.24}
+    h2{margin:0 0 8px;font-size:17px}
+    h3{margin:0 0 6px;font-size:15px}
+    p{margin-bottom:9px}
+    .muted{color:var(--muted)}
+    .devicebar{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;margin-bottom:8px}
+    .identity{display:flex;align-items:center;gap:8px;min-width:0}
+    .dot{width:10px;height:10px;border-radius:999px;background:var(--ok);box-shadow:0 0 0 3px var(--ok-soft);flex:0 0 auto}
+    .device-name{font-weight:850;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .device-meta{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .nav{display:flex;align-items:center;gap:4px;overflow:auto;white-space:nowrap;border:1px solid var(--line);background:#fff;border-radius:8px;padding:3px;margin-bottom:12px}
+    .nav a{display:inline-flex;align-items:center;min-height:29px;padding:0 10px;border-radius:6px;color:#344054;text-decoration:none;font-weight:750;font-size:13px}
+    .nav a.active{background:var(--primary-soft);color:var(--primary)}
+    .titlebar{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:end;margin:0 0 12px}
+    .titlebar p{margin:4px 0 0;color:var(--muted)}
+    .title-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+    .section{background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);padding:12px;margin-bottom:12px}
+    .section.tight{padding:0;overflow:hidden}
+    .section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-bottom:1px solid var(--line-soft)}
+    .section-head h2{margin:0}
+    .section-body{padding:12px}
+    .grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+    .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .tile{border:1px solid var(--line);border-radius:8px;background:#fff;padding:10px;min-width:0}
+    .tile strong{display:block;margin-bottom:4px}
+    .tile span{display:block;color:var(--muted);font-size:13px}
+    .tag{display:inline-flex;align-items:center;min-height:21px;padding:2px 7px;border-radius:999px;background:#eef2f4;color:#475467;font-size:11px;font-weight:750;white-space:nowrap}
+    .tag.ok{background:var(--ok-soft);color:var(--ok)}
+    .tag.warn{background:var(--warn-soft);color:var(--warn)}
+    .tag.danger{background:var(--danger-soft);color:var(--danger)}
+    .tag.primary{background:var(--primary-soft);color:var(--primary)}
+    .btn{display:inline-flex;align-items:center;justify-content:center;min-height:32px;padding:0 10px;border:1px solid #cfd6df;border-radius:6px;background:#fff;color:#344054;font-weight:750;font-size:13px;white-space:nowrap}
+    .btn.primary{border-color:var(--primary);background:var(--primary);color:#fff}
+    .mock{border:1px solid var(--line);border-radius:8px;background:#fff;overflow:hidden;min-width:0}
+    .mock-body{padding:10px;background:#f8fafb}
+    .status{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;border:1px solid var(--line);border-radius:8px;background:#fff;padding:9px 10px;margin-bottom:8px}
+    .status b{font-size:15px}
+    .status small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+    .metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+    .metric{border:1px solid var(--line);border-radius:7px;background:#fff;padding:9px}
+    .metric small{display:block;color:var(--muted);font-size:12px}.metric b{display:block;font-size:18px;line-height:1.2;margin-top:2px}
+    .compare{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .old{opacity:.78}
+    .old .brandbox{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+    .old .mark{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid #b9d8cf;border-radius:7px;background:var(--primary-soft);color:var(--primary);font-weight:900}
+    .old .nav{margin-top:8px}
+    .phone{width:320px;max-width:100%;margin:0 auto;border:1px solid var(--line);border-radius:18px;background:#fff;padding:10px}
+    .phone-screen{border:1px solid var(--line-soft);border-radius:12px;background:#f8fafb;padding:9px;min-height:374px}
+    .phone .devicebar{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+    .phone .device-meta{display:none}
+    .phone .nav{margin-bottom:8px}
+    .phone .titlebar{display:block;margin-bottom:8px}
+    .phone h1{font-size:20px}
+    .phone .titlebar p{display:none}
+    .phone .status{grid-template-columns:1fr;margin-bottom:8px}
+    .phone .metrics{grid-template-columns:1fr 1fr}
+    .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fff}
+    table{width:100%;border-collapse:collapse;min-width:760px}
+    th,td{padding:8px 10px;border-bottom:1px solid var(--line-soft);text-align:left;vertical-align:top}
+    th{background:#f8fafb;color:#475467;font-size:12px}
+    tr:last-child td{border-bottom:0}
+    .notice{border:1px solid #bfe0d4;background:#f1faf7;color:#185b4e;border-radius:8px;padding:10px 11px}
+    @media(max-width:980px){
+      .page{width:min(100% - 20px,1180px);padding-top:10px}
+      .devicebar,.titlebar{grid-template-columns:1fr}
+      .device-meta{white-space:normal}
+      .title-actions{justify-content:flex-start}
+      .grid-3,.grid-2,.compare,.metrics{grid-template-columns:1fr}
+      .status{grid-template-columns:1fr}
+      .btn{width:100%}
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="devicebar">
+      <div class="identity">
+        <span class="dot"></span>
+        <span class="device-name">灌溉控制器</span>
+        <span class="device-meta">本地 Web 控制台 / 在线 / 192.168.4.1</span>
+      </div>
+      <span class="tag ok">在线</span>
+    </div>
+    <nav class="nav">
+      <a class="active" href="#">总览</a>
+      <a href="#">配置</a>
+      <a href="#">记录</a>
+      <a href="#">系统</a>
+    </nav>
+
+    <div class="titlebar">
+      <div>
+        <h1>基础壳层顶部优化</h1>
+        <p>顶部只负责设备身份和导航；页面标题负责说明当前页面。</p>
+      </div>
+      <div class="title-actions">
+        <span class="tag primary">推荐方案</span>
+      </div>
+    </div>
+
+    <section class="section">
+      <h2>一、问题判断</h2>
+      <div class="grid-3">
+        <div class="tile"><strong>原顶部信息职责混乱</strong><span>图标、设备名、说明、导航、页面标题堆在一起，视觉上没有明确层级。</span></div>
+        <div class="tile"><strong>手机端重复文字太多</strong><span>设备名、总览、状态和主要操作连续出现，头部信息密度过高。</span></div>
+        <div class="tile"><strong>品牌图标价值不高</strong><span>ESP32 本地页面不是品牌入口，小方块图标可以换成在线状态点，信息更有用。</span></div>
+      </div>
+    </section>
+
+    <section class="section tight">
+      <div class="section-head">
+        <h2>二、优化前后对比</h2>
+        <span class="tag primary">推荐右侧</span>
+      </div>
+      <div class="section-body">
+        <div class="compare">
+          <div class="mock old">
+            <div class="mock-body">
+              <div class="brandbox">
+                <div class="mark">ESP</div>
+                <div><b>设备名称</b><br><span class="muted">本地控制台，状态和页面说明</span></div>
+              </div>
+              <nav class="nav"><a class="active" href="#">总览</a><a href="#">配置</a><a href="#">记录</a></nav>
+              <div class="titlebar"><h1>总览</h1><p>状态和主要操作。</p></div>
+            </div>
+          </div>
+          <div class="mock">
+            <div class="mock-body">
+              <div class="devicebar">
+                <div class="identity"><span class="dot"></span><span class="device-name">设备名称</span><span class="device-meta">在线 / 本地控制台</span></div>
+                <span class="tag ok">在线</span>
+              </div>
+              <nav class="nav"><a class="active" href="#">总览</a><a href="#">配置</a><a href="#">记录</a></nav>
+              <div class="titlebar"><div><h1>总览</h1><p>只在需要时放一句页面说明。</p></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid-2">
+      <article class="section tight">
+        <div class="section-head">
+          <h2>三、PC 顶部基线</h2>
+          <span class="tag ok">更清楚</span>
+        </div>
+        <div class="section-body">
+          <div class="mock">
+            <div class="mock-body">
+              <div class="status">
+                <div><b>当前状态：空闲</b><small>下一计划 18:30，最近一次执行正常。</small></div>
+                <button class="btn primary">主要操作</button>
+              </div>
+              <div class="metrics">
+                <div class="metric"><small>通道 1</small><b>空闲</b></div>
+                <div class="metric"><small>通道 2</small><b>启用</b></div>
+                <div class="metric"><small>今日累计</small><b>1.8 L</b></div>
+                <div class="metric"><small>异常</small><b>无</b></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="section tight">
+        <div class="section-head">
+          <h2>四、手机顶部基线</h2>
+          <span class="tag ok">减少重复</span>
+        </div>
+        <div class="section-body">
+          <div class="phone">
+            <div class="phone-screen">
+              <div class="devicebar">
+                <div class="identity"><span class="dot"></span><span class="device-name">设备</span></div>
+                <span class="tag ok">在线</span>
+              </div>
+              <nav class="nav"><a class="active" href="#">总览</a><a href="#">配置</a><a href="#">记录</a></nav>
+              <div class="titlebar"><h1>总览</h1><p>状态和主要操作。</p></div>
+              <div class="status">
+                <div><b>空闲</b><small>下一计划 18:30</small></div>
+                <button class="btn primary">操作</button>
+              </div>
+              <div class="metrics">
+                <div class="metric"><small>通道 1</small><b>空闲</b></div>
+                <div class="metric"><small>异常</small><b>无</b></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section class="section tight">
+      <div class="section-head">
+        <h2>五、顶部壳层规则</h2>
+        <span class="tag primary">建议定稿</span>
+      </div>
+      <div class="section-body">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>区域</th><th>职责</th><th>规则</th></tr></thead>
+            <tbody>
+              <tr><td>设备身份栏</td><td>告诉用户正在看哪台设备，以及是否在线。</td><td>只放状态点、设备名、短元信息；不放长说明，不放装饰图标。</td></tr>
+              <tr><td>导航栏</td><td>切换页面能力模块。</td><td>独立一行，紧凑横向；手机可横向滚动，不做复杂菜单。</td></tr>
+              <tr><td>页面标题区</td><td>说明当前页面是什么。</td><td>标题 + 一句短说明；手机端说明可隐藏，避免头部过长。</td></tr>
+              <tr><td>页面内容区</td><td>展示状态、列表、配置或操作。</td><td>不要在顶部重复写“状态和主要操作”，具体信息放进内容区。</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>六、我的建议</h2>
+      <div class="notice">
+        顶部采用“设备身份栏 + 独立导航 + 页面标题区”三段式，但每段都要短。去掉 ESP 小方块品牌图标，改用在线状态点；手机端隐藏页面说明，只保留设备名、导航、标题和关键内容。
+      </div>
+    </section>
+  </main>
+</body>
+</html>

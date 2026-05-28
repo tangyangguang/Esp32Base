@@ -18,6 +18,10 @@
 
 已知限制、明确不支持能力和风险边界详见 [已知限制](docs/10_known_limitations.md)。
 
+Web 页面结构、样式基线、业务页面模板和换肤策略详见 [Web UI 页面结构与样式基线](docs/11_web_ui_baseline.md)。
+业务项目接入前，建议先用 `examples/web_ui_gallery` 统一查看和验证状态、记录、配置、命令、流程、确认和空状态等页面样式；`examples/full_demo` 侧重完整功能集成。
+基础 Web CSS 由 `/esp32base/ui.css` 统一输出并允许浏览器缓存，业务页面通过 `sendHeader()` 自动引用，不需要复制样式。
+
 ## 快速开始
 
 最小应用：
@@ -51,7 +55,7 @@ build_flags =
 
 Web/API 保存的 hostname 存储在 `eb_sys.hostname`，重启后覆盖构建默认值，并用于 DHCP client hostname、mDNS 和 OTA；出厂重置清除该配置后恢复 `ESP32BASE_DEFAULT_HOSTNAME`。
 
-启用 FS 的 profile 会默认启用 Runtime 文件日志：`/logs/eb_app.log`，默认 `4 × 32KB`，模式 WARN。示例通过构建参数把默认模式改为 INFO：
+启用 FS 的 profile 会默认启用 Runtime 文件日志：`/logs/eb_app.log`，默认 `4 × 32KB`，模式 WARN。运行时可配置为 OFF、ERROR、WARN、INFO；示例通过构建参数把默认模式改为 INFO：
 
 ```ini
 build_flags =
@@ -163,6 +167,7 @@ pio run -t webota
 9. [Arduino Core 兼容性](docs/08_arduino_core_compat.md)
 10. [发布检查清单](docs/09_release_checklist.md)
 11. [已知限制](docs/10_known_limitations.md)
+12. [Web UI 页面结构与样式基线](docs/11_web_ui_baseline.md)
 
 历史设计方案与评审记录已归档到 `design-history/`，只作为背景材料，不作为新实现的直接依据。
 

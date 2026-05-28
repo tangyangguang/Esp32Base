@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>业务配置页与保存前核对</title>
+  <style>
+    :root{
+      color-scheme:light;
+      --bg:#f6f7f8;
+      --surface:#fff;
+      --soft:#f8fafb;
+      --text:#17202a;
+      --muted:#667085;
+      --line:#d8dee6;
+      --line-soft:#edf1f4;
+      --primary:#14685d;
+      --primary-soft:#e7f2ef;
+      --danger:#b42318;
+      --warn:#a15c07;
+      --ok:#087443;
+      --shadow:0 1px 2px rgba(16,24,40,.04);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-size:14px;line-height:1.45}
+    .page{width:min(1180px,calc(100% - 28px));margin:0 auto;padding:18px 0 44px}
+    h1,h2,h3,p{margin-top:0}
+    h1{margin:0 0 5px;font-size:25px;line-height:1.22}
+    h2{margin:0 0 8px;font-size:17px}
+    h3{margin:0 0 6px;font-size:15px}
+    .sub{color:var(--muted);margin:0}
+    .top{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:16px}
+    .pill{display:inline-flex;align-items:center;min-height:26px;padding:3px 9px;border:1px solid var(--line);border-radius:999px;background:#fff;color:#475467;font-size:13px;white-space:nowrap}
+    .section{background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);padding:14px;margin-bottom:14px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .card{border:1px solid var(--line);border-radius:8px;background:#fff;overflow:hidden;min-width:0}
+    .card.rec{border-color:#8bc9be;box-shadow:0 0 0 2px rgba(20,104,93,.08)}
+    .card-head{padding:11px 12px;border-bottom:1px solid var(--line);background:#fff}
+    .rec .card-head{background:#f4fbf9}
+    .card-body{padding:12px;background:#f8fafb}
+    .mock{border:1px solid var(--line);border-radius:7px;background:#fff;overflow:hidden}
+    .mock-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 9px;border-bottom:1px solid var(--line-soft)}
+    .mock-title{font-weight:750;font-size:13px}
+    .badge{display:inline-flex;align-items:center;min-height:20px;padding:2px 7px;border-radius:999px;background:#eef2f4;color:#475467;font-size:11px;font-weight:700;white-space:nowrap}
+    .badge.ok{background:#e8f4ee;color:var(--ok)}
+    .badge.warn{background:#fff6e6;color:var(--warn)}
+    .badge.danger{background:#fff0ee;color:var(--danger)}
+    .mock-body{padding:10px}
+    .field-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px;border:1px solid var(--line-soft);border-radius:6px;background:#fff;margin-bottom:7px}
+    .field-row b{display:block;font-size:13px}.field-row small{display:block;color:var(--muted);font-size:11px}
+    .edit{min-width:46px;text-align:center;padding:4px 7px;border:1px solid #cfd6df;border-radius:5px;color:#344054;background:#fff;font-size:12px;font-weight:700}
+    .form{display:grid;gap:8px}
+    .field{display:grid;gap:4px}.field label{font-size:12px;color:var(--muted);font-weight:700}
+    input,select{min-width:0;width:100%;min-height:32px;border:1px solid #cfd6df;border-radius:6px;background:#fff;padding:6px 8px;font:inherit;color:var(--text)}
+    .suffix{display:grid;grid-template-columns:1fr auto;align-items:center;border:1px solid #cfd6df;border-radius:6px;background:#fff;overflow:hidden}
+    .suffix input{border:0;border-radius:0}.suffix em{font-style:normal;color:var(--muted);font-size:12px;padding-right:8px}
+    .btns{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}
+    .btn{display:inline-flex;align-items:center;justify-content:center;min-height:30px;padding:0 10px;border:1px solid var(--primary);border-radius:6px;background:var(--primary);color:#fff;font-size:12px;font-weight:700}
+    .btn.secondary{background:#fff;color:#344054;border-color:#cfd6df}.btn.danger{background:var(--danger);border-color:var(--danger)}
+    .confirm{border:1px solid #e0c06c;background:#fffdf5;border-radius:7px;padding:10px}
+    .table{border:1px solid var(--line);border-radius:6px;overflow:hidden;margin-top:8px}
+    .row{display:grid;grid-template-columns:1fr 76px 76px;gap:6px;padding:6px 7px;border-bottom:1px solid var(--line-soft);font-size:12px}
+    .row:last-child{border-bottom:0}.row.head{background:#f7f9fa;color:var(--muted);font-weight:700}
+    .flow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+    .step{position:relative;border:1px solid var(--line);border-radius:8px;background:#fff;padding:10px;min-height:120px}
+    .num{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:999px;background:var(--primary-soft);color:var(--primary);font-size:12px;font-weight:800;margin-bottom:7px}
+    .step b{display:block;margin-bottom:4px}.step span{color:var(--muted);font-size:13px}
+    .notes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:10px}
+    .notes div{border:1px solid var(--line);border-radius:8px;padding:10px;background:#fff}
+    .notes b{display:block;margin-bottom:4px}.notes span{color:var(--muted);font-size:13px}
+    .codebox{border:1px solid var(--line);border-radius:8px;background:#fff;padding:12px}
+    .codebox code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;line-height:1.5;white-space:pre-wrap;color:#344054}
+    @media(max-width:960px){.top{display:block}.page{width:min(100% - 20px,1180px);padding-top:12px}.grid,.flow,.notes{grid-template-columns:1fr}.row{grid-template-columns:1fr 64px 64px}}
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="top">
+      <div>
+        <h1>业务配置页与保存前核对</h1>
+        <p class="sub">App Config 保持现状；新增的是业务页面里的轻量配置模式，避免每个项目重复写一套复杂表单逻辑。</p>
+      </div>
+      <span class="pill">目标：业务页少写样式，少写重复交互</span>
+    </header>
+
+    <section class="section">
+      <h2>一、业务配置页不是 App Config 的复制品</h2>
+      <div class="grid">
+        <article class="card">
+          <div class="card-head"><h3>App Config 已经适合的场景</h3><p class="sub">低频、系统级、硬件/策略参数。</p></div>
+          <div class="card-body">
+            <div class="mock">
+              <div class="mock-head"><span class="mock-title">系统参数</span><span class="badge ok">基础库内置</span></div>
+              <div class="mock-body">
+                <div class="field-row"><div><b>最大运行时间</b><small>保护参数，低频修改</small></div><span class="edit">内置</span></div>
+                <div class="field-row"><div><b>硬件校准系数</b><small>系统/硬件参数</small></div><span class="edit">内置</span></div>
+                <div class="field-row"><div><b>重启后生效参数</b><small>基础库已经有提示机制</small></div><span class="edit">内置</span></div>
+              </div>
+            </div>
+          </div>
+        </article>
+        <article class="card rec">
+          <div class="card-head"><h3>业务配置页需要的新模式</h3><p class="sub">计划、预设、滤芯、通道、补料、校准入口。</p></div>
+          <div class="card-body">
+            <div class="mock">
+              <div class="mock-head"><span class="mock-title">业务对象</span><span class="badge warn">应用页面</span></div>
+              <div class="mock-body">
+                <div class="field-row"><div><b>早晨投喂计划</b><small>06:30 · 1/2/3 路 · 每路目标不同</small></div><span class="edit">编辑</span></div>
+                <div class="field-row"><div><b>第 1 路基础信息</b><small>启用、名称、每圈克数、容量</small></div><span class="edit">编辑</span></div>
+                <div class="field-row"><div><b>滤芯 A</b><small>寿命、启用状态、重置记录</small></div><span class="edit">编辑</span></div>
+              </div>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>二、推荐的业务配置流程</h2>
+      <div class="flow">
+        <div class="step"><span class="num">1</span><b>列表展示</b><span>先展示当前值、状态、影响范围。用户不用进入表单也能看懂配置。</span></div>
+        <div class="step"><span class="num">2</span><b>单项编辑</b><span>点击某一项，只编辑一个业务对象或一小组强相关字段。</span></div>
+        <div class="step"><span class="num">3</span><b>保存前核对</b><span>前端显示 old/new 差异，尤其是危险、校准、会影响运行的修改。</span></div>
+        <div class="step"><span class="num">4</span><b>服务端校验保存</b><span>最终事实仍由业务 handler 校验；核对页面只帮助用户避免误操作。</span></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>三、保存前核对在哪里实现</h2>
+      <div class="grid">
+        <article class="card rec">
+          <div class="card-head"><h3>首选：基础库提供轻量 UI helper</h3><p class="sub">不替业务保存数据，只生成通用确认体验。</p></div>
+          <div class="card-body">
+            <div class="mock">
+              <div class="mock-head"><span class="mock-title">编辑计划</span><span class="badge">业务页</span></div>
+              <div class="mock-body">
+                <div class="form">
+                  <div class="field"><label>计划名称</label><input value="傍晚投喂"></div>
+                  <div class="field"><label>执行时间</label><input value="18:30"></div>
+                  <div class="field"><label>第 1 路目标</label><span class="suffix"><input value="70"><em>g</em></span></div>
+                </div>
+                <div class="confirm" style="margin-top:9px">
+                  <b>保存前核对</b>
+                  <p class="sub">由基础库通用样式/脚本显示；业务只声明字段标签和初始值。</p>
+                  <div class="table"><div class="row head"><span>字段</span><span>原值</span><span>新值</span></div><div class="row"><span>执行时间</span><span>18:00</span><span>18:30</span></div><div class="row"><span>第 1 路目标</span><span>60g</span><span>70g</span></div></div>
+                  <div class="btns"><span class="btn">确认保存</span><span class="btn secondary">返回修改</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </article>
+        <article class="card">
+          <div class="card-head"><h3>业务代码只保留业务事实</h3><p class="sub">校验、权限、保存、运行中拒绝仍在业务 handler。</p></div>
+          <div class="card-body">
+            <div class="codebox"><code>页面端：
+- 基础库样式负责布局
+- 通用 JS 负责 old/new 核对
+- 表单仍提交到业务 POST 路由
+
+业务端：
+- 重新解析 POST 参数
+- 校验范围和业务状态
+- 运行中/忙碌时拒绝
+- 保存后 303 跳转
+- 记录业务事件</code></div>
+          </div>
+        </article>
+      </div>
+      <div class="notes">
+        <div><b>不做什么</b><span>不把业务配置都塞进 App Config；不让基础库理解业务对象；不让前端核对代替后端校验。</span></div>
+        <div><b>基础库做什么</b><span>提供 CSS class、确认框样式、字段 old/new 标记规则、按钮状态和少量通用 JS。</span></div>
+        <div><b>业务做什么</b><span>负责字段含义、数据读取、业务校验、保存路径、事件记录和是否允许修改。</span></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>四、为什么这种方式不会别扭</h2>
+      <div class="notes">
+        <div><b>App Config</b><span>继续作为基础库内置低频参数页，保持现有体验。</span></div>
+        <div><b>业务配置</b><span>用“对象列表 + 单项编辑”，更像产品页面，而不是系统参数页。</span></div>
+        <div><b>共同部分</b><span>两者共享视觉 token、表单控件、按钮、状态提示和确认体验。</span></div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

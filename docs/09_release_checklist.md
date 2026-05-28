@@ -49,7 +49,7 @@
 - 发布包包含 `partitions/` 推荐分区表。
 - 推荐分区表的 `app0` 偏移必须和 PlatformIO / Arduino 上传地址一致；默认应为 `0x10000`。
 - 发布包包含示例依赖哨兵 `examples/basic/src/deps_*.cpp`。
-- 发布包包含独立 PIO 示例 `examples/full_demo`、`examples/web_logs_ota`、`examples/net_runtime`。
+- 发布包包含独立 PIO 示例 `examples/full_demo`、`examples/web_ui_gallery`、`examples/web_logs_ota`、`examples/net_runtime`。
 - 发布包不包含 `design-history/`。
 - 发布包不包含 `.pio/`、`.cache/`、`idf_component.yml` 等构建生成物。
 
@@ -135,9 +135,9 @@
 - 非 FS profile 不强行启用 FileLog。
 - 默认路径为 `/logs/eb_app.log`。
 - 默认轮转为 `4 × 32KB`。
-- INFO 仅在 FileLog 模式为 INFO 后写文件；DEBUG/VERBOSE 不能配置为文件日志模式。
+- ERROR 仅在 FileLog 模式为 ERROR/WARN/INFO 后写文件；WARN 仅在 WARN/INFO 后写文件；INFO 仅在 INFO 后写文件；DEBUG/VERBOSE 不能配置为文件日志模式。
 - INFO 使用 `1KB / 2s` 缓存。
-- Web System 页只能设置 Off/WARN/INFO，非法 POST 值必须失败。
+- Web System 页只能设置 Off/ERROR/WARN/INFO，非法 POST 值必须失败。
 - Web System 页切换 FileLog 模式时，WARN 审计日志必须包含上一次模式和新模式。
 - FileLog OFF 后 Logs 页面仍能查看已有历史 segment。
 - `setSerialLevel(NONE)` 后 Serial 不输出，但 FileLog 仍按当前模式写入。
@@ -215,6 +215,8 @@
 - `examples/basic` 的 `deps_*.cpp` 哨兵继续验证裁剪。
 - `examples/full_demo` 可在自身目录 `pio run`。
 - `examples/full_demo` 覆盖 App Config string/int/decimal/bool/enum、字段级校验、页面级校验、重启提示和回调。
+- `examples/web_ui_gallery` 可在自身目录 `pio run`。
+- `examples/web_ui_gallery` 覆盖 Web UI baseline 的状态、统计、分页记录、配置、命令、流程、维护、访问控制、确认、空状态和表单页面，并提供 selftest env。
 - `examples/web_logs_ota` 可在自身目录 `pio run`。
 - `examples/net_runtime` 可在自身目录 `pio run`。
 - 所有启用 FS 的示例通过 `ESP32BASE_EB_FILELOG_DEFAULT_MODE=ESP32BASE_FILELOG_MODE_INFO` 将文件日志默认模式设为 INFO。

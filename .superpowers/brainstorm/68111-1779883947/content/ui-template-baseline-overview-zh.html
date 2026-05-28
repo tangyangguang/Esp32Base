@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>公共 Web UI 模板基线总览</title>
+  <style>
+    :root{color-scheme:light;--bg:#f5f6f7;--surface:#fff;--soft:#f8fafb;--ink:#17202a;--muted:#667085;--line:#d7dde4;--line-soft:#edf1f4;--primary:#14685d;--primary-soft:#e6f2ef;--ok:#087443;--ok-soft:#e7f4ee;--warn:#9a5a0a;--warn-soft:#fff6e8;--danger:#ad3027;--danger-soft:#fff1ef;--blue:#245f9e;--blue-soft:#e8f0f8;--shadow:0 1px 2px rgba(16,24,40,.04);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.42}.page{width:min(1180px,calc(100% - 28px));margin:0 auto;padding:12px 0 42px}
+    h1,h2,h3,p{margin-top:0}h1{margin:0;font-size:23px;line-height:1.24}h2{margin:0 0 8px;font-size:17px}h3{margin:0 0 6px;font-size:15px}p{margin-bottom:9px}.muted{color:var(--muted)}
+    .devicebar{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;margin-bottom:8px}.identity{display:flex;align-items:center;gap:8px;min-width:0}.dot{width:10px;height:10px;border-radius:999px;background:var(--ok);box-shadow:0 0 0 3px var(--ok-soft);flex:0 0 auto}.name{font-weight:850}.meta{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .nav{display:flex;align-items:center;gap:4px;overflow:auto;white-space:nowrap;border:1px solid var(--line);background:#fff;border-radius:8px;padding:3px;margin-bottom:12px}.nav a{display:inline-flex;align-items:center;min-height:29px;padding:0 10px;border-radius:6px;color:#344054;text-decoration:none;font-weight:750;font-size:13px}.nav a.active{background:var(--primary-soft);color:var(--primary)}
+    .titlebar{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:end;margin:0 0 12px}.titlebar p{margin:4px 0 0;color:var(--muted)}
+    .tag{display:inline-flex;align-items:center;min-height:21px;padding:2px 7px;border-radius:999px;background:#eef2f4;color:#475467;font-size:11px;font-weight:750;white-space:nowrap}.tag.ok{background:var(--ok-soft);color:var(--ok)}.tag.warn{background:var(--warn-soft);color:var(--warn)}.tag.danger{background:var(--danger-soft);color:var(--danger)}.tag.blue{background:var(--blue-soft);color:var(--blue)}
+    .section{background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);padding:12px;margin-bottom:12px}.section.tight{padding:0;overflow:hidden}.section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-bottom:1px solid var(--line-soft)}.section-head h2{margin:0}.section-body{padding:12px}
+    .grid-4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+    .tile{border:1px solid var(--line);border-radius:8px;background:#fff;padding:10px}.tile strong{display:block;margin-bottom:4px}.tile span{display:block;color:var(--muted);font-size:13px}.tile.ok{border-color:#bfe0d4;background:#f7fcfa}.tile.warn{border-color:#efcf96;background:#fffaf0}
+    .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fff}table{width:100%;border-collapse:collapse;min-width:980px}th,td{padding:8px 10px;border-bottom:1px solid var(--line-soft);text-align:left;vertical-align:top}th{background:#f8fafb;color:#475467;font-size:12px}tr:last-child td{border-bottom:0}td small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+    .flow{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}.step{border:1px solid var(--line);border-radius:8px;background:#fff;padding:10px;min-height:112px}.num{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:999px;background:var(--primary-soft);color:var(--primary);font-size:12px;font-weight:800;margin-bottom:7px}.step b{display:block;margin-bottom:4px}.step span{display:block;color:var(--muted);font-size:13px}
+    .note{border:1px solid #bfe0d4;background:#f1faf7;color:#185b4e;border-radius:8px;padding:10px 11px;margin-bottom:10px}.note.warn{border-color:#efcf96;background:#fff8ea;color:#7a4608}
+    @media(max-width:980px){.page{width:min(100% - 20px,1180px);padding-top:10px}.devicebar,.titlebar,.grid-4,.grid-3,.flow{grid-template-columns:1fr}.tag{white-space:normal}}
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="devicebar"><div class="identity"><span class="dot"></span><span class="name">公共 Web UI 模板</span><span class="meta">第一版基线 / 方案总览</span></div><span class="tag ok">已汇总</span></div>
+    <nav class="nav"><a class="active">总览</a><a>状态</a><a>列表</a><a>配置</a><a>操作</a><a>反馈</a></nav>
+    <div class="titlebar"><div><h1>公共 Web UI 模板基线总览</h1><p>把已确认的页面能力模板收束为一套可落地的 ESP32 Web UI 基线。</p></div><span class="tag blue">第一版基线</span></div>
+
+    <section class="section">
+      <h2>一、总判断</h2>
+      <div class="grid-3">
+        <div class="tile ok"><strong>方向成立</strong><span>按页面能力分类，而不是按业务功能分类，能覆盖更多项目，也不会被某个未定稿业务绑住。</span></div>
+        <div class="tile ok"><strong>第一批足够完整</strong><span>基础壳层、状态、列表、配置、操作、确认、横向状态已经覆盖高频页面。</span></div>
+        <div class="tile warn"><strong>实现要克制</strong><span>首版应沉淀轻量 CSS、HTML 结构约定和少量 helper，不做重型前端框架。</span></div>
+      </div>
+    </section>
+
+    <section class="section tight">
+      <div class="section-head"><h2>二、模板清单</h2><span class="tag ok">当前确认状态</span></div>
+      <div class="section-body">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>模板</th><th>定位</th><th>关键规则</th><th>状态</th><th>优先级</th></tr></thead>
+            <tbody>
+              <tr><td>基础壳层</td><td>所有页面共享的顶部、导航、标题、容器、控件密度。</td><td>三段式紧凑顶部；状态点替代品牌图标；1180px 宽度；32-34px 控件。</td><td><span class="tag ok">已认可</span></td><td>第一批</td></tr>
+              <tr><td>状态概览</td><td>设备首页或任何需要判断当前状态的区域。</td><td>首行回答是否正常；指标不超过 4 个；异常优先；主操作克制。</td><td><span class="tag ok">已认可</span></td><td>第一批</td></tr>
+              <tr><td>列表记录</td><td>历史记录、事件、对象列表等多条数据展示。</td><td>紧凑筛选、表头、分页 footer、首页/尾页/跳页、总条数/总页数。</td><td><span class="tag ok">已认可</span></td><td>第一批</td></tr>
+              <tr><td>配置编辑</td><td>业务配置、通道配置、计划配置、低频参数。</td><td>列表先行；简单字段行内展开；多字段对象独立编辑；每项一句说明。</td><td><span class="tag ok">已认可</span></td><td>第一批</td></tr>
+              <tr><td>操作命令</td><td>开始、停止、跳过、测试、立即执行等一次性动作。</td><td>命令不是配置；执行中禁止重复开始；拒绝执行说明原因；高风险进确认。</td><td><span class="tag ok">已认可</span></td><td>第一批</td></tr>
+              <tr><td>确认保护</td><td>不可逆或高风险操作前的安全门。</td><td>独立确认页；影响范围；一次性 token；服务端二次校验；POST 后跳转。</td><td><span class="tag ok">已认可</span></td><td>第一批</td></tr>
+              <tr><td>横向状态</td><td>所有页面共享的成功、失败、空数据、未配置、受限状态。</td><td>短提示和大空态分工；状态必须可行动；错误原因可读；PRG 结果统一显示。</td><td><span class="tag ok">已认可</span></td><td>第一批</td></tr>
+              <tr><td>流程向导</td><td>校准、首次设置、复杂维护等多步骤任务。</td><td>依据、实测、核对、保存；作为按需模板，不强加给每个项目。</td><td><span class="tag blue">方向认可</span></td><td>第二批</td></tr>
+              <tr><td>诊断/长任务</td><td>维护、调试、导出、修复、扫描等非普通业务流程。</td><td>只读优先；耗时任务异步；限制输出量；不挤占普通页面主流程。</td><td><span class="tag warn">后置</span></td><td>第三批</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>三、全局硬规则</h2>
+      <div class="grid-4">
+        <div class="tile"><strong>PRG</strong><span>页面表单和命令提交统一 POST -> 303 -> GET，刷新不能重复提交。</span></div>
+        <div class="tile"><strong>轻量</strong><span>首版不引入前端框架，不做复杂主题系统，不依赖大型 JS。</span></div>
+        <div class="tile"><strong>紧凑</strong><span>PC 不拉散，手机不拥挤；按钮、输入框、section 间距统一。</span></div>
+        <div class="tile"><strong>可行动</strong><span>空状态、错误、拒绝、受限状态都必须告诉用户下一步。</span></div>
+      </div>
+    </section>
+
+    <section class="section tight">
+      <div class="section-head"><h2>四、业务页面如何组合</h2><span class="tag blue">不是按业务分类</span></div>
+      <div class="section-body">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>常见组合页</th><th>由哪些模板组成</th><th>说明</th></tr></thead>
+            <tbody>
+              <tr><td>设备首页</td><td>基础壳层 + 状态概览 + 操作命令入口 + 横向状态</td><td>首页不是一个独立模板，而是状态能力的组合。</td></tr>
+              <tr><td>设备记录页</td><td>基础壳层 + 列表记录 + 横向状态</td><td>无记录、筛选无结果、时间未同步都走横向状态。</td></tr>
+              <tr><td>设备配置页</td><td>基础壳层 + 配置编辑 + 确认保护 + 横向状态</td><td>简单字段行内改，复杂对象进独立编辑页。</td></tr>
+              <tr><td>设备操作页</td><td>基础壳层 + 操作命令 + 确认保护 + 横向状态</td><td>一次性动作与长期配置分离。</td></tr>
+              <tr><td>校准/首次设置</td><td>基础壳层 + 流程向导 + 确认保护 + 横向状态</td><td>按需启用，不作为所有项目默认页面。</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>五、建议实现顺序</h2>
+      <div class="flow">
+        <div class="step"><span class="num">1</span><b>CSS 基线</b><span>变量、容器、导航、section、按钮、表单、tag、notice。</span></div>
+        <div class="step"><span class="num">2</span><b>页面结构 helper</b><span>header、nav、title、section、row、actions 等轻量输出函数。</span></div>
+        <div class="step"><span class="num">3</span><b>核心模板</b><span>状态、列表、配置、操作、确认、横向状态。</span></div>
+        <div class="step"><span class="num">4</span><b>示例页</b><span>用一个最小示例覆盖常见组合页，避免业务项目重复摸索。</span></div>
+        <div class="step"><span class="num">5</span><b>接入验证</b><span>优先用灌溉项目验证，再回看风扇和接水优化空间。</span></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>六、当前不建议做</h2>
+      <div class="grid-3">
+        <div class="tile warn"><strong>不先做完整主题系统</strong><span>可以保留 CSS 变量，但不要为皮肤切换增加复杂度。</span></div>
+        <div class="tile warn"><strong>不先重做所有业务页</strong><span>先形成模板和示例，再挑痛点最高的灌溉页面接入验证。</span></div>
+        <div class="tile warn"><strong>不把诊断维护做成第一批</strong><span>诊断、长任务、原始数据后置，避免首版变重。</span></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>七、下一步建议</h2>
+      <div class="note">
+        这套基线已经可以进入正式设计文档阶段。我的建议是先写一份设计文档，冻结模板分类、规则、资源边界和实现顺序；你确认后，再进入实现计划。这样不会一边写代码一边继续改方向。
+      </div>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>紧凑业务配置页</title>
+  <style>
+    :root{
+      color-scheme:light;
+      --bg:#f6f7f8;
+      --surface:#fff;
+      --soft:#f8fafb;
+      --text:#17202a;
+      --muted:#667085;
+      --line:#d8dee6;
+      --line-soft:#edf1f4;
+      --primary:#14685d;
+      --primary-soft:#e7f2ef;
+      --danger:#b42318;
+      --warn:#a15c07;
+      --ok:#087443;
+      --shadow:0 1px 2px rgba(16,24,40,.04);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-size:14px;line-height:1.45}
+    .page{width:min(1180px,calc(100% - 28px));margin:0 auto;padding:18px 0 44px}
+    h1,h2,h3,p{margin-top:0}
+    h1{margin:0 0 5px;font-size:25px;line-height:1.22}
+    h2{margin:0;font-size:17px}
+    h3{margin:0;font-size:15px}
+    .sub{color:var(--muted);margin:0}
+    .top{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:16px}
+    .pill{display:inline-flex;align-items:center;min-height:26px;padding:3px 9px;border:1px solid var(--line);border-radius:999px;background:#fff;color:#475467;font-size:13px;white-space:nowrap}
+    .layout{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .panel{background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);overflow:hidden;min-width:0}
+    .panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 14px;border-bottom:1px solid var(--line)}
+    .panel-head .sub{font-size:13px;margin-top:3px}
+    .tools{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+    .badge{display:inline-flex;align-items:center;min-height:22px;padding:2px 8px;border-radius:999px;background:#eef2f4;color:#475467;font-size:12px;font-weight:700;white-space:nowrap}
+    .badge.ok{background:#e8f4ee;color:var(--ok)}
+    .badge.warn{background:#fff6e6;color:var(--warn)}
+    .badge.danger{background:#fff0ee;color:var(--danger)}
+    .body{padding:12px 14px;background:#fff}
+    .summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--line);border-radius:7px;overflow:hidden;margin-bottom:12px}
+    .summary div{padding:7px 8px;border-right:1px solid var(--line-soft);min-width:0}
+    .summary div:last-child{border-right:0}
+    .summary span{display:block;color:var(--muted);font-size:11px;line-height:1.2}
+    .summary b{display:block;margin-top:1px;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .group{border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:10px}
+    .group:last-child{margin-bottom:0}
+    .group-title{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;background:#f8fafb;border-bottom:1px solid var(--line-soft)}
+    .group-title b{font-size:13px}.group-title span{color:var(--muted);font-size:12px}
+    .config-row{display:grid;grid-template-columns:minmax(132px,.9fr) minmax(96px,.55fr) minmax(0,1.45fr) auto;gap:10px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--line-soft);min-width:0}
+    .config-row:last-child{border-bottom:0}
+    .name{min-width:0}.name b{display:block;font-size:13px;line-height:1.2}.name small{display:block;margin-top:2px;color:var(--muted);font-size:11px;line-height:1.25}
+    .value{font-weight:750;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .value.muted{font-weight:650;color:#475467}
+    .desc{color:var(--muted);font-size:12px;line-height:1.32;min-width:0}
+    .edit{display:inline-flex;align-items:center;justify-content:center;min-height:28px;padding:0 9px;border:1px solid #cfd6df;border-radius:6px;background:#fff;color:#344054;font-size:12px;font-weight:700;white-space:nowrap}
+    .edit.primary{border-color:var(--primary);background:var(--primary);color:#fff}
+    .edit.danger{border-color:var(--danger);background:var(--danger);color:#fff}
+    .note{margin-top:10px;padding:8px 10px;border:1px solid #ead28b;background:#fff8e6;color:#70480f;border-radius:7px;font-size:13px}
+    .rules{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}
+    .rule{background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);padding:11px}
+    .rule b{display:block;margin-bottom:4px}.rule span{display:block;color:var(--muted);font-size:13px}
+    .mobile{width:260px;margin:12px auto 0;border:1px solid var(--line);border-radius:16px;background:#fff;overflow:hidden}
+    .mobile-top{height:20px;background:#17211f}
+    .mobile .body{padding:10px}
+    .mobile .summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .mobile .summary div:nth-child(2n){border-right:0}
+    .mobile .summary div:nth-child(-n+2){border-bottom:1px solid var(--line-soft)}
+    .mobile .config-row{grid-template-columns:1fr auto;gap:6px 8px;padding:8px}
+    .mobile .value{grid-column:1}.mobile .desc{grid-column:1 / -1}.mobile .edit{grid-column:2;grid-row:1 / span 2}
+    @media(max-width:980px){.top{display:block}.page{width:min(100% - 20px,1180px);padding-top:12px}.layout,.rules{grid-template-columns:1fr}.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.summary div:nth-child(2n){border-right:0}.summary div:nth-child(-n+2){border-bottom:1px solid var(--line-soft)}.config-row{grid-template-columns:1fr auto;gap:6px 8px}.value{grid-column:1}.desc{grid-column:1 / -1}.edit{grid-column:2;grid-row:1 / span 2}.mobile{display:none}}
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="top">
+      <div>
+        <h1>紧凑业务配置页</h1>
+        <p class="sub">适合计划配置、饲料桶配置、一路信息配置、滤芯配置等业务对象页面。重点是方便查看，不把每个字段做成大卡片。</p>
+      </div>
+      <span class="pill">每项保留一句必要说明</span>
+    </header>
+
+    <section class="layout">
+      <article class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>喂食器 · 第 1 路基础信息</h2>
+            <p class="sub">一次只编辑一路，避免三路字段混在同一个大表单中误保存。</p>
+          </div>
+          <div class="tools"><span class="badge ok">已启用</span><span class="badge">空闲</span></div>
+        </div>
+        <div class="body">
+          <div class="summary">
+            <div><span>通道</span><b>第 1 路</b></div>
+            <div><span>今日投喂</span><b>42 g</b></div>
+            <div><span>余量</span><b>82%</b></div>
+            <div><span>最近补料</span><b>05-26</b></div>
+          </div>
+
+          <div class="group">
+            <div class="group-title"><b>基础信息</b><span>影响计划和手动下料换算</span></div>
+            <div class="config-row">
+              <div class="name"><b>通道名称</b><small>页面显示名称</small></div>
+              <div class="value">一号料道</div>
+              <div class="desc">用于首页、计划页和记录页展示，不影响控制逻辑。</div>
+              <span class="edit">修改</span>
+            </div>
+            <div class="config-row">
+              <div class="name"><b>通道启用</b><small>是否参与投喂</small></div>
+              <div class="value">启用</div>
+              <div class="desc">关闭后不会自动投喂，也不会出现在手动下料可选项中。</div>
+              <span class="edit">修改</span>
+            </div>
+            <div class="config-row">
+              <div class="name"><b>每圈信号数</b><small>编码器换算</small></div>
+              <div class="value">2160 pulse/rev</div>
+              <div class="desc">用于把控制目标从圈数换算为底层脉冲。</div>
+              <span class="edit">修改</span>
+            </div>
+          </div>
+
+          <div class="group">
+            <div class="group-title"><b>下料换算</b><span>影响克数模式</span></div>
+            <div class="config-row">
+              <div class="name"><b>每圈下料量</b><small>手工标定</small></div>
+              <div class="value">68.5 g/rev</div>
+              <div class="desc">克数目标会根据该值换算为圈数；每一路应独立标定。</div>
+              <span class="edit primary">标定</span>
+            </div>
+            <div class="config-row">
+              <div class="name"><b>料桶容量</b><small>满桶估算</small></div>
+              <div class="value">5000 g</div>
+              <div class="desc">用于计算余量百分比和预计可用天数。</div>
+              <span class="edit">修改</span>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>灌溉 · 第 1 路信息</h2>
+            <p class="sub">适合一路阀门或一路水路的配置查看与单项修改。</p>
+          </div>
+          <div class="tools"><span class="badge ok">可用</span></div>
+        </div>
+        <div class="body">
+          <div class="summary">
+            <div><span>水路</span><b>第 1 路</b></div>
+            <div><span>默认时长</span><b>5 分钟</b></div>
+            <div><span>今日浇水</span><b>1 次</b></div>
+            <div><span>流量状态</span><b>正常</b></div>
+          </div>
+
+          <div class="group">
+            <div class="group-title"><b>运行参数</b><span>影响手动和计划执行</span></div>
+            <div class="config-row">
+              <div class="name"><b>水路启用</b><small>是否可执行</small></div>
+              <div class="value">启用</div>
+              <div class="desc">关闭后计划会自动跳过该路，手动页面也不能选择。</div>
+              <span class="edit">修改</span>
+            </div>
+            <div class="config-row">
+              <div class="name"><b>快速浇水时长</b><small>本地按键默认值</small></div>
+              <div class="value">300 s</div>
+              <div class="desc">本地快速启动和手动页面默认使用该时长。</div>
+              <span class="edit">修改</span>
+            </div>
+            <div class="config-row">
+              <div class="name"><b>无流量超时</b><small>异常保护</small></div>
+              <div class="value">10 s</div>
+              <div class="desc">开阀后持续无脉冲超过该时间会自动关阀并记录。</div>
+              <span class="edit">修改</span>
+            </div>
+          </div>
+
+          <div class="group">
+            <div class="group-title"><b>计量参数</b><span>影响记录里的估算水量</span></div>
+            <div class="config-row">
+              <div class="name"><b>每升脉冲数</b><small>流量计标定</small></div>
+              <div class="value">450 pulse/L</div>
+              <div class="desc">用于把原始脉冲换算为估算水量；建议通过实测校准。</div>
+              <span class="edit primary">校准</span>
+            </div>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section class="mobile">
+      <div class="mobile-top"></div>
+      <div class="body">
+        <div class="panel-head" style="padding:0 0 9px;border-bottom:0">
+          <div><h2>手机端同一结构</h2><p class="sub">行内说明下折，不拥挤。</p></div>
+        </div>
+        <div class="summary">
+          <div><span>通道</span><b>第 1 路</b></div>
+          <div><span>余量</span><b>82%</b></div>
+          <div><span>今日</span><b>42 g</b></div>
+          <div><span>状态</span><b>可用</b></div>
+        </div>
+        <div class="group">
+          <div class="group-title"><b>基础信息</b></div>
+          <div class="config-row">
+            <div class="name"><b>每圈下料量</b><small>手工标定</small></div>
+            <div class="value">68.5 g/rev</div>
+            <div class="desc">克数目标会根据该值换算为圈数。</div>
+            <span class="edit">修改</span>
+          </div>
+          <div class="config-row">
+            <div class="name"><b>料桶容量</b><small>满桶估算</small></div>
+            <div class="value">5000 g</div>
+            <div class="desc">用于计算余量百分比和预计天数。</div>
+            <span class="edit">修改</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="rules">
+      <div class="rule"><b>视觉原则</b><span>一行一项，值和说明同屏可见；只在必要时进入编辑表单。</span></div>
+      <div class="rule"><b>说明文字</b><span>每项一句短说明，解释用途或影响，不写长段帮助文档。</span></div>
+      <div class="rule"><b>编辑原则</b><span>一次只编辑一个对象或一小组强相关字段，保存前可显示 old/new 核对。</span></div>
+    </section>
+  </main>
+</body>
+</html>

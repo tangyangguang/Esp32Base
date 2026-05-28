@@ -159,13 +159,14 @@ Esp32BaseFileLog::setMode(Esp32BaseFileLog::WARN);
 
 ### 3.4 Esp32BaseFileLog
 
-仅在 `ESP32BASE_ENABLE_FILELOG=1` 时可用，依赖 `Esp32BaseFs`。默认文件为 `/logs/eb_app.log`，`4 × 32KB` 轮转，默认模式 WARN。运行时文件日志模式只支持 OFF、WARN、INFO；DEBUG/VERBOSE 不作为文件日志模式。INFO 模式使用 1KB / 2s 缓存，不做节流。
+仅在 `ESP32BASE_ENABLE_FILELOG=1` 时可用，依赖 `Esp32BaseFs`。默认文件为 `/logs/eb_app.log`，`4 × 32KB` 轮转，默认模式 WARN。运行时文件日志模式只支持 OFF、ERROR、WARN、INFO；DEBUG/VERBOSE 不作为文件日志模式。INFO 模式使用 1KB / 2s 缓存，不做节流。
 
 ```cpp
 class Esp32BaseFileLog {
 public:
     enum Mode : uint8_t {
         OFF = ESP32BASE_FILELOG_MODE_OFF,
+        ERROR = ESP32BASE_FILELOG_MODE_ERROR,
         WARN = ESP32BASE_FILELOG_MODE_WARN,
         INFO = ESP32BASE_FILELOG_MODE_INFO
     };

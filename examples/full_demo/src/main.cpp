@@ -85,6 +85,23 @@ void onAppConfigSave(const Esp32BaseAppConfig::SaveSummary& summary) {
 #if ESP32BASE_FULL_DEMO_SELFTEST
 static bool g_selfTestDone = false;
 
+size_t selfTestAdvanceMatch(const char* pattern, size_t patternLen, size_t matched, char c) {
+    while (matched > 0 && c != pattern[matched]) {
+        size_t next = matched - 1;
+        while (next > 0 && strncmp(pattern, pattern + matched - next, next) != 0) {
+            --next;
+        }
+        matched = next;
+    }
+    if (c == pattern[matched]) {
+        ++matched;
+        if (matched > patternLen) {
+            matched = patternLen;
+        }
+    }
+    return matched;
+}
+
 bool selfTestRequest(const char* method, const char* path, const char* body, bool auth, int expectedCode, const char* mustContain) {
     WiFiClient client;
     const IPAddress targetIp = Esp32BaseWiFi::state() == Esp32BaseWiFi::CONFIG_PORTAL ? WiFi.softAPIP() : WiFi.localIP();
@@ -112,26 +129,39 @@ bool selfTestRequest(const char* method, const char* path, const char* body, boo
         client.print(body);
     }
 
-    char response[900];
-    size_t used = 0;
+    char statusLine[96];
+    size_t statusUsed = 0;
+    size_t matchUsed = 0;
+    const size_t matchLen = mustContain ? strlen(mustContain) : 0;
+    bool contains = !mustContain || matchLen == 0;
+    bool firstLineDone = false;
     const uint32_t deadline = millis() + 5000UL;
     while (millis() < deadline && (client.connected() || client.available())) {
         while (client.available()) {
             const char c = static_cast<char>(client.read());
-            if (used + 1 < sizeof(response)) {
-                response[used++] = c;
+            if (!firstLineDone) {
+                if (c == '\n') {
+                    firstLineDone = true;
+                } else if (c != '\r' && statusUsed + 1 < sizeof(statusLine)) {
+                    statusLine[statusUsed++] = c;
+                }
+            }
+            if (!contains && mustContain) {
+                matchUsed = selfTestAdvanceMatch(mustContain, matchLen, matchUsed, c);
+                if (matchUsed == matchLen) {
+                    contains = true;
+                }
             }
         }
         Esp32Base::handle();
         Esp32BaseWatchdog::feed();
         delay(1);
     }
-    response[used] = '\0';
+    statusLine[statusUsed] = '\0';
     client.stop();
 
     int code = 0;
-    sscanf(response, "HTTP/%*s %d", &code);
-    const bool contains = !mustContain || strstr(response, mustContain);
+    sscanf(statusLine, "HTTP/%*s %d", &code);
     const bool ok = code == expectedCode && contains;
     ESP32BASE_LOG_I("selftest", "%s %s code=%d expected=%d contains=%s result=%s",
                     method, path, code, expectedCode, mustContain ? mustContain : "-",
@@ -257,6 +287,16 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/control", nullptr, true, 200, "type='radio'");
     RUN_SELFTEST("GET", "/control/edit", nullptr, true, 200, "<a href='/control' class='active'>Control</a>");
     RUN_SELFTEST("GET", "/control/edit", nullptr, true, 200, "<footer class='footerbar'><span class='syslinks'>");
+    RUN_SELFTEST("GET", "/ui-status", nullptr, true, 200, "状态概览模板");
+    RUN_SELFTEST("GET", "/ui-stats", nullptr, true, 200, "统计摘要模板");
+    RUN_SELFTEST("GET", "/ui-records?page=2", nullptr, true, 200, "共 128 条 / 7 页");
+    RUN_SELFTEST("GET", "/ui-records?page=2", nullptr, true, 200, "page=1'>上一页");
+    RUN_SELFTEST("GET", "/ui-config?saved=1", nullptr, true, 200, "保存成功");
+    RUN_SELFTEST("GET", "/ui-action", nullptr, true, 200, "操作命令模板");
+    RUN_SELFTEST("POST", "/ui-action/run", "run=1", true, 303, "Location: /ui-action?saved=1");
+    RUN_SELFTEST("GET", "/ui-flow?saved=1", nullptr, true, 200, "流程向导模板");
+    RUN_SELFTEST("GET", "/ui-maintenance", nullptr, true, 200, "诊断维护模板");
+    RUN_SELFTEST("GET", "/ui-access", nullptr, false, 200, "访问控制模板");
     RUN_SELFTEST("GET", "/api/control", nullptr, true, 200, "\"method\":\"GET\"");
     RUN_SELFTEST("GET", "/api/csv", nullptr, true, 200, "Content-Type: text/csv");
     RUN_SELFTEST("GET", "/api/csv", nullptr, true, 200, "Content-Disposition: attachment");
@@ -350,6 +390,17 @@ void handleControlApi() {
     Esp32BaseWeb::redirectSeeOther("/control?saved=1");
 }
 
+void handleUiActionRun() {
+    if (!Esp32BaseWeb::checkAuth()) {
+        return;
+    }
+    if (!Esp32BaseWeb::isMethod(Esp32BaseWeb::METHOD_POST)) {
+        Esp32BaseWeb::sendText(405, "method not allowed");
+        return;
+    }
+    Esp32BaseWeb::redirectSeeOther("/ui-action?saved=1");
+}
+
 void handleCsvApi() {
     if (!Esp32BaseWeb::checkAuth()) {
         return;
@@ -370,6 +421,146 @@ void handleCsvApi() {
     Esp32BaseWeb::writeCsvEscaped(value);
     Esp32BaseWeb::sendChunk("\r\n");
     Esp32BaseWeb::endResponse();
+}
+
+const Esp32BaseWeb::ResultNotice DEMO_RESULTS[] = {
+    {"saved", "1", Esp32BaseWeb::UI_OK, "保存成功", "页面已通过 POST -> 303 -> GET 返回。"},
+    {"error", "invalid", Esp32BaseWeb::UI_WARN, "提交未保存", "示例参数未通过校验。"}
+};
+
+void handleUiStatusDemo() {
+    if (!Esp32BaseWeb::checkAuth()) {
+        return;
+    }
+    Esp32BaseWeb::sendHeader("UI Status");
+    Esp32BaseWeb::sendPageTitle("状态概览模板", "用于设备首页和需要快速判断当前状态的页面。");
+    Esp32BaseWeb::sendResultNotice(DEMO_RESULTS, 2);
+    Esp32BaseWeb::beginPanel("当前状态");
+    Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "设备正常", "当前空闲，下一计划 18:30。");
+    Esp32BaseWeb::beginMetricGrid();
+    Esp32BaseWeb::sendMetric("当前状态", "空闲");
+    Esp32BaseWeb::sendMetric("下一计划", "18:30");
+    Esp32BaseWeb::sendMetric("可用通道", "4 路");
+    Esp32BaseWeb::sendMetric("异常", "0");
+    Esp32BaseWeb::endMetricGrid();
+    Esp32BaseWeb::endPanel();
+    Esp32BaseWeb::sendFooter();
+}
+
+void handleUiStatsDemo() {
+    if (!Esp32BaseWeb::checkAuth()) {
+        return;
+    }
+    Esp32BaseWeb::sendHeader("UI Stats");
+    Esp32BaseWeb::sendPageTitle("统计摘要模板", "用轻量数字、表格和 CSS 结构表达汇总，不引入图表库。");
+    Esp32BaseWeb::beginPanel("本月摘要");
+    Esp32BaseWeb::beginMetricGrid();
+    Esp32BaseWeb::sendMetric("本月次数", "128");
+    Esp32BaseWeb::sendMetric("本月用量", "32.4L");
+    Esp32BaseWeb::sendMetric("成功率", "98%");
+    Esp32BaseWeb::sendMetric("较上周", "+6%");
+    Esp32BaseWeb::endMetricGrid();
+    Esp32BaseWeb::sendInfoRowCompactLink("分组汇总", "用紧凑表格或 CSS 条形表达，不依赖图表库。", "4 组",
+                                         "/ui-records", "查看记录");
+    Esp32BaseWeb::endPanel();
+    Esp32BaseWeb::sendFooter();
+}
+
+void handleUiRecordsDemo() {
+    if (!Esp32BaseWeb::checkAuth()) {
+        return;
+    }
+    char pageText[12] = "1";
+    Esp32BaseWeb::getParam("page", pageText, sizeof(pageText));
+    uint32_t page = static_cast<uint32_t>(strtoul(pageText, nullptr, 10));
+    if (page == 0) {
+        page = 1;
+    }
+    Esp32BaseWeb::sendHeader("UI Records");
+    Esp32BaseWeb::sendPageTitle("列表记录模板", "包含紧凑筛选、表头、分页和空状态。");
+    Esp32BaseWeb::beginPanel("最近记录");
+    Esp32BaseWeb::sendChunk("<div class='actions'><span class='tag info'>最近 24 小时</span><span class='tag'>全部类型</span><span class='tag'>每页 20 条</span></div>");
+    Esp32BaseWeb::sendChunk("<table class='kv'><tr><th>时间</th><th>类型</th><th>结果</th></tr><tr><td>18:30</td><td>计划执行</td><td>完成</td></tr><tr><td>16:10</td><td>手动执行</td><td>完成</td></tr></table>");
+    Esp32BaseWeb::Pagination pagination = {"/ui-records", "range=24h&type=all", page, 20, 128};
+    Esp32BaseWeb::sendPagination(pagination);
+    Esp32BaseWeb::endPanel();
+    Esp32BaseWeb::sendFooter();
+}
+
+void handleUiConfigDemo() {
+    if (!Esp32BaseWeb::checkAuth()) {
+        return;
+    }
+    Esp32BaseWeb::sendHeader("UI Config");
+    Esp32BaseWeb::sendPageTitle("配置编辑模板", "简单字段行内改，多字段对象进入独立编辑页。");
+    Esp32BaseWeb::sendResultNotice(DEMO_RESULTS, 2);
+    Esp32BaseWeb::beginPanel("紧凑配置列表");
+    Esp32BaseWeb::sendInfoRowCompactLink("第 1 路名称", "用于页面和记录展示，不影响实际控制。", "花坛",
+                                         "/ui-config?saved=1", "展开修改");
+    Esp32BaseWeb::sendInfoRowCompactLink("默认浇水计划", "包含时间、通道、执行天数和目标量。", "3 条",
+                                         "/ui-flow", "进入编辑页");
+    Esp32BaseWeb::sendInfoRowCompactLink("恢复出厂", "高风险操作，必须进入确认保护页。", nullptr,
+                                         "/ui-maintenance", "确认页", Esp32BaseWeb::UI_DANGER);
+    Esp32BaseWeb::endPanel();
+    Esp32BaseWeb::sendFooter();
+}
+
+void handleUiActionDemo() {
+    if (!Esp32BaseWeb::checkAuth()) {
+        return;
+    }
+    Esp32BaseWeb::sendHeader("UI Action");
+    Esp32BaseWeb::sendPageTitle("操作命令模板", "一次性动作与长期配置分离。");
+    Esp32BaseWeb::sendResultNotice(DEMO_RESULTS, 2);
+    Esp32BaseWeb::beginPanel("立即执行");
+    Esp32BaseWeb::sendInfoRowCompactForm("可执行", "设备空闲、时间可信、无严重异常。", nullptr,
+                                         "/ui-action/run", "开始", "run", "1");
+    Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_WARN, "拒绝执行示例", "当前时间未同步时，应说明原因和下一步。");
+    Esp32BaseWeb::endPanel();
+    Esp32BaseWeb::sendFooter();
+}
+
+void handleUiFlowDemo() {
+    if (!Esp32BaseWeb::checkAuth()) {
+        return;
+    }
+    Esp32BaseWeb::sendHeader("UI Flow");
+    Esp32BaseWeb::sendPageTitle("流程向导模板", "用于校准、首次设置和复杂维护。");
+    Esp32BaseWeb::sendResultNotice(DEMO_RESULTS, 2);
+    Esp32BaseWeb::beginPanel("校准流程");
+    Esp32BaseWeb::sendInfoRowCompact("1. 依据", "展示旧值、数据来源和是否允许继续。", "通过");
+    Esp32BaseWeb::sendInfoRowCompactLink("2. 实测", "录入真实测量结果，不塞进普通配置表。", nullptr,
+                                         "/ui-flow", "继续");
+    Esp32BaseWeb::sendInfoRowCompactLink("3. 核对保存", "展示旧值、新值、变化幅度和影响范围。", nullptr,
+                                         "/ui-flow?saved=1", "保存");
+    Esp32BaseWeb::endPanel();
+    Esp32BaseWeb::sendFooter();
+}
+
+void handleUiMaintenanceDemo() {
+    if (!Esp32BaseWeb::checkAuth()) {
+        return;
+    }
+    Esp32BaseWeb::sendHeader("UI Maintenance");
+    Esp32BaseWeb::sendPageTitle("诊断维护模板", "只读优先，危险动作进入确认保护页。");
+    Esp32BaseWeb::beginPanel("系统诊断");
+    Esp32BaseWeb::sendInfoRowCompact("WiFi", "连接状态、RSSI、IP。", "正常");
+    Esp32BaseWeb::sendInfoRowCompactLink("维护任务", "导出、扫描、重启等长任务显示状态和下一步。", "空闲",
+                                         "/esp32base/tools", "查看");
+    Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_WARN, "原始数据受控", "限制长度，可复制或导出，不做无限滚动调试平台。");
+    Esp32BaseWeb::endPanel();
+    Esp32BaseWeb::sendFooter();
+}
+
+void handleUiAccessDemo() {
+    Esp32BaseWeb::sendHeader("UI Access");
+    Esp32BaseWeb::sendPageTitle("访问控制模板", "覆盖登录、权限不足、会话失效和只读受限。");
+    Esp32BaseWeb::beginPanel("受限状态");
+    Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_WARN, "需要登录", "登录后可以继续执行配置和维护操作。");
+    Esp32BaseWeb::sendInfoRowCompactLink("只读访问", "无权限时展示原因和可继续查看的内容。", "允许",
+                                         "/esp32base", "返回状态");
+    Esp32BaseWeb::endPanel();
+    Esp32BaseWeb::sendFooter();
 }
 
 void setup() {
@@ -441,7 +632,16 @@ void setup() {
     }
     Esp32BaseWeb::addPage("/dashboard", "Dashboard", handleDashboard);
     Esp32BaseWeb::addPage("/control", "Control", handleControl);
+    Esp32BaseWeb::addPage("/ui-status", "UI Status", handleUiStatusDemo);
+    Esp32BaseWeb::addPage("/ui-stats", "UI Stats", handleUiStatsDemo);
+    Esp32BaseWeb::addPage("/ui-records", "UI Records", handleUiRecordsDemo);
+    Esp32BaseWeb::addPage("/ui-config", "UI Config", handleUiConfigDemo);
+    Esp32BaseWeb::addPage("/ui-action", "UI Action", handleUiActionDemo);
+    Esp32BaseWeb::addPage("/ui-flow", "UI Flow", handleUiFlowDemo);
+    Esp32BaseWeb::addPage("/ui-maintenance", "UI Maintenance", handleUiMaintenanceDemo);
+    Esp32BaseWeb::addPage("/ui-access", "UI Access", handleUiAccessDemo);
     Esp32BaseWeb::addRoute("/control/edit", Esp32BaseWeb::METHOD_GET, handleControl);
+    Esp32BaseWeb::addRoute("/ui-action/run", Esp32BaseWeb::METHOD_POST, handleUiActionRun);
     Esp32BaseWeb::addApi("/api/control", handleControlApi);
     Esp32BaseWeb::addApi("/api/csv", handleCsvApi);
     ESP32BASE_LOG_I("example", "full demo ready boot=%ld", static_cast<long>(boot));

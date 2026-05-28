@@ -2,6 +2,52 @@
 
 本文从 2026-05-06 起记录 Esp32Base 新增和优化的能力，面向正在接入本库的业务项目。业务项目应优先查看本文，了解最近可用的新 API、行为变化和推荐接入方式。
 
+## 2026-05-28
+
+### FileLog 支持 ERROR 模式
+
+新增：
+
+- `Esp32BaseFileLog` 增加 `ERROR` 模式，运行时模式收口为 `OFF`、`ERROR`、`WARN`、`INFO`；默认仍为 WARN。
+- 新增构建宏值 `ESP32BASE_FILELOG_MODE_ERROR`，`ESP32BASE_EB_FILELOG_DEFAULT_MODE` 可配置为 OFF、ERROR、WARN 或 INFO，但仍不能超过 `ESP32BASE_LOG_LEVEL` 编译期上限。
+- Web System 页 File log 模式设置新增 ERROR 选项，POST 参数 `mode=error` 保存后写入 `eb_log.mode` 并立即生效。
+
+业务侧影响：
+
+- 量产设备需要只保留错误日志时，可使用 `Esp32BaseFileLog::setMode(Esp32BaseFileLog::ERROR)` 或构建参数 `-D ESP32BASE_EB_FILELOG_DEFAULT_MODE=ESP32BASE_FILELOG_MODE_ERROR`。
+- `DEBUG` / `VERBOSE` 继续不作为文件日志模式；需要现场调试时仍推荐临时切到 INFO。
+
+## 2026-05-27
+
+### Web UI baseline helper
+
+新增：
+
+- 增加轻量 Web UI helper API，用于页面标题、panel、notice、结果提示、指标网格、紧凑行、安全行内链接、单按钮 POST 表单和分页输出。
+- 内置 Web CSS 改为变量化的紧凑 UI baseline，保留 `pagehead`、`panel`、`kv`、`part`、`tabs`、`quicklinks`、`logmeta`、`logframe` 等旧类名兼容。
+- `examples/full_demo` 增加 UI baseline 示例页，覆盖状态概览、统计摘要、分页记录、配置编辑、操作命令、流程向导、诊断维护和访问控制状态。
+- 新增 `examples/web_ui_gallery` 独立样式样例，用于集中查看和验证状态、统计、分页记录、配置、命令、流程、维护、访问控制、确认、空状态和表单页面，并提供 selftest env 便于回归。
+- 紧凑行链接和分页链接改为按钮型链接样式，避免把小尺寸状态标签用作可点击控件。
+- `sendPagination()` 输出补齐每页条数选择和跳页提交；`web_ui_gallery` 启用 App Config、底部系统状态栏、真实筛选控件和简单字段行内展开编辑。
+- `sendPagination()` 增加当前页附近页码，并将分页控件调整为更轻量的字号；新增 `editform` 和 `fieldgrid` 表单布局类，`web_ui_gallery` 去掉重复筛选摘要并优化多字段表单布局。
+- 分页控件进一步收紧高度并改为中性色；记录筛选的预设时间范围不再展示起止时间，只有自定义范围展示开始和结束时间。
+- 分页右侧去掉重复的“当前第 N 页”，分页文字、页码、标签和跳转控件统一为普通字重并垂直居中。
+- 紧凑行右侧增加独立动作区，状态值和动作按钮保持清晰间距；只读状态值预留动作列空间，避免贴到按钮区域最右侧；`web_ui_gallery` 配置页的“进入编辑页”修正为进入多字段表单页。
+- 基础 Web CSS 改为 `/esp32base/ui.css` 独立缓存资源，`sendHeader()` 只输出 stylesheet 引用，避免每个业务页面重复内联 9KB 级样式内容；`web_ui_gallery` selftest 增加 CSS 资源和页面体积回归检查。
+- 紧凑行右侧动作区改为固定值列和动作列，配置页“花坛”“3 条”等状态值与右侧按钮竖向对齐。
+- 重新收敛 Web UI 字号层级：顶部主导航调整为 14px，页面标题降为 18px，section 标题降为 16px，底部系统入口降为 12px，运行摘要降为 11px。
+- 底部低频系统入口进一步降低视觉权重：外层条高度、阴影、圆角和入口按钮高度收紧，避免与主导航或正文操作抢注意力。
+- 页面标题按设备控制台层级降权，避免“状态概览”等页面标题压过正文状态信息；section 标题保持 16px。
+- 新增 [Web UI 页面结构与样式基线](docs/11_web_ui_baseline.md)，作为页面能力、样式、换肤和调整回路的长期文档入口。
+
+业务侧影响：
+
+- 业务页面可继续使用 `addPage()`、`sendHeader()`、`sendFooter()` 和 `sendChunk()`；新 helper 是增量能力，不强制迁移。
+- 推荐新业务页面优先使用 helper，避免复制基础库 CSS 和重复手写分页、提示、配置行等结构。
+- 紧凑行内动作使用 `sendInfoRowCompactLink()` 或 `sendInfoRowCompactForm()`；自定义 HTML 使用底层 `sendChunk()` 手动输出并自行 escape 动态内容。
+- 换肤走 CSS 变量覆盖，可通过 `setHeadExtraCallback()` 调整主色和背景；不新增运行时主题系统、前端框架或图表库。
+- 表单和命令提交仍推荐 `POST -> 303 -> GET`，刷新页面不应重复提交。
+
 ## 2026-05-17
 
 ### Web 默认页面背景

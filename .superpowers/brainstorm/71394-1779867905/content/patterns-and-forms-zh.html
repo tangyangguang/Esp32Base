@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>页面模式与表单方案</title>
+  <style>
+    :root{
+      color-scheme:light;
+      --bg:#f6f7f8;
+      --surface:#fff;
+      --soft:#f8fafb;
+      --text:#17202a;
+      --muted:#667085;
+      --line:#d8dee6;
+      --line-soft:#edf1f4;
+      --primary:#14685d;
+      --primary-soft:#e7f2ef;
+      --danger:#b42318;
+      --warn:#a15c07;
+      --ok:#087443;
+      --shadow:0 1px 2px rgba(16,24,40,.04);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-size:14px;line-height:1.45}
+    .page{width:min(1240px,calc(100% - 28px));margin:0 auto;padding:18px 0 44px}
+    h1,h2,h3,p{margin-top:0}
+    h1{margin:0 0 5px;font-size:25px;line-height:1.22}
+    h2{margin:0 0 8px;font-size:17px}
+    h3{margin:0 0 6px;font-size:15px}
+    .sub{color:var(--muted);margin:0}
+    .top{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:16px}
+    .pill{display:inline-flex;align-items:center;min-height:26px;padding:3px 9px;border:1px solid var(--line);border-radius:999px;background:#fff;color:#475467;font-size:13px;white-space:nowrap}
+    .pill.ok{background:#e8f4ee;color:var(--ok);border-color:#b7e4c7}
+    .section{background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);padding:14px;margin-bottom:14px}
+    .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+    .grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .card{border:1px solid var(--line);border-radius:8px;background:#fff;overflow:hidden;min-width:0}
+    .card.rec{border-color:#8bc9be;box-shadow:0 0 0 2px rgba(20,104,93,.08)}
+    .card-head{padding:11px 12px;border-bottom:1px solid var(--line);background:#fff}
+    .rec .card-head{background:#f4fbf9}
+    .card-body{padding:12px;background:#f8fafb}
+    .mock{border:1px solid var(--line);border-radius:7px;background:#fff;overflow:hidden}
+    .mock-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 8px;border-bottom:1px solid var(--line-soft)}
+    .mock-title{font-weight:750;font-size:13px}
+    .badge{display:inline-flex;align-items:center;min-height:20px;padding:2px 7px;border-radius:999px;background:#eef2f4;color:#475467;font-size:11px;font-weight:700;white-space:nowrap}
+    .badge.ok{background:#e8f4ee;color:var(--ok)}
+    .badge.warn{background:#fff6e6;color:var(--warn)}
+    .badge.danger{background:#fff0ee;color:var(--danger)}
+    .mock-body{padding:9px}
+    .status-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--line);border-radius:6px;overflow:hidden}
+    .status-strip div{padding:6px 7px;border-right:1px solid var(--line-soft);min-width:0}
+    .status-strip div:last-child{border-right:0}
+    .status-strip span{display:block;color:var(--muted);font-size:11px}
+    .status-strip b{display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .kvgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));border:1px solid var(--line);border-radius:6px;overflow:hidden}
+    .kv{display:grid;grid-template-columns:70px 1fr;gap:6px;padding:6px 7px;border-right:1px solid var(--line-soft);border-bottom:1px solid var(--line-soft);font-size:12px}
+    .kv:nth-child(2n){border-right:0}.kv:nth-last-child(-n+2){border-bottom:0}
+    .kv span{color:var(--muted)}.kv b{text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .table{border:1px solid var(--line);border-radius:6px;overflow:hidden}
+    .row{display:grid;grid-template-columns:1fr 70px 54px;gap:6px;padding:6px 7px;border-bottom:1px solid var(--line-soft);font-size:12px}
+    .row:last-child{border-bottom:0}
+    .row.head{background:#f7f9fa;color:var(--muted);font-weight:700}
+    .filter{display:grid;grid-template-columns:1fr 1fr auto;gap:6px;margin-bottom:7px}
+    input,select{min-width:0;width:100%;min-height:30px;border:1px solid #cfd6df;border-radius:6px;background:#fff;padding:5px 7px;font:inherit;font-size:12px;color:var(--text)}
+    .btns{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+    .btn{display:inline-flex;align-items:center;justify-content:center;min-height:28px;padding:0 9px;border:1px solid var(--primary);border-radius:6px;background:var(--primary);color:#fff;font-size:12px;font-weight:700}
+    .btn.secondary{background:#fff;color:#344054;border-color:#cfd6df}
+    .btn.danger{background:var(--danger);border-color:var(--danger)}
+    .field-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:7px 8px;border:1px solid var(--line-soft);border-radius:6px;background:#fff;margin-bottom:6px}
+    .field-row b{display:block;font-size:13px}.field-row small{display:block;color:var(--muted);font-size:11px}
+    .edit{min-width:46px;text-align:center;padding:4px 7px;border:1px solid #cfd6df;border-radius:5px;color:#344054;background:#fff;font-size:12px;font-weight:700}
+    .form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+    .field{display:grid;gap:3px}.field label{color:var(--muted);font-size:11px;font-weight:700}
+    .suffix{display:grid;grid-template-columns:1fr auto;align-items:center;border:1px solid #cfd6df;border-radius:6px;background:#fff;overflow:hidden}
+    .suffix input{border:0;border-radius:0}.suffix em{font-style:normal;color:var(--muted);font-size:12px;padding-right:7px}
+    .wizard{display:grid;gap:7px}
+    .step{display:grid;grid-template-columns:24px 1fr;gap:8px;align-items:start;padding:7px;border:1px solid var(--line-soft);border-radius:6px;background:#fff}
+    .num{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:999px;background:var(--primary-soft);color:var(--primary);font-size:12px;font-weight:800}
+    .matrix{display:grid;grid-template-columns:72px repeat(3,minmax(0,1fr));border:1px solid var(--line);border-radius:6px;overflow:hidden;font-size:12px}
+    .matrix div{padding:6px 7px;border-right:1px solid var(--line-soft);border-bottom:1px solid var(--line-soft)}
+    .matrix div:nth-child(4n){border-right:0}.matrix div:nth-last-child(-n+4){border-bottom:0}
+    .matrix .head{background:#f7f9fa;color:var(--muted);font-weight:700}
+    .note-list{display:grid;gap:8px;margin:10px 0 0}
+    .note-list div{border:1px solid var(--line);border-radius:7px;padding:9px;background:#fff}
+    .note-list b{display:block;margin-bottom:3px}.note-list span{color:var(--muted);font-size:13px}
+    .recommend{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+    .recommend div{border:1px solid var(--line);border-radius:8px;padding:12px;background:#fff}
+    @media(max-width:980px){.grid,.grid.two,.recommend{grid-template-columns:1fr}.top{display:block}.page{width:min(100% - 20px,1240px);padding-top:12px}.status-strip{grid-template-columns:repeat(2,minmax(0,1fr))}.status-strip div:nth-child(2n){border-right:0}.status-strip div:nth-child(-n+2){border-bottom:1px solid var(--line-soft)}.filter,.form-grid{grid-template-columns:1fr}.matrix{grid-template-columns:1fr}.matrix div{border-right:0}.matrix .head{display:none}.row{grid-template-columns:1fr auto}.row .hide{display:none}}
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="top">
+      <div>
+        <h1>页面模式与表单方案</h1>
+        <p class="sub">专业做法不是选一种页面套所有场景，而是建立页面模板目录：每类页面有默认结构、适用边界和移动端规则。</p>
+      </div>
+      <span class="pill ok">推荐：方案二 + 方案三混合</span>
+    </header>
+
+    <section class="section">
+      <h2>一、其他专业页面方式</h2>
+      <div class="grid">
+        <article class="card rec">
+          <div class="card-head"><h3>1. 状态条 + 操作表</h3><p class="sub">首页、手动控制页默认模式。</p></div>
+          <div class="card-body">
+            <div class="mock">
+              <div class="mock-head"><span class="mock-title">总览</span><span class="badge warn">提醒</span></div>
+              <div class="mock-body">
+                <div class="status-strip"><div><span>状态</span><b>空闲</b></div><div><span>下一计划</span><b>18:30</b></div><div><span>今日</span><b>4.2 L</b></div><div><span>记录</span><b>正常</b></div></div>
+                <div style="height:7px"></div>
+                <div class="table"><div class="row head"><span>通道</span><span>状态</span><span>操作</span></div><div class="row"><span>第 1 路</span><span>可用</span><span>启动</span></div><div class="row"><span>第 2 路</span><span>停用</span><span>-</span></div></div>
+              </div>
+            </div>
+          </div>
+        </article>
+        <article class="card rec">
+          <div class="card-head"><h3>2. 键值矩阵</h3><p class="sub">诊断、系统状态、参数摘要。</p></div>
+          <div class="card-body">
+            <div class="mock">
+              <div class="mock-head"><span class="mock-title">诊断</span><span class="badge ok">正常</span></div>
+              <div class="mock-body">
+                <div class="kvgrid"><div class="kv"><span>门状态</span><b>已关闭</b></div><div class="kv"><span>位置</span><b>0 脉冲</b></div><div class="kv"><span>AT24C</span><b>在线</b></div><div class="kv"><span>记录</span><b>1052 条</b></div><div class="kv"><span>电流</span><b>320mA</b></div><div class="kv"><span>保护</span><b>启用</b></div></div>
+              </div>
+            </div>
+          </div>
+        </article>
+        <article class="card">
+          <div class="card-head"><h3>3. 过滤条 + 数据表</h3><p class="sub">记录、事件、历史数据。</p></div>
+          <div class="card-body">
+            <div class="mock">
+              <div class="mock-head"><span class="mock-title">记录</span><span class="badge">1052 条</span></div>
+              <div class="mock-body">
+                <div class="filter"><input value="2026-05-01"><select><option>全部事件</option></select><span class="btn">查询</span></div>
+                <div class="table"><div class="row head"><span>时间</span><span>类型</span><span>结果</span></div><div class="row"><span>05-27 08:30</span><span>投喂</span><span>正常</span></div><div class="row"><span>05-27 07:12</span><span>告警</span><span>已处理</span></div></div>
+              </div>
+            </div>
+          </div>
+        </article>
+        <article class="card">
+          <div class="card-head"><h3>4. 主从详情</h3><p class="sub">计划列表、预设列表、滤芯列表。</p></div>
+          <div class="card-body">
+            <div class="mock">
+              <div class="mock-head"><span class="mock-title">计划配置</span><span class="btn secondary">新增</span></div>
+              <div class="mock-body">
+                <div class="field-row"><div><b>早晨投喂</b><small>06:30 · 1/2/3 路</small></div><span class="edit">编辑</span></div>
+                <div class="field-row"><div><b>傍晚投喂</b><small>18:30 · 1/3 路</small></div><span class="edit">编辑</span></div>
+              </div>
+            </div>
+          </div>
+        </article>
+        <article class="card">
+          <div class="card-head"><h3>5. 引导式维护流程</h3><p class="sub">校准、学习、危险维护。</p></div>
+          <div class="card-body">
+            <div class="mock">
+              <div class="mock-head"><span class="mock-title">行程校准</span><span class="badge warn">需确认</span></div>
+              <div class="mock-body">
+                <div class="wizard"><div class="step"><span class="num">1</span><div><b>手动运行</b><small>选择方向、圈数和速度</small></div></div><div class="step"><span class="num">2</span><div><b>确认位置</b><small>检查当前位置是否可信</small></div></div><div class="step"><span class="num">3</span><div><b>保存端点</b><small>二次确认后写入</small></div></div></div>
+              </div>
+            </div>
+          </div>
+        </article>
+        <article class="card">
+          <div class="card-head"><h3>6. 通道矩阵</h3><p class="sub">多路阀门、三路喂食、风扇档位。</p></div>
+          <div class="card-body">
+            <div class="mock">
+              <div class="mock-head"><span class="mock-title">通道状态</span><span class="badge ok">2 路可用</span></div>
+              <div class="mock-body">
+                <div class="matrix"><div class="head">项目</div><div class="head">1 路</div><div class="head">2 路</div><div class="head">3 路</div><div>状态</div><div>空闲</div><div>运行中</div><div>故障</div><div>目标</div><div>70g</div><div>35/70g</div><div>-</div></div>
+              </div>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>二、表单页面应该怎么做</h2>
+      <p class="sub" style="margin-bottom:10px">表单页痛苦的根源通常是：字段太多、单位混乱、保存范围不清、移动端宽度不稳、用户不知道改动影响。解决方式不是把表单做大，而是按风险和频率拆成不同表单模式。</p>
+      <div class="grid two">
+        <article class="card rec">
+          <div class="card-head"><h3>A. 单项编辑列表（推荐用于低频参数）</h3><p class="sub">先展示当前值，点击“修改”只改一个参数或一小组参数。</p></div>
+          <div class="card-body">
+            <div class="mock">
+              <div class="mock-head"><span class="mock-title">安全限制</span><span class="badge ok">已保存</span></div>
+              <div class="mock-body">
+                <div class="field-row"><div><b>最大出水时长</b><small>7200 s · 单次出水保护边界</small></div><span class="edit">修改</span></div>
+                <div class="field-row"><div><b>无流量判定超时</b><small>10 s · 开阀后无脉冲判定</small></div><span class="edit">修改</span></div>
+                <div class="field-row"><div><b>阀门保持占空比</b><small>35% · 立即生效</small></div><span class="edit">修改</span></div>
+              </div>
+            </div>
+          </div>
+        </article>
+        <article class="card">
+          <div class="card-head"><h3>B. 紧凑分组表单</h3><p class="sub">适合一次保存一组相关字段，比如单个计划、单个预设、单个通道。</p></div>
+          <div class="card-body">
+            <div class="mock">
+              <div class="mock-head"><span class="mock-title">编辑计划</span><span class="badge">计划 2</span></div>
+              <div class="mock-body">
+                <div class="form-grid">
+                  <div class="field"><label>计划名称</label><input value="傍晚投喂"></div>
+                  <div class="field"><label>执行时间</label><input value="18:30"></div>
+                  <div class="field"><label>第 1 路目标</label><span class="suffix"><input value="70"><em>g</em></span></div>
+                  <div class="field"><label>第 2 路目标</label><span class="suffix"><input value="1.00"><em>圈</em></span></div>
+                </div>
+                <div class="btns"><span class="btn">保存计划</span><span class="btn secondary">取消</span></div>
+              </div>
+            </div>
+          </div>
+        </article>
+        <article class="card">
+          <div class="card-head"><h3>C. 矩阵表单</h3><p class="sub">适合多路设备横向比较，但不适合手机上编辑大量字段。</p></div>
+          <div class="card-body">
+            <div class="mock">
+              <div class="mock-head"><span class="mock-title">通道基础信息</span><span class="badge warn">谨慎使用</span></div>
+              <div class="mock-body">
+                <div class="matrix"><div class="head">字段</div><div class="head">1 路</div><div class="head">2 路</div><div class="head">3 路</div><div>启用</div><div>是</div><div>是</div><div>否</div><div>每圈克数</div><div>68g</div><div>70g</div><div>-</div></div>
+                <div class="btns"><span class="btn secondary">改第 1 路</span><span class="btn secondary">改第 2 路</span></div>
+              </div>
+            </div>
+          </div>
+        </article>
+        <article class="card rec">
+          <div class="card-head"><h3>D. 保存前核对</h3><p class="sub">适合危险、重启后生效、校准和维护操作。</p></div>
+          <div class="card-body">
+            <div class="mock">
+              <div class="mock-head"><span class="mock-title">确认修改</span><span class="badge danger">影响运行</span></div>
+              <div class="mock-body">
+                <div class="table"><div class="row head"><span>参数</span><span>原值</span><span>新值</span></div><div class="row"><span>开门目标</span><span>5.00 圈</span><span>5.25 圈</span></div><div class="row"><span>最大运行时长</span><span>25s</span><span>30s</span></div></div>
+                <div class="btns"><span class="btn danger">确认保存</span><span class="btn secondary">返回修改</span></div>
+              </div>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>三、我的专业建议</h2>
+      <div class="recommend">
+        <div>
+          <h3>不要让用户每个项目重新选样式</h3>
+          <p class="sub">我们应该在 Esp32Base 里定义“页面模板目录”。业务项目只选择页面类型：总览、操作、记录、诊断、校准、配置、确认。每类页面有默认布局，不需要每次重新发明。</p>
+        </div>
+        <div>
+          <h3>也不要一次只选一种页面</h3>
+          <p class="sub">页面逻辑应该成套提供。你不需要今天只选首页、明天再选表单。我们先确认整套模板，再逐页微调最痛的页面，尤其是表单页和记录页。</p>
+        </div>
+      </div>
+      <div class="note-list">
+        <div><b>默认组合</b><span>首页/手动页用状态条 + 操作表；诊断页用键值矩阵；记录页用过滤条 + 数据表；配置页用单项编辑列表；校准页用引导流程；危险动作进入确认页。</span></div>
+        <div><b>表单页重点</b><span>App Config 默认应从“长表单”升级为“分组紧凑 + 修改前可读 + 保存前核对”。业务设置页优先“一次只编辑一个对象”，比如单个滤芯、单个计划、单个通道。</span></div>
+        <div><b>资源边界</b><span>基础库默认 CSS 只放核心组件；复杂业务组件按页注入。皮肤只用少量 CSS 变量，不做复杂主题系统。</span></div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

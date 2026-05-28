@@ -4,6 +4,8 @@
 
 Web 层用于小型局域网管理，不是大型 Web 平台。
 
+页面结构、样式基线、业务页面模板、换肤策略和视觉调整规则见 [Web UI 页面结构与样式基线](11_web_ui_baseline.md)。
+
 能力：
 
 - WebServer。
@@ -197,7 +199,7 @@ System 维护页：
 - 重启和格式化等危险操作必须分组显示，避免按钮与下一项标题贴得太近。
 - 启用 Watchdog 的 profile 显示 Watchdog lifetime/trip 小计维护；当 `wdt_trip_base` 大于 lifetime 时显示 `invalid baseline`，Reset Watchdog Trip 写入并回读确认 `eb_sys.wdt_trip_base` 和 `eb_sys.wdt_trip_time`，不清 `eb_sys.wdt_cnt`。
 - 启用 FS 的 profile 显示 `Format LittleFS`，该操作会删除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth 或 NVS 配置。
-- 启用 FileLog 的 profile 显示 File log 模式设置和 `Clear logs`；模式设置只接受 OFF、WARN、INFO，保存后立即生效并写入 `eb_log.mode`，清空日志只接受 POST，表单使用 `confirm()` 和 `once(form)`，成功后回到 System 页面显示结果。
+- 启用 FileLog 的 profile 显示 File log 模式设置和 `Clear logs`；模式设置只接受 OFF、ERROR、WARN、INFO，保存后立即生效并写入 `eb_log.mode`，清空日志只接受 POST，表单使用 `confirm()` 和 `once(form)`，成功后回到 System 页面显示结果。
 - 格式化 FS 是显式 POST 操作；执行前 flush 文件日志，成功后重新 mount FS，并重新加载 FileLog 模式；成功提示应明确显示在 System 页面，同时输出 WARN 级维护日志记录请求、format/mount/FileLog reload 结果。重启请求同样输出 WARN 级维护日志。
 - 普通 `GET` 页面慢请求只输出 DEBUG；`POST` 等操作慢请求继续输出 WARN。
 - API 层仍建议要求 POST，不使用 GET 触发重启。
@@ -261,10 +263,10 @@ Logs 页面：
 页面风格：
 
 - 单栏设备控制台布局，正文、顶部导航和底部系统入口使用同一页面宽度。
-- 默认正文 14px，标题 18px/16px/15px，采用紧凑设备控制台尺度。
-- 默认页面最大宽度 1040px，白色页面背景配轻量边框 panel，避免正文和操作块错位。
-- 顶部导航使用中性色和浅绿灰 active 状态。
-- 内置状态、WiFi、Auth、OTA、Logs、System 页面使用统一标题、panel、按钮和表单节奏；页面标题本身使用白色 header panel，与正文 panel 内边距对齐。
+- 默认正文 14px；顶部主导航 14px；页面标题/内容标题约 18px/16px/15px；底部低频系统入口 12px/24px 高度，右侧运行摘要 11px，采用主次清晰的设备控制台尺度。
+- 默认页面最大宽度约 1180px，浅灰页面背景配白色轻量边框 panel，避免正文和操作块错位。
+- 顶部导航使用中性色和主色浅底 active 状态，主色由 CSS 变量控制。
+- 内置状态、WiFi、Auth、OTA、Logs、System 页面使用统一标题、panel、按钮和表单节奏；页面标题、正文 panel、导航和 footer 使用同一布局宽度。
 - 默认输入框样式只作用于文本类输入，例如未声明 type 的 input、text、password、number、email、url、tel、search。
 - checkbox、radio、file、range、color、hidden 等非文本控件保持浏览器原生尺寸和行为，业务页面不需要额外覆盖基础 CSS。
 - 统一 `.ok`、`.err`、`.info` 状态样式。
@@ -361,7 +363,78 @@ void handleConfigApi() {
 Esp32BaseWeb::addRoute("/api/faucet/config", Esp32BaseWeb::METHOD_ANY, handleConfigApi);
 ```
 
-## 8. JSON 输出
+## 8. Web UI baseline helper
+
+业务页面继续使用 `Esp32BaseWeb::addPage()` 注册页面，并使用 `sendHeader()` / `sendFooter()` 输出基础壳层。
+
+为保持页面结构和样式统一，业务页面优先使用：
+
+- `sendPageTitle(title, subtitle)`：页面标题区。
+- `beginPanel(title)` / `endPanel()`：内容分组。
+- `sendNotice(tone, title, message)`：成功、警告、危险、信息和普通提示。
+- `sendResultNotice(notices, count)`：`POST -> 303 -> GET` 后的结果提示。
+- `beginMetricGrid()` / `sendMetric()` / `endMetricGrid()`：状态和统计摘要。
+- `sendInfoRowCompact(title, help, value)`：只读配置、操作、向导和诊断行。
+- `sendInfoRowCompactLink(title, help, value, href, label, tone)`：带按钮型链接动作的紧凑行。
+- `sendInfoRowCompactForm(title, help, value, action, label, hiddenName, hiddenValue, tone)`：带单按钮 POST 动作的紧凑行，默认包含 `once()` 防重复点击。
+- `sendPagination(pagination)`：页码型列表分页，包含总条数、总页数、首页、上一页、下一页、尾页、当前页附近页码、每页条数和跳页提交。
+
+示例：
+
+```cpp
+void handleBusinessPage() {
+    if (!Esp32BaseWeb::checkAuth()) {
+        return;
+    }
+    Esp32BaseWeb::sendHeader("业务配置");
+    Esp32BaseWeb::sendPageTitle("配置编辑模板", "简单字段行内改，多字段对象进入独立编辑页。");
+    Esp32BaseWeb::beginPanel("紧凑配置列表");
+    Esp32BaseWeb::sendInfoRowCompactLink("第 1 路名称", "用于页面和记录展示，不影响实际控制。", "花坛",
+                                         "/config/name", "展开修改");
+    Esp32BaseWeb::endPanel();
+    Esp32BaseWeb::sendFooter();
+}
+```
+
+样式和页面能力优先在 `examples/web_ui_gallery` 中验证；`examples/full_demo` 用于验证 Web、App Config、OTA、日志等能力在完整示例中的集成效果。
+
+需要行内动作时优先使用 `sendInfoRowCompactLink()` 或 `sendInfoRowCompactForm()`。如果业务确实需要自定义 HTML，使用底层 `sendChunk()` 手动输出，并对来自配置、URL 参数、设备名、日志、用户输入或远端数据的内容使用 `writeHtmlEscaped()`。
+
+表单和命令提交应使用 `POST -> 303 -> GET`。前端按钮禁用只能防连点，服务端仍必须重新校验参数、状态和权限。
+
+### 8.1 Skinning
+
+Web UI baseline 支持 CSS 变量级换肤。业务项目可通过 `setHeadExtraCallback()` 覆盖少量变量：
+
+```cpp
+void handleHeadExtra() {
+    Esp32BaseWeb::sendChunk("<style>:root{--eb-primary:#245f9e;--eb-primary-soft:#e8f0f8}</style>");
+}
+```
+
+不应替换语义色含义。成功、警告、危险和信息色必须保持可识别。
+
+### 8.2 视觉检查清单
+
+- PC 宽屏下控件不无意义拉满。
+- 手机端导航、行、分页自然堆叠或横向滚动，不出现文字重叠。
+- 按钮文字居中，动态内容不改变整体布局。
+- 紧凑行动作和分页跳转使用按钮型链接，不使用小尺寸状态标签代替可点击控件。
+- 紧凑行同时包含状态值和动作时，状态值与按钮之间必须有清晰间距。
+- 紧凑行右侧使用固定值列和动作列；同一组内的状态值、数量和按钮应竖向对齐。
+- 同组只读状态值应和带动作行的状态值位置保持一致，避免占用动作按钮视觉区域。
+- 简单字段行内编辑和多字段独立编辑页有明显区别。
+- 分页显示总条数、总页数、首页、上一页、下一页、尾页和当前页。
+- 分页页脚必须提供当前页附近页码、每页条数选择和跳页提交；筛选条件翻页和跳页时保持不丢失；分页控件应比主操作更轻、更矮、颜色更中性，且不重复输出“当前第 N 页”。
+- 筛选控件已经展示当前条件时，不重复输出一行筛选摘要标签。
+- 预设时间范围不展示开始时间和结束时间；只有自定义时间范围才展示起止时间控件。
+- 多字段表单使用 `editform` 控制编辑区最大宽度，并使用 `fieldgrid`、`field short`、`field med`、`field long` 或 `field full` 控制字段宽度，避免短字段被拉满。
+- 重定向后的成功、失败、拒绝状态清楚可见。
+- 登录、权限不足和只读受限状态可理解。
+- 诊断维护页中的原始片段有长度边界，不成为主页面体验。
+- 覆盖 `--eb-primary` 和 `--eb-bg` 后页面仍保持语义清楚。
+
+## 9. JSON 输出
 
 必须 escape：
 
@@ -393,7 +466,7 @@ Esp32BaseWeb::endJson();
 
 `beginJson()` / `endJson()` 输出最外层 `{}`，中间使用 `sendChunk()` 拼接结构、`writeJsonEscaped()` 输出字符串值。
 
-## 9. WiFi 配网状态机
+## 10. WiFi 配网状态机
 
 进入 AP/config portal 的条件：
 
@@ -423,7 +496,7 @@ Esp32BaseWeb::endJson();
 - STA、AP、DNS、Web 全部不可访问。
 - 唤醒后重新执行 begin/handle 流程。
 
-## 10. Handler 性能边界
+## 11. Handler 性能边界
 
 Arduino `WebServer` 是同步模型。
 
@@ -442,5 +515,6 @@ Arduino `WebServer` 是同步模型。
 - `sendChunk()` / `sendProgmem()` 共用 512 B 静态 chunk buffer，并通过 Arduino `WebServer::sendContent()` 输出 chunked response；这样保留框架的 chunked 编码和连接收尾语义，同时避免 PROGMEM CSS/JS 被拆成大量 128 B 小 chunk。
 - `sendResponseContent()` 只在发送前检查客户端是否已经断开，发送后不再用 `client().connected()` 判定失败；`endResponse()` 在响应未标记断开时总是尝试发送最终 0-length chunk，避免同步 WebServer 下 curl/浏览器等待 chunked 响应结束直到超时。
 - 小 JSON 如果已经完整生成，使用 `sendJson()` 一次性返回固定 `Content-Length`；只有需要流式拼接或响应体较大时才使用 `beginResponse()` / `sendChunk()` / `endResponse()`。
+- `sendHeader()` 不再把基础 CSS 内联进每个 HTML 页面，而是引用 `/esp32base/ui.css`；该资源使用固定 `Content-Length` 和 `Cache-Control: public, max-age=86400`，减少业务页面重复下载 9KB 级样式内容。
 - WiFi modem sleep 默认关闭，避免按 DTIM 周期唤醒；电池业务可调用 `Esp32BaseWiFi::setPowerSave(true)` 显式恢复 modem sleep。
 - 内置基础 CSS 不再包含 App Config 专用样式；启用 `ESP32BASE_ENABLE_APP_CONFIG` 时 App Config 页会按需注入额外 `<style>`，其他页面不下发这部分字节。

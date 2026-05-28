@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>实现边界确认</title>
+  <style>
+    :root{color-scheme:light;--bg:#f5f6f7;--surface:#fff;--soft:#f8fafb;--ink:#17202a;--muted:#667085;--line:#d7dde4;--line-soft:#edf1f4;--primary:#14685d;--primary-soft:#e6f2ef;--ok:#087443;--ok-soft:#e7f4ee;--warn:#9a5a0a;--warn-soft:#fff6e8;--danger:#ad3027;--danger-soft:#fff1ef;--blue:#245f9e;--blue-soft:#e8f0f8;--shadow:0 1px 2px rgba(16,24,40,.04);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.42}.page{width:min(1180px,calc(100% - 28px));margin:0 auto;padding:12px 0 42px}
+    h1,h2,h3,p{margin-top:0}h1{margin:0;font-size:23px;line-height:1.24}h2{margin:0 0 8px;font-size:17px}h3{margin:0 0 5px;font-size:15px}p{margin-bottom:9px}.muted{color:var(--muted)}
+    .devicebar{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;margin-bottom:8px}.identity{display:flex;align-items:center;gap:8px;min-width:0}.dot{width:10px;height:10px;border-radius:999px;background:var(--ok);box-shadow:0 0 0 3px var(--ok-soft);flex:0 0 auto}.name{font-weight:850}.meta{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .nav{display:flex;align-items:center;gap:4px;overflow:auto;white-space:nowrap;border:1px solid var(--line);background:#fff;border-radius:8px;padding:3px;margin-bottom:12px}.nav a{display:inline-flex;align-items:center;min-height:29px;padding:0 10px;border-radius:6px;color:#344054;text-decoration:none;font-weight:750;font-size:13px}.nav a.active{background:var(--primary-soft);color:var(--primary)}
+    .titlebar{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:end;margin:0 0 12px}.titlebar p{margin:4px 0 0;color:var(--muted)}
+    .tag{display:inline-flex;align-items:center;min-height:21px;padding:2px 7px;border-radius:999px;background:#eef2f4;color:#475467;font-size:11px;font-weight:750;white-space:nowrap}.tag.ok{background:var(--ok-soft);color:var(--ok)}.tag.warn{background:var(--warn-soft);color:var(--warn)}.tag.danger{background:var(--danger-soft);color:var(--danger)}.tag.blue{background:var(--blue-soft);color:var(--blue)}
+    .section{background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);padding:12px;margin-bottom:12px}.section.tight{padding:0;overflow:hidden}.section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-bottom:1px solid var(--line-soft)}.section-head h2{margin:0}.section-body{padding:12px}
+    .grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+    .tile{border:1px solid var(--line);border-radius:8px;background:#fff;padding:10px}.tile strong{display:block;margin-bottom:4px}.tile span{display:block;color:var(--muted);font-size:13px}.tile.ok{border-color:#bfe0d4;background:#f7fcfa}.tile.warn{border-color:#efcf96;background:#fffaf0}.tile.blue{border-color:#c6d7ea;background:#f5f9fd}
+    .decision{display:grid;grid-template-columns:190px 1fr 1fr 120px;gap:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#fff;margin-bottom:10px}.decision>div{padding:10px;border-right:1px solid var(--line-soft);border-bottom:1px solid var(--line-soft)}.decision>div:nth-child(4n){border-right:0}.decision>div:nth-last-child(-n+4){border-bottom:0}.head{background:#f8fafb;color:#475467;font-size:12px;font-weight:800}.decision b{display:block;margin-bottom:4px}.decision small{display:block;color:var(--muted);font-size:12px;margin-top:3px}
+    .note{border:1px solid #bfe0d4;background:#f1faf7;color:#185b4e;border-radius:8px;padding:10px 11px;margin-bottom:10px}.note.warn{border-color:#efcf96;background:#fff8ea;color:#7a4608}
+    .flow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.step{border:1px solid var(--line);border-radius:8px;background:#fff;padding:10px;min-height:102px}.step b{display:block;margin-bottom:4px}.step span{display:block;color:var(--muted);font-size:13px}.step .num{display:grid;place-items:center;width:24px;height:24px;line-height:1;border-radius:999px;background:var(--primary-soft);color:var(--primary);font-size:12px;font-weight:800;margin-bottom:7px}
+    @media(max-width:980px){.page{width:min(100% - 20px,1180px);padding-top:10px}.devicebar,.titlebar,.grid-3,.grid-2,.flow{grid-template-columns:1fr}.decision{display:block}.decision>div{border-right:0}.head{display:none}.tag{white-space:normal}}
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="devicebar"><div class="identity"><span class="dot"></span><span class="name">公共 Web UI 模板</span><span class="meta">实现边界 / 待确认</span></div><span class="tag blue">下一环节</span></div>
+    <nav class="nav"><a href="/files/ui-template-baseline-overview-zh.html">总览</a><a class="active">实现确认</a><a href="/files/final-review-zh.html">最终总审</a><a>计划</a><a>实现</a><a>验证</a></nav>
+    <div class="titlebar"><div><h1>实现边界确认</h1><p>页面模板本身已经基本收束，下一步不是继续堆页面，而是把应沉到 Esp32Base 的能力固定下来。</p></div><span class="tag ok">专业建议版</span></div>
+
+    <section class="section">
+      <h2>一、现在还需要确认什么</h2>
+      <div class="grid-3">
+        <div class="tile ok"><strong>页面类型不需要继续扩张</strong><span>首版已经覆盖设备首页、记录页、配置页、操作页、保护页、反馈状态、向导和维护。</span></div>
+        <div class="tile blue"><strong>需要确认实现边界</strong><span>关键不是再多画几个业务页面，而是确定 CSS、helper、分页、PRG 的基础库责任。</span></div>
+        <div class="tile warn"><strong>不留模糊尾巴</strong><span>流程向导和诊断维护进入首版；长任务和原始数据只做受控状态，不做独立模板。</span></div>
+      </div>
+    </section>
+
+    <section class="section tight">
+      <div class="section-head"><h2>二、建议采用的实现决策</h2><span class="tag blue">不再发散</span></div>
+      <div class="section-body">
+        <div class="decision">
+          <div class="head">决策点</div><div class="head">推荐方案</div><div class="head">不推荐方案</div><div class="head">理由</div>
+          <div><b>CSS 怎么提供</b><small>所有业务页都会用。</small></div>
+          <div><b>基础库内置一份轻量 CSS，并允许业务页覆盖变量。</b><small>通过统一入口输出或引用，默认不要求业务项目复制 CSS。</small></div>
+          <div>每个业务项目复制一份样式，或者首版做多套皮肤。</div>
+          <div><span class="tag ok">推荐</span></div>
+
+          <div><b>helper 粒度</b><small>决定以后业务页面写法。</small></div>
+          <div><b>只做结构 helper，不做业务组件。</b><small>例如 page、nav、section、row、actions、notice、formResult。</small></div>
+          <div>直接封装“灌溉计划页”“风扇记录页”这类业务组件。</div>
+          <div><span class="tag ok">推荐</span></div>
+
+          <div><b>分页能力</b><small>记录页高频出现。</small></div>
+          <div><b>基础库提供分页模型和渲染 helper。</b><small>业务只传总数、页码、每页数量和查询参数。</small></div>
+          <div>只给 CSS，让每个项目手写分页逻辑。</div>
+          <div><span class="tag ok">推荐</span></div>
+
+          <div><b>防重复提交</b><small>表单和命令都需要。</small></div>
+          <div><b>把 POST -> 303 -> GET 做成 Web 层通用 helper。</b><small>成功、失败、拒绝原因通过跳转后的 GET 页面展示。</small></div>
+          <div>每个页面手写 redirect 和结果参数。</div>
+          <div><span class="tag ok">强制</span></div>
+
+          <div><b>示例页放哪里</b><small>决定业务项目怎么复用。</small></div>
+          <div><b>放在 Esp32Base 示例里，同时文档保留静态截图/结构说明。</b><small>示例覆盖首页、记录、配置、操作、向导和维护。</small></div>
+          <div>只放静态原型，不提供可编译示例。</div>
+          <div><span class="tag ok">推荐</span></div>
+
+          <div><b>AppConfig 是否首批重做</b><small>内置页目前体验尚可。</small></div>
+          <div><b>首批不主动重做 AppConfig，只保证新基线不冲突。</b><small>优先服务业务自定义页，后续再评估内置页统一。</small></div>
+          <div>一上来重构所有内置页面。</div>
+          <div><span class="tag warn">克制</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>三、确认后进入哪一步</h2>
+      <div class="flow">
+        <div class="step"><span class="num">1</span><b>冻结设计文档</b><span>把上面的决策写入正式设计文档，删除摇摆空间。</span></div>
+        <div class="step"><span class="num">2</span><b>写实现计划</b><span>拆成 CSS、helper、分页、PRG、示例和验证步骤。</span></div>
+        <div class="step"><span class="num">3</span><b>实现第一批</b><span>先做基础能力，不急着改业务项目所有页面。</span></div>
+        <div class="step"><span class="num">4</span><b>灌溉项目验证</b><span>用当前痛点最高的项目验证密度、表单、分页和提交行为。</span></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>四、我的判断</h2>
+      <div class="note">
+        我不建议继续按“再画一个业务页”的方式推进。现在页面能力已经够了，真正会影响后续质量的是实现边界。如果这个边界确认好，后面业务页会自然组合出来；如果边界没确认好，样式库会变成一堆不能复用的漂亮原型。
+      </div>
+      <div class="note warn">
+        我的判断是采用上面 6 个实现决策。它们足够解决当前业务页面的高频痛点，同时不会把 Esp32Base 推向重型前端框架或大型组件库。
+      </div>
+    </section>
+  </main>
+</body>
+</html>

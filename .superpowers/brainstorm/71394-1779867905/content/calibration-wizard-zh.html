@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>校准向导页</title>
+  <style>
+    :root{
+      color-scheme:light;
+      --bg:#f5f6f7;
+      --surface:#fff;
+      --soft:#f8fafb;
+      --ink:#17202a;
+      --muted:#667085;
+      --line:#d7dde4;
+      --line-soft:#edf1f4;
+      --primary:#14685d;
+      --primary-soft:#e6f2ef;
+      --blue:#245f9e;
+      --blue-soft:#e8f0f8;
+      --warn:#9a5a0a;
+      --warn-soft:#fff6e8;
+      --danger:#ad3027;
+      --danger-soft:#fff1ef;
+      --ok:#087443;
+      --ok-soft:#e7f4ee;
+      --shadow:0 1px 2px rgba(16,24,40,.04);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.43}
+    .page{width:min(1180px,calc(100% - 28px));margin:0 auto;padding:18px 0 46px}
+    h1,h2,h3,p{margin-top:0}
+    h1{margin:0 0 6px;font-size:25px;line-height:1.22}
+    h2{margin:0 0 8px;font-size:17px}
+    h3{margin:0 0 6px;font-size:15px}
+    p{margin-bottom:9px}
+    .muted{color:var(--muted)}
+    .top{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:15px}
+    .top p{margin:0;color:var(--muted)}
+    .pill{display:inline-flex;align-items:center;min-height:27px;padding:3px 10px;border:1px solid var(--line);border-radius:999px;background:#fff;color:#475467;font-size:13px;font-weight:700;white-space:nowrap}
+    .section{background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);padding:14px;margin-bottom:14px}
+    .section.compact{padding:0;overflow:hidden}
+    .section-head{padding:12px 14px;border-bottom:1px solid var(--line-soft);background:#fff}
+    .section-body{padding:12px 14px 14px}
+    .grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+    .grid-2{display:grid;grid-template-columns:1.08fr .92fr;gap:12px}
+    .tile{border:1px solid var(--line);border-radius:8px;background:#fff;padding:11px;min-width:0}
+    .tile strong{display:block;margin-bottom:5px}
+    .tile span{display:block;color:var(--muted);font-size:13px}
+    .tag{display:inline-flex;align-items:center;min-height:21px;padding:2px 7px;border-radius:999px;background:#eef2f4;color:#475467;font-size:11px;font-weight:750;white-space:nowrap}
+    .tag.ok{background:var(--ok-soft);color:var(--ok)}
+    .tag.warn{background:var(--warn-soft);color:var(--warn)}
+    .tag.danger{background:var(--danger-soft);color:var(--danger)}
+    .tag.blue{background:var(--blue-soft);color:var(--blue)}
+    .mock{border:1px solid var(--line);border-radius:8px;background:#fff;overflow:hidden;min-width:0}
+    .mock-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 11px;border-bottom:1px solid var(--line-soft);background:#fff}
+    .mock-title{font-weight:800;font-size:13px}
+    .mock-body{padding:12px;background:#f8fafb}
+    .wizard{display:grid;grid-template-columns:170px 1fr;gap:12px}
+    .steps{border:1px solid var(--line);border-radius:8px;background:#fff;padding:8px}
+    .step{display:grid;grid-template-columns:24px 1fr;gap:8px;align-items:center;padding:8px;border-radius:7px;color:#475467}
+    .step.active{background:var(--primary-soft);color:var(--primary);font-weight:800}
+    .step.done{color:var(--ok)}
+    .step-num{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:999px;background:#eef2f4;font-size:12px;font-weight:800}
+    .active .step-num{background:#fff;color:var(--primary)}
+    .done .step-num{background:var(--ok-soft);color:var(--ok)}
+    .panel{border:1px solid var(--line);border-radius:8px;background:#fff;padding:12px}
+    .alert{border:1px solid #bfe0d4;background:#f1faf7;color:#185b4e;border-radius:7px;padding:9px 10px;margin-bottom:10px}
+    .alert.warn{border-color:#efcf96;background:#fff8ea;color:#7a4608}
+    .kv{border:1px solid var(--line);border-radius:7px;background:#fff;overflow:hidden;margin-bottom:10px}
+    .kv-row{display:grid;grid-template-columns:138px 1fr;gap:10px;padding:8px 10px;border-bottom:1px solid var(--line-soft)}
+    .kv-row:last-child{border-bottom:0}
+    .kv-row b{color:#475467;font-size:12px}
+    .field-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:10px}
+    .field{display:grid;gap:4px;min-width:0}
+    .field label{font-size:12px;color:#475467;font-weight:750}
+    .input,.select{width:100%;min-height:34px;border:1px solid #cfd6df;border-radius:6px;background:#fff;padding:7px 8px;font:inherit;color:var(--ink)}
+    .compare{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:10px}
+    .metric{border:1px solid var(--line);border-radius:8px;background:#fff;padding:10px}
+    .metric small{display:block;color:var(--muted);font-size:12px}
+    .metric b{display:block;font-size:20px;line-height:1.2;margin-top:3px}
+    .actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:10px}
+    .btn{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:0 11px;border:1px solid #cfd6df;border-radius:6px;background:#fff;color:#344054;font-weight:750;font-size:13px;white-space:nowrap}
+    .btn.primary{border-color:var(--primary);background:var(--primary);color:#fff}
+    .btn.danger{border-color:var(--danger);background:var(--danger);color:#fff}
+    .phone{width:330px;max-width:100%;margin:0 auto;border:1px solid var(--line);border-radius:18px;background:#fff;padding:10px}
+    .phone-screen{border:1px solid var(--line-soft);border-radius:12px;background:#f8fafb;padding:10px;min-height:440px}
+    .phone h3{font-size:16px;margin-bottom:8px}
+    .phone-step{display:flex;gap:5px;margin-bottom:9px}
+    .dot{height:6px;flex:1;border-radius:999px;background:#d7dde4}
+    .dot.active{background:var(--primary)}
+    .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fff}
+    table{width:100%;border-collapse:collapse;min-width:760px}
+    th,td{padding:8px 10px;border-bottom:1px solid var(--line-soft);text-align:left;vertical-align:top}
+    th{background:#f8fafb;color:#475467;font-size:12px}
+    tr:last-child td{border-bottom:0}
+    td small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+    @media(max-width:980px){
+      .top{display:block}
+      .page{width:min(100% - 20px,1180px);padding-top:12px}
+      .grid-3,.grid-2,.wizard,.field-grid,.compare{grid-template-columns:1fr}
+      .kv-row{grid-template-columns:1fr}
+      .actions{display:grid;grid-template-columns:1fr}
+      .btn{width:100%}
+      .pill{margin-top:10px}
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="top">
+      <div>
+        <h1>校准向导页</h1>
+        <p>用于流量计、投喂克数、自动门端点、电流零点等校准。它不是普通表单，而是“检查条件、录入实测、核对变化、保存结果”的安全流程。</p>
+      </div>
+      <span class="pill">核心：先验证，再保存</span>
+    </header>
+
+    <section class="section">
+      <h2>一、校准页面要解决什么</h2>
+      <div class="grid-3">
+        <div class="tile"><strong>避免错误来源</strong><span>必须说明校准依据来自哪条记录、哪次动作或哪个当前读数，不能让用户凭空填参数。</span></div>
+        <div class="tile"><strong>让变化可核对</strong><span>保存前展示旧值、新值、变化幅度和影响范围，避免误填单位导致设备行为异常。</span></div>
+        <div class="tile"><strong>保护设备状态</strong><span>运行中、故障中、传感器不可信、时间无效等状态下，应禁止保存或转入故障处理页。</span></div>
+      </div>
+    </section>
+
+    <section class="grid-2">
+      <article class="section compact">
+        <div class="section-head">
+          <h2>二、PC 端向导示例：水流量校准</h2>
+          <p class="muted">基于最新可校准出水记录，只输入量杯实测值；系统计算新系数。</p>
+        </div>
+        <div class="section-body">
+          <div class="mock">
+            <div class="mock-head"><span class="mock-title">记录校准</span><span class="tag ok">记录 #1024 可校准</span></div>
+            <div class="mock-body">
+              <div class="wizard">
+                <div class="steps">
+                  <div class="step done"><span class="step-num">1</span><span>选择依据</span></div>
+                  <div class="step active"><span class="step-num">2</span><span>输入实测</span></div>
+                  <div class="step"><span class="step-num">3</span><span>核对变化</span></div>
+                  <div class="step"><span class="step-num">4</span><span>保存结果</span></div>
+                </div>
+                <div class="panel">
+                  <div class="alert">校准依据来自最近一次本地真实出水记录。Web 页面不允许远程打开电磁阀。</div>
+                  <div class="kv">
+                    <div class="kv-row"><b>记录时间</b><span>2026-05-27 16:42:08</span></div>
+                    <div class="kv-row"><b>记录结果</b><span>正常完成，原始脉冲 3120</span></div>
+                    <div class="kv-row"><b>当前显示量</b><span>6.80 L</span></div>
+                  </div>
+                  <div class="field-grid">
+                    <div class="field"><label>量杯实测水量</label><input class="input" value="6.92"></div>
+                    <div class="field"><label>单位</label><select class="select"><option>L</option><option>ml</option></select></div>
+                  </div>
+                  <div class="compare">
+                    <div class="metric"><small>当前系数</small><b>458.8 P/L</b></div>
+                    <div class="metric"><small>保存后系数</small><b>450.9 P/L</b></div>
+                  </div>
+                  <div class="actions">
+                    <button class="btn">返回记录</button>
+                    <button class="btn primary">下一步，核对变化</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="section">
+        <h2>三、手机端向导示例</h2>
+        <div class="phone">
+          <div class="phone-screen">
+            <h3>投喂校准</h3>
+            <div class="phone-step"><span class="dot active"></span><span class="dot active"></span><span class="dot"></span><span class="dot"></span></div>
+            <div class="panel">
+              <div class="alert warn">请先完成一次测试下料，再称量实际重量。运行中不能保存校准。</div>
+              <div class="kv">
+                <div class="kv-row"><b>通道</b><span>第 2 路</span></div>
+                <div class="kv-row"><b>测试圈数</b><span>3.0 圈</span></div>
+                <div class="kv-row"><b>当前估算</b><span>205 g</span></div>
+              </div>
+              <div class="field">
+                <label>实测重量</label>
+                <input class="input" value="198">
+              </div>
+              <div class="compare">
+                <div class="metric"><small>当前</small><b>68.5 g/圈</b></div>
+                <div class="metric"><small>保存后</small><b>66.0 g/圈</b></div>
+              </div>
+              <div class="actions">
+                <button class="btn">取消</button>
+                <button class="btn primary">核对</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section class="section">
+      <h2>四、推荐流程</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>步骤</th><th>页面职责</th><th>保存规则</th></tr></thead>
+          <tbody>
+            <tr><td>1. 条件检查</td><td>检查设备是否空闲、传感器是否可信、是否有可用记录或测试动作。</td><td>不满足时禁止继续，并给出处理入口。</td></tr>
+            <tr><td>2. 选择依据</td><td>选择一条记录、一次测试动作、当前零点读数或当前位置。</td><td>依据必须能追溯，不能只保存裸参数。</td></tr>
+            <tr><td>3. 输入实测</td><td>用户输入量杯水量、称重结果、当前位置含义或零点读数。</td><td>前端提示单位，服务端重新校验范围。</td></tr>
+            <tr><td>4. 保存前核对</td><td>展示旧值、新值、变化幅度、影响范围和是否需要强确认。</td><td>高风险校准进入危险确认页或使用一次性 token。</td></tr>
+            <tr><td>5. POST 保存</td><td>保存校准参数，同时写入校准记录或业务事件。</td><td>使用 POST -> 303 -> GET，刷新不重复保存。</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>五、不同校准类型的模板</h2>
+      <div class="grid-3">
+        <div class="tile"><strong>水流量校准</strong><span>依据：最新可校准出水记录。输入：量杯实测值。输出：流量系数或启动补偿。</span></div>
+        <div class="tile"><strong>投喂克数校准</strong><span>依据：测试下料圈数或脉冲。输入：称重结果。输出：每圈克数或每脉冲克数。</span></div>
+        <div class="tile"><strong>自动门端点校准</strong><span>依据：当前位置和低速点动结果。输入：端点含义。输出：关门基准或开门目标，必须强确认。</span></div>
+        <div class="tile"><strong>电流零点校准</strong><span>依据：电机断电/无电流状态下的 ADC 采样。输入：通常无需人工值。输出：零点偏移。</span></div>
+        <div class="tile"><strong>阈值实测记录</strong><span>依据：正常负载和接近堵转的实测电流。输入：备注和确认。输出：建议阈值，不自动启用高风险保护。</span></div>
+        <div class="tile"><strong>高级手动参数</strong><span>只给明确知道单位的人使用，必须展示推荐范围和旧值。优先放 App Config 或高级页。</span></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>六、建议定稿规则</h2>
+      <div class="grid-3">
+        <div class="tile"><strong>校准不是普通配置表单</strong><span>必须围绕“依据、实测、计算、核对、保存”组织页面。</span></div>
+        <div class="tile"><strong>不要远程触发危险动作</strong><span>水龙头 Web 校准只能基于已有本地记录；机械点动类必须显式进入维护/校准模式。</span></div>
+        <div class="tile"><strong>保存前必须显示变化</strong><span>旧值、新值、变化比例和影响范围必须让用户看见。</span></div>
+        <div class="tile"><strong>校准结果可追溯</strong><span>保存时写入校准元数据或业务记录，包括依据、输入、输出和操作者来源。</span></div>
+        <div class="tile"><strong>运行中禁止保存关键校准</strong><span>执行器运行中、状态不可信或传感器异常时，不能保存会影响控制边界的参数。</span></div>
+        <div class="tile"><strong>仍然使用 PRG</strong><span>保存请求必须 POST 后 303 跳转，避免刷新重复写入校准参数。</span></div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
