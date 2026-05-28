@@ -237,9 +237,10 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "spiffs");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "next OTA");
     RUN_SELFTEST("GET", "/esp32base/wifi", nullptr, true, 200, "<title>Network</title>");
-    RUN_SELFTEST("GET", "/esp32base/wifi", nullptr, true, 200, "<section class='panel formpanel'><h2>Credentials</h2><form class='editform'");
+    RUN_SELFTEST("GET", "/esp32base/wifi", nullptr, true, 200, "<section class='panel formpanel wifipanel'><h2>Credentials</h2><form class='editform'");
     RUN_SELFTEST("GET", "/esp32base/wifi", nullptr, true, 200, "<section class='panel dangerpanel'><h2>Clear WiFi</h2>");
     RUN_SELFTEST("GET", "/esp32base/wifi", nullptr, true, 200, "Password (optional)");
+    RUN_SELFTEST("GET", "/esp32base/wifi", nullptr, true, 200, "class='secondary' type='button' value='Show/Hide Password'");
     RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "<section class='panel logpanel'><div class='tablewrap'><table class='logmeta'>");
     RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "<th>File log</th><td><b>enabled</b>");
     RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "class='logmeta'");
@@ -251,7 +252,7 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/logs?segment=1", nullptr, true, 200, "class='active' href='/esp32base/logs?segment=1'><span class='segname'>history-1");
     RUN_SELFTEST("GET", "/esp32base/logs?segment=99", nullptr, true, 200, "class='active' href='/esp32base/logs?segment=0'><span class='segname'>current-0");
     RUN_SELFTEST("GET", "/esp32base/auth", nullptr, true, 200, "<title>Auth</title>");
-    RUN_SELFTEST("GET", "/esp32base/auth", nullptr, true, 200, "<section class='panel formpanel'><h2>Credentials</h2><form class='editform'");
+    RUN_SELFTEST("GET", "/esp32base/auth", nullptr, true, 200, "<section class='panel formpanel authpanel'><h2>Credentials</h2><form class='editform'");
     RUN_SELFTEST("GET", "/esp32base/auth", nullptr, true, 200, "type='password'");
     RUN_SELFTEST("GET", "/esp32base/auth", nullptr, true, 200, "Confirm new auth password");
     RUN_SELFTEST("GET", "/esp32base/auth", nullptr, true, 200, "New passwords do not match");
