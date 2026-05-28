@@ -142,7 +142,11 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/ui-records?page=2", nullptr, true, 200, "range=24h&amp;type=all&amp;per=20&amp;page=1");
     RUN_SELFTEST("GET", "/ui-records?page=2", nullptr, true, 200, "<link rel='stylesheet' href='/esp32base/ui.css", ":root{color-scheme");
     RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, "Cache-Control: public, max-age=86400");
-    RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".pagehead{padding:12px");
+    RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, "h1{font-size:20px}h2{font-size:16px}");
+    RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, "nav a{display:inline-flex;align-items:center;min-height:34px");
+    RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".pagehead p{margin:4px 0 0;color:var(--eb-muted);font-size:13px}");
+    RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".syslinks a{display:inline-flex;align-items:center;min-height:28px;font-size:12px");
+    RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".heap{flex:0 0 auto;margin-left:auto;white-space:nowrap;text-align:right;font-size:11px}");
     RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".pagination .btnlink,.pagination button,.pagination select,.pagination input{font-size:12px;min-height:26px");
     RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".uactions{display:grid;grid-template-columns:4em 96px;gap:16px");
     RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".uactions .btnlink,.uactions input[type=submit]{width:96px");
