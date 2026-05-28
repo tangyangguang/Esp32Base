@@ -76,6 +76,7 @@ public:
     static bool clearWebAuthConfig();
     static bool clearSystemConfig();
     static bool clearLogConfig();
+    static bool clearUiConfig();
     static bool factoryReset();
     static bool clearLibraryNamespaces();
 

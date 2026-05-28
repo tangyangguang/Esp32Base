@@ -4,6 +4,19 @@
 
 ## 2026-05-28
 
+### Footer bar 运行时显示模式
+
+新增：
+
+- Web System 页新增 Footer bar 模式设置，可在 Off、Status only、Links + status 之间切换。
+- 新增 `Esp32BaseWeb::FooterBarMode`、`setFooterBarMode()`、`footerBarMode()` 和 `footerBarModeName()`，用于业务代码读取或设置底部横条模式。
+- Footer bar 模式保存到 `eb_ui.footer_mode`，出厂重置会清理该配置并恢复默认 Links + status。
+
+业务侧影响：
+
+- 需要隐藏底部系统入口的业务页面无需自定义 CSS 绕过，可直接在 System 页面关闭底部横条或保留右侧运行摘要。
+- 直达 URL 和顶部业务导航不受影响；隐藏底部横条只改变 `sendFooter()` 的页面输出。
+
 ### FileLog 支持 ERROR 模式
 
 新增：

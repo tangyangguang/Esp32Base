@@ -117,6 +117,7 @@ OTA 规则：
 - `addPage()` 注册业务页面并进入业务导航；`addNavItem()` 只注册导航项，不注册路由。
 - `setHomeMode()` 控制 `/` 和 `/esp32base` 的首页模型：基础库首页、业务首页优先或融合首页。
 - `setSystemNavMode()` 控制 Status、Logs、System 等系统入口在顶部、底部或底部紧凑系统工具区展示；默认使用底部紧凑系统工具区，让顶部主要服务业务导航。
+- `setFooterBarMode()` 控制 `sendFooter()` 输出的底部横条：Off 不显示，Status only 只显示右侧运行摘要，Links + status 同时显示左侧系统入口和右侧运行摘要。
 - `setBuiltinLabel()` 可覆盖 Status/WiFi/OTA/Logs/System/Auth 标签，用于应用统一本地化；系统维护页统一使用 `BUILTIN_TOOLS`，不提供旧 Reboot 历史别名。
 - `setHeadExtraCallback()` 可在 `sendHeader()` 的 `</head>` 和顶部导航输出前注入业务 CSS，业务页面不需要复制基础库 header/nav。
 - 导航按当前请求路径输出 `active` class：完全匹配优先，嵌套路由按最长 path 前缀匹配；`SYSTEM_NAV_SECTION` 下系统维护入口只在 footer 中展示，WiFi/Auth/OTA 二级页会把 System 标记为 active，App Config 页面在启用时标记自己的 footer 入口。
@@ -169,6 +170,7 @@ System:
 - `POST /esp32base/app-config`，仅 `ESP32BASE_ENABLE_APP_CONFIG=1`
 - `POST /esp32base/tools/hostname`
 - `POST /esp32base/tools/reboot`
+- `POST /esp32base/tools/footer-bar`
 - `POST /esp32base/tools/filelog`
 - `POST /esp32base/tools/logs-clear`，System 页面主入口，成功后回到 System 页面
 - `POST /esp32base/tools/watchdog-trip-reset`
@@ -194,6 +196,7 @@ System 维护页：
 - 默认底部系统导航展示 Status、Logs、System；启用 App Config 时额外展示 App Config 直达入口。WiFi、Auth、OTA 是低频配置/维护入口，收在 System 页面中并显示为 WiFi Setup、Web Auth、Firmware OTA，但保留原直达 URL。
 - 启用 App Config 时，System 页面首位仍显示 App Config 入口；App Config 是业务持久化参数配置页，不和基础库维护参数混在 System 长页面中。
 - Hostname 设置区显示当前 hostname、构建默认 hostname、已保存 hostname 和是否需要重启；保存只写入 `eb_sys.hostname`，不热切换当前 DHCP hostname、mDNS、OTA 或 Web 身份，页面必须提示重启后生效。
+- Footer bar 模式设置只接受 Off、Status only、Links + status，保存后立即生效并写入 `eb_ui.footer_mode`；该设置只控制底部横条，不关闭直达 URL 或顶部业务导航。
 - 重启按钮必须有二次确认，并通过统一 lifecycle restart 执行；POST 响应必须替换浏览器历史到 GET URL，避免刷新重复提交。
 - `/esp32base/api/restart` 是脚本兼容入口，返回纯文本并立即进入重启流程，不提供 JSON 错误模型。
 - 重启和格式化等危险操作必须分组显示，避免按钮与下一项标题贴得太近。
@@ -336,6 +339,7 @@ Esp32BaseWeb::addPage("/config", "配置", handleConfigPage);
 - `HOME_COMBINED`：`/` 跳转业务首页，`/esp32base` 使用同一套导航框架展示设备融合首页。
 - 配置业务首页后，导航品牌链接指向业务首页，业务主导航不会重复显示同一个首页入口。
 - `SYSTEM_NAV_SECTION` 会在页面底部以小字系统入口与 `Free heap`、`Up`、`RSSI` 同行展示；窄屏下系统入口和状态摘要可自然换行，避免遮挡和横向滚动。
+- Footer bar 可在 System 页面运行时切换 Off、Status only、Links + status；关闭底部横条时系统页面仍可通过直达 URL 访问。
 - 基础库页面复用同一套导航框架，业务页和系统页保持一致入口结构。
 - `/esp32base` 系统页按 Overview、Hardware、Firmware & OTA、Network、Storage & Logs、Partition Table、Boot Reasons 分组展示设备调试信息，包括 MAC、OTA slot minus current sketch 和运行时分区表。
 - `/esp32base/api/status` 保留 `resetReason` / `wakeReason` 原始字段，并提供 `resetReasonText` / `wakeReasonText` 中文说明字段；`wifi.rssi` 返回当前 WiFi RSSI，未连接时为 `0`。

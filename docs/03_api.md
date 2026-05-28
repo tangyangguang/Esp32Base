@@ -218,8 +218,8 @@ void loop() {
 - key 长度 `1..15`。
 - string value 可见内容长度不超过 3999 字节。
 - blob value 长度为 `1..256` 字节，用于小型固定大小 POD 元数据，不用于日志、记录正文或大块业务数据。
-- 库内部 namespace 全部使用 `eb_` 前缀，例如 `eb_wifi`、`eb_sys`、`eb_log`。
-- namespace 已表达库和模块归属，key 不重复模块前缀，例如 `eb_wifi.ssid`、`eb_wifi.pass`、`eb_sys.rst_cnt`、`eb_sys.wdt_cnt`、`eb_sys.wdt_trip_base`、`eb_sys.wdt_trip_time`、`eb_sys.time_boot_id`、`eb_log.mode`、`eb_web.auth_user`、`eb_web.auth_pass`。
+- 库内部 namespace 全部使用 `eb_` 前缀，例如 `eb_wifi`、`eb_sys`、`eb_log`、`eb_ui`。
+- namespace 已表达库和模块归属，key 不重复模块前缀，例如 `eb_wifi.ssid`、`eb_wifi.pass`、`eb_sys.rst_cnt`、`eb_sys.wdt_cnt`、`eb_sys.wdt_trip_base`、`eb_sys.wdt_trip_time`、`eb_sys.time_boot_id`、`eb_log.mode`、`eb_web.auth_user`、`eb_web.auth_pass`、`eb_ui.footer_mode`。
 - 应用不得使用 `eb_` 前缀，避免被库维护 API 清理。
 - `Esp32BaseConfig` 不是跨任务线程安全 API；推荐和 `Esp32Base::begin()` / `handle()`、Web、Bus 固定在同一个 loop/system task 中调用，其他任务通过队列投递配置变更。
 
@@ -270,6 +270,7 @@ public:
     static bool clearWebAuthConfig();
     static bool clearSystemConfig();
     static bool clearLogConfig();
+    static bool clearUiConfig();
     static bool factoryReset();
     static bool clearLibraryNamespaces();
 
@@ -300,6 +301,7 @@ deferred 语义：
 - `clearWebAuthConfig()` 清理 `eb_web`，包含 Web Auth user/password。
 - `clearSystemConfig()` 只清理 `eb_sys.hostname`；`eb_sys.rst_cnt`、restart log、`wdt_cnt`、`wdt_trip_base`、`wdt_trip_time`、`time_boot_id` 等统计/诊断 key 必须保留。
 - `clearLogConfig()` 清理 `eb_log`，包含 FileLog 配置。
+- `clearUiConfig()` 清理 `eb_ui`，包含 Footer bar 显示模式。
 - `clearLibraryNamespaces()` 等价于 `factoryReset()`，保留用于兼容旧代码。
 - `clearNamespace()` 和各出厂重置 API 在 namespace 不存在时返回成功，不创建空 namespace，也不输出底层 `NOT_FOUND` 噪声。
 
@@ -655,6 +657,12 @@ public:
         SYSTEM_NAV_SECTION
     };
 
+    enum FooterBarMode : uint8_t {
+        FOOTER_BAR_OFF,
+        FOOTER_BAR_STATUS_ONLY,
+        FOOTER_BAR_FULL
+    };
+
     enum BuiltinPage : uint8_t {
         BUILTIN_HOME,
         BUILTIN_WIFI,
@@ -691,6 +699,9 @@ public:
     static bool setHomePath(const char* path);
     static void setHomeMode(HomeMode mode);
     static void setSystemNavMode(SystemNavMode mode);
+    static bool setFooterBarMode(FooterBarMode mode);
+    static FooterBarMode footerBarMode();
+    static const char* footerBarModeName();
     static bool setBuiltinLabel(BuiltinPage page, const char* label);
     static void setHeadExtraCallback(Handler handler);
 
@@ -737,6 +748,7 @@ Route 缓冲机制：
 - `setDeviceName()` 设置导航品牌和默认标题；`setHomePath()` 设置业务首页路径。
 - `setHomeMode(HOME_ESP32BASE)` 保持基础库首页默认行为；`HOME_APP` 让 `/` 和 `/esp32base` 优先进入业务首页；`HOME_COMBINED` 让 `/` 进入业务首页，并保留 `/esp32base` 为融合首页。
 - `setSystemNavMode()` 控制系统入口位置：顶部、底部或底部紧凑系统工具区；默认使用 `SYSTEM_NAV_SECTION`，把 Status、Logs、System 作为小字链接与 `Free heap`、`Up`、`RSSI` 放在同一 footer 区域，窄屏可自然换行；启用 App Config 时系统入口同时显示 App Config 直达链接。
+- `FooterBarMode` 控制 `sendFooter()` 的底部横条输出：`FOOTER_BAR_OFF` 不显示，`FOOTER_BAR_STATUS_ONLY` 只显示运行摘要，`FOOTER_BAR_FULL` 显示系统入口和运行摘要。默认 `FOOTER_BAR_FULL`，System 页面保存后写入 `eb_ui.footer_mode` 并立即影响后续页面输出。
 - `setBuiltinLabel()` 覆盖内置导航标签，可用于中文本地化；系统工具页统一使用 `BUILTIN_TOOLS`，不提供旧 Reboot 历史别名。
 - `setHeadExtraCallback()` 设置额外 head 输出回调；`sendHeader()` 在默认 `WEB_HEAD` 后、`</head><body>` 和顶部导航前调用它，业务项目可在这里输出 `<style>`，避免页面刷新时先显示基础库默认导航样式。
 - 导航会给当前匹配项输出 `active` class；匹配规则为 path 完全相等，或当前路径以 `path + "/"` 开头，多个匹配时选择最长 path。`SYSTEM_NAV_SECTION` 下 WiFi/Auth/OTA 二级页会把底部 System 入口标记为 active；App Config 页面在启用时使用自己的底部入口标记 active。

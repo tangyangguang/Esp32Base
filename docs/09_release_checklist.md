@@ -115,7 +115,7 @@
 - deferred 写后立即读返回 pending 新值。
 - restart 前全部落盘。
 - NVS 写满返回 false。
-- `factoryReset()` 清理 `eb_wifi`、`eb_web`、`eb_log` 和 `eb_sys.hostname`。
+- `factoryReset()` 清理 `eb_wifi`、`eb_web`、`eb_log`、`eb_ui` 和 `eb_sys.hostname`。
 - `factoryReset()` 保留 `eb_sys` 中的 boot/restart/watchdog 统计诊断 key。
 - 单项清理 API 只影响对应配置范围；`clearSystemConfig()` 只清 hostname，不清统计诊断 key。
 - namespace 不存在时出厂重置返回成功，不创建空 namespace。
@@ -189,6 +189,7 @@
 - 日志内容 HTML escape。
 - 默认 Web 首页和导航开箱可用。
 - 业务优先导航可设置 device name、home path、home mode、system nav mode。
+- Footer bar 可切换 Off、Status only、Links + status；Off 不输出底部横条，Status only 只输出运行摘要，Links + status 输出系统入口和运行摘要。
 - `addPage()` / `addNavItem()` 注册的业务入口进入业务导航且不重复业务首页入口。
 - 内置 Status/WiFi/OTA/Logs/Tools/Auth 标签可覆盖，用于本地化。
 - Tools 维护页中的重启和格式化 FS 按钮都有二次确认。

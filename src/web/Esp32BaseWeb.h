@@ -43,6 +43,12 @@ public:
         SYSTEM_NAV_SECTION
     };
 
+    enum FooterBarMode : uint8_t {
+        FOOTER_BAR_OFF,
+        FOOTER_BAR_STATUS_ONLY,
+        FOOTER_BAR_FULL
+    };
+
     enum BuiltinPage : uint8_t {
         BUILTIN_HOME,
         BUILTIN_WIFI,
@@ -103,6 +109,9 @@ public:
     static bool setHomePath(const char* path);
     static void setHomeMode(HomeMode mode);
     static void setSystemNavMode(SystemNavMode mode);
+    static bool setFooterBarMode(FooterBarMode mode);
+    static FooterBarMode footerBarMode();
+    static const char* footerBarModeName();
     static bool setBuiltinLabel(BuiltinPage page, const char* label);
     static void setHeadExtraCallback(Handler handler);
 

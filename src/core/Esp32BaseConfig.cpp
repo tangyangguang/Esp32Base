@@ -707,12 +707,17 @@ bool Esp32BaseConfig::clearLogConfig() {
     return clearNamespace("eb_log");
 }
 
+bool Esp32BaseConfig::clearUiConfig() {
+    return clearNamespace("eb_ui");
+}
+
 bool Esp32BaseConfig::factoryReset() {
     bool ok = true;
     ok = clearWifiConfig() && ok;
     ok = clearWebAuthConfig() && ok;
     ok = clearSystemConfig() && ok;
     ok = clearLogConfig() && ok;
+    ok = clearUiConfig() && ok;
     return ok;
 }
 

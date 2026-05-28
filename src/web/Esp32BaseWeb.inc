@@ -71,6 +71,7 @@ char g_deviceName[32] = "Esp32Base";
 char g_homePath[48] = "";
 Esp32BaseWeb::HomeMode g_homeMode = Esp32BaseWeb::HOME_ESP32BASE;
 Esp32BaseWeb::SystemNavMode g_systemNavMode = Esp32BaseWeb::SYSTEM_NAV_SECTION;
+Esp32BaseWeb::FooterBarMode g_footerBarMode = Esp32BaseWeb::FOOTER_BAR_FULL;
 char g_builtinLabels[7][16] = {"Status", "WiFi", "OTA", "Logs", "System", "System", "Auth"};
 Esp32BaseWeb::Handler g_headExtraCallback = nullptr;
 const char* g_pageHeadProgmem = nullptr;
@@ -395,6 +396,27 @@ bool saveStoredAuth(const char* user, const char* pass) {
     }
     prefs.end();
     return ok;
+}
+
+bool validFooterBarMode(Esp32BaseWeb::FooterBarMode mode) {
+    return mode == Esp32BaseWeb::FOOTER_BAR_OFF ||
+           mode == Esp32BaseWeb::FOOTER_BAR_STATUS_ONLY ||
+           mode == Esp32BaseWeb::FOOTER_BAR_FULL;
+}
+
+const char* footerBarModeName(Esp32BaseWeb::FooterBarMode mode) {
+    switch (mode) {
+        case Esp32BaseWeb::FOOTER_BAR_OFF: return "Off";
+        case Esp32BaseWeb::FOOTER_BAR_STATUS_ONLY: return "Status only";
+        case Esp32BaseWeb::FOOTER_BAR_FULL: return "Links + status";
+        default: return "Unknown";
+    }
+}
+
+Esp32BaseWeb::FooterBarMode readFooterBarMode() {
+    const int32_t raw = Esp32BaseConfig::getInt("eb_ui", "footer_mode", Esp32BaseWeb::FOOTER_BAR_FULL);
+    const Esp32BaseWeb::FooterBarMode mode = static_cast<Esp32BaseWeb::FooterBarMode>(raw);
+    return validFooterBarMode(mode) ? mode : Esp32BaseWeb::FOOTER_BAR_FULL;
 }
 
 bool validHeaderValue(const char* value, size_t maxLen) {
@@ -1653,6 +1675,34 @@ const char* fileLogModeName(Esp32BaseFileLog::Mode mode) {
 }
 #endif
 
+void sendFooterBarModeOption(const char* value, const char* label, Esp32BaseWeb::FooterBarMode mode) {
+    sendChunk("<label><input type='radio' name='mode' value='");
+    sendEscapedHtmlChunk(value);
+    sendChunk("'");
+    if (Esp32BaseWeb::footerBarMode() == mode) {
+        sendChunk(" checked");
+    }
+    sendChunk("> ");
+    sendEscapedHtmlChunk(label);
+    sendChunk("</label> ");
+}
+
+bool footerBarModeFromArg(const String& raw, Esp32BaseWeb::FooterBarMode& mode) {
+    if (raw == "off") {
+        mode = Esp32BaseWeb::FOOTER_BAR_OFF;
+        return true;
+    }
+    if (raw == "status") {
+        mode = Esp32BaseWeb::FOOTER_BAR_STATUS_ONLY;
+        return true;
+    }
+    if (raw == "full") {
+        mode = Esp32BaseWeb::FOOTER_BAR_FULL;
+        return true;
+    }
+    return false;
+}
+
 #if ESP32BASE_ENABLE_WATCHDOG
 void sendWatchdogPanel() {
     const WatchdogTripState state = readWatchdogTripState();
@@ -2532,6 +2582,8 @@ void handleToolsPage() {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "Logs cleared");
     } else if (g_server.hasArg("filelog_saved")) {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "File log mode saved");
+    } else if (g_server.hasArg("footer_saved")) {
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "Footer bar mode saved");
     } else if (g_server.hasArg("watchdog_trip_reset")) {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "Watchdog trip reset");
     } else if (g_server.hasArg("error")) {
@@ -2559,6 +2611,13 @@ void handleToolsPage() {
     sendChunk("<label for='host'>New hostname</label><input id='host' name='hostname' maxlength='32' autocomplete='off' value='");
     sendEscapedHtmlChunk(hasStoredHostname && storedHostname[0] ? storedHostname : Esp32Base::hostname());
     sendChunk("'><p class='muted'>Saved hostname takes effect after restart.</p><input type='submit' value='Save Hostname'></form></section>");
+    sendChunk("<section class='panel'><h2>Footer bar</h2><table class='kv'>");
+    sendInfoRow("Current mode", Esp32BaseWeb::footerBarModeName());
+    sendChunk("</table><form method='post' action='/esp32base/tools/footer-bar' onsubmit=\"return once(this)\"><div class='quicklinks'>");
+    sendFooterBarModeOption("off", "Off", Esp32BaseWeb::FOOTER_BAR_OFF);
+    sendFooterBarModeOption("status", "Status only", Esp32BaseWeb::FOOTER_BAR_STATUS_ONLY);
+    sendFooterBarModeOption("full", "Links + status", Esp32BaseWeb::FOOTER_BAR_FULL);
+    sendChunk("</div><p class='muted'>Controls the compact bottom bar on built-in and app pages.</p><input type='submit' value='Save Footer Bar'></form></section>");
 #if ESP32BASE_ENABLE_WATCHDOG
     sendWatchdogPanel();
 #endif
@@ -2615,6 +2674,24 @@ void handleToolsFileLogPost() {
 #else
     redirectSeeOther("/esp32base/tools?error=filelog_unavailable");
 #endif
+}
+
+void handleToolsFooterBarPost() {
+    markRequest();
+    if (!ensurePostAllowed("tools_footer_bar")) {
+        return;
+    }
+    Esp32BaseWeb::FooterBarMode mode = Esp32BaseWeb::FOOTER_BAR_FULL;
+    if (!footerBarModeFromArg(g_server.arg("mode"), mode)) {
+        ESP32BASE_LOG_W("web", "footer_bar_mode_rejected source=tools value=%s", g_server.arg("mode").c_str());
+        redirectSeeOther("/esp32base/tools?error=footer_bar_invalid_mode");
+        return;
+    }
+    ESP32BASE_LOG_W("web", "footer_bar_mode_requested source=tools from=%s to=%s",
+                    Esp32BaseWeb::footerBarModeName(),
+                    footerBarModeName(mode));
+    const bool ok = Esp32BaseWeb::setFooterBarMode(mode);
+    redirectSeeOther(ok ? "/esp32base/tools?footer_saved=1" : "/esp32base/tools?error=footer_bar_save_failed");
 }
 
 void handleToolsRebootPost() {
@@ -3359,6 +3436,7 @@ bool Esp32BaseWeb::begin() {
         applyDefaultAuth();
         ESP32BASE_LOG_I("web", "auth_loaded user=%s password=%s source=default", g_authUser, g_authPass);
     }
+    g_footerBarMode = readFooterBarMode();
     g_server.collectHeaders(g_headerKeys, sizeof(g_headerKeys) / sizeof(g_headerKeys[0]));
     g_server.on("/", HTTP_GET, handleRootRedirect);
     g_server.on("/esp32base", HTTP_GET, handleRoot);
@@ -3383,6 +3461,7 @@ bool Esp32BaseWeb::begin() {
 #endif
     g_server.on("/esp32base/tools/hostname", HTTP_POST, handleHostnameSubmit);
     g_server.on("/esp32base/tools/filelog", HTTP_POST, handleToolsFileLogPost);
+    g_server.on("/esp32base/tools/footer-bar", HTTP_POST, handleToolsFooterBarPost);
     g_server.on("/esp32base/tools/reboot", HTTP_POST, handleToolsRebootPost);
 #if ESP32BASE_ENABLE_WATCHDOG
     g_server.on("/esp32base/tools/watchdog-trip-reset", HTTP_POST, handleToolsWatchdogTripResetPost);
@@ -3616,6 +3695,29 @@ void Esp32BaseWeb::setSystemNavMode(SystemNavMode mode) {
     }
 }
 
+bool Esp32BaseWeb::setFooterBarMode(FooterBarMode mode) {
+    if (!validFooterBarMode(mode)) {
+        return false;
+    }
+    const FooterBarMode previousMode = g_footerBarMode;
+    g_footerBarMode = mode;
+    const bool saved = Esp32BaseConfig::setInt("eb_ui", "footer_mode", static_cast<int32_t>(mode));
+    ESP32BASE_LOG_W("web", "footer_bar_mode_%s from=%s to=%s saved=%s",
+                    previousMode == mode ? "unchanged" : "changed",
+                    ::footerBarModeName(previousMode),
+                    ::footerBarModeName(mode),
+                    saved ? "success" : "failed");
+    return saved;
+}
+
+Esp32BaseWeb::FooterBarMode Esp32BaseWeb::footerBarMode() {
+    return g_footerBarMode;
+}
+
+const char* Esp32BaseWeb::footerBarModeName() {
+    return ::footerBarModeName(g_footerBarMode);
+}
+
 bool Esp32BaseWeb::setBuiltinLabel(BuiltinPage page, const char* label) {
     if (page > BUILTIN_AUTH || !label || !label[0] || strlen(label) >= sizeof(g_builtinLabels[0])) {
         return false;
@@ -3685,19 +3787,33 @@ void Esp32BaseWeb::sendHeader(const char* title) {
 }
 
 void Esp32BaseWeb::sendFooter() {
-    if (g_systemNavMode == Esp32BaseWeb::SYSTEM_NAV_SECTION) {
-        sendChunk("</main>");
-        sendChunk("<footer class='footerbar'><span class='syslinks'>");
-        sendSystemLinks(false, activeNavPath(true));
-        sendChunk("</span><span class='heap'>");
-        sendFooterStats();
-        sendChunk("</span></footer></body></html>");
-    } else {
-        sendChunk("</main>");
+    sendChunk("</main>");
+    if (g_systemNavMode != Esp32BaseWeb::SYSTEM_NAV_SECTION) {
         sendSystemNavSection();
-        sendChunk("<div class=info>");
-        sendFooterStats();
-        sendChunk("</div></body></html>");
+    }
+    switch (g_footerBarMode) {
+        case Esp32BaseWeb::FOOTER_BAR_OFF:
+            sendChunk("</body></html>");
+            break;
+        case Esp32BaseWeb::FOOTER_BAR_STATUS_ONLY:
+            sendChunk("<footer class='footerbar'><span class='heap'>");
+            sendFooterStats();
+            sendChunk("</span></footer></body></html>");
+            break;
+        case Esp32BaseWeb::FOOTER_BAR_FULL:
+        default:
+            if (g_systemNavMode == Esp32BaseWeb::SYSTEM_NAV_SECTION) {
+                sendChunk("<footer class='footerbar'><span class='syslinks'>");
+                sendSystemLinks(false, activeNavPath(true));
+                sendChunk("</span><span class='heap'>");
+                sendFooterStats();
+                sendChunk("</span></footer></body></html>");
+            } else {
+                sendChunk("<div class=info>");
+                sendFooterStats();
+                sendChunk("</div></body></html>");
+            }
+            break;
     }
     endResponse();
 }
