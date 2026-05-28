@@ -62,7 +62,7 @@
 
 - 第一版不依赖 PSRAM。
 - 即使板子有 PSRAM，默认资源预算也按无 PSRAM 设计。
-- ESP32-C3 单核、内存和 wake source 更受限，默认容量更保守。
+- ESP32-C3 单核、内存和 wake source 更受限，部分模块默认容量更保守；Web route 默认仍统一为 24，应用可按自身 route 数量显式调小。
 - FULL profile 必须通过实机资源表确认，不能只看依赖声明。
 
 ## 8. 兼容边界

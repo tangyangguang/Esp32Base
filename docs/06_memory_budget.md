@@ -48,14 +48,12 @@
 ### 3.2 Web route
 
 ```cpp
-#if defined(CONFIG_IDF_TARGET_ESP32C3)
-#define ESP32BASE_WEB_MAX_ROUTES 12
-#else
-#define ESP32BASE_WEB_MAX_ROUTES 16
-#endif
+#define ESP32BASE_WEB_MAX_ROUTES 24
 ```
 
-该上限只控制应用通过 `addRoute()` / `addPage()` / `addApi()` 注册的静态 route 槽位；内置 Web 路由不占用此表。页面/API 较多的应用可在构建参数里显式调大，但不建议基础库默认提高静态 RAM 占用。
+该上限只控制应用通过 `addRoute()` / `addPage()` / `addApi()` 注册的静态 route 槽位；内置 Web 路由不占用此表。默认 24 是基础库当前 full profile 的设计目标，优先避免业务页面/API 增长时过早触发 route 容量不足。route 较少且需要节省静态 RAM 的应用，可以在构建参数里显式调小。
+
+ESP32 full_demo 对照构建中，24 route 相比 16 route 让 `g_routes` 增加 672 bytes BSS。该成本属于可量化的静态 RAM 开销，不应和启动期 NVS 写入、FileLog 初始化写日志或 WiFi 瞬时电流问题混为同一个根因。
 
 ### 3.3 Config pending
 

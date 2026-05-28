@@ -4,11 +4,7 @@
 #include <stdint.h>
 
 #ifndef ESP32BASE_WEB_MAX_ROUTES
-#if defined(CONFIG_IDF_TARGET_ESP32C3)
-#define ESP32BASE_WEB_MAX_ROUTES 12
-#else
-#define ESP32BASE_WEB_MAX_ROUTES 16
-#endif
+#define ESP32BASE_WEB_MAX_ROUTES 24
 #endif
 
 #ifndef ESP32BASE_WEB_MAX_NAV_ITEMS

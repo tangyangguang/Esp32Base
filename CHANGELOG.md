@@ -29,17 +29,18 @@
 - `snapshot().bootId`、`isCurrentBootEvent()`、`resolveCurrentBootEvent()` 的业务语义不变，仍只允许回填本次 boot 的相对时间事件。
 - 旧的 `eb_sys.time_boot_id` key 不再更新；业务项目不应直接依赖该 NVS key。
 
-### Web 应用路由默认容量恢复为保守静态 RAM 配置
+### Web 应用路由默认容量统一为 24
 
-修复：
+设计：
 
-- Web 应用路由默认容量恢复为 ESP32/ESP32-S3 16、ESP32-C3 12，避免所有项目都承担 24 route 静态表的额外 RAM 占用。
+- Web 应用路由默认容量统一为 24，作为基础库 full profile 当前目标默认值，优先覆盖业务页面/API 增长时的容量需求。
 - 该上限只影响业务通过 `addRoute()`、`addPage()` 和 `addApi()` 注册的静态 route 槽位；内置 Web 路由不占用此表。
+- ESP32 full_demo 对照构建显示，24 route 相比 16 route 让 `g_routes` 增加 672 bytes BSS；这是可量化的静态 RAM 成本，不作为 brownout 原始根因处理。
 
 业务侧影响：
 
-- 页面/API 较多的业务项目仍可通过构建参数显式调大 `ESP32BASE_WEB_MAX_ROUTES`。
-- 基础库默认保持保守，符合 ESP32 上 Web、WiFi、FS、OTA 同时启用时的 RAM 边界。
+- route 较少且需要节省静态 RAM 的业务项目，可在核算 route 数量后通过构建参数显式调小 `ESP32BASE_WEB_MAX_ROUTES`。
+- 页面/API 继续增长时，业务项目仍可按项目显式调大 `ESP32BASE_WEB_MAX_ROUTES`，并同步验证 heap/static RAM 边界。
 
 ### Status 页视觉深化
 
