@@ -111,8 +111,9 @@ Web JSON：
 
 Web 发送 buffer：
 
-- HTML/JSON/CSV 与 PROGMEM CSS/JS 共用 512 B 静态 chunk buffer，并走 Arduino `WebServer::sendContent()` 的 chunked 编码路径。本次 ESP32 实机回归显示 1 KB/1.4 KB 级 chunk payload 以及直接手写 `hex\r\n + payload + \r\n` 调用 raw `WiFiClient::write()` 的快路径都会偶发响应挂起，因此默认不使用；稳定性优先于省掉 `WebServer::sendContent()` 内部小写入和 `malloc(11)` 的极限优化。若 flush 前后检测到客户端断开，当前响应标记为 broken 并停止继续输出。
+- HTML/JSON/CSV 与 PROGMEM CSS/JS 共用 512 B 静态 chunk buffer。响应头仍走 Arduino `WebServer`，正文 data chunk 由基础库写出 `hex\r\n + payload + \r\n` 标准 chunked 帧，避免每个 chunk 触发 `WebServer::sendContent()` 内部小块 `malloc/free`。chunk payload 保持 512 B，不恢复早前实机回归中不稳定的 1 KB/1.4 KB 大 chunk。长响应发送每个 chunk 时会喂 watchdog，避免 UI baseline 增加页面体积后，业务长页面仍在同步 `WebServer::handleClient()` 内就触发 task WDT。若 flush 前后检测到客户端断开，当前响应标记为 broken 并停止继续输出。
 - 不再为每页面下发 App Config 专用 CSS（~700 B），只在 App Config 页注入；其他 6 个内置页和业务页首屏均受益。
+- `setHeadExtraCallback()` 的业务 head 注入不会作用到 `/esp32base` 内置页面，业务项目的大段应用 CSS 不会增加 Status、Logs、System 等内置页首屏字节数。
 
 ## 5. PSRAM
 

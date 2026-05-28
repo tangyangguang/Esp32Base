@@ -193,6 +193,7 @@ static const char WEB_APPCFG_STYLE[] PROGMEM =
 
 void flushChunkBuffer();
 bool sendResponseContent(const char* data, size_t len);
+bool sendRawChunkedContent(const char* data, size_t len);
 void markRequest();
 void sendChunk(const char* data, size_t len);
 void sendChunk(const char* text);
@@ -627,6 +628,19 @@ const char* configuredHomePath() {
 
 bool useAppHome() {
     return g_homeMode == Esp32BaseWeb::HOME_APP && strcmp(configuredHomePath(), "/esp32base") != 0;
+}
+
+bool isBuiltinWebPath(const char* path) {
+    static const char prefix[] = "/esp32base";
+    if (!path || !path[0]) {
+        return false;
+    }
+    const size_t len = sizeof(prefix) - 1;
+    return strncmp(path, prefix, len) == 0 && (path[len] == '\0' || path[len] == '/');
+}
+
+bool shouldSendHeadExtra() {
+    return g_headExtraCallback && !isBuiltinWebPath(g_activeUri);
 }
 
 bool navPathMatches(const char* navPath, const char* currentPath) {
@@ -1207,6 +1221,37 @@ bool responseClientConnected() {
     return g_server.client().connected();
 }
 
+void feedWatchdogDuringSend() {
+#if ESP32BASE_ENABLE_WATCHDOG
+    Esp32BaseWatchdog::feed();
+#endif
+}
+
+bool writeClientBytes(WiFiClient& client, const char* data, size_t len) {
+    if (len == 0) {
+        return true;
+    }
+    feedWatchdogDuringSend();
+    const size_t written = client.write(reinterpret_cast<const uint8_t*>(data), len);
+    feedWatchdogDuringSend();
+    return written == len;
+}
+
+bool sendRawChunkedContent(const char* data, size_t len) {
+    if (!data && len > 0) {
+        return false;
+    }
+    char header[18];
+    const int headerLen = snprintf(header, sizeof(header), "%lx\r\n", static_cast<unsigned long>(len));
+    if (headerLen <= 0 || static_cast<size_t>(headerLen) >= sizeof(header)) {
+        return false;
+    }
+    WiFiClient client = g_server.client();
+    return writeClientBytes(client, header, static_cast<size_t>(headerLen)) &&
+           writeClientBytes(client, data, len) &&
+           writeClientBytes(client, "\r\n", 2);
+}
+
 void markResponseClientDisconnected() {
     if (!g_responseBroken) {
         g_responseBroken = true;
@@ -1222,7 +1267,12 @@ bool sendResponseContent(const char* data, size_t len) {
         markResponseClientDisconnected();
         return false;
     }
-    g_server.sendContent(data, len);
+    feedWatchdogDuringSend();
+    if (!sendRawChunkedContent(data, len)) {
+        markResponseClientDisconnected();
+        return false;
+    }
+    feedWatchdogDuringSend();
     yield();
     return true;
 }
@@ -3800,7 +3850,7 @@ void Esp32BaseWeb::sendHeader(const char* title) {
         sendProgmem(g_pageHeadProgmem);
         g_pageHeadProgmem = nullptr;
     }
-    if (g_headExtraCallback) {
+    if (shouldSendHeadExtra()) {
         g_headExtraCallback();
     }
     sendChunk("</head><body>");

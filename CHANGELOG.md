@@ -4,6 +4,22 @@
 
 ## 2026-05-28
 
+### Web 长响应 watchdog 修复
+
+修复：
+
+- `sendResponseContent()` 在每个 chunk 发送前后主动喂 watchdog，避免大 HTML/JSON/CSV 响应仍处在 `WebServer::handleClient()` 内时超过 task WDT 窗口。
+- 长响应数据 chunk 改为基础库无堆分配 writer 输出，避免每个 512 B chunk 都触发 Arduino `WebServer::sendContent()` 内部的小块 `malloc/free`；响应头、chunked 协议格式和最终收尾语义保持不变。
+- `setHeadExtraCallback()` 不再注入到 `/esp32base` 及其子路径的内置页面，避免业务项目的大段页面 CSS 跟随 Status、Logs、System 等内置页重复下发；业务页面和自定义路由继续保留该 head 注入能力。
+- 修复 UI baseline 增加页面基础体积后，业务长页面或慢速客户端可能在响应未结束前触发 watchdog reset 的问题。
+- 慢请求日志、chunk buffer 大小、URL、route/API 和业务页面 helper 语义不变。
+
+业务侧影响：
+
+- 业务应用不需要为了这个 watchdog 问题绕开基础库或拆改现有页面；仍建议长列表页面保留分页，避免同步 WebServer 长时间占用主循环。
+- 内置 `/esp32base` 页面不再承载业务 CSS 字节，已经通过 `setHeadExtraCallback()` 注入样式的业务页面无需改动。
+- 实机横向测试显示内置页、内置 API、CSS、业务首页/统计/预设/滤芯页和业务 API 均可正常返回；如果某个业务 HTML 页仍显著慢于同数据 API，应继续在业务 handler 的额外文件查询或逐行渲染路径排查。
+
 ### FileLog 启动重复日志修复
 
 修复：
