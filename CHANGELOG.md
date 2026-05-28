@@ -11,6 +11,8 @@
 - `/esp32base/tools` 的低频入口从横向 quicklinks 改为紧凑信息行，入口用途更清楚，不再依赖一串链接表达。
 - Hostname、Footer bar、Watchdog trip 和 File log 进入两列 `toolgrid`，PC 上减少纵向滚动；手机端仍保持单列。
 - Restart、Format LittleFS 和 Clear logs 仍使用危险操作面板，但也进入维护网格，和普通设置区分开。
+- System settings 入口进一步改为 PC 两列按钮网格，App Config、WiFi Setup、Web Auth 和 Firmware OTA 直接点击进入，不再显示额外 Open 列。
+- Hostname 面板压缩为紧凑表格和同一行编辑区，减少单个面板在 PC 上撑高整行。
 
 业务侧影响：
 

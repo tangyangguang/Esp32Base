@@ -194,7 +194,7 @@ WiFi 配置页：
 System 维护页：
 
 - 默认底部系统导航展示 Status、Logs、System；启用 App Config 时额外展示 App Config 直达入口。WiFi、Auth、OTA 是低频配置/维护入口，收在 System 页面中并显示为 WiFi Setup、Web Auth、Firmware OTA，但保留原直达 URL。
-- System 页面使用 baseline 分块：低频入口使用紧凑行，设置项和维护项在 PC 上用两列 `toolgrid` 收敛高度，手机端自然单列；可编辑基础参数使用 `formpanel`，普通维护项使用 `actionpanel`，重启、格式化、清日志等危险操作使用 `dangerpanel`。
+- System 页面使用 baseline 分块：低频入口使用两列按钮网格，设置项和维护项在 PC 上用两列 `toolgrid` 收敛高度，手机端自然单列；可编辑基础参数使用 `formpanel`，普通维护项使用 `actionpanel`，重启、格式化、清日志等危险操作使用 `dangerpanel`。
 - 启用 App Config 时，System 页面首位仍显示 App Config 入口；App Config 是业务持久化参数配置页，不和基础库维护参数混在 System 长页面中。
 - Hostname 设置区显示当前 hostname、构建默认 hostname、已保存 hostname 和是否需要重启；保存只写入 `eb_sys.hostname`，不热切换当前 DHCP hostname、mDNS、OTA 或 Web 身份，页面必须提示重启后生效。
 - Footer bar 模式设置只接受 Off、Status only、Links + status，保存后立即生效并写入 `eb_ui.footer_mode`；该设置只控制底部横条，不关闭直达 URL 或顶部业务导航。
