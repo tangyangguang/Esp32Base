@@ -203,6 +203,7 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/", nullptr, true, 302, "Location: /dashboard");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "<title>Status</title>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "class='statuspage'");
+    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "<div class='tablewrap'><table class='kv'>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Overview");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Hardware");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Firmware &amp; OTA");
@@ -232,7 +233,7 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "next OTA");
     RUN_SELFTEST("GET", "/esp32base/wifi", nullptr, true, 200, "<title>Network</title>");
     RUN_SELFTEST("GET", "/esp32base/wifi", nullptr, true, 200, "Password (optional)");
-    RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "<section class='panel'><table class='logmeta'>");
+    RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "<section class='panel logpanel'><div class='tablewrap'><table class='logmeta'>");
     RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "<th>File log</th><td><b>enabled</b>");
     RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "class='logmeta'");
     RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "class='segname'");
@@ -264,9 +265,11 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Free heap:");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "RSSI:");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "<title>App Config</title>");
+    RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Application configuration values stored by Esp32Base.");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Stored value");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Device code");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Confirm changes");
+    RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "id='acbox' class='confirmbox'><h2>Confirm changes</h2><div class='tablewrap'><table>");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Save App Config");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "data-group='General'");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "class=\\\"acgroup\\\"");

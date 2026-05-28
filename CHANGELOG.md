@@ -4,6 +4,19 @@
 
 ## 2026-05-28
 
+### 内置页面 UI baseline 第一轮对齐
+
+优化：
+
+- Status、Logs、App Config 和重启等待页开始对齐统一 Web UI baseline；只读信息区、分区表、日志元信息、日志 segment tabs、App Config 字段区和保存确认区使用更统一的 panel、表格、横向溢出和提示样式。
+- `docs/11_web_ui_baseline.md` 增加业务项目接入规则和基础库优化提示词模板；业务项目找不到合适页面能力块时，应优先回到 Esp32Base 评估补统一能力，而不是在业务侧复制 CSS 或打一次性样式补丁。
+- `README.md` 和 `docs/04_web.md` 增加 Web UI baseline 使用入口说明，提醒业务项目优先复用基础库 helper、能力块和基础 CSS。
+
+业务侧影响：
+
+- 内置页面默认英文文案、URL、POST 参数、NVS key、认证逻辑和 App Config 保存语义不变。
+- 业务页面继续使用 `sendHeader()`、`sendPageTitle()`、`beginPanel()`、`sendFooter()` 和现有 helper；找不到合适能力块时，按文档模板反馈基础库补能力。
+
 ### Footer bar 运行时显示模式
 
 新增：

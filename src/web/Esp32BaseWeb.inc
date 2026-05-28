@@ -156,7 +156,7 @@ static const char WEB_CSS[] PROGMEM =
     "a{color:#25313f;text-decoration:none}.muted,.info{color:var(--eb-muted)}.ok{color:var(--eb-ok)}.err,.dangertext{color:var(--eb-danger)}"
     "nav,.panel,.footerbar,.pagehead{background:var(--eb-surface);border:1px solid var(--eb-line);border-radius:8px;box-shadow:0 1px 2px rgba(16,24,40,.04)}"
     "nav{display:flex;align-items:center;gap:4px;overflow:auto;white-space:nowrap;margin:0 0 12px;padding:3px}.brand{font-weight:800}nav a{display:inline-flex;align-items:center;min-height:34px;padding:0 11px;margin:0;border-radius:6px;color:#344054;font-size:14px;font-weight:750}nav a.active{background:var(--eb-primary-soft);color:var(--eb-primary)}"
-    ".page{margin:0}.pagehead{padding:11px 12px;margin:0 0 12px}.pagehead h1{margin:0}.pagehead p{margin:4px 0 0;color:var(--eb-muted);font-size:13px}.panel{padding:12px;margin:12px 0}.panel>:last-child{margin-bottom:0}.actions,.filterbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}.filterbar{margin:0 0 10px}.filterbar label{margin:0;color:var(--eb-muted);font-size:13px}.filterbar select,.filterbar input{width:auto;margin:0}.editform{max-width:760px}.fieldgrid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:10px 12px;align-items:start}.field{margin:0}.field input,.field select{margin:0}.field.short{grid-column:span 2}.field.med{grid-column:span 4}.field.long{grid-column:span 6}.field.full{grid-column:1/-1;max-width:720px}.field small{display:block;margin-top:4px;color:var(--eb-muted);font-size:12px}"
+    ".page{margin:0}.pagehead{padding:11px 12px;margin:0 0 12px}.pagehead h1{margin:0}.pagehead p{margin:4px 0 0;color:var(--eb-muted);font-size:13px}.panel{padding:12px;margin:12px 0}.panel>:last-child{margin-bottom:0}.actions,.filterbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}.filterbar{margin:0 0 10px}.filterbar label{margin:0;color:var(--eb-muted);font-size:13px}.filterbar select,.filterbar input{width:auto;margin:0}.editform{max-width:760px}.fieldgrid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:10px 12px;align-items:start}.field{margin:0}.field input,.field select{margin:0}.field.short{grid-column:span 2}.field.med{grid-column:span 4}.field.long{grid-column:span 6}.field.full{grid-column:1/-1;max-width:720px}.field small{display:block;margin-top:4px;color:var(--eb-muted);font-size:12px}.tablewrap{overflow-x:auto;margin:0}"
     "button,input[type=submit],input[type=button]{font-size:14px;background:var(--eb-primary);color:#fff;min-height:32px;padding:0 11px;border:0;border-radius:7px;cursor:pointer;margin:0}button:hover,input[type=submit]:hover,input[type=button]:hover{background:#10574e}.dangerbtn,input.danger{background:#b93a32}.dangerbtn:hover,input.danger:hover{background:#9f2f29}"
     "label{display:block;font-weight:700;margin:0 0 4px}input:not([type]),input[type=text],input[type=password],input[type=number],input[type=email],input[type=url],input[type=tel],input[type=search],select{font-size:14px;min-height:32px;padding:6px 9px;margin:0 0 10px;border:1px solid #ccd5dd;border-radius:7px;background:#fff;color:#1f2933}"
     "input:not([type]),input[type=text],input[type=password],input[type=email],input[type=url],input[type=tel],input[type=search]{width:100%}input[type=number]{max-width:14ch}select{max-width:260px}"
@@ -168,10 +168,10 @@ static const char WEB_CSS[] PROGMEM =
     ".urow{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--eb-line-soft)}.urow:last-child{border-bottom:0}.urow small{display:block;color:var(--eb-muted);margin-top:2px}.urow form{display:inline}.uactions{display:grid;grid-template-columns:4em 96px;gap:16px;align-items:center;justify-content:end;min-width:0}.uvalue{font-weight:700;white-space:nowrap}.uactions .uvalue{min-width:0;text-align:right;color:#344054}.uactions .btnlink,.uactions input[type=submit]{width:96px}.uactions form{display:block;width:96px;margin:0}.uactions form input[type=submit]{width:100%;margin:0}.uactions.readonly{grid-template-columns:4em 96px}.pagination{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;border-top:1px solid var(--eb-line-soft);padding-top:7px;margin-top:7px;font-size:12px;font-weight:400}.pagerlinks,.pagerform{display:flex;flex-wrap:wrap;align-items:center;gap:4px}.pagerlinks{justify-content:center}.pagerform{justify-content:flex-end}.pagination .muted,.pagination label{display:inline-flex;align-items:center;min-height:26px;margin:0;font-weight:400;line-height:1}.pagination .btnlink,.pagination button,.pagination select,.pagination input{font-size:12px;min-height:26px;border-radius:6px;font-weight:400;line-height:1.1}.pagination .btnlink{padding:0 7px;background:#f3f6f8;color:#526071}.pagination .btnlink.disabled{background:#f5f6f7;color:#9aa4b2}.pagination .current{background:#e6f2ef;color:#14685d;border:1px solid #bddbd3}.pagination button{padding:0 8px;background:#f3f6f8;color:#344054;border:1px solid var(--eb-line)}.pagination button:hover{background:#e9eef2}.pagination select,.pagination input{padding:2px 7px}.pagerform input[type=number]{width:6ch;margin:0}.pagerform select{width:auto;max-width:82px;margin:0}"
     ".tag{display:inline-flex;align-items:center;min-height:21px;padding:2px 7px;border-radius:999px;background:#eef2f4;color:#475467;font-size:11px;font-weight:750;white-space:nowrap}.tag.ok{background:var(--eb-ok-soft);color:var(--eb-ok)}.tag.warn{background:var(--eb-warn-soft);color:var(--eb-warn)}.tag.danger{background:var(--eb-danger-soft);color:var(--eb-danger)}.tag.info{background:var(--eb-info-soft);color:var(--eb-info)}"
     ".btnlink{display:inline-flex;align-items:center;justify-content:center;min-height:32px;padding:0 10px;border-radius:7px;background:var(--eb-info-soft);color:var(--eb-info);font-size:13px;font-weight:750;white-space:nowrap}.btnlink.ok{background:var(--eb-ok-soft);color:var(--eb-ok)}.btnlink.warn{background:var(--eb-warn-soft);color:var(--eb-warn)}.btnlink.danger{background:var(--eb-danger-soft);color:var(--eb-danger)}.btnlink.disabled{background:#eef2f4;color:#98a2b3}"
-    ".kv{border-collapse:collapse;width:100%;margin:0}.kv th,.kv td{border-bottom:1px solid var(--eb-line);padding:7px 5px;text-align:left;vertical-align:top}.kv tr:last-child th,.kv tr:last-child td{border-bottom:0}.kv th{width:30%;color:var(--eb-muted);font-weight:650}"
-    ".part{border-collapse:collapse;width:100%;font-size:13px}.part th,.part td{border-bottom:1px solid var(--eb-line);padding:6px 5px;text-align:left;vertical-align:top}.part th{color:var(--eb-muted);font-weight:650}.part tr:last-child td{border-bottom:0}"
+    ".kv{border-collapse:collapse;width:100%;margin:0}.kv th,.kv td{border-bottom:1px solid var(--eb-line);padding:7px 5px;text-align:left;vertical-align:top}.kv tr:last-child th,.kv tr:last-child td{border-bottom:0}.kv th{width:30%;color:var(--eb-muted);font-weight:650}.statuspage{padding:10px 12px}.statuspage h2,.logpanel h2{margin-bottom:6px}.statuspage .kv{font-size:13px}.statuspage .kv th{width:176px;max-width:38%}"
+    ".part{border-collapse:collapse;width:100%;min-width:640px;font-size:13px}.part th,.part td{border-bottom:1px solid var(--eb-line);padding:6px 5px;text-align:left;vertical-align:top}.part th{color:var(--eb-muted);font-weight:650}.part tr:last-child td{border-bottom:0}"
     ".tabs,.quicklinks{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 10px}.tabs a,.quicklinks a{font-size:13px;padding:5px 8px;margin:0;background:#f1f4f3;color:var(--eb-muted);border-radius:6px}.tabs a{display:inline-flex;align-items:center;gap:8px}.tabs a.active{background:var(--eb-primary-soft);color:var(--eb-primary);font-weight:700}.segsize{padding-left:7px;border-left:1px solid var(--eb-line);font-variant-numeric:tabular-nums}"
-    ".logmeta{border-collapse:collapse;font-size:13px;line-height:1.45;margin:0}.logmeta th,.logmeta td{padding:2px 10px 2px 0;text-align:left;vertical-align:top}.logmeta th{width:112px;color:var(--eb-muted);font-weight:650}.logmeta td{color:var(--eb-ink)}.statusline{min-height:1.45em}.toolsection{padding:12px;margin:12px 0;background:#fff;border:1px solid var(--eb-line);border-radius:8px}"
+    ".logmeta{border-collapse:collapse;font-size:13px;line-height:1.45;margin:0}.logmeta th,.logmeta td{padding:3px 10px 3px 0;text-align:left;vertical-align:top}.logmeta th{width:112px;color:var(--eb-muted);font-weight:650}.logmeta td{color:var(--eb-ink)}.logpanel{padding:10px 12px}.logpanel .tabs{margin-bottom:8px}.statusline{min-height:1.45em}.toolsection{padding:12px;margin:12px 0;background:#fff;border:1px solid var(--eb-line);border-radius:8px}"
     "pre{white-space:pre;overflow-x:auto;word-break:normal;font-size:12px;line-height:1.45;background:#f1f4f3;border:1px solid var(--eb-line);border-radius:7px;padding:9px}.logframe{display:block;width:100%;height:62vh;min-height:320px;border:1px solid var(--eb-line);border-radius:7px;background:#f1f4f3}"
     "@media(max-width:760px){body{padding:10px}.metrics,.pagination,.urow{grid-template-columns:1fr}.fieldgrid{grid-template-columns:1fr}.field.short,.field.med,.field.long,.field.full{grid-column:auto;max-width:none}.uactions,.uactions.readonly{grid-template-columns:minmax(0,max-content) minmax(88px,96px);justify-content:flex-start}.uactions .uvalue{text-align:left}.pagerlinks,.pagerform{justify-content:flex-start}.pagination .btnlink,.pagination button,.pagination select,.pagination input{min-height:32px}.heap{margin-left:0;text-align:left;white-space:normal}nav a{font-size:14px;padding:0 10px}.tag{white-space:normal}}";
 
@@ -185,7 +185,7 @@ static const char WEB_HEAD[] PROGMEM =
 // Auth, OTA and Tools pages don't pay ~700 B per request for App Config-only styles.
 static const char WEB_APPCFG_STYLE[] PROGMEM =
     "<style>"
-    ".appcfg{max-width:720px;margin:0 auto}.appcfg .pagehead,.appcfg .panel{margin:10px 0}.appcfg .panel{padding:12px 14px}.appcfg .acfield{margin:0 0 11px}.appcfg .acfield:last-child{margin-bottom:0}.appcfg .acfield>label{margin:0 0 3px}.appcfg input:not([type]),.appcfg input[type=text],.appcfg input[type=number],.appcfg select{font-size:14px;padding:6px 8px;margin:0;border:1px solid #ccd5dd;border-radius:5px;box-sizing:border-box;background:#fff;color:#1f2933}.appcfg input:not([type]),.appcfg input[type=text],.appcfg input[type=number]{width:100%}.appcfg select{max-width:260px;width:auto}.appcfg .acrow{display:flex;gap:7px;align-items:center;max-width:100%}.appcfg .acrow input{flex:1 1 auto;min-width:0}.appcfg .acrow input[type=number]{flex:0 1 14ch;width:14ch}.appcfg .unit{color:#64707d;font-size:13px;flex:0 0 auto}.appcfg .help{color:#64707d;font-size:13px;margin:4px 0 0}.appcfg .restart{color:#8a5a00;font-size:13px}.appcfg .confirmbox{display:none;border:1px solid #d8e0e6;background:#f8faf9;border-radius:6px;padding:10px;margin:10px 0;overflow-x:auto}.appcfg .confirmbox table,.appcfg .pendingbox table{border-collapse:collapse;width:100%;font-size:13px}.appcfg .confirmbox th,.appcfg .confirmbox td,.appcfg .pendingbox th,.appcfg .pendingbox td{border-bottom:1px solid #d8e0e6;padding:5px;text-align:left;vertical-align:top}.appcfg .confirmbox tr:last-child td,.appcfg .pendingbox tr:last-child td{border-bottom:0}.appcfg .acgroup th{background:#eef3f1;color:#64707d;font-size:12px;font-weight:700}.appcfg .pendingbox{border-color:#e1c46d;background:#fffdf6;overflow-x:auto}@media(max-width:640px){.appcfg{max-width:none}.appcfg select{width:100%;max-width:none}.appcfg .acrow{align-items:flex-start}.appcfg .acrow input[type=number]{max-width:100%}.appcfg .unit{padding-top:7px}}"
+    ".appcfg{margin:0}.appcfg .pagehead,.appcfg .panel{margin:12px 0}.appcfg .panel{padding:12px}.appcfg .acfield{max-width:760px;margin:0 0 11px}.appcfg .acfield:last-child{margin-bottom:0}.appcfg .acfield>label{margin:0 0 3px}.appcfg input:not([type]),.appcfg input[type=text],.appcfg input[type=number],.appcfg select{font-size:14px;padding:6px 8px;margin:0;border:1px solid #ccd5dd;border-radius:7px;box-sizing:border-box;background:#fff;color:#1f2933}.appcfg input:not([type]),.appcfg input[type=text],.appcfg input[type=number]{width:100%}.appcfg select{max-width:260px;width:auto}.appcfg .acrow{display:flex;gap:7px;align-items:center;max-width:760px}.appcfg .acrow input{flex:1 1 auto;min-width:0}.appcfg .acrow input[type=number]{flex:0 1 14ch;width:14ch}.appcfg .unit{color:var(--eb-muted);font-size:13px;flex:0 0 auto}.appcfg .help{color:var(--eb-muted);font-size:13px;margin:4px 0 0}.appcfg .restart{color:var(--eb-warn);font-size:13px}.appcfg .confirmbox{display:none;border:1px solid #bfe0d4;background:var(--eb-ok-soft);border-radius:8px;padding:10px 12px;margin:12px 0;overflow-x:auto}.appcfg .confirmbox table,.appcfg .pendingbox table{border-collapse:collapse;width:100%;font-size:13px}.appcfg .confirmbox th,.appcfg .confirmbox td,.appcfg .pendingbox th,.appcfg .pendingbox td{border-bottom:1px solid var(--eb-line);padding:5px;text-align:left;vertical-align:top}.appcfg .confirmbox tr:last-child td,.appcfg .pendingbox tr:last-child td{border-bottom:0}.appcfg .acgroup th{background:#eef3f1;color:var(--eb-muted);font-size:12px;font-weight:700}.appcfg .pendingbox{border-color:#efcf96;background:var(--eb-warn-soft);overflow-x:auto}.appcfg #acsavebar,.appcfg .confirmbox .actions{max-width:760px}@media(max-width:640px){.appcfg select{width:100%;max-width:none}.appcfg .acrow{align-items:flex-start}.appcfg .acrow input[type=number]{max-width:100%}.appcfg .unit{padding-top:7px}}"
     "</style>";
 #endif
 
@@ -834,11 +834,11 @@ void sendInfoRow(const char* label, const char* value) {
 void sendStatusSectionStart(const char* title) {
     sendChunk("<section class='panel statuspage'><h2>");
     sendEscapedHtmlChunk(title);
-    sendChunk("</h2><table class='kv'>");
+    sendChunk("</h2><div class='tablewrap'><table class='kv'>");
 }
 
 void sendStatusSectionEnd() {
-    sendChunk("</table></section>");
+    sendChunk("</table></div></section>");
 }
 
 #if ESP32BASE_ENABLE_WATCHDOG
@@ -988,7 +988,7 @@ void sendPartitionTable() {
     const esp_partition_t* running = esp_ota_get_running_partition();
     const esp_partition_t* nextOta = esp_ota_get_next_update_partition(nullptr);
     esp_partition_iterator_t it = esp_partition_find(ESP_PARTITION_TYPE_ANY, ESP_PARTITION_SUBTYPE_ANY, nullptr);
-    sendChunk("<section class='panel statuspage'><h2>Partition Table</h2><table class='part'><tr><th>Name</th><th>Type</th><th>SubType</th><th>Offset</th><th>Size</th><th>Role</th></tr>");
+    sendChunk("<section class='panel statuspage'><h2>Partition Table</h2><div class='tablewrap'><table class='part'><tr><th>Name</th><th>Type</th><th>SubType</th><th>Offset</th><th>Size</th><th>Role</th></tr>");
     while (it) {
         const esp_partition_t* p = esp_partition_get(it);
         if (p) {
@@ -1013,7 +1013,7 @@ void sendPartitionTable() {
         it = esp_partition_next(it);
     }
     esp_partition_iterator_release(it);
-    sendChunk("</table></section>");
+    sendChunk("</table></div></section>");
 }
 
 void sendAppLinks(bool paragraph, const char* activePath) {
@@ -2195,13 +2195,13 @@ void sendAppConfigScript() {
 
 void sendAppConfigTopMessage() {
     if (g_server.hasArg("saved")) {
-        sendChunk("<p class='ok'><b>App Config saved.</b></p>");
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "App Config saved");
     } else if (g_server.hasArg("partial")) {
-        sendChunk("<p class='err'><b>Some App Config values were not saved.</b></p>");
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_DANGER, "Some App Config values were not saved");
     } else if (g_server.hasArg("restart")) {
-        sendChunk("<p class='ok'><b>App Config saved.</b></p>");
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "App Config saved", "Restart the device for marked values to take effect.");
     } else if (g_server.hasArg("stale")) {
-        sendChunk("<p class='err'>Config page was stale. Reload and try again.</p>");
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_DANGER, "Config page was stale", "Reload and try again.");
     }
 }
 
@@ -2209,7 +2209,7 @@ void sendAppConfigPendingRestartNotice() {
     if (!hasAppConfigPendingRestart()) {
         return;
     }
-    sendChunk("<section class='panel pendingbox'><h2>Restart required</h2><p class='muted'>Some saved App Config values take effect after restart.</p><table><thead><tr><th>Parameter</th><th>Running</th><th>Saved</th></tr></thead><tbody>");
+    sendChunk("<section class='panel pendingbox'><h2>Restart required</h2><p class='muted'>Some saved App Config values take effect after restart.</p><div class='tablewrap'><table><thead><tr><th>Parameter</th><th>Running</th><th>Saved</th></tr></thead><tbody>");
     for (uint8_t i = 0; i < ESP32BASE_APP_CONFIG_MAX_FIELDS; ++i) {
         const AppConfigPendingRestartSlot& slot = g_appConfigPendingRestart[i];
         if (!slot.active || slot.fieldIndex >= g_appConfigFieldCount) {
@@ -2250,7 +2250,7 @@ void sendAppConfigPendingRestartNotice() {
         sendEscapedHtmlChunk(display);
         sendChunk("</td></tr>");
     }
-    sendChunk("</tbody></table></section>");
+    sendChunk("</tbody></table></div></section>");
 }
 
 void sendAppConfigPage(const char* errorMessage = nullptr) {
@@ -2262,15 +2262,11 @@ void sendAppConfigPage(const char* errorMessage = nullptr) {
     Esp32BaseWeb::sendHeader(g_appConfigTitle);
     sendAppConfigScript();
     sendChunk("<div class='appcfg'>");
-    sendChunk("<header class='pagehead'><h1>");
-    sendEscapedHtmlChunk(g_appConfigTitle);
-    sendChunk("</h1></header>");
+    Esp32BaseWeb::sendPageTitle(g_appConfigTitle, "Application configuration values stored by Esp32Base.");
     sendAppConfigTopMessage();
     sendAppConfigPendingRestartNotice();
     if (errorMessage && errorMessage[0]) {
-        sendChunk("<p class='err'>");
-        sendEscapedHtmlChunk(errorMessage);
-        sendChunk("</p>");
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_DANGER, "App Config was not saved", errorMessage);
     }
     if (g_appConfigGroupCount == 0 || g_appConfigFieldCount == 0) {
         sendChunk("<section class='panel'><p class='muted'>No App Config fields registered.</p></section>");
@@ -2420,7 +2416,7 @@ void sendAppConfigPage(const char* errorMessage = nullptr) {
         }
         sendChunk("</section>");
     }
-    sendChunk("<div id='acbox' class='confirmbox'><h2>Confirm changes</h2><table><thead><tr><th>Parameter</th><th>Old</th><th>New</th></tr></thead><tbody id='acrows'></tbody></table><div class='actions'><input type='button' value='Confirm Save' onclick='acSubmit(this.form)'> <input type='button' value='Cancel' onclick='acCancel(this.form)'></div></div><div id='acsavebar' class='actions'><input type='submit' value='Save App Config'></div></form></div>");
+    sendChunk("<div id='acbox' class='confirmbox'><h2>Confirm changes</h2><div class='tablewrap'><table><thead><tr><th>Parameter</th><th>Old</th><th>New</th></tr></thead><tbody id='acrows'></tbody></table></div><div class='actions'><input type='button' value='Confirm Save' onclick='acSubmit(this.form)'> <input type='button' value='Cancel' onclick='acCancel(this.form)'></div></div><div id='acsavebar' class='actions'><input type='submit' value='Save App Config'></div></form></div>");
     Esp32BaseWeb::sendFooter();
 }
 
@@ -2703,7 +2699,7 @@ void handleToolsRebootPost() {
     Esp32BaseWeb::sendHeader("Rebooting");
     sendChunk("<script>history.replaceState(null,'','/esp32base/tools?restarting=1');</script>");
     Esp32BaseWeb::sendPageTitle("Rebooting...");
-    sendChunk("<section class='panel'><p>Device is restarting. Please wait a few seconds, then reload.</p></section>");
+    sendChunk("<section class='panel statuspage'><p>Device is restarting. Please wait a few seconds, then reload.</p></section>");
     Esp32BaseWeb::sendFooter();
     delay(100);
     Esp32BaseSystem::restart("web");
@@ -3290,7 +3286,7 @@ void handleLogsPage() {
     formatReadableBytes(Esp32BaseFileLog::bufferUsed(), bufferUsed, sizeof(bufferUsed));
     formatReadableBytes(Esp32BaseFileLog::bufferSize(), bufferTotal, sizeof(bufferTotal));
     char line[320];
-    sendChunk("<section class='panel'><table class='logmeta'><tr><th>File log</th><td><b>");
+    sendChunk("<section class='panel logpanel'><div class='tablewrap'><table class='logmeta'><tr><th>File log</th><td><b>");
     sendEscapedHtmlChunk(Esp32BaseFileLog::isEnabled() ? "enabled" : "disabled");
     sendChunk("</b></td></tr><tr><th>Path</th><td>");
     sendEscapedHtmlChunk(Esp32BaseFileLog::path());
@@ -3310,7 +3306,7 @@ void handleLogsPage() {
         sendChunk(line);
     }
     const uint8_t selectedSegment = selectedLogSegment();
-    sendChunk("</td></tr></table></section><section class='panel'>");
+    sendChunk("</td></tr></table></div></section><section class='panel logpanel'>");
     sendLogSegmentTabs(selectedSegment);
     snprintf(line, sizeof(line), "<p><a href='/esp32base/logs/raw?segment=%u'>Open raw log</a></p><iframe class='logframe' src='/esp32base/logs/raw?segment=%u'></iframe>",
              static_cast<unsigned>(selectedSegment),
@@ -3318,7 +3314,7 @@ void handleLogsPage() {
     sendChunk(line);
     sendChunk("</section>");
 #else
-    sendChunk("<section class='panel'><p>File log: <b>unavailable</b></p></section>");
+    sendChunk("<section class='panel logpanel'><p>File log: <b>unavailable</b></p></section>");
 #endif
     Esp32BaseWeb::sendFooter();
 }

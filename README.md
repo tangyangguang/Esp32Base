@@ -75,6 +75,8 @@ build_flags =
 
 App Config 支持 string、int、decimal 定点数、bool 和 enum 字段；保存时后端重新校验并只写入实际变化字段。注册传入的字符串和 enum option 数组需保持固件生命周期有效。标记为重启后生效的字段保存后会在未重启会话内持续提示旧值和已保存新值，适合低频修改的小型业务配置。
 
+Web 页面应优先使用 Esp32Base 的 UI baseline、helper 和页面能力块；不要在业务项目里为样式问题临时复制 CSS 或绕开基础库。找不到合适页面能力块时，先查看 [Web UI 页面结构与样式基线](docs/11_web_ui_baseline.md)，并优先回到 Esp32Base 评估是否补充统一能力。
+
 联网 profile 可通过 `Esp32BaseNtp::snapshot()` 获取统一业务时间快照。断网启动时业务仍能记录当前 `bootId + uptimeSec`；本次 boot 后续 NTP 同步成功时，`onTimeSynced()` 会回调，业务可用 `resolveCurrentBootEvent()` 只回填同一 boot 的相对时间事件，历史未知时间不会被伪造为日期。
 
 WiFi 默认关闭 modem sleep，让 Web 首屏和 OTA 不被 Arduino ESP32 默认 `WIFI_PS_MIN_MODEM` 的 DTIM 唤醒抖动拖慢；电池设备可调用 `Esp32BaseWiFi::setPowerSave(true)` 恢复 modem sleep。

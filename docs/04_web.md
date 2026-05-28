@@ -122,6 +122,7 @@ OTA 规则：
 - `setHeadExtraCallback()` 可在 `sendHeader()` 的 `</head>` 和顶部导航输出前注入业务 CSS，业务页面不需要复制基础库 header/nav。
 - 导航按当前请求路径输出 `active` class：完全匹配优先，嵌套路由按最长 path 前缀匹配；`SYSTEM_NAV_SECTION` 下系统维护入口只在 footer 中展示，WiFi/Auth/OTA 二级页会把 System 标记为 active，App Config 页面在启用时标记自己的 footer 入口。
 - 默认 Web 样式采用简洁中性色，普通链接、导航和 tabs 不使用蓝色主色；业务项目最终视觉仍由 `setHeadExtraCallback()` 注入 CSS 覆盖。
+- 业务页面应优先使用 `docs/11_web_ui_baseline.md` 中定义的页面能力块、helper 和基础 CSS。找不到合适能力块时，不应先在业务项目复制 CSS 或写一次性布局补丁，而应回到 Esp32Base 评估是否补充统一能力块、CSS 类、helper、示例和文档。
 
 默认容量：
 
