@@ -16,18 +16,19 @@
 - App Config 保存流程、revision 防旧页面提交、POST 参数、校验语义和 pending restart 行为不变。
 - 业务页面的保存前核对区也应使用中性 review 语义，成功色只用于保存完成后的结果反馈。
 
-### Logs 页视觉深化
+### Logs 页恢复紧凑诊断表
 
 优化：
 
-- `/esp32base/logs` 从单纯元信息表格深化为诊断页结构：顶部先展示 FileLog 启用状态、模式、buffer、单文件上限和轮转文件数，再展示 path、flush interval、max total 和各 segment 大小。
-- 原始日志查看区独立成 `Log segment` panel，segment 标签和 raw iframe 保持原有行为，日志正文仍通过 `/esp32base/logs/raw?segment=N` 加载，不内联进主页面。
-- FS/FileLog 不可用时显示轻量诊断状态，不输出空日志查看器。
+- `/esp32base/logs` 恢复为紧凑元信息表格，不再使用指标卡片展示 FileLog 状态，避免诊断页显得复杂和分散。
+- FileLog 的 enabled、path、rotation files、mode、buffer、flush interval、max per file、max total 和 segments 继续集中显示。
+- segment 标签、Open raw log 链接和 raw iframe 保持原有行为，日志正文仍通过 `/esp32base/logs/raw?segment=N` 加载，不内联进主页面。
+- FS/FileLog 不可用时恢复为简单 `File log: unavailable` 表达。
 
 业务侧影响：
 
 - Logs 页 URL、Basic Auth、segment 查询参数、raw endpoint、System 页 Clear logs 入口和日志流式输出语义不变。
-- 业务诊断页如果需要展示“摘要状态 + 元信息 + 受控原始片段”，应参考本页结构，先补公共能力而不是在业务侧直接写一套诊断布局。
+- 业务诊断页不是所有场景都需要卡片；日志、原始片段、系统元信息这类高密度内容优先使用紧凑表格。
 
 ### 字节数人性化展示统一
 

@@ -245,12 +245,12 @@ OTA 上传页：
 Logs 页面：
 
 - 需要 Basic Auth。
-- FS/FileLog 不可用时使用诊断 panel 展示 `unavailable` 状态，不输出空的日志查看器。
+- FS/FileLog 不可用时显示 `File log: unavailable`。
 - FileLog 模式为 OFF 时，Logs 页面仍展示已有历史日志；OFF 只表示停止后续写入。
 - 读取日志内容前必须调用 `Esp32BaseFileLog::flush()`。
-- 文件日志信息先用摘要指标展示 enabled/disabled、mode、buffer、max per file 和 rotate files，再用紧凑表格展示 path、flush interval、max total 和每段大小。
-- 文件日志状态信息使用 panel 内紧凑小字号展示，label/value 纵向对齐；其中的容量值只显示 KB/MB/B 人性化值，不重复 raw bytes。
-- 原始日志区域以标签展示所有 segment，顺序为 `current-0`、`history-1`、`history-2` 到最旧 history；标签里的文件名和大小分开展示，大小只显示 KB/MB/B 人性化值。
+- 显示 enabled、path、mode、rotate files、buffer used/total、flush interval、max per file、max total、每段大小。
+- 文件日志状态信息使用 panel 内紧凑小字号表格展示，label/value 纵向对齐；其中的容量值只显示 KB/MB/B 人性化值，不重复 raw bytes。
+- 页面顶部以标签展示所有 segment，顺序为 `current-0`、`history-1`、`history-2` 到最旧 history；标签里的文件名和大小分开展示，大小只显示 KB/MB/B 人性化值。
 - 默认显示 `current-0`；可通过 `?segment=N` 查看单个历史文件，非法或越界 segment 回落到 `current-0`。
 - 日志正文不内联进主 HTML；Logs 页面通过 iframe 加载 `/esp32base/logs/raw?segment=N` 的 `text/plain` 原文，避免大日志逐字符 HTML escape。
 - 清空日志入口位于 System 页面；Logs 页面只负责查看日志。

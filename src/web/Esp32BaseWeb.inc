@@ -173,9 +173,9 @@ static const char WEB_CSS[] PROGMEM =
     ".kv{border-collapse:collapse;width:100%;margin:0}.kv th,.kv td{border-bottom:1px solid var(--eb-line);padding:7px 5px;text-align:left;vertical-align:top}.kv tr:last-child th,.kv tr:last-child td{border-bottom:0}.kv th{width:30%;color:var(--eb-muted);font-weight:650}.statuspage{padding:10px 12px}.statuspage h2,.logpanel h2{margin-bottom:6px}.statuspage .kv{font-size:13px}.statuspage .kv th{width:176px;max-width:38%}"
     ".part{border-collapse:collapse;width:100%;min-width:640px;font-size:13px}.part th,.part td{border-bottom:1px solid var(--eb-line);padding:6px 5px;text-align:left;vertical-align:top}.part th{color:var(--eb-muted);font-weight:650}.part tr:last-child td{border-bottom:0}"
     ".tabs,.quicklinks{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 10px}.tabs a,.quicklinks a{font-size:13px;padding:5px 8px;margin:0;background:#f1f4f3;color:var(--eb-muted);border-radius:6px}.tabs a{display:inline-flex;align-items:center;gap:8px}.tabs a.active{background:var(--eb-primary-soft);color:var(--eb-primary);font-weight:700}.segsize{padding-left:7px;border-left:1px solid var(--eb-line);font-variant-numeric:tabular-nums}"
-    ".loghead{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px}.loghead h2{margin:0}.loghead p{margin:3px 0 0;color:var(--eb-muted);font-size:13px}.loghead .btnlink{min-height:28px}.logmetrics{grid-template-columns:repeat(4,minmax(0,1fr));margin:8px 0 10px}.logmetrics .metric b{font-size:15px}.logmeta{border-collapse:collapse;font-size:13px;line-height:1.45;margin:0}.logmeta th,.logmeta td{padding:3px 10px 3px 0;text-align:left;vertical-align:top}.logmeta th{width:112px;color:var(--eb-muted);font-weight:650}.logmeta td{color:var(--eb-ink)}.logpanel{padding:10px 12px}.logpanel .tabs{margin:0 0 8px}.statusline{min-height:1.45em}.toolsection{padding:12px;margin:12px 0;background:#fff;border:1px solid var(--eb-line);border-radius:8px}"
+    ".logmeta{border-collapse:collapse;font-size:13px;line-height:1.45;margin:0}.logmeta th,.logmeta td{padding:3px 10px 3px 0;text-align:left;vertical-align:top}.logmeta th{width:112px;color:var(--eb-muted);font-weight:650}.logmeta td{color:var(--eb-ink)}.logpanel{padding:10px 12px}.logpanel .tabs{margin-bottom:8px}.statusline{min-height:1.45em}.toolsection{padding:12px;margin:12px 0;background:#fff;border:1px solid var(--eb-line);border-radius:8px}"
     "pre{white-space:pre;overflow-x:auto;word-break:normal;font-size:12px;line-height:1.45;background:#f1f4f3;border:1px solid var(--eb-line);border-radius:7px;padding:9px}.logframe{display:block;width:100%;height:62vh;min-height:320px;border:1px solid var(--eb-line);border-radius:7px;background:#f1f4f3}"
-    "@media(max-width:760px){body{padding:10px}.metrics,.pagination,.urow,.healthgrid,.statusgrid,.logmetrics{grid-template-columns:1fr}.fieldgrid{grid-template-columns:1fr}.field.short,.field.med,.field.long,.field.full{grid-column:auto;max-width:none}.uactions,.uactions.readonly{grid-template-columns:minmax(0,max-content) minmax(88px,96px);justify-content:flex-start}.uactions .uvalue{text-align:left}.pagerlinks,.pagerform{justify-content:flex-start}.pagination .btnlink,.pagination button,.pagination select,.pagination input{min-height:32px}.heap{margin-left:0;text-align:left;white-space:normal}nav a{font-size:14px;padding:0 10px}.tag{white-space:normal}.loghead{align-items:flex-start}}";
+    "@media(max-width:760px){body{padding:10px}.metrics,.pagination,.urow,.healthgrid,.statusgrid{grid-template-columns:1fr}.fieldgrid{grid-template-columns:1fr}.field.short,.field.med,.field.long,.field.full{grid-column:auto;max-width:none}.uactions,.uactions.readonly{grid-template-columns:minmax(0,max-content) minmax(88px,96px);justify-content:flex-start}.uactions .uvalue{text-align:left}.pagerlinks,.pagerform{justify-content:flex-start}.pagination .btnlink,.pagination button,.pagination select,.pagination input{min-height:32px}.heap{margin-left:0;text-align:left;white-space:normal}nav a{font-size:14px;padding:0 10px}.tag{white-space:normal}}";
 
 static const char WEB_HEAD[] PROGMEM =
     "<meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
@@ -3401,23 +3401,17 @@ void handleLogsPage() {
     formatReadableBytes(Esp32BaseFileLog::bufferUsed(), bufferUsed, sizeof(bufferUsed));
     formatReadableBytes(Esp32BaseFileLog::bufferSize(), bufferTotal, sizeof(bufferTotal));
     char line[320];
-    sendChunk("<section class='panel logpanel'><div class='loghead'><div><h2>File log</h2><p>Runtime file logging and rotation state.</p></div><span class='tag");
-    sendChunk(Esp32BaseFileLog::isEnabled() ? " ok'>enabled" : " warn'>disabled");
-    sendChunk("</span></div><div class='metrics logmetrics'><div class='metric'><b>");
-    sendEscapedHtmlChunk(Esp32BaseFileLog::modeName());
-    sendChunk("</b><span>Mode</span></div><div class='metric'><b>");
-    sendEscapedHtmlChunk(bufferUsed);
-    sendChunk(" / ");
-    sendEscapedHtmlChunk(bufferTotal);
-    sendChunk("</b><span>Buffer</span></div><div class='metric'><b>");
-    sendEscapedHtmlChunk(maxBuf);
-    sendChunk("</b><span>Max per file</span></div>");
-    snprintf(line, sizeof(line), "<div class='metric'><b>%u files</b><span>Rotation</span></div></div><div class='tablewrap'><table class='logmeta'><tr><th>Path</th><td>",
-             static_cast<unsigned>(Esp32BaseFileLog::rotateFiles()));
-    sendChunk(line);
+    sendChunk("<section class='panel logpanel'><div class='tablewrap'><table class='logmeta'><tr><th>File log</th><td><b>");
+    sendEscapedHtmlChunk(Esp32BaseFileLog::isEnabled() ? "enabled" : "disabled");
+    sendChunk("</b></td></tr><tr><th>Path</th><td>");
     sendEscapedHtmlChunk(Esp32BaseFileLog::path());
-    snprintf(line, sizeof(line), "</td></tr><tr><th>Flush interval</th><td>%lu ms</td></tr><tr><th>Max total</th><td>%s</td></tr><tr><th>Segments</th><td>",
+    snprintf(line, sizeof(line), "</td></tr><tr><th>Rotation files</th><td>%u</td></tr><tr><th>Mode</th><td>%s</td></tr><tr><th>Buffer</th><td>%s / %s</td></tr><tr><th>Flush interval</th><td>%lu ms</td></tr><tr><th>Max per file</th><td>%s</td></tr><tr><th>Max total</th><td>%s</td></tr><tr><th>Segments</th><td>",
+             static_cast<unsigned>(Esp32BaseFileLog::rotateFiles()),
+             Esp32BaseFileLog::modeName(),
+             bufferUsed,
+             bufferTotal,
              static_cast<unsigned long>(Esp32BaseFileLog::flushIntervalMs()),
+             maxBuf,
              totalBuf);
     sendChunk(line);
     for (int8_t i = static_cast<int8_t>(Esp32BaseFileLog::rotateFiles()) - 1; i >= 0; --i) {
@@ -3427,21 +3421,15 @@ void handleLogsPage() {
         sendChunk(line);
     }
     const uint8_t selectedSegment = selectedLogSegment();
-    char selectedTitle[16];
-    logSegmentTitle(selectedSegment, selectedTitle, sizeof(selectedTitle));
-    sendChunk("</td></tr></table></div></section><section class='panel logpanel'><div class='loghead'><div><h2>Log segment</h2><p>");
-    sendEscapedHtmlChunk(selectedTitle);
-    sendChunk(" is loaded as raw text in a bounded viewer.</p></div>");
-    snprintf(line, sizeof(line), "<a class='btnlink' href='/esp32base/logs/raw?segment=%u'>Open raw</a></div>",
-             static_cast<unsigned>(selectedSegment));
-    sendChunk(line);
+    sendChunk("</td></tr></table></div></section><section class='panel logpanel'>");
     sendLogSegmentTabs(selectedSegment);
-    snprintf(line, sizeof(line), "<iframe class='logframe' src='/esp32base/logs/raw?segment=%u'></iframe>",
+    snprintf(line, sizeof(line), "<p><a href='/esp32base/logs/raw?segment=%u'>Open raw log</a></p><iframe class='logframe' src='/esp32base/logs/raw?segment=%u'></iframe>",
+             static_cast<unsigned>(selectedSegment),
              static_cast<unsigned>(selectedSegment));
     sendChunk(line);
     sendChunk("</section>");
 #else
-    sendChunk("<section class='panel logpanel'><div class='loghead'><div><h2>File log</h2><p>Runtime file logging is not available in this profile.</p></div><span class='tag warn'>unavailable</span></div></section>");
+    sendChunk("<section class='panel logpanel'><p>File log: <b>unavailable</b></p></section>");
 #endif
     Esp32BaseWeb::sendFooter();
 }
