@@ -151,7 +151,7 @@ static const char WEB_CSS_TYPE[] PROGMEM = "text/css; charset=utf-8";
 static const char WEB_CSS[] PROGMEM =
     ":root{color-scheme:light;--eb-bg:#f5f6f7;--eb-surface:#fff;--eb-soft:#f8fafb;--eb-ink:#17202a;--eb-muted:#667085;--eb-line:#d7dde4;--eb-line-soft:#edf1f4;--eb-primary:#14685d;--eb-primary-soft:#e6f2ef;--eb-ok:#087443;--eb-ok-soft:#e7f4ee;--eb-warn:#9a5a0a;--eb-warn-soft:#fff6e8;--eb-danger:#ad3027;--eb-danger-soft:#fff1ef;--eb-info:#245f9e;--eb-info-soft:#e8f0f8}"
     "*{box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:14px;line-height:1.42;margin:0;padding:12px 14px 36px;color:var(--eb-ink);background:var(--eb-bg);max-width:1180px;margin-inline:auto}"
-    "h1,h2,h3{color:#111827;line-height:1.25;margin:0 0 8px}h1{font-size:20px}h2{font-size:16px}h3{font-size:15px}p{margin:0 0 9px}"
+    "h1,h2,h3{color:#111827;line-height:1.25;margin:0 0 8px}h1{font-size:18px}h2{font-size:16px}h3{font-size:15px}p{margin:0 0 9px}"
     "a{color:#25313f;text-decoration:none}.muted,.info{color:var(--eb-muted)}.ok{color:var(--eb-ok)}.err,.dangertext{color:var(--eb-danger)}"
     "nav,.panel,.footerbar,.pagehead{background:var(--eb-surface);border:1px solid var(--eb-line);border-radius:8px;box-shadow:0 1px 2px rgba(16,24,40,.04)}"
     "nav{display:flex;align-items:center;gap:4px;overflow:auto;white-space:nowrap;margin:0 0 12px;padding:3px}.brand{font-weight:800}nav a{display:inline-flex;align-items:center;min-height:34px;padding:0 11px;margin:0;border-radius:6px;color:#344054;font-size:14px;font-weight:750}nav a.active{background:var(--eb-primary-soft);color:var(--eb-primary)}"
