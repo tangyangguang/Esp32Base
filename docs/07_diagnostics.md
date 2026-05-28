@@ -119,7 +119,7 @@
 - FS profile 默认启用 WARN 文件日志。
 - 示例中 INFO 文件日志生效。
 - 默认 `4 × 32KB` 轮转正确。
-- INFO 仅在 FileLog 模式为 INFO 后写文件；DEBUG/VERBOSE 不作为文件日志模式。
+- ERROR 仅在 FileLog 模式为 ERROR/WARN/INFO 后写文件；WARN 仅在 WARN/INFO 后写文件；INFO 仅在 INFO 后写文件；DEBUG/VERBOSE 不作为文件日志模式。
 - INFO 使用 `1KB / 2s` 缓存。
 - WARN/ERROR 立即写入。
 - clear 幂等。
@@ -236,7 +236,7 @@ CI 应覆盖核心矩阵，release 前执行完整矩阵。
 - 字节数同时显示 raw bytes 与 KB/MB。
 - NTP 对时成功后输出实际时间、当前 uptime、推算 boot wall time，并让 `TimeSnapshot.synced`、Status 页 Time 行和日志绝对时间切换共享同一可信同步语义。
 - WiFi 连接、断开、重连 backoff、进入/退出 config portal 都必须有清晰日志。
-- 文件日志默认 WARN；现场调试可通过 Web System 页或 `Esp32BaseFileLog::setMode(Esp32BaseFileLog::INFO)` 切到 INFO，方便通过 Logs 页面观察。
+- 文件日志默认 WARN；量产极简现场记录可通过 Web System 页或 `Esp32BaseFileLog::setMode(Esp32BaseFileLog::ERROR)` 只记录 ERROR；现场调试可切到 INFO，方便通过 Logs 页面观察。
 - FileLog 模式变更必须输出 WARN 级审计日志，包含上一次模式和新模式。
 - Serial 日志和 FileLog 必须可独立控制；量产设备可通过 `Esp32BaseLog::setSerialLevel(Esp32BaseLog::NONE)` 关闭串口，同时保持 FileLog WARN/ERROR 或 INFO 正常写入。
 - `ESP32BASE_LOG_LEVEL` 是编译期上限；如果编译为 `ESP32BASE_LOG_NONE`，日志宏被移除，FileLog 也不会收到日志。

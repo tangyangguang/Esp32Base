@@ -2,6 +2,21 @@
 
 本文从 2026-05-06 起记录 Esp32Base 新增和优化的能力，面向正在接入本库的业务项目。业务项目应优先查看本文，了解最近可用的新 API、行为变化和推荐接入方式。
 
+## 2026-05-28
+
+### FileLog 支持 ERROR 模式
+
+新增：
+
+- `Esp32BaseFileLog` 增加 `ERROR` 模式，运行时模式收口为 `OFF`、`ERROR`、`WARN`、`INFO`；默认仍为 WARN。
+- 新增构建宏值 `ESP32BASE_FILELOG_MODE_ERROR`，`ESP32BASE_EB_FILELOG_DEFAULT_MODE` 可配置为 OFF、ERROR、WARN 或 INFO，但仍不能超过 `ESP32BASE_LOG_LEVEL` 编译期上限。
+- Web System 页 File log 模式设置新增 ERROR 选项，POST 参数 `mode=error` 保存后写入 `eb_log.mode` 并立即生效。
+
+业务侧影响：
+
+- 量产设备需要只保留错误日志时，可使用 `Esp32BaseFileLog::setMode(Esp32BaseFileLog::ERROR)` 或构建参数 `-D ESP32BASE_EB_FILELOG_DEFAULT_MODE=ESP32BASE_FILELOG_MODE_ERROR`。
+- `DEBUG` / `VERBOSE` 继续不作为文件日志模式；需要现场调试时仍推荐临时切到 INFO。
+
 ## 2026-05-27
 
 ### Web UI baseline helper

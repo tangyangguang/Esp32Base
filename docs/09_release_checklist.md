@@ -135,9 +135,9 @@
 - 非 FS profile 不强行启用 FileLog。
 - 默认路径为 `/logs/eb_app.log`。
 - 默认轮转为 `4 × 32KB`。
-- INFO 仅在 FileLog 模式为 INFO 后写文件；DEBUG/VERBOSE 不能配置为文件日志模式。
+- ERROR 仅在 FileLog 模式为 ERROR/WARN/INFO 后写文件；WARN 仅在 WARN/INFO 后写文件；INFO 仅在 INFO 后写文件；DEBUG/VERBOSE 不能配置为文件日志模式。
 - INFO 使用 `1KB / 2s` 缓存。
-- Web System 页只能设置 Off/WARN/INFO，非法 POST 值必须失败。
+- Web System 页只能设置 Off/ERROR/WARN/INFO，非法 POST 值必须失败。
 - Web System 页切换 FileLog 模式时，WARN 审计日志必须包含上一次模式和新模式。
 - FileLog OFF 后 Logs 页面仍能查看已有历史 segment。
 - `setSerialLevel(NONE)` 后 Serial 不输出，但 FileLog 仍按当前模式写入。

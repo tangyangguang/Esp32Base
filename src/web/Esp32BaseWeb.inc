@@ -1621,6 +1621,12 @@ bool fileLogModeFromArg(const String& raw, Esp32BaseFileLog::Mode& mode) {
         mode = Esp32BaseFileLog::OFF;
         return true;
     }
+#if ESP32BASE_LOG_LEVEL >= ESP32BASE_LOG_ERROR
+    if (raw == "error") {
+        mode = Esp32BaseFileLog::ERROR;
+        return true;
+    }
+#endif
 #if ESP32BASE_LOG_LEVEL >= ESP32BASE_LOG_WARN
     if (raw == "warn") {
         mode = Esp32BaseFileLog::WARN;
@@ -1634,6 +1640,16 @@ bool fileLogModeFromArg(const String& raw, Esp32BaseFileLog::Mode& mode) {
     }
 #endif
     return false;
+}
+
+const char* fileLogModeName(Esp32BaseFileLog::Mode mode) {
+    switch (mode) {
+        case Esp32BaseFileLog::ERROR: return "ERROR";
+        case Esp32BaseFileLog::WARN: return "WARN";
+        case Esp32BaseFileLog::INFO: return "INFO";
+        case Esp32BaseFileLog::OFF:
+        default: return "OFF";
+    }
 }
 #endif
 
@@ -2552,6 +2568,9 @@ void handleToolsPage() {
     sendInfoRow("Path", Esp32BaseFileLog::path());
     sendChunk("</table><form method='post' action='/esp32base/tools/filelog' onsubmit=\"return once(this)\"><div class='quicklinks'>");
     sendFileLogModeOption("off", "Off", Esp32BaseFileLog::OFF);
+#if ESP32BASE_LOG_LEVEL >= ESP32BASE_LOG_ERROR
+    sendFileLogModeOption("error", "ERROR", Esp32BaseFileLog::ERROR);
+#endif
 #if ESP32BASE_LOG_LEVEL >= ESP32BASE_LOG_WARN
     sendFileLogModeOption("warn", "WARN", Esp32BaseFileLog::WARN);
 #endif
@@ -2590,7 +2609,7 @@ void handleToolsFileLogPost() {
     }
     ESP32BASE_LOG_W("web", "filelog_mode_requested source=tools from=%s to=%s",
                     Esp32BaseFileLog::modeName(),
-                    mode == Esp32BaseFileLog::OFF ? "OFF" : (mode == Esp32BaseFileLog::WARN ? "WARN" : "INFO"));
+                    fileLogModeName(mode));
     const bool ok = Esp32BaseFileLog::setMode(mode);
     redirectSeeOther(ok ? "/esp32base/tools?filelog_saved=1" : "/esp32base/tools?error=filelog_save_failed");
 #else
