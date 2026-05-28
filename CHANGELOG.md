@@ -4,6 +4,20 @@
 
 ## 2026-05-28
 
+### Status 页视觉深化
+
+优化：
+
+- `/esp32base` Status 页从纯表格入口深化为设备体检页：顶部新增 Device Health 摘要，优先展示运行时间、WiFi/RSSI、可用 heap 和固件/profile。
+- Overview、Hardware、Firmware & OTA、Runtime Health、Network、Storage & Logs、Boot Reasons 改为两列紧凑信息区，Partition Table 保留为最后的详细诊断表。
+- FileLog 从健康摘要中移出，归入 Storage & Logs，并拆分为启用状态、日志级别、当前文件大小和路径，避免把 WARN 日志级别误读成设备健康告警。
+- Application 入口在出现时使用低频 appsection，避免和设备体检摘要抢第一屏注意力。
+
+业务侧影响：
+
+- Status 页 URL、API、字段语义和底部系统入口不变；变化只影响内置 HTML/CSS 表达。
+- 业务首页若要表达“设备是否正常 + 关键指标 + 详细诊断”，应参考 Status 页的 health hero 和紧凑状态分区，而不是直接铺开大表格。
+
 ### 内置页面 UI baseline 第二轮对齐
 
 优化：
