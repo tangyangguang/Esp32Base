@@ -36,6 +36,7 @@ def main() -> int:
     send_response_content = function_body(source, "sendResponseContent")
     send_raw_chunked_content = function_body(source, "sendRawChunkedContent")
     write_client_bytes = function_body(source, "writeClientBytes")
+    send_response_header = function_body(source, "sendResponseHeader")
     end_response = function_body(source, "endResponse")
     send_header = function_body(source, "sendHeader")
     handle_logs_page = function_body(source, "handleLogsPage")
@@ -84,6 +85,14 @@ def main() -> int:
     if "shouldSendHeadExtra()" in send_header:
         if "isBuiltinWebPath(" not in source:
             errors.append("sendHeader() head extra gating must explicitly skip built-in /esp32base pages")
+    if "sendResponseHeader" not in (ROOT / "src" / "web" / "Esp32BaseWeb.h").read_text():
+        errors.append("Esp32BaseWeb must expose sendResponseHeader() for cacheable app assets")
+    if "validHeaderName(" not in source:
+        errors.append("sendResponseHeader() must validate header names before passing them to WebServer")
+    if "g_responseActive" not in send_response_header:
+        errors.append("sendResponseHeader() must reject headers after a chunked response has started")
+    if "g_server.sendHeader(name, value)" not in send_response_header:
+        errors.append("sendResponseHeader() must delegate valid headers to WebServer::sendHeader()")
 
     if errors:
         for error in errors:

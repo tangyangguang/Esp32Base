@@ -152,8 +152,9 @@ Esp32BaseFileLog::setMode(Esp32BaseFileLog::WARN);
 - 默认格式包含 uptime、level、tag、message；对齐和间隔应保持稳定，便于人工扫描。
 - `DEBUG` 编译级别下，启动流程应输出模块初始化顺序和 Web/NTP/mDNS/OTA 等延迟启动原因；默认 `INFO` 构建不输出这些开发诊断日志。
 - message 按调用方传入内容输出，不规整 CR/LF；需要单行日志时由调用方传入单行 message。
-- 大数字字节数必须使用人性化显示，例如 `1048576 bytes (1.00 MB)`；Web 页面与 JSON 中同样遵守该规则。
+- 日志和内置页面中的大数字字节数必须使用人性化显示，例如 `1.00 MB`，不重复输出原始 bytes。
 - `formatBytes()` 采用二进制单位，`1 KB = 1024 bytes`，`1 MB = 1024 KB`。
+- 状态/API JSON 可保留 raw `bytes` 数值，同时提供 `human` 字段用于人性化展示。
 - WiFi 名称/密码、Web Auth 用户名/密码在 `INFO` 日志中明文输出，这是本库用于业务接入和现场调试的设计。
 - sink callback 在日志调用现场同步执行，用户 sink 不得长时间阻塞。
 
@@ -715,6 +716,7 @@ public:
 
     static void sendHeader(const char* title = nullptr);
     static void sendFooter();
+    static bool sendResponseHeader(const char* name, const char* value);
     static bool beginResponse(int code, const char* contentType, const char* filename = nullptr);
     static bool beginText(int code);
     static bool beginCsv(int code, const char* filename = nullptr);
@@ -766,6 +768,7 @@ Route 缓冲机制：
 - `METHOD_ANY` 用于同一路径 GET/POST 复用；应用 handler 内可用 `currentMethod()`、`isMethod()` 或 `currentMethodName()` 判断当前请求方法。
 - `currentMethod()` 仅在 handler 上下文中返回实际方法：GET 为 `METHOD_GET`，POST 为 `METHOD_POST`；handler 外或未知方法返回 `METHOD_UNKNOWN`。
 - `isMethod(METHOD_ANY)` 在有效 handler 请求中返回 true；`METHOD_ANY` 不作为实际请求方法返回。
+- `sendResponseHeader(name, value)` 可在 handler 内、响应开始前追加 HTTP 响应头；header name 仅允许字母、数字和 `-`，value 不允许控制字符且最大 127 字节。已进入 chunked 响应后调用会返回 false 并记录 WARN。
 - `beginResponse(code, contentType, filename)` 开始通用 chunked 响应，后续使用 `sendChunk()` 输出文本或 `sendBytes()` 输出二进制块，最后必须调用 `endResponse()`。
 - `beginText(code)` 等价于 `text/plain; charset=utf-8` chunked 响应；`beginCsv(code, filename)` 等价于 `text/csv; charset=utf-8`，filename 非空时发送 `Content-Disposition: attachment`。
 - `beginResponse()` / `beginText()` / `beginCsv()` 只能在 handler 请求上下文中成功；handler 外、contentType 为空或超过 63 字节、filename 含不安全字符时返回 false 并记录 WARN。

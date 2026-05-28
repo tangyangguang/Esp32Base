@@ -89,11 +89,17 @@ void logBootSessionStart() {
                     Esp32Base::firmwareBuild()[0] ? Esp32Base::firmwareBuild() : "-",
                     Esp32Base::profileName(),
                     Esp32Base::hostname());
+    char freeHeap[48];
+    char minHeap[48];
+    char flash[48];
+    Esp32BaseLog::formatBytes(Esp32BaseSystem::freeHeap(), freeHeap, sizeof(freeHeap));
+    Esp32BaseLog::formatBytes(Esp32BaseSystem::minFreeHeap(), minHeap, sizeof(minHeap));
+    Esp32BaseLog::formatBytes(Esp32BaseSystem::flashSize(), flash, sizeof(flash));
     ESP32BASE_LOG_I("boot",
-                    "free_heap=%lu min_heap=%lu flash=%lu",
-                    static_cast<unsigned long>(Esp32BaseSystem::freeHeap()),
-                    static_cast<unsigned long>(Esp32BaseSystem::minFreeHeap()),
-                    static_cast<unsigned long>(Esp32BaseSystem::flashSize()));
+                    "free_heap=%s min_heap=%s flash=%s",
+                    freeHeap,
+                    minHeap,
+                    flash);
     ESP32BASE_LOG_I("boot", "============================================================");
 }
 }

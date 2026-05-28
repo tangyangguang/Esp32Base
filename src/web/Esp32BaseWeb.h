@@ -137,6 +137,7 @@ public:
                                        const char* hiddenName = nullptr, const char* hiddenValue = nullptr,
                                        UiTone tone = UI_INFO);
     static void sendPagination(const Pagination& pagination);
+    static bool sendResponseHeader(const char* name, const char* value);
     static bool beginResponse(int code, const char* contentType, const char* filename = nullptr);
     static bool beginText(int code);
     static bool beginCsv(int code, const char* filename = nullptr);

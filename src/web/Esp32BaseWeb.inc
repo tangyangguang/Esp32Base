@@ -173,9 +173,9 @@ static const char WEB_CSS[] PROGMEM =
     ".kv{border-collapse:collapse;width:100%;margin:0}.kv th,.kv td{border-bottom:1px solid var(--eb-line);padding:7px 5px;text-align:left;vertical-align:top}.kv tr:last-child th,.kv tr:last-child td{border-bottom:0}.kv th{width:30%;color:var(--eb-muted);font-weight:650}.statuspage{padding:10px 12px}.statuspage h2,.logpanel h2{margin-bottom:6px}.statuspage .kv{font-size:13px}.statuspage .kv th{width:176px;max-width:38%}"
     ".part{border-collapse:collapse;width:100%;min-width:640px;font-size:13px}.part th,.part td{border-bottom:1px solid var(--eb-line);padding:6px 5px;text-align:left;vertical-align:top}.part th{color:var(--eb-muted);font-weight:650}.part tr:last-child td{border-bottom:0}"
     ".tabs,.quicklinks{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 10px}.tabs a,.quicklinks a{font-size:13px;padding:5px 8px;margin:0;background:#f1f4f3;color:var(--eb-muted);border-radius:6px}.tabs a{display:inline-flex;align-items:center;gap:8px}.tabs a.active{background:var(--eb-primary-soft);color:var(--eb-primary);font-weight:700}.segsize{padding-left:7px;border-left:1px solid var(--eb-line);font-variant-numeric:tabular-nums}"
-    ".logmeta{border-collapse:collapse;font-size:13px;line-height:1.45;margin:0}.logmeta th,.logmeta td{padding:3px 10px 3px 0;text-align:left;vertical-align:top}.logmeta th{width:112px;color:var(--eb-muted);font-weight:650}.logmeta td{color:var(--eb-ink)}.logpanel{padding:10px 12px}.logpanel .tabs{margin-bottom:8px}.statusline{min-height:1.45em}.toolsection{padding:12px;margin:12px 0;background:#fff;border:1px solid var(--eb-line);border-radius:8px}"
+    ".loghead{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px}.loghead h2{margin:0}.loghead p{margin:3px 0 0;color:var(--eb-muted);font-size:13px}.loghead .btnlink{min-height:28px}.logmetrics{grid-template-columns:repeat(4,minmax(0,1fr));margin:8px 0 10px}.logmetrics .metric b{font-size:15px}.logmeta{border-collapse:collapse;font-size:13px;line-height:1.45;margin:0}.logmeta th,.logmeta td{padding:3px 10px 3px 0;text-align:left;vertical-align:top}.logmeta th{width:112px;color:var(--eb-muted);font-weight:650}.logmeta td{color:var(--eb-ink)}.logpanel{padding:10px 12px}.logpanel .tabs{margin:0 0 8px}.statusline{min-height:1.45em}.toolsection{padding:12px;margin:12px 0;background:#fff;border:1px solid var(--eb-line);border-radius:8px}"
     "pre{white-space:pre;overflow-x:auto;word-break:normal;font-size:12px;line-height:1.45;background:#f1f4f3;border:1px solid var(--eb-line);border-radius:7px;padding:9px}.logframe{display:block;width:100%;height:62vh;min-height:320px;border:1px solid var(--eb-line);border-radius:7px;background:#f1f4f3}"
-    "@media(max-width:760px){body{padding:10px}.metrics,.pagination,.urow,.healthgrid,.statusgrid{grid-template-columns:1fr}.fieldgrid{grid-template-columns:1fr}.field.short,.field.med,.field.long,.field.full{grid-column:auto;max-width:none}.uactions,.uactions.readonly{grid-template-columns:minmax(0,max-content) minmax(88px,96px);justify-content:flex-start}.uactions .uvalue{text-align:left}.pagerlinks,.pagerform{justify-content:flex-start}.pagination .btnlink,.pagination button,.pagination select,.pagination input{min-height:32px}.heap{margin-left:0;text-align:left;white-space:normal}nav a{font-size:14px;padding:0 10px}.tag{white-space:normal}}";
+    "@media(max-width:760px){body{padding:10px}.metrics,.pagination,.urow,.healthgrid,.statusgrid,.logmetrics{grid-template-columns:1fr}.fieldgrid{grid-template-columns:1fr}.field.short,.field.med,.field.long,.field.full{grid-column:auto;max-width:none}.uactions,.uactions.readonly{grid-template-columns:minmax(0,max-content) minmax(88px,96px);justify-content:flex-start}.uactions .uvalue{text-align:left}.pagerlinks,.pagerform{justify-content:flex-start}.pagination .btnlink,.pagination button,.pagination select,.pagination input{min-height:32px}.heap{margin-left:0;text-align:left;white-space:normal}nav a{font-size:14px;padding:0 10px}.tag{white-space:normal}.loghead{align-items:flex-start}}";
 
 static const char WEB_HEAD[] PROGMEM =
     "<meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
@@ -194,6 +194,7 @@ static const char WEB_APPCFG_STYLE[] PROGMEM =
 void flushChunkBuffer();
 bool sendResponseContent(const char* data, size_t len);
 bool sendRawChunkedContent(const char* data, size_t len);
+bool sendResponseHeader(const char* name, const char* value);
 void markRequest();
 void sendChunk(const char* data, size_t len);
 void sendChunk(const char* text);
@@ -285,7 +286,9 @@ bool parseBasicAuth(char* user, size_t userLen, char* pass, size_t passLen) {
         return false;
     }
     if (header.length() > 180) {
-        ESP32BASE_LOG_W("web", "auth_header_rejected reason=too_long length=%u", static_cast<unsigned>(header.length()));
+        char lengthBuf[24];
+        Esp32BaseLog::formatBytes(header.length(), lengthBuf, sizeof(lengthBuf));
+        ESP32BASE_LOG_W("web", "auth_header_rejected reason=too_long length=%s", lengthBuf);
         return false;
     }
     const char* encoded = header.c_str() + 6;
@@ -433,6 +436,28 @@ bool validHeaderValue(const char* value, size_t maxLen) {
     for (const char* p = value; *p; ++p) {
         const uint8_t c = static_cast<uint8_t>(*p);
         if (c < 0x20 || c == 0x7f) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool validHeaderName(const char* name, size_t maxLen) {
+    if (!name || !name[0]) {
+        return false;
+    }
+    size_t len = 0;
+    for (const char* p = name; *p; ++p) {
+        const char c = *p;
+        const bool ok = (c >= 'A' && c <= 'Z') ||
+                        (c >= 'a' && c <= 'z') ||
+                        (c >= '0' && c <= '9') ||
+                        c == '-';
+        if (!ok) {
+            return false;
+        }
+        ++len;
+        if (len > maxLen) {
             return false;
         }
     }
@@ -1081,16 +1106,7 @@ void sendSystemNavSection() {
 }
 
 void formatReadableBytes(uint64_t bytes, char* out, size_t len) {
-    if (!out || len == 0) {
-        return;
-    }
-    if (bytes >= 1024ULL * 1024ULL) {
-        snprintf(out, len, "%.2f MB", static_cast<double>(bytes) / 1024.0 / 1024.0);
-    } else if (bytes >= 1024ULL) {
-        snprintf(out, len, "%.2f KB", static_cast<double>(bytes) / 1024.0);
-    } else {
-        snprintf(out, len, "%llu B", static_cast<unsigned long long>(bytes));
-    }
+    Esp32BaseLog::formatBytes(bytes, out, len);
 }
 
 void sendFooterStats() {
@@ -1183,6 +1199,27 @@ void registerRoute(Route& route) {
         g_currentMethod = Esp32BaseWeb::METHOD_UNKNOWN;
     });
     route.registered = true;
+}
+
+bool sendResponseHeader(const char* name, const char* value) {
+    if (!g_requestContextActive) {
+        ESP32BASE_LOG_W("web", "send_response_header outside request");
+        return false;
+    }
+    if (g_responseActive) {
+        ESP32BASE_LOG_W("web", "send_response_header after response started");
+        return false;
+    }
+    if (!validHeaderName(name, 63)) {
+        ESP32BASE_LOG_W("web", "send_response_header invalid name");
+        return false;
+    }
+    if (!validHeaderValue(value, 127)) {
+        ESP32BASE_LOG_W("web", "send_response_header invalid value");
+        return false;
+    }
+    g_server.sendHeader(name, value);
+    return true;
 }
 
 bool beginResponse(int code, const char* contentType, const char* filename) {
@@ -2867,7 +2904,7 @@ void handleOtaPage() {
     Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_OTA]);
     Esp32BaseWeb::sendPageTitle("OTA Update", "Upload a firmware binary through the authenticated Web OTA endpoint.");
     sendChunk("<section class='panel formpanel uploadpanel'><h2>Firmware upload</h2><form id='f' class='editform'><div class='fieldgrid'><div class='field full'><label for='fw'>Firmware file</label><input id='fw' type='file' name='firmware' accept='.bin' required></div><div class='field long'><label for='sha'>SHA256</label><input id='sha' placeholder='Optional 64-character digest' maxlength='64'><small>Optional integrity check for the uploaded firmware.</small></div></div><div class='actions'><input type='submit' value='Upload Firmware'></div></form><progress id='p' value='0' max='100' style='width:100%;display:none'></progress><p id='s' class='statusline muted'></p></section>");
-    sendChunk("<script>function h(n){var u=['B','KB','MB','GB'],i=0,x=n;while(x>=1024&&i<u.length-1){x/=1024;i++;}return n+' bytes ('+(i?x.toFixed(2):x)+' '+u[i]+')';}document.getElementById('f').onsubmit=function(e){e.preventDefault();if(this.dataset.busy)return false;this.dataset.busy=1;var f=document.getElementById('fw').files[0],st=document.getElementById('s'),pg=document.getElementById('p'),b=this.querySelector('[type=submit]');if(!f){this.dataset.busy='';return false;}var d=new FormData();d.append('firmware',f,f.name);var x=new XMLHttpRequest();if(b)b.disabled=true;pg.style.display='block';st.textContent='Uploading 0%';x.upload.onprogress=function(ev){if(ev.lengthComputable){var p=Math.floor(ev.loaded*100/ev.total);pg.value=p;st.textContent='Uploading '+p+'% '+h(ev.loaded)+' / '+h(ev.total);}};x.onload=function(){var r={};try{r=JSON.parse(x.responseText||'{}');}catch(e){}if(x.status==200){st.textContent='Upload successful. Restarting...';setTimeout(function(){location.href=r.redirect||'/esp32base';},8000);return;}st.textContent='Upload failed: '+(r.error||('HTTP '+x.status));document.getElementById('f').dataset.busy='';if(b)b.disabled=false;};x.onerror=function(){st.textContent='Upload failed: network error';document.getElementById('f').dataset.busy='';if(b)b.disabled=false;};x.open('POST','/esp32base/ota');x.setRequestHeader('X-Firmware-Size',String(f.size));var s=document.getElementById('sha').value;if(s)x.setRequestHeader('X-Sha256',s);x.send(d);return false;};</script>");
+    sendChunk("<script>function h(n){var u=['B','KB','MB','GB'],i=0,x=n;while(x>=1024&&i<u.length-1){x/=1024;i++;}return (i?x.toFixed(2):Math.round(x))+' '+u[i];}document.getElementById('f').onsubmit=function(e){e.preventDefault();if(this.dataset.busy)return false;this.dataset.busy=1;var f=document.getElementById('fw').files[0],st=document.getElementById('s'),pg=document.getElementById('p'),b=this.querySelector('[type=submit]');if(!f){this.dataset.busy='';return false;}var d=new FormData();d.append('firmware',f,f.name);var x=new XMLHttpRequest();if(b)b.disabled=true;pg.style.display='block';st.textContent='Uploading 0%';x.upload.onprogress=function(ev){if(ev.lengthComputable){var p=Math.floor(ev.loaded*100/ev.total);pg.value=p;st.textContent='Uploading '+p+'% '+h(ev.loaded)+' / '+h(ev.total);}};x.onload=function(){var r={};try{r=JSON.parse(x.responseText||'{}');}catch(e){}if(x.status==200){st.textContent='Upload successful. Restarting...';setTimeout(function(){location.href=r.redirect||'/esp32base';},8000);return;}st.textContent='Upload failed: '+(r.error||('HTTP '+x.status));document.getElementById('f').dataset.busy='';if(b)b.disabled=false;};x.onerror=function(){st.textContent='Upload failed: network error';document.getElementById('f').dataset.busy='';if(b)b.disabled=false;};x.open('POST','/esp32base/ota');x.setRequestHeader('X-Firmware-Size',String(f.size));var s=document.getElementById('sha').value;if(s)x.setRequestHeader('X-Sha256',s);x.send(d);return false;};</script>");
     Esp32BaseWeb::sendFooter();
 }
 
@@ -3364,17 +3401,23 @@ void handleLogsPage() {
     formatReadableBytes(Esp32BaseFileLog::bufferUsed(), bufferUsed, sizeof(bufferUsed));
     formatReadableBytes(Esp32BaseFileLog::bufferSize(), bufferTotal, sizeof(bufferTotal));
     char line[320];
-    sendChunk("<section class='panel logpanel'><div class='tablewrap'><table class='logmeta'><tr><th>File log</th><td><b>");
-    sendEscapedHtmlChunk(Esp32BaseFileLog::isEnabled() ? "enabled" : "disabled");
-    sendChunk("</b></td></tr><tr><th>Path</th><td>");
+    sendChunk("<section class='panel logpanel'><div class='loghead'><div><h2>File log</h2><p>Runtime file logging and rotation state.</p></div><span class='tag");
+    sendChunk(Esp32BaseFileLog::isEnabled() ? " ok'>enabled" : " warn'>disabled");
+    sendChunk("</span></div><div class='metrics logmetrics'><div class='metric'><b>");
+    sendEscapedHtmlChunk(Esp32BaseFileLog::modeName());
+    sendChunk("</b><span>Mode</span></div><div class='metric'><b>");
+    sendEscapedHtmlChunk(bufferUsed);
+    sendChunk(" / ");
+    sendEscapedHtmlChunk(bufferTotal);
+    sendChunk("</b><span>Buffer</span></div><div class='metric'><b>");
+    sendEscapedHtmlChunk(maxBuf);
+    sendChunk("</b><span>Max per file</span></div>");
+    snprintf(line, sizeof(line), "<div class='metric'><b>%u files</b><span>Rotation</span></div></div><div class='tablewrap'><table class='logmeta'><tr><th>Path</th><td>",
+             static_cast<unsigned>(Esp32BaseFileLog::rotateFiles()));
+    sendChunk(line);
     sendEscapedHtmlChunk(Esp32BaseFileLog::path());
-    snprintf(line, sizeof(line), "</td></tr><tr><th>Rotation files</th><td>%u</td></tr><tr><th>Mode</th><td>%s</td></tr><tr><th>Buffer</th><td>%s / %s</td></tr><tr><th>Flush interval</th><td>%lu ms</td></tr><tr><th>Max per file</th><td>%s</td></tr><tr><th>Max total</th><td>%s</td></tr><tr><th>Segments</th><td>",
-             static_cast<unsigned>(Esp32BaseFileLog::rotateFiles()),
-             Esp32BaseFileLog::modeName(),
-             bufferUsed,
-             bufferTotal,
+    snprintf(line, sizeof(line), "</td></tr><tr><th>Flush interval</th><td>%lu ms</td></tr><tr><th>Max total</th><td>%s</td></tr><tr><th>Segments</th><td>",
              static_cast<unsigned long>(Esp32BaseFileLog::flushIntervalMs()),
-             maxBuf,
              totalBuf);
     sendChunk(line);
     for (int8_t i = static_cast<int8_t>(Esp32BaseFileLog::rotateFiles()) - 1; i >= 0; --i) {
@@ -3384,15 +3427,21 @@ void handleLogsPage() {
         sendChunk(line);
     }
     const uint8_t selectedSegment = selectedLogSegment();
-    sendChunk("</td></tr></table></div></section><section class='panel logpanel'>");
+    char selectedTitle[16];
+    logSegmentTitle(selectedSegment, selectedTitle, sizeof(selectedTitle));
+    sendChunk("</td></tr></table></div></section><section class='panel logpanel'><div class='loghead'><div><h2>Log segment</h2><p>");
+    sendEscapedHtmlChunk(selectedTitle);
+    sendChunk(" is loaded as raw text in a bounded viewer.</p></div>");
+    snprintf(line, sizeof(line), "<a class='btnlink' href='/esp32base/logs/raw?segment=%u'>Open raw</a></div>",
+             static_cast<unsigned>(selectedSegment));
+    sendChunk(line);
     sendLogSegmentTabs(selectedSegment);
-    snprintf(line, sizeof(line), "<p><a href='/esp32base/logs/raw?segment=%u'>Open raw log</a></p><iframe class='logframe' src='/esp32base/logs/raw?segment=%u'></iframe>",
-             static_cast<unsigned>(selectedSegment),
+    snprintf(line, sizeof(line), "<iframe class='logframe' src='/esp32base/logs/raw?segment=%u'></iframe>",
              static_cast<unsigned>(selectedSegment));
     sendChunk(line);
     sendChunk("</section>");
 #else
-    sendChunk("<section class='panel logpanel'><p>File log: <b>unavailable</b></p></section>");
+    sendChunk("<section class='panel logpanel'><div class='loghead'><div><h2>File log</h2><p>Runtime file logging is not available in this profile.</p></div><span class='tag warn'>unavailable</span></div></section>");
 #endif
     Esp32BaseWeb::sendFooter();
 }
@@ -4108,6 +4157,10 @@ void Esp32BaseWeb::sendPagination(const Pagination& pagination) {
     sendChunk("' value='");
     sendChunk(pageValue);
     sendChunk("'><button type='submit'>跳转</button></form></div>");
+}
+
+bool Esp32BaseWeb::sendResponseHeader(const char* name, const char* value) {
+    return ::sendResponseHeader(name, value);
 }
 
 bool Esp32BaseWeb::beginResponse(int code, const char* contentType, const char* filename) {

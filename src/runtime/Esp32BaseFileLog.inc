@@ -371,24 +371,28 @@ bool applyMode(Esp32BaseFileLog::Mode mode, bool persist, bool logChange) {
     g_fileLogEnabled = true;
     const bool saved = persist ? Esp32BaseConfig::setInt("eb_log", "mode", static_cast<int32_t>(g_fileLogMode)) : true;
     if (logChange) {
+        char maxBytes[48];
+        char bufferBytes[48];
+        Esp32BaseLog::formatBytes(g_fileLogMaxBytes, maxBytes, sizeof(maxBytes));
+        Esp32BaseLog::formatBytes(Esp32BaseFileLog::bufferSize(), bufferBytes, sizeof(bufferBytes));
         if (previousMode == g_fileLogMode) {
-            ESP32BASE_LOG_D("filelog", "mode_unchanged mode=%s saved=%s path=%s max=%lu rotate=%u buffer=%u flushMs=%lu",
+            ESP32BASE_LOG_D("filelog", "mode_unchanged mode=%s saved=%s path=%s max=%s rotate=%u buffer=%s flushMs=%lu",
                             ::modeName(g_fileLogMode),
                             saved ? "success" : "failed",
                             g_fileLogPath,
-                            static_cast<unsigned long>(g_fileLogMaxBytes),
+                            maxBytes,
                             static_cast<unsigned>(g_fileLogRotateFiles),
-                            static_cast<unsigned>(Esp32BaseFileLog::bufferSize()),
+                            bufferBytes,
                             static_cast<unsigned long>(Esp32BaseFileLog::flushIntervalMs()));
         } else {
-            ESP32BASE_LOG_W("filelog", "mode_changed from=%s to=%s saved=%s path=%s max=%lu rotate=%u buffer=%u flushMs=%lu",
+            ESP32BASE_LOG_W("filelog", "mode_changed from=%s to=%s saved=%s path=%s max=%s rotate=%u buffer=%s flushMs=%lu",
                             ::modeName(previousMode),
                             ::modeName(g_fileLogMode),
                             saved ? "success" : "failed",
                             g_fileLogPath,
-                            static_cast<unsigned long>(g_fileLogMaxBytes),
+                            maxBytes,
                             static_cast<unsigned>(g_fileLogRotateFiles),
-                            static_cast<unsigned>(Esp32BaseFileLog::bufferSize()),
+                            bufferBytes,
                             static_cast<unsigned long>(Esp32BaseFileLog::flushIntervalMs()));
         }
     }

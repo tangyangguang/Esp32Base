@@ -100,7 +100,8 @@ ESP32BASE_RESTART_LOG_CAPACITY=4
 
 人性化容量显示：
 
-- 所有日志、Web 页面和状态 API 中的大字节数同时提供 raw bytes 与 KB/MB。
+- 日志和内置页面中的大字节数只显示 KB/MB/B 人性化值，不重复 raw bytes。
+- 状态/API JSON 保留 raw `bytes` 数值，并提供 `human` 字段供前端展示。
 - 单位采用二进制换算，`1 KB = 1024 bytes`，`1 MB = 1024 KB`。
 
 Web JSON：

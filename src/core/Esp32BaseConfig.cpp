@@ -503,7 +503,9 @@ bool Esp32BaseConfig::setStrDeferred(const char* ns, const char* key, const char
     g_pending[slot].strValue = copy;
     g_pending[slot].dueMs = millis() + delayMs;
     if (g_auditEnabled) {
-        ESP32BASE_LOG_D("config", "audit op=setStrDeferred ns=%s key=%s len=%u", ns, key, static_cast<unsigned>(strlen(value)));
+        char lenBuf[24];
+        Esp32BaseLog::formatBytes(valueLen, lenBuf, sizeof(lenBuf));
+        ESP32BASE_LOG_D("config", "audit op=setStrDeferred ns=%s key=%s len=%s", ns, key, lenBuf);
     }
     return true;
 }
@@ -517,8 +519,10 @@ bool Esp32BaseConfig::setBlob(const char* ns, const char* key, const void* data,
     const bool readOk = readStoredBlob(ns, key, g_blobScratch, sizeof(g_blobScratch), &oldLen, &hadOld);
     if (readOk && hadOld && oldLen == len && memcmp(g_blobScratch, data, len) == 0) {
         if (g_auditEnabled) {
-            ESP32BASE_LOG_D("config", "audit op=setBlob ns=%s key=%s len=%u changed=no result=skipped",
-                            ns, key, static_cast<unsigned>(len));
+            char lenBuf[24];
+            Esp32BaseLog::formatBytes(len, lenBuf, sizeof(lenBuf));
+            ESP32BASE_LOG_D("config", "audit op=setBlob ns=%s key=%s len=%s changed=no result=skipped",
+                            ns, key, lenBuf);
         }
         clearPendingKey(ns, key);
         return true;
@@ -531,11 +535,15 @@ bool Esp32BaseConfig::setBlob(const char* ns, const char* key, const void* data,
     const bool ok = prefs.putBytes(key, data, len) == len;
     prefs.end();
     if (!ok) {
-        ESP32BASE_LOG_W("config", "audit op=setBlob ns=%s key=%s len=%u changed=yes result=failed",
-                        ns, key, static_cast<unsigned>(len));
+        char lenBuf[24];
+        Esp32BaseLog::formatBytes(len, lenBuf, sizeof(lenBuf));
+        ESP32BASE_LOG_W("config", "audit op=setBlob ns=%s key=%s len=%s changed=yes result=failed",
+                        ns, key, lenBuf);
     } else if (g_auditEnabled) {
-        ESP32BASE_LOG_I("config", "audit op=setBlob ns=%s key=%s len=%u changed=yes result=success",
-                        ns, key, static_cast<unsigned>(len));
+        char lenBuf[24];
+        Esp32BaseLog::formatBytes(len, lenBuf, sizeof(lenBuf));
+        ESP32BASE_LOG_I("config", "audit op=setBlob ns=%s key=%s len=%s changed=yes result=success",
+                        ns, key, lenBuf);
     }
     if (ok) {
         clearPendingKey(ns, key);
@@ -561,8 +569,10 @@ bool Esp32BaseConfig::getBlob(const char* ns, const char* key, void* out, size_t
     size_t actualLen = 0;
     const bool ok = readStoredBlob(ns, key, out, len, &actualLen, &found);
     if (g_readAuditEnabled) {
-        ESP32BASE_LOG_D("config", "audit op=getBlob ns=%s key=%s found=%s len=%u",
-                        ns, key, found ? "yes" : "no", static_cast<unsigned>(actualLen));
+        char lenBuf[24];
+        Esp32BaseLog::formatBytes(actualLen, lenBuf, sizeof(lenBuf));
+        ESP32BASE_LOG_D("config", "audit op=getBlob ns=%s key=%s found=%s len=%s",
+                        ns, key, found ? "yes" : "no", lenBuf);
     }
     return ok && found && actualLen == len;
 }
@@ -575,8 +585,10 @@ bool Esp32BaseConfig::setBlobDeferred(const char* ns, const char* key, const voi
     if (existing >= 0 && g_pending[existing].type == PENDING_BLOB && g_pending[existing].blobLen == len &&
         g_pending[existing].blobValue && memcmp(g_pending[existing].blobValue, data, len) == 0) {
         if (g_auditEnabled) {
-            ESP32BASE_LOG_D("config", "audit op=setBlobDeferred ns=%s key=%s len=%u changed=no result=skipped_pending",
-                            ns, key, static_cast<unsigned>(len));
+            char lenBuf[24];
+            Esp32BaseLog::formatBytes(len, lenBuf, sizeof(lenBuf));
+            ESP32BASE_LOG_D("config", "audit op=setBlobDeferred ns=%s key=%s len=%s changed=no result=skipped_pending",
+                            ns, key, lenBuf);
         }
         return true;
     }
@@ -586,8 +598,10 @@ bool Esp32BaseConfig::setBlobDeferred(const char* ns, const char* key, const voi
     const bool readOk = readStoredBlob(ns, key, g_blobScratch, sizeof(g_blobScratch), &oldLen, &hadOld);
     if (readOk && hadOld && oldLen == len && memcmp(g_blobScratch, data, len) == 0) {
         if (g_auditEnabled) {
-            ESP32BASE_LOG_D("config", "audit op=setBlobDeferred ns=%s key=%s len=%u changed=no result=skipped",
-                            ns, key, static_cast<unsigned>(len));
+            char lenBuf[24];
+            Esp32BaseLog::formatBytes(len, lenBuf, sizeof(lenBuf));
+            ESP32BASE_LOG_D("config", "audit op=setBlobDeferred ns=%s key=%s len=%s changed=no result=skipped",
+                            ns, key, lenBuf);
         }
         clearPendingKey(ns, key);
         return true;
@@ -609,8 +623,10 @@ bool Esp32BaseConfig::setBlobDeferred(const char* ns, const char* key, const voi
     g_pending[slot].blobLen = len;
     g_pending[slot].dueMs = millis() + delayMs;
     if (g_auditEnabled) {
-        ESP32BASE_LOG_D("config", "audit op=setBlobDeferred ns=%s key=%s len=%u",
-                        ns, key, static_cast<unsigned>(len));
+        char lenBuf[24];
+        Esp32BaseLog::formatBytes(len, lenBuf, sizeof(lenBuf));
+        ESP32BASE_LOG_D("config", "audit op=setBlobDeferred ns=%s key=%s len=%s",
+                        ns, key, lenBuf);
     }
     return true;
 }

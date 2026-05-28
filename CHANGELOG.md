@@ -4,10 +4,36 @@
 
 ## 2026-05-28
 
+### Logs 页视觉深化
+
+优化：
+
+- `/esp32base/logs` 从单纯元信息表格深化为诊断页结构：顶部先展示 FileLog 启用状态、模式、buffer、单文件上限和轮转文件数，再展示 path、flush interval、max total 和各 segment 大小。
+- 原始日志查看区独立成 `Log segment` panel，segment 标签和 raw iframe 保持原有行为，日志正文仍通过 `/esp32base/logs/raw?segment=N` 加载，不内联进主页面。
+- FS/FileLog 不可用时显示轻量诊断状态，不输出空日志查看器。
+
+业务侧影响：
+
+- Logs 页 URL、Basic Auth、segment 查询参数、raw endpoint、System 页 Clear logs 入口和日志流式输出语义不变。
+- 业务诊断页如果需要展示“摘要状态 + 元信息 + 受控原始片段”，应参考本页结构，先补公共能力而不是在业务侧直接写一套诊断布局。
+
+### 字节数人性化展示统一
+
+优化：
+
+- `Esp32BaseLog::formatBytes()` 改为只输出 `B`、`KB`、`MB` 人性化值，不再重复 raw bytes。
+- 启动诊断、资源日志、FS mount、FileLog 模式审计、OTA 分区调试和 Config/Web 长度诊断中的字节数统一使用人性化值。
+- Web OTA 上传页进度只显示友好容量；状态/API JSON 继续保留 raw `bytes` 数值，并通过 `human` 字段提供展示文本。
+
+业务侧影响：
+
+- 串口日志、FileLog 和内置页面更易读；需要精确数值的自动化脚本应优先读取状态/API JSON 的 raw `bytes` 字段。
+
 ### Web 长响应 watchdog 修复
 
 修复：
 
+- 新增 `Esp32BaseWeb::sendResponseHeader(name, value)`，允许业务 handler 在 `beginResponse()`、`sendJson()`、`sendText()` 等发送响应前追加安全校验过的 HTTP 响应头；可用于应用 CSS/JS/静态资源设置 `Cache-Control`，避免把资源外置后仍无法明确浏览器缓存。
 - `sendResponseContent()` 在每个 chunk 发送前后主动喂 watchdog，避免大 HTML/JSON/CSV 响应仍处在 `WebServer::handleClient()` 内时超过 task WDT 窗口。
 - 长响应数据 chunk 改为基础库无堆分配 writer 输出，避免每个 512 B chunk 都触发 Arduino `WebServer::sendContent()` 内部的小块 `malloc/free`；响应头、chunked 协议格式和最终收尾语义保持不变。
 - `setHeadExtraCallback()` 不再注入到 `/esp32base` 及其子路径的内置页面，避免业务项目的大段页面 CSS 跟随 Status、Logs、System 等内置页重复下发；业务页面和自定义路由继续保留该 head 注入能力。
@@ -18,6 +44,7 @@
 
 - 业务应用不需要为了这个 watchdog 问题绕开基础库或拆改现有页面；仍建议长列表页面保留分页，避免同步 WebServer 长时间占用主循环。
 - 内置 `/esp32base` 页面不再承载业务 CSS 字节，已经通过 `setHeadExtraCallback()` 注入样式的业务页面无需改动。
+- 业务项目把 CSS/JS 从内联改为独立资源时，推荐在资源 handler 中先调用 `sendResponseHeader("Cache-Control", "public, max-age=86400")`，再调用 `beginResponse()` 输出资源；资源 URL 应带版本号或固件版本查询参数，避免升级后浏览器继续使用旧缓存。
 - 实机横向测试显示内置页、内置 API、CSS、业务首页/统计/预设/滤芯页和业务 API 均可正常返回；如果某个业务 HTML 页仍显著慢于同数据 API，应继续在业务 handler 的额外文件查询或逐行渲染路径排查。
 
 ### FileLog 启动重复日志修复
@@ -629,11 +656,11 @@ upload_flags =
 
 业务侧用途：
 
-- 设备首页更易读，避免 `198280 bytes (193.63 KB)` 这类重复信息挤占页面宽度。
+- 设备首页更易读，避免 raw bytes 与 `193.63 KB` 这类重复信息挤占页面宽度。
 
 关键边界：
 
-- 只调整内置系统首页展示；状态 API、OTA 进度等需要 raw bytes 的位置保持原有输出。
+- 只调整内置系统首页展示；状态 API 保留 raw `bytes` 字段，人工页面继续优先显示人性化值。
 
 推荐接入：
 
@@ -716,11 +743,11 @@ upload_flags =
 
 业务侧用途：
 
-- 日志文件切换标签更简洁，避免 `9167 bytes (8.95 KB)` 这类重复信息挤占移动端宽度。
+- 日志文件切换标签更简洁，避免 raw bytes 与 `8.95 KB` 这类重复信息挤占移动端宽度。
 
 关键边界：
 
-- 只调整 Logs 页面顶部 segment 标签的展示文本；状态页、API、OTA 进度等需要 raw bytes 的位置保持原有 raw + human 输出。
+- 只调整 Logs 页面顶部 segment 标签的展示文本；状态页和 API 中需要精确容量的位置保留 raw `bytes` 字段。
 
 推荐接入：
 

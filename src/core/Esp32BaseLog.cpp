@@ -100,20 +100,12 @@ void Esp32BaseLog::formatBytes(uint64_t bytes, char* out, size_t len) {
         return;
     }
 
-    const char* unit = "B";
-    double value = static_cast<double>(bytes);
     if (bytes >= 1024ULL * 1024ULL) {
-        value = value / 1024.0 / 1024.0;
-        unit = "MB";
+        snprintf(out, len, "%.2f MB", static_cast<double>(bytes) / 1024.0 / 1024.0);
     } else if (bytes >= 1024ULL) {
-        value = value / 1024.0;
-        unit = "KB";
-    }
-
-    if (bytes < 1024ULL) {
-        snprintf(out, len, "%llu bytes (%llu %s)", static_cast<unsigned long long>(bytes), static_cast<unsigned long long>(bytes), unit);
+        snprintf(out, len, "%.2f KB", static_cast<double>(bytes) / 1024.0);
     } else {
-        snprintf(out, len, "%llu bytes (%.2f %s)", static_cast<unsigned long long>(bytes), value, unit);
+        snprintf(out, len, "%llu B", static_cast<unsigned long long>(bytes));
     }
 }
 

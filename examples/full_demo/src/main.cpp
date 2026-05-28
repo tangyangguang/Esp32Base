@@ -240,12 +240,14 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/wifi", nullptr, true, 200, "<section class='panel formpanel'><h2>Credentials</h2><form class='editform'");
     RUN_SELFTEST("GET", "/esp32base/wifi", nullptr, true, 200, "<section class='panel dangerpanel'><h2>Clear WiFi</h2>");
     RUN_SELFTEST("GET", "/esp32base/wifi", nullptr, true, 200, "Password (optional)");
-    RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "<section class='panel logpanel'><div class='tablewrap'><table class='logmeta'>");
-    RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "<th>File log</th><td><b>enabled</b>");
+    RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "<section class='panel logpanel'><div class='loghead'><div><h2>File log</h2>");
+    RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "<span class='tag ok'>enabled</span>");
+    RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "class='metrics logmetrics'");
     RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "class='logmeta'");
     RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "class='segname'");
     RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "class='segsize'");
-    RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "<th>Max per file</th><td>32.00 KB");
+    RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "<span>Max per file</span>");
+    RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "<h2>Log segment</h2>");
     RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "class='active' href='/esp32base/logs?segment=0'><span class='segname'>current-0");
     RUN_SELFTEST("GET", "/esp32base/logs?segment=1", nullptr, true, 200, "class='active' href='/esp32base/logs?segment=1'><span class='segname'>history-1");
     RUN_SELFTEST("GET", "/esp32base/logs?segment=99", nullptr, true, 200, "class='active' href='/esp32base/logs?segment=0'><span class='segname'>current-0");

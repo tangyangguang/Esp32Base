@@ -324,10 +324,12 @@ bool Esp32BaseOta::begin() {
     g_otaBootMs = millis();
     g_otaBootPartition = esp_ota_get_running_partition();
     if (g_otaBootPartition) {
-        ESP32BASE_LOG_D("ota", "ready partition=%s address=0x%lx size=%lu",
+        char sizeBuf[32];
+        formatOtaBytes(g_otaBootPartition->size, sizeBuf, sizeof(sizeBuf));
+        ESP32BASE_LOG_D("ota", "ready partition=%s address=0x%lx size=%s",
                         g_otaBootPartition->label,
                         static_cast<unsigned long>(g_otaBootPartition->address),
-                        static_cast<unsigned long>(g_otaBootPartition->size));
+                        sizeBuf);
     } else {
         ESP32BASE_LOG_D("ota", "ready partition=unknown");
     }
