@@ -48,12 +48,10 @@
 ### 3.2 Web route
 
 ```cpp
-#if defined(CONFIG_IDF_TARGET_ESP32C3)
-#define ESP32BASE_WEB_MAX_ROUTES 12
-#else
-#define ESP32BASE_WEB_MAX_ROUTES 16
-#endif
+#define ESP32BASE_WEB_MAX_ROUTES 24
 ```
+
+该上限只控制应用通过 `addRoute()` / `addPage()` / `addApi()` 注册的静态 route 槽位；内置 Web 路由不占用此表。需要极限节省静态 RAM 的应用可在构建参数里自行调小。
 
 ### 3.3 Config pending
 

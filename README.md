@@ -57,6 +57,8 @@ Web/API 保存的 hostname 存储在 `eb_sys.hostname`，重启后覆盖构建�
 
 底部横条可在 System 页面配置为 Off、Status only 或 Links + status。该设置保存到 `eb_ui.footer_mode`，用于控制 `sendFooter()` 输出的紧凑系统入口和运行摘要。
 
+Web 应用路由默认容量为 `ESP32BASE_WEB_MAX_ROUTES=24`。该上限只覆盖业务 `addRoute()` / `addPage()` / `addApi()` 注册的静态路由表；资源紧张的具体应用可通过构建参数自行调小。
+
 启用 FS 的 profile 会默认启用 Runtime 文件日志：`/logs/eb_app.log`，默认 `4 × 32KB`，模式 WARN。运行时可配置为 OFF、ERROR、WARN、INFO；示例通过构建参数把默认模式改为 INFO：
 
 ```ini
