@@ -273,6 +273,7 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "class='toolgrid'");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "<section class='panel formpanel hostpanel'><h2>Hostname</h2>");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "class='hostfacts'");
+    RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "<b>Restart</b>");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "class='hostedit'");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Hostname");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Save Hostname");

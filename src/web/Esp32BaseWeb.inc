@@ -2692,7 +2692,11 @@ void handleToolsPage() {
     sendChunk("</span><span><b>Stored</b>");
     sendEscapedHtmlChunk(hasStoredHostname && storedHostname[0] ? storedHostname : "-");
     sendChunk("</span><span><b>Restart</b>");
-    sendEscapedHtmlChunk(hostnameRestartRequired(storedHostname) ? "required" : "no");
+    if (hostnameRestartRequired(storedHostname)) {
+        sendChunk("<span class='tag warn'>required</span>");
+    } else {
+        sendChunk("no");
+    }
     sendChunk("</span></div><form class='editform' method='post' action='/esp32base/tools/hostname' onsubmit=\"var h=this.hostname.value.trim();if(!/^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/.test(h)){alert('Use 1-32 lowercase letters, digits and hyphen. No leading or trailing hyphen. Do not include .local.');return false;}this.hostname.value=h;return once(this);\"><div class='hostedit'>");
     sendChunk("<div class='field'><label for='host'>New hostname</label><input id='host' name='hostname' maxlength='32' autocomplete='off' value='");
     sendEscapedHtmlChunk(hasStoredHostname && storedHostname[0] ? storedHostname : Esp32Base::hostname());
@@ -2704,9 +2708,6 @@ void handleToolsPage() {
     sendFooterBarModeOption("status", "Status only", Esp32BaseWeb::FOOTER_BAR_STATUS_ONLY);
     sendFooterBarModeOption("full", "Links + status", Esp32BaseWeb::FOOTER_BAR_FULL);
     sendChunk("</div><p class='muted'>Controls the compact bottom bar on built-in and app pages.</p><div class='actions'><input type='submit' value='Save Footer Bar'></div></form></section>");
-#if ESP32BASE_ENABLE_WATCHDOG
-    sendWatchdogPanel();
-#endif
 #if ESP32BASE_ENABLE_FILELOG
     sendChunk("<section class='panel actionpanel'><h2>File log</h2><div class='tablewrap'><table class='kv'>");
     sendInfoRow("Current mode", Esp32BaseFileLog::modeName());
@@ -2726,17 +2727,20 @@ void handleToolsPage() {
 #else
     sendChunk("<section class='panel actionpanel'><h2>File log</h2><p class='muted'>File log is unavailable in this profile.</p></section>");
 #endif
+#if ESP32BASE_ENABLE_WATCHDOG
+    sendWatchdogPanel();
+#endif
     sendChunk("</div><div class='toolgrid'>");
     sendChunk("<section class='panel dangerpanel'><h2>Restart device</h2><p class='muted'>Restart the device through the normal lifecycle path.</p><form method='post' action='/esp32base/tools/reboot' onsubmit=\"return confirm('Reboot device now?')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Restart device'></div></form></section>");
-#if ESP32BASE_ENABLE_FS
-    sendChunk("<section class='panel dangerpanel'><h2>Format LittleFS</h2><p class='dangertext'>This deletes logs and all files stored in LittleFS. WiFi, Web Auth and NVS config are not cleared.</p><form method='post' action='/esp32base/tools/format-fs' onsubmit=\"return confirm('Format LittleFS? This deletes logs and all files stored in LittleFS.')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Format LittleFS'></div></form></section>");
-#else
-    sendChunk("<section class='panel actionpanel'><h2>Format LittleFS</h2><p class='muted'>LittleFS is unavailable in this profile.</p></section>");
-#endif
 #if ESP32BASE_ENABLE_FILELOG
     sendChunk("<section class='panel dangerpanel'><h2>Clear logs</h2><p class='dangertext'>Delete all file log contents. Runtime settings and WiFi credentials are not changed.</p><form method='post' action='/esp32base/tools/logs-clear' onsubmit=\"return confirm('Clear log files?')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Clear Logs'></div></form></section>");
 #else
     sendChunk("<section class='panel actionpanel'><h2>Clear logs</h2><p class='muted'>File log is unavailable in this profile.</p></section>");
+#endif
+#if ESP32BASE_ENABLE_FS
+    sendChunk("<section class='panel dangerpanel'><h2>Format LittleFS</h2><p class='dangertext'>This deletes logs and all files stored in LittleFS. WiFi, Web Auth and NVS config are not cleared.</p><form method='post' action='/esp32base/tools/format-fs' onsubmit=\"return confirm('Format LittleFS? This deletes logs and all files stored in LittleFS.')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Format LittleFS'></div></form></section>");
+#else
+    sendChunk("<section class='panel actionpanel'><h2>Format LittleFS</h2><p class='muted'>LittleFS is unavailable in this profile.</p></section>");
 #endif
     sendChunk("</div>");
     Esp32BaseWeb::sendFooter();
