@@ -120,18 +120,18 @@ void runSelfTest() {
 #define RUN_SELFTEST(method, path, body, auth, code, contains) do { ++total; if (selfTestRequest(method, path, body, auth, code, contains)) ++pass; } while (0)
     RUN_SELFTEST("GET", "/", nullptr, true, 302, "Location: /ui-status");
     RUN_SELFTEST("GET", "/ui-status", nullptr, true, 200, "状态概览");
-    RUN_SELFTEST("GET", "/ui-stats", nullptr, true, 200, "统计摘要");
+    RUN_SELFTEST("GET", "/ui-status/stats", nullptr, true, 200, "统计摘要");
     RUN_SELFTEST("GET", "/ui-records?page=2", nullptr, true, 200, "共 128 条 / 7 页");
     RUN_SELFTEST("GET", "/ui-records?page=2", nullptr, true, 200, "range=24h&amp;type=all&amp;page=1");
     RUN_SELFTEST("GET", "/ui-config?saved=1", nullptr, true, 200, "保存成功");
     RUN_SELFTEST("GET", "/ui-action", nullptr, true, 200, "操作命令");
     RUN_SELFTEST("POST", "/ui-action/run", "run=1", true, 303, "Location: /ui-action?done=1");
-    RUN_SELFTEST("GET", "/ui-flow?saved=1", nullptr, true, 200, "流程向导");
-    RUN_SELFTEST("GET", "/ui-maintenance", nullptr, true, 200, "诊断维护");
-    RUN_SELFTEST("GET", "/ui-access", nullptr, false, 200, "访问控制");
-    RUN_SELFTEST("GET", "/ui-confirm", nullptr, true, 200, "确认保护");
-    RUN_SELFTEST("POST", "/ui-confirm/run", "confirm=1", true, 303, "Location: /ui-confirm?done=1");
-    RUN_SELFTEST("GET", "/ui-empty", nullptr, true, 200, "空状态");
+    RUN_SELFTEST("GET", "/ui-config/flow?saved=1", nullptr, true, 200, "流程向导");
+    RUN_SELFTEST("GET", "/ui-status/maintenance", nullptr, true, 200, "诊断维护");
+    RUN_SELFTEST("GET", "/ui-status/access", nullptr, false, 200, "访问控制");
+    RUN_SELFTEST("GET", "/ui-config/confirm", nullptr, true, 200, "确认保护");
+    RUN_SELFTEST("POST", "/ui-confirm/run", "confirm=1", true, 303, "Location: /ui-config/confirm?done=1");
+    RUN_SELFTEST("GET", "/ui-records/empty", nullptr, true, 200, "空状态");
     RUN_SELFTEST("GET", "/ui-form", nullptr, true, 200, "多字段表单");
     RUN_SELFTEST("POST", "/ui-form/save", "name=gallery&limit=30", true, 303, "Location: /ui-form?saved=1");
 #undef RUN_SELFTEST
@@ -159,7 +159,7 @@ void handleActionRun() {
 }
 
 void handleConfirmRun() {
-    handlePostRedirect("/ui-confirm?done=1");
+    handlePostRedirect("/ui-config/confirm?done=1");
 }
 
 void handleFormSave() {
@@ -188,11 +188,11 @@ void handleStatusPage() {
     Esp32BaseWeb::sendInfoRowCompactLink("最近记录", "只放和判断状态有关的最近事件。", "2 条", "/ui-records", "查看");
     Esp32BaseWeb::endPanel();
     Esp32BaseWeb::beginPanel("页面模板目录");
-    Esp32BaseWeb::sendInfoRowCompactLink("状态与统计", "设备首页和轻量统计摘要，避免引入图表库。", nullptr, "/ui-stats", "查看");
+    Esp32BaseWeb::sendInfoRowCompactLink("状态与统计", "设备首页和轻量统计摘要，避免引入图表库。", nullptr, "/ui-status/stats", "查看");
     Esp32BaseWeb::sendInfoRowCompactLink("记录与分页", "筛选、表头、空状态和页码型分页。", nullptr, "/ui-records", "查看");
     Esp32BaseWeb::sendInfoRowCompactLink("配置与表单", "紧凑配置列表、行内动作和多字段独立编辑页。", nullptr, "/ui-config", "查看");
     Esp32BaseWeb::sendInfoRowCompactLink("命令与确认", "一次性动作、危险确认和 PRG 防重复提交。", nullptr, "/ui-action", "查看");
-    Esp32BaseWeb::sendInfoRowCompactLink("维护与权限", "诊断维护、访问受限和空状态。", nullptr, "/ui-maintenance", "查看");
+    Esp32BaseWeb::sendInfoRowCompactLink("维护与权限", "诊断维护、访问受限和空状态。", nullptr, "/ui-status/maintenance", "查看");
     Esp32BaseWeb::endPanel();
     Esp32BaseWeb::sendFooter();
 }
@@ -245,8 +245,8 @@ void handleConfigPage() {
     sendGalleryResults();
     Esp32BaseWeb::beginPanel("紧凑配置列表");
     Esp32BaseWeb::sendInfoRowCompactLink("第 1 路名称", "用于页面和记录展示，不影响实际控制。", "花坛", "/ui-form", "展开修改");
-    Esp32BaseWeb::sendInfoRowCompactLink("默认计划", "包含时间、通道、执行天数和目标量。", "3 条", "/ui-flow", "进入编辑页");
-    Esp32BaseWeb::sendInfoRowCompactLink("恢复出厂", "高风险操作必须进入确认保护页。", nullptr, "/ui-confirm", "确认页", Esp32BaseWeb::UI_DANGER);
+    Esp32BaseWeb::sendInfoRowCompactLink("默认计划", "包含时间、通道、执行天数和目标量。", "3 条", "/ui-config/flow", "进入编辑页");
+    Esp32BaseWeb::sendInfoRowCompactLink("恢复出厂", "高风险操作必须进入确认保护页。", nullptr, "/ui-config/confirm", "确认页", Esp32BaseWeb::UI_DANGER);
     Esp32BaseWeb::endPanel();
     Esp32BaseWeb::sendFooter();
 }
@@ -275,7 +275,7 @@ void handleFlowPage() {
     Esp32BaseWeb::beginPanel("三步流程");
     Esp32BaseWeb::sendInfoRowCompact("1. 依据", "展示旧值、数据来源和是否允许继续。", "通过");
     Esp32BaseWeb::sendInfoRowCompactLink("2. 实测", "录入真实测量结果，不塞进普通配置表。", nullptr, "/ui-form", "继续");
-    Esp32BaseWeb::sendInfoRowCompactLink("3. 核对保存", "展示旧值、新值、变化幅度和影响范围。", nullptr, "/ui-flow?saved=1", "保存");
+    Esp32BaseWeb::sendInfoRowCompactLink("3. 核对保存", "展示旧值、新值、变化幅度和影响范围。", nullptr, "/ui-config/flow?saved=1", "保存");
     Esp32BaseWeb::endPanel();
     Esp32BaseWeb::sendFooter();
 }
@@ -289,8 +289,8 @@ void handleMaintenancePage() {
     Esp32BaseWeb::beginPanel("系统诊断");
     Esp32BaseWeb::sendInfoRowCompact("WiFi", "连接状态、RSSI、IP。", "正常");
     Esp32BaseWeb::sendInfoRowCompactLink("维护任务", "导出、扫描、重启等长任务显示状态和下一步。", "空闲", "/esp32base/tools", "查看");
-    Esp32BaseWeb::sendInfoRowCompactLink("访问控制", "登录、权限不足、会话失效和只读受限状态。", nullptr, "/ui-access", "查看");
-    Esp32BaseWeb::sendInfoRowCompactLink("空状态", "列表、记录或配置项暂不存在时的基准表达。", nullptr, "/ui-empty", "查看");
+    Esp32BaseWeb::sendInfoRowCompactLink("访问控制", "登录、权限不足、会话失效和只读受限状态。", nullptr, "/ui-status/access", "查看");
+    Esp32BaseWeb::sendInfoRowCompactLink("空状态", "列表、记录或配置项暂不存在时的基准表达。", nullptr, "/ui-records/empty", "查看");
     Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_INFO, "原始数据受控", "限制长度，可复制或导出，不做无限滚动调试平台。");
     Esp32BaseWeb::endPanel();
     Esp32BaseWeb::sendFooter();
@@ -359,12 +359,12 @@ void setup() {
     Esp32BaseWeb::addPage("/ui-config", "配置", handleConfigPage);
     Esp32BaseWeb::addPage("/ui-action", "命令", handleActionPage);
     Esp32BaseWeb::addPage("/ui-form", "表单", handleFormPage);
-    Esp32BaseWeb::addRoute("/ui-stats", Esp32BaseWeb::METHOD_GET, handleStatsPage);
-    Esp32BaseWeb::addRoute("/ui-flow", Esp32BaseWeb::METHOD_GET, handleFlowPage);
-    Esp32BaseWeb::addRoute("/ui-maintenance", Esp32BaseWeb::METHOD_GET, handleMaintenancePage);
-    Esp32BaseWeb::addRoute("/ui-access", Esp32BaseWeb::METHOD_GET, handleAccessPage);
-    Esp32BaseWeb::addRoute("/ui-confirm", Esp32BaseWeb::METHOD_GET, handleConfirmPage);
-    Esp32BaseWeb::addRoute("/ui-empty", Esp32BaseWeb::METHOD_GET, handleEmptyPage);
+    Esp32BaseWeb::addRoute("/ui-status/stats", Esp32BaseWeb::METHOD_GET, handleStatsPage);
+    Esp32BaseWeb::addRoute("/ui-config/flow", Esp32BaseWeb::METHOD_GET, handleFlowPage);
+    Esp32BaseWeb::addRoute("/ui-status/maintenance", Esp32BaseWeb::METHOD_GET, handleMaintenancePage);
+    Esp32BaseWeb::addRoute("/ui-status/access", Esp32BaseWeb::METHOD_GET, handleAccessPage);
+    Esp32BaseWeb::addRoute("/ui-config/confirm", Esp32BaseWeb::METHOD_GET, handleConfirmPage);
+    Esp32BaseWeb::addRoute("/ui-records/empty", Esp32BaseWeb::METHOD_GET, handleEmptyPage);
     Esp32BaseWeb::addRoute("/ui-action/run", Esp32BaseWeb::METHOD_POST, handleActionRun);
     Esp32BaseWeb::addRoute("/ui-confirm/run", Esp32BaseWeb::METHOD_POST, handleConfirmRun);
     Esp32BaseWeb::addRoute("/ui-form/save", Esp32BaseWeb::METHOD_POST, handleFormSave);
