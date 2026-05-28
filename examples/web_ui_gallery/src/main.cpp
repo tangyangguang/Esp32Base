@@ -37,7 +37,8 @@ size_t advanceMatch(const char* pattern, size_t patternLen, size_t matched, char
     return matched;
 }
 
-bool selfTestRequest(const char* method, const char* path, const char* body, bool auth, int expectedCode, const char* mustContain) {
+bool selfTestRequest(const char* method, const char* path, const char* body, bool auth, int expectedCode,
+                     const char* mustContain, const char* mustNotContain = nullptr) {
     WiFiClient client;
     const IPAddress targetIp = Esp32BaseWiFi::state() == Esp32BaseWiFi::CONFIG_PORTAL ? WiFi.softAPIP() : WiFi.localIP();
     if (!client.connect(targetIp, 80)) {
@@ -68,8 +69,11 @@ bool selfTestRequest(const char* method, const char* path, const char* body, boo
     size_t statusUsed = 0;
     size_t matchUsed = 0;
     const size_t matchLen = mustContain ? strlen(mustContain) : 0;
+    const size_t forbidLen = mustNotContain ? strlen(mustNotContain) : 0;
     bool contains = !mustContain || matchLen == 0;
+    bool forbidden = false;
     bool firstLineDone = false;
+    size_t forbidUsed = 0;
     const uint32_t deadline = millis() + 5000UL;
     while (millis() < deadline && (client.connected() || client.available())) {
         while (client.available()) {
@@ -87,6 +91,12 @@ bool selfTestRequest(const char* method, const char* path, const char* body, boo
                     contains = true;
                 }
             }
+            if (!forbidden && mustNotContain) {
+                forbidUsed = advanceMatch(mustNotContain, forbidLen, forbidUsed, c);
+                if (forbidUsed == forbidLen) {
+                    forbidden = true;
+                }
+            }
         }
         Esp32Base::handle();
         delay(1);
@@ -96,9 +106,10 @@ bool selfTestRequest(const char* method, const char* path, const char* body, boo
 
     int code = 0;
     sscanf(statusLine, "HTTP/%*s %d", &code);
-    const bool ok = code == expectedCode && contains;
-    ESP32BASE_LOG_I("selftest", "%s %s code=%d expected=%d contains=%s result=%s",
+    const bool ok = code == expectedCode && contains && !forbidden;
+    ESP32BASE_LOG_I("selftest", "%s %s code=%d expected=%d contains=%s excludes=%s result=%s",
                     method, path, code, expectedCode, mustContain ? mustContain : "-",
+                    mustNotContain ? mustNotContain : "-",
                     ok ? "pass" : "fail");
     return ok;
 }
@@ -122,12 +133,15 @@ void runSelfTest() {
     g_selfTestDone = true;
     uint8_t pass = 0;
     uint8_t total = 0;
-#define RUN_SELFTEST(method, path, body, auth, code, contains) do { ++total; if (selfTestRequest(method, path, body, auth, code, contains)) ++pass; } while (0)
+#define RUN_SELFTEST(method, path, body, auth, code, contains, ...) \
+    do { ++total; if (selfTestRequest(method, path, body, auth, code, contains, ##__VA_ARGS__)) ++pass; } while (0)
     RUN_SELFTEST("GET", "/", nullptr, true, 302, "Location: /ui-status");
     RUN_SELFTEST("GET", "/ui-status", nullptr, true, 200, "状态概览");
     RUN_SELFTEST("GET", "/ui-status/stats", nullptr, true, 200, "统计摘要");
     RUN_SELFTEST("GET", "/ui-records?page=2", nullptr, true, 200, "共 128 条 / 7 页");
     RUN_SELFTEST("GET", "/ui-records?page=2", nullptr, true, 200, "range=24h&amp;type=all&amp;per=20&amp;page=1");
+    RUN_SELFTEST("GET", "/ui-records?range=30d&type=guard&page=4", nullptr, true, 200, "aria-current='page'>4</span>");
+    RUN_SELFTEST("GET", "/ui-records?range=30d&type=guard&page=4", nullptr, true, 200, "filterbar", "每页 20 条");
     RUN_SELFTEST("GET", "/ui-config?saved=1", nullptr, true, 200, "保存成功");
     RUN_SELFTEST("GET", "/ui-config?edit=name", nullptr, true, 200, "行内编辑");
     RUN_SELFTEST("POST", "/ui-config/name", "name=flower", true, 303, "Location: /ui-config?saved=1");
@@ -140,6 +154,7 @@ void runSelfTest() {
     RUN_SELFTEST("POST", "/ui-confirm/run", "confirm=1", true, 303, "Location: /ui-config/confirm?done=1");
     RUN_SELFTEST("GET", "/ui-records/empty", nullptr, true, 200, "空状态");
     RUN_SELFTEST("GET", "/ui-form", nullptr, true, 200, "多字段表单");
+    RUN_SELFTEST("GET", "/ui-form", nullptr, true, 200, "fieldgrid");
     RUN_SELFTEST("POST", "/ui-form/save", "name=gallery&limit=30", true, 303, "Location: /ui-form?saved=1");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Device title");
     RUN_SELFTEST("GET", "/ui-status", nullptr, true, 200, "<footer class='footerbar'><span class='syslinks'><a href='/esp32base'>Status</a><a href='/esp32base/logs'>Logs</a><a href='/esp32base/app-config'>App Config</a>");
@@ -149,7 +164,7 @@ void runSelfTest() {
 #endif
 
 void handleHeadExtra() {
-    Esp32BaseWeb::sendChunk("<style id='gallery-head-extra'>.swatch{display:inline-flex;gap:6px;align-items:center}.swatch i{display:inline-block;width:18px;height:18px;border-radius:5px;border:1px solid var(--eb-line)}.formgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.formgrid p{margin:0}.inlineedit{border:1px solid #b9e3d9;background:#f3fbf8;border-radius:8px;padding:10px;margin:0 0 10px}.inlineedit form{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:end}.inlineedit input{margin:0}@media(max-width:760px){.formgrid{grid-template-columns:1fr}.inlineedit form{grid-template-columns:1fr}.inlineedit .actions{margin-top:0}}</style>");
+    Esp32BaseWeb::sendChunk("<style id='gallery-head-extra'>.swatch{display:inline-flex;gap:6px;align-items:center}.swatch i{display:inline-block;width:18px;height:18px;border-radius:5px;border:1px solid var(--eb-line)}.inlineedit{border:1px solid #b9e3d9;background:#f3fbf8;border-radius:8px;padding:10px;margin:0 0 10px}.inlineedit form{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:end}.inlineedit input{margin:0}@media(max-width:760px){.inlineedit form{grid-template-columns:1fr}.inlineedit .actions{margin-top:0}}</style>");
 }
 
 void handlePostRedirect(const char* location) {
@@ -297,31 +312,7 @@ void handleRecordsPage() {
         Esp32BaseWeb::sendChunk(typeLabels[i]);
         Esp32BaseWeb::sendChunk("</option>");
     }
-    Esp32BaseWeb::sendChunk("</select><button type='submit'>筛选</button></form><div class='actions'><span class='tag info'>");
-    if (strcmp(range, "7d") == 0) {
-        Esp32BaseWeb::sendChunk("最近 7 天");
-    } else if (strcmp(range, "30d") == 0) {
-        Esp32BaseWeb::sendChunk("最近 30 天");
-    } else if (strcmp(range, "custom") == 0) {
-        Esp32BaseWeb::sendChunk("自定义范围");
-    } else {
-        Esp32BaseWeb::sendChunk("最近 24 小时");
-    }
-    Esp32BaseWeb::sendChunk("</span><span class='tag'>");
-    if (strcmp(type, "plan") == 0) {
-        Esp32BaseWeb::sendChunk("计划执行");
-    } else if (strcmp(type, "manual") == 0) {
-        Esp32BaseWeb::sendChunk("手动执行");
-    } else if (strcmp(type, "guard") == 0) {
-        Esp32BaseWeb::sendChunk("保护触发");
-    } else {
-        Esp32BaseWeb::sendChunk("全部类型");
-    }
-    Esp32BaseWeb::sendChunk("</span><span class='tag'>每页 ");
-    char perLabel[12];
-    snprintf(perLabel, sizeof(perLabel), "%lu", static_cast<unsigned long>(perPage));
-    Esp32BaseWeb::sendChunk(perLabel);
-    Esp32BaseWeb::sendChunk(" 条</span></div>");
+    Esp32BaseWeb::sendChunk("</select><button type='submit'>筛选</button></form>");
     Esp32BaseWeb::sendChunk("<table class='kv'><tr><th>时间</th><th>类型</th><th>结果</th></tr><tr><td>18:30</td><td>计划执行</td><td><span class='tag ok'>完成</span></td></tr><tr><td>16:10</td><td>手动执行</td><td><span class='tag ok'>完成</span></td></tr><tr><td>14:02</td><td>保护触发</td><td><span class='tag warn'>已跳过</span></td></tr></table>");
     char pagePath[40];
     char pageQuery[120];
@@ -449,7 +440,7 @@ void handleFormPage() {
     Esp32BaseWeb::sendPageTitle("多字段表单", "多字段对象默认进入独立编辑页，保存后返回展示页。");
     sendGalleryResults();
     Esp32BaseWeb::beginPanel("计划编辑");
-    Esp32BaseWeb::sendChunk("<form method='post' action='/ui-form/save' onsubmit='return once(this)'><div class='formgrid'><p><label>名称</label><input name='name' maxlength='16' value='花坛计划'></p><p><label>目标量</label><input type='number' name='limit' min='1' max='120' value='30'></p><p><label>模式</label><select name='mode'><option>auto</option><option>manual</option></select></p><p><label>说明</label><input name='note' maxlength='24' value='工作日傍晚执行'></p></div><div class='actions'><input type='submit' value='保存'><input type='button' value='取消' onclick=\"location.href='/ui-config'\"></div></form>");
+    Esp32BaseWeb::sendChunk("<form class='editform' method='post' action='/ui-form/save' onsubmit='return once(this)'><div class='fieldgrid'><p class='field med'><label>名称</label><input name='name' maxlength='16' value='花坛计划'><small>页面和记录显示名称。</small></p><p class='field short'><label>目标量</label><input type='number' name='limit' min='1' max='120' value='30'><small>1-120。</small></p><p class='field short'><label>模式</label><select name='mode'><option>auto</option><option>manual</option></select><small>执行策略。</small></p><p class='field long'><label>说明</label><input name='note' maxlength='24' value='工作日傍晚执行'><small>可选，帮助区分相似计划。</small></p></div><div class='actions'><input type='submit' value='保存'><input type='button' value='取消' onclick=\"location.href='/ui-config'\"></div></form>");
     Esp32BaseWeb::endPanel();
     Esp32BaseWeb::sendFooter();
 }

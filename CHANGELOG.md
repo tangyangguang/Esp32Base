@@ -14,6 +14,7 @@
 - 新增 `examples/web_ui_gallery` 独立样式样例，用于集中查看和验证状态、统计、分页记录、配置、命令、流程、维护、访问控制、确认、空状态和表单页面，并提供 selftest env 便于回归。
 - 紧凑行链接和分页链接改为按钮型链接样式，避免把小尺寸状态标签用作可点击控件。
 - `sendPagination()` 输出补齐每页条数选择和跳页提交；`web_ui_gallery` 启用 App Config、底部系统状态栏、真实筛选控件和简单字段行内展开编辑。
+- `sendPagination()` 增加当前页附近页码，并将分页控件调整为更轻量的字号；新增 `editform` 和 `fieldgrid` 表单布局类，`web_ui_gallery` 去掉重复筛选摘要并优化多字段表单布局。
 - 新增 [Web UI 页面结构与样式基线](docs/11_web_ui_baseline.md)，作为页面能力、样式、换肤和调整回路的长期文档入口。
 
 业务侧影响：

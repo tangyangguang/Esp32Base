@@ -377,7 +377,7 @@ Esp32BaseWeb::addRoute("/api/faucet/config", Esp32BaseWeb::METHOD_ANY, handleCon
 - `sendInfoRowCompact(title, help, value)`：只读配置、操作、向导和诊断行。
 - `sendInfoRowCompactLink(title, help, value, href, label, tone)`：带按钮型链接动作的紧凑行。
 - `sendInfoRowCompactForm(title, help, value, action, label, hiddenName, hiddenValue, tone)`：带单按钮 POST 动作的紧凑行，默认包含 `once()` 防重复点击。
-- `sendPagination(pagination)`：页码型列表分页，包含总条数、总页数、首页、上一页、下一页、尾页、每页条数和跳页提交。
+- `sendPagination(pagination)`：页码型列表分页，包含总条数、总页数、首页、上一页、下一页、尾页、当前页附近页码、每页条数和跳页提交。
 
 示例：
 
@@ -422,7 +422,9 @@ void handleHeadExtra() {
 - 紧凑行动作和分页跳转使用按钮型链接，不使用小尺寸状态标签代替可点击控件。
 - 简单字段行内编辑和多字段独立编辑页有明显区别。
 - 分页显示总条数、总页数、首页、上一页、下一页、尾页和当前页。
-- 分页页脚必须提供每页条数选择和跳页提交；筛选条件翻页和跳页时保持不丢失。
+- 分页页脚必须提供当前页附近页码、每页条数选择和跳页提交；筛选条件翻页和跳页时保持不丢失。
+- 筛选控件已经展示当前条件时，不重复输出一行筛选摘要标签。
+- 多字段表单使用 `editform` 控制编辑区最大宽度，并使用 `fieldgrid`、`field short`、`field med`、`field long` 或 `field full` 控制字段宽度，避免短字段被拉满。
 - 重定向后的成功、失败、拒绝状态清楚可见。
 - 登录、权限不足和只读受限状态可理解。
 - 诊断维护页中的原始片段有长度边界，不成为主页面体验。
