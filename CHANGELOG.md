@@ -4,6 +4,19 @@
 
 ## 2026-05-28
 
+### System 页工具布局收敛
+
+优化：
+
+- `/esp32base/tools` 的低频入口从横向 quicklinks 改为紧凑信息行，入口用途更清楚，不再依赖一串链接表达。
+- Hostname、Footer bar、Watchdog trip 和 File log 进入两列 `toolgrid`，PC 上减少纵向滚动；手机端仍保持单列。
+- Restart、Format LittleFS 和 Clear logs 仍使用危险操作面板，但也进入维护网格，和普通设置区分开。
+
+业务侧影响：
+
+- System 页 URL、POST 参数、确认弹窗、PRG 流程、NVS key 和维护动作语义不变。
+- 业务工具页如果是“低频入口 + 若干设置 + 危险维护动作”，应优先复用紧凑行、`toolgrid`、`formpanel`、`actionpanel` 和 `dangerpanel`。
+
 ### App Config 保存前核对区配色优化
 
 优化：

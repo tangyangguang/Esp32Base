@@ -263,8 +263,11 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "WiFi Setup");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Web Auth");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "App Config");
-    RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "<a href='/esp32base/app-config'>App Config</a><a href='/esp32base/wifi'>WiFi Setup</a>");
+    RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Application configuration values registered by the app.");
+    RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "<a class='btnlink info' href='/esp32base/app-config'>Open</a>");
+    RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "<a class='btnlink info' href='/esp32base/wifi'>Open</a>");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Firmware OTA");
+    RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "class='toolgrid'");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "<section class='panel formpanel'><h2>Hostname</h2>");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Hostname");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Save Hostname");
