@@ -143,9 +143,12 @@ Esp32BaseAppConfig::ChangeCallback g_appConfigChangeCallback = nullptr;
 Esp32BaseAppConfig::SaveCallback g_appConfigSaveCallback = nullptr;
 #endif
 
-static const char WEB_HEAD[] PROGMEM =
-    "<meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
-    "<style>"
+#ifndef ESP32BASE_WEB_CSS_VERSION
+#define ESP32BASE_WEB_CSS_VERSION __TIME__
+#endif
+
+static const char WEB_CSS_TYPE[] PROGMEM = "text/css; charset=utf-8";
+static const char WEB_CSS[] PROGMEM =
     ":root{color-scheme:light;--eb-bg:#f5f6f7;--eb-surface:#fff;--eb-soft:#f8fafb;--eb-ink:#17202a;--eb-muted:#667085;--eb-line:#d7dde4;--eb-line-soft:#edf1f4;--eb-primary:#14685d;--eb-primary-soft:#e6f2ef;--eb-ok:#087443;--eb-ok-soft:#e7f4ee;--eb-warn:#9a5a0a;--eb-warn-soft:#fff6e8;--eb-danger:#ad3027;--eb-danger-soft:#fff1ef;--eb-info:#245f9e;--eb-info-soft:#e8f0f8}"
     "*{box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:14px;line-height:1.42;margin:0;padding:12px 14px 36px;color:var(--eb-ink);background:var(--eb-bg);max-width:1180px;margin-inline:auto}"
     "h1,h2,h3{color:#111827;line-height:1.25;margin:0 0 8px}h1{font-size:23px}h2{font-size:17px}h3{font-size:15px}p{margin:0 0 9px}"
@@ -169,8 +172,11 @@ static const char WEB_HEAD[] PROGMEM =
     ".tabs,.quicklinks{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 10px}.tabs a,.quicklinks a{font-size:13px;padding:5px 8px;margin:0;background:#f1f4f3;color:var(--eb-muted);border-radius:6px}.tabs a{display:inline-flex;align-items:center;gap:8px}.tabs a.active{background:var(--eb-primary-soft);color:var(--eb-primary);font-weight:700}.segsize{padding-left:7px;border-left:1px solid var(--eb-line);font-variant-numeric:tabular-nums}"
     ".logmeta{border-collapse:collapse;font-size:13px;line-height:1.45;margin:0}.logmeta th,.logmeta td{padding:2px 10px 2px 0;text-align:left;vertical-align:top}.logmeta th{width:112px;color:var(--eb-muted);font-weight:650}.logmeta td{color:var(--eb-ink)}.statusline{min-height:1.45em}.toolsection{padding:12px;margin:12px 0;background:#fff;border:1px solid var(--eb-line);border-radius:8px}"
     "pre{white-space:pre;overflow-x:auto;word-break:normal;font-size:12px;line-height:1.45;background:#f1f4f3;border:1px solid var(--eb-line);border-radius:7px;padding:9px}.logframe{display:block;width:100%;height:62vh;min-height:320px;border:1px solid var(--eb-line);border-radius:7px;background:#f1f4f3}"
-    "@media(max-width:760px){body{padding:10px}.metrics,.pagination,.urow{grid-template-columns:1fr}.fieldgrid{grid-template-columns:1fr}.field.short,.field.med,.field.long,.field.full{grid-column:auto;max-width:none}.uactions{justify-content:flex-start}.uactions .uvalue{min-width:0;text-align:left}.uactions.readonly .uvalue{margin-right:0}.pagerlinks,.pagerform{justify-content:flex-start}.pagination .btnlink,.pagination button,.pagination select,.pagination input{min-height:32px}.heap{margin-left:0;text-align:left;white-space:normal}nav a{font-size:13px;padding:0 9px}.tag{white-space:normal}}"
-    "</style>"
+    "@media(max-width:760px){body{padding:10px}.metrics,.pagination,.urow{grid-template-columns:1fr}.fieldgrid{grid-template-columns:1fr}.field.short,.field.med,.field.long,.field.full{grid-column:auto;max-width:none}.uactions{justify-content:flex-start}.uactions .uvalue{min-width:0;text-align:left}.uactions.readonly .uvalue{margin-right:0}.pagerlinks,.pagerform{justify-content:flex-start}.pagination .btnlink,.pagination button,.pagination select,.pagination input{min-height:32px}.heap{margin-left:0;text-align:left;white-space:normal}nav a{font-size:13px;padding:0 9px}.tag{white-space:normal}}";
+
+static const char WEB_HEAD[] PROGMEM =
+    "<meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
+    "<link rel='stylesheet' href='/esp32base/ui.css?v=" ESP32BASE_WEB_CSS_VERSION "'>"
     "<script>function once(f){if(f.dataset.busy)return false;f.dataset.busy=1;var b=f.querySelector('[type=submit]');if(b)b.disabled=true;return true;}</script>";
 
 #if ESP32BASE_ENABLE_APP_CONFIG
@@ -2689,6 +2695,13 @@ void handleNoContent() {
     g_server.send(204, "text/plain", "");
 }
 
+void handleUiCss() {
+    markRequest();
+    g_server.sendHeader("Cache-Control", "public, max-age=86400");
+    g_server.sendHeader("X-Content-Type-Options", "nosniff");
+    g_server.send_P(200, WEB_CSS_TYPE, WEB_CSS);
+}
+
 void handleNotFound() {
     markRequest();
     const String uri = g_server.uri();
@@ -3315,7 +3328,7 @@ bool Esp32BaseWeb::begin() {
     }
     const uint8_t appRoutes = routeCount(false);
     const uint8_t appPages = routeCount(true);
-    uint8_t builtinRoutes = 24;
+    uint8_t builtinRoutes = 25;
 #if ESP32BASE_ENABLE_OTA
     builtinRoutes += 3;
 #endif
@@ -3362,6 +3375,7 @@ bool Esp32BaseWeb::begin() {
     g_server.on("/hotspot-detect.html", HTTP_GET, handleCaptiveProbe);
     g_server.on("/ncsi.txt", HTTP_GET, handleCaptiveProbe);
     g_server.on("/favicon.ico", HTTP_GET, handleNoContent);
+    g_server.on("/esp32base/ui.css", HTTP_GET, handleUiCss);
 #if ESP32BASE_ENABLE_OTA
     g_server.on("/esp32base/ota", HTTP_GET, handleOtaPage);
     g_server.on("/esp32base/ota", HTTP_POST, handleOtaUploadDone, handleOtaUpload);

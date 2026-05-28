@@ -140,7 +140,10 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/ui-status/stats", nullptr, true, 200, "统计摘要");
     RUN_SELFTEST("GET", "/ui-records?page=2", nullptr, true, 200, "共 128 条 / 7 页");
     RUN_SELFTEST("GET", "/ui-records?page=2", nullptr, true, 200, "range=24h&amp;type=all&amp;per=20&amp;page=1");
-    RUN_SELFTEST("GET", "/ui-records?page=2", nullptr, true, 200, ".pagination .btnlink,.pagination button,.pagination select,.pagination input{font-size:12px;min-height:26px");
+    RUN_SELFTEST("GET", "/ui-records?page=2", nullptr, true, 200, "<link rel='stylesheet' href='/esp32base/ui.css", ":root{color-scheme");
+    RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, "Cache-Control: public, max-age=86400");
+    RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".pagehead{padding:12px");
+    RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".pagination .btnlink,.pagination button,.pagination select,.pagination input{font-size:12px;min-height:26px");
     RUN_SELFTEST("GET", "/ui-records?page=2", nullptr, true, 200, "aria-current='page'>2</span>", "当前第");
     RUN_SELFTEST("GET", "/ui-records?range=24h&type=all&per=20&page=2", nullptr, true, 200, "filterbar", "name='start'");
     RUN_SELFTEST("GET", "/ui-records?range=custom&type=all&start=2026-05-28T08:00&end=2026-05-28T09:00", nullptr, true, 200, "name='start'");
