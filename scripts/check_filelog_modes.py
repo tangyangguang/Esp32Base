@@ -40,6 +40,21 @@ checks = [
         "modeLevel() does not map ERROR",
     ),
     (
+        "src/runtime/Esp32BaseFileLog.inc",
+        "return applyMode(readMode(), false, false);",
+        "begin() must load persisted FileLog mode without saving or logging mode_changed",
+    ),
+    (
+        "src/runtime/Esp32BaseFileLog.inc",
+        "return applyMode(mode, true, true);",
+        "setMode() must be the explicit persist-and-log mode change path",
+    ),
+    (
+        "src/web/Esp32BaseWeb.inc",
+        'ESP32BASE_LOG_W("web", "filelog_mode_requested source=tools',
+        "FileLog mode request should stay WARN because it is a system-level configuration change",
+    ),
+    (
         "src/web/Esp32BaseWeb.inc",
         'if (raw == "error")',
         "Web FileLog parser does not accept error",

@@ -219,7 +219,7 @@ void loop() {
 - string value 可见内容长度不超过 3999 字节。
 - blob value 长度为 `1..256` 字节，用于小型固定大小 POD 元数据，不用于日志、记录正文或大块业务数据。
 - 库内部 namespace 全部使用 `eb_` 前缀，例如 `eb_wifi`、`eb_sys`、`eb_log`、`eb_ui`。
-- namespace 已表达库和模块归属，key 不重复模块前缀，例如 `eb_wifi.ssid`、`eb_wifi.pass`、`eb_sys.rst_cnt`、`eb_sys.wdt_cnt`、`eb_sys.wdt_trip_base`、`eb_sys.wdt_trip_time`、`eb_sys.time_boot_id`、`eb_log.mode`、`eb_web.auth_user`、`eb_web.auth_pass`、`eb_ui.footer_mode`。
+- namespace 已表达库和模块归属，key 不重复模块前缀，例如 `eb_wifi.ssid`、`eb_wifi.pass`、`eb_sys.rst_cnt`、`eb_sys.wdt_cnt`、`eb_sys.wdt_trip_base`、`eb_sys.wdt_trip_time`、`eb_log.mode`、`eb_web.auth_user`、`eb_web.auth_pass`、`eb_ui.footer_mode`。
 - 应用不得使用 `eb_` 前缀，避免被库维护 API 清理。
 - `Esp32BaseConfig` 不是跨任务线程安全 API；推荐和 `Esp32Base::begin()` / `handle()`、Web、Bus 固定在同一个 loop/system task 中调用，其他任务通过队列投递配置变更。
 
@@ -299,7 +299,7 @@ deferred 语义：
 - `factoryReset()` 只清理基础库 NVS 配置，不重启、不格式化 LittleFS、不删除 FileLog 日志文件内容、不清理业务 namespace，不清理 boot/restart/watchdog 统计诊断资产。
 - `clearWifiConfig()` 清理 `eb_wifi`，包含 WiFi SSID/password。
 - `clearWebAuthConfig()` 清理 `eb_web`，包含 Web Auth user/password。
-- `clearSystemConfig()` 只清理 `eb_sys.hostname`；`eb_sys.rst_cnt`、restart log、`wdt_cnt`、`wdt_trip_base`、`wdt_trip_time`、`time_boot_id` 等统计/诊断 key 必须保留。
+- `clearSystemConfig()` 只清理 `eb_sys.hostname`；`eb_sys.rst_cnt`、restart log、`boot_cnt`、`wdt_cnt`、`wdt_trip_base`、`wdt_trip_time` 等统计/诊断 key 必须保留。
 - `clearLogConfig()` 清理 `eb_log`，包含 FileLog 配置。
 - `clearUiConfig()` 清理 `eb_ui`，包含 Footer bar 显示模式。
 - `clearLibraryNamespaces()` 等价于 `factoryReset()`，保留用于兼容旧代码。
@@ -605,7 +605,7 @@ NTP 默认使用 UTC+8，即 `ESP32BASE_NTP_GMT_OFFSET_SEC=(8L * 3600L)`、`ESP3
 - `uptimeSec` 和 `bootId` 在未同步时也可用，用于记录“本次开机 +N 秒”的业务事件；`uptimeSec` 来自 ESP-IDF 64-bit 运行时间计数源，不受 Arduino `millis()` 约 49.7 天回卷影响。
 - `bootStartEpochSec` 仅在本次 boot 已同步后有效，值为 `epochSec - uptimeSec`。
 
-`Esp32Base::begin()` 会在配置初始化后调用 `initBootSession()`，递增并持久化 `eb_sys.time_boot_id`。`bootId=0` 保留为未知；正常启动使用 `1..2147483647` 并循环递增。业务项目不需要手动调用 `initBootSession()`，除非绕过 `Esp32Base::begin()` 直接使用 NTP 模块。
+`Esp32Base::begin()` 会在系统模块初始化后调用 `initBootSession()`，`bootId` 复用 `Esp32BaseSystem::bootCount()`，不为 NTP 额外写启动期 NVS。`bootId=0` 保留为未知；正常启动使用非零 boot count。业务项目不需要手动调用 `initBootSession()`，除非绕过 `Esp32Base::begin()` 直接使用 NTP 模块。
 
 `onTimeSynced(callback)` 注册一个轻量单回调；如果注册时当前 boot 已同步，会立即回调一次。回调参数是同步瞬间的 `TimeSnapshot`，业务可据此扫描自己的日志，把同一 `bootId` 的相对 `uptimeSec` 事件回填为真实时间。基础库不理解也不改写业务日志结构。
 

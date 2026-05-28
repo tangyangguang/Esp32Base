@@ -5,6 +5,7 @@
 #include "Esp32BaseNtp.h"
 #include "../core/Esp32BaseConfig.h"
 #include "../core/Esp32BaseLog.h"
+#include "../core/Esp32BaseSystem.h"
 
 #include <esp_timer.h>
 #include <esp_sntp.h>
@@ -54,17 +55,13 @@ bool Esp32BaseNtp::initBootSession() {
     if (g_bootSessionReady) {
         return true;
     }
-    const int32_t stored = Esp32BaseConfig::getInt("eb_sys", "time_boot_id", 0);
-    const uint32_t previous = stored > 0 ? static_cast<uint32_t>(stored) : 0;
-    g_bootId = previous >= static_cast<uint32_t>(INT32_MAX) ? 1U : previous + 1U;
-    const bool ok = Esp32BaseConfig::setInt("eb_sys", "time_boot_id", static_cast<int32_t>(g_bootId));
-    g_bootSessionReady = true;
-    if (ok) {
-        ESP32BASE_LOG_I("ntp", "time_boot_session boot_id=%lu", static_cast<unsigned long>(g_bootId));
-    } else {
-        ESP32BASE_LOG_W("ntp", "time_boot_session_persist_failed stored=%ld", static_cast<long>(stored));
+    g_bootId = Esp32BaseSystem::bootCount();
+    if (g_bootId == 0) {
+        g_bootId = 1;
     }
-    return ok;
+    g_bootSessionReady = true;
+    ESP32BASE_LOG_I("ntp", "time_boot_session boot_id=%lu source=boot_count", static_cast<unsigned long>(g_bootId));
+    return true;
 }
 
 bool Esp32BaseNtp::begin() {

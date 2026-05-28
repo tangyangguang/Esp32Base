@@ -4,17 +4,42 @@
 
 ## 2026-05-28
 
-### Web 应用路由默认容量统一为 24
+### FileLog 启动重复日志修复
 
-变更：
+修复：
 
-- Web 应用路由默认容量统一调整为 24，不再对 ESP32-C3 使用更低默认值。
+- `Esp32BaseFileLog::begin()` 只加载已保存模式，不再把 NVS 中的模式误记为运行期 `mode_changed`。
+- `mode_changed` / `mode_unchanged` 只保留给显式 `setMode()` 操作；相同模式使用 DEBUG，真实变更仍使用 WARN，便于追踪系统级配置修改。
+- 避免 brownout 或重启循环时 4 个 history segment 被同一条 FileLog 初始化日志快速刷满。
+
+业务侧影响：
+
+- Logs 页面仍保留 current/history segment 结构；已写入的旧重复日志不会自动删除，可在 System 页面执行 Clear logs 清理。
+
+### 启动期 NTP boot session 写入修复
+
+修复：
+
+- `Esp32BaseNtp::initBootSession()` 不再每次启动同步写 `eb_sys.time_boot_id`，改为复用 `Esp32BaseSystem::bootCount()` 作为当前 boot 的 `bootId`。
+- 避免启动早期连续 NVS 写入在弱供电或重启循环中放大 brownout 风险，同时减少不必要的 flash/NVS 写入。
+- `time_boot_session` 日志增加 `source=boot_count`，便于确认 bootId 来源。
+
+业务侧影响：
+
+- `snapshot().bootId`、`isCurrentBootEvent()`、`resolveCurrentBootEvent()` 的业务语义不变，仍只允许回填本次 boot 的相对时间事件。
+- 旧的 `eb_sys.time_boot_id` key 不再更新；业务项目不应直接依赖该 NVS key。
+
+### Web 应用路由默认容量恢复为保守静态 RAM 配置
+
+修复：
+
+- Web 应用路由默认容量恢复为 ESP32/ESP32-S3 16、ESP32-C3 12，避免所有项目都承担 24 route 静态表的额外 RAM 占用。
 - 该上限只影响业务通过 `addRoute()`、`addPage()` 和 `addApi()` 注册的静态 route 槽位；内置 Web 路由不占用此表。
 
 业务侧影响：
 
-- 页面/API 较多的业务项目默认更不容易碰到路由表容量上限。
-- 极限节省静态 RAM 的具体应用仍可通过构建参数显式调小 `ESP32BASE_WEB_MAX_ROUTES`。
+- 页面/API 较多的业务项目仍可通过构建参数显式调大 `ESP32BASE_WEB_MAX_ROUTES`。
+- 基础库默认保持保守，符合 ESP32 上 Web、WiFi、FS、OTA 同时启用时的 RAM 边界。
 
 ### Status 页视觉深化
 

@@ -314,41 +314,34 @@ void logLineSink(Esp32BaseLog::Level level, const char*, const char*, const char
         writeLineBuffered(line);
     }
 }
-}
 
-bool Esp32BaseFileLog::begin() {
-    Esp32BaseLog::setInternalLineSink(logLineSink);
-    strlcpy(g_fileLogPath, ESP32BASE_EB_FILELOG_PATH, sizeof(g_fileLogPath));
-    g_fileLogMaxBytes = ESP32BASE_EB_FILELOG_MAX_BYTES;
-    g_fileLogRotateFiles = ESP32BASE_EB_FILELOG_ROTATE_FILES;
-    return setMode(readMode());
-}
-
-bool Esp32BaseFileLog::setMode(Mode mode) {
+bool applyMode(Esp32BaseFileLog::Mode mode, bool persist, bool logChange) {
     if (!validMode(mode)) {
         return false;
     }
-    const Mode previousMode = g_fileLogMode;
-    if (mode == OFF) {
-        flush();
+    const Esp32BaseFileLog::Mode previousMode = g_fileLogMode;
+    if (mode == Esp32BaseFileLog::OFF) {
+        Esp32BaseFileLog::flush();
         g_fileLogEnabled = false;
-        g_fileLogMode = OFF;
+        g_fileLogMode = Esp32BaseFileLog::OFF;
         g_fileLogDirReady = false;
         g_fileLogCurrentBytes = 0;
 #if ESP32BASE_EB_FILELOG_BUFFER_SIZE > 0
         g_fileLogBufferUsed = 0;
         g_fileLogLastFlushMs = 0;
 #endif
-        const bool saved = Esp32BaseConfig::setInt("eb_log", "mode", static_cast<int32_t>(g_fileLogMode));
-        if (previousMode == g_fileLogMode) {
-            ESP32BASE_LOG_W("filelog", "mode_unchanged mode=%s saved=%s",
-                            ::modeName(g_fileLogMode),
-                            saved ? "success" : "failed");
-        } else {
-            ESP32BASE_LOG_W("filelog", "mode_changed from=%s to=%s saved=%s",
-                            ::modeName(previousMode),
-                            ::modeName(g_fileLogMode),
-                            saved ? "success" : "failed");
+        const bool saved = persist ? Esp32BaseConfig::setInt("eb_log", "mode", static_cast<int32_t>(g_fileLogMode)) : true;
+        if (logChange) {
+            if (previousMode == g_fileLogMode) {
+                ESP32BASE_LOG_D("filelog", "mode_unchanged mode=%s saved=%s",
+                                ::modeName(g_fileLogMode),
+                                saved ? "success" : "failed");
+            } else {
+                ESP32BASE_LOG_W("filelog", "mode_changed from=%s to=%s saved=%s",
+                                ::modeName(previousMode),
+                                ::modeName(g_fileLogMode),
+                                saved ? "success" : "failed");
+            }
         }
         return saved;
     }
@@ -362,7 +355,7 @@ bool Esp32BaseFileLog::setMode(Mode mode) {
         g_fileLogRotateFiles = 4;
     }
     if (g_fileLogEnabled) {
-        flush();
+        Esp32BaseFileLog::flush();
     }
     g_fileLogMode = mode;
     const Esp32BaseLog::Level fileLevel = modeLevel(g_fileLogMode);
@@ -376,28 +369,43 @@ bool Esp32BaseFileLog::setMode(Mode mode) {
     g_fileLogLastFlushMs = 0;
 #endif
     g_fileLogEnabled = true;
-    const bool saved = Esp32BaseConfig::setInt("eb_log", "mode", static_cast<int32_t>(g_fileLogMode));
-    if (previousMode == g_fileLogMode) {
-        ESP32BASE_LOG_W("filelog", "mode_unchanged mode=%s saved=%s path=%s max=%lu rotate=%u buffer=%u flushMs=%lu",
-                        ::modeName(g_fileLogMode),
-                        saved ? "success" : "failed",
-                        g_fileLogPath,
-                        static_cast<unsigned long>(g_fileLogMaxBytes),
-                        static_cast<unsigned>(g_fileLogRotateFiles),
-                        static_cast<unsigned>(bufferSize()),
-                        static_cast<unsigned long>(flushIntervalMs()));
-    } else {
-        ESP32BASE_LOG_W("filelog", "mode_changed from=%s to=%s saved=%s path=%s max=%lu rotate=%u buffer=%u flushMs=%lu",
-                        ::modeName(previousMode),
-                        ::modeName(g_fileLogMode),
-                        saved ? "success" : "failed",
-                        g_fileLogPath,
-                        static_cast<unsigned long>(g_fileLogMaxBytes),
-                        static_cast<unsigned>(g_fileLogRotateFiles),
-                        static_cast<unsigned>(bufferSize()),
-                        static_cast<unsigned long>(flushIntervalMs()));
+    const bool saved = persist ? Esp32BaseConfig::setInt("eb_log", "mode", static_cast<int32_t>(g_fileLogMode)) : true;
+    if (logChange) {
+        if (previousMode == g_fileLogMode) {
+            ESP32BASE_LOG_D("filelog", "mode_unchanged mode=%s saved=%s path=%s max=%lu rotate=%u buffer=%u flushMs=%lu",
+                            ::modeName(g_fileLogMode),
+                            saved ? "success" : "failed",
+                            g_fileLogPath,
+                            static_cast<unsigned long>(g_fileLogMaxBytes),
+                            static_cast<unsigned>(g_fileLogRotateFiles),
+                            static_cast<unsigned>(Esp32BaseFileLog::bufferSize()),
+                            static_cast<unsigned long>(Esp32BaseFileLog::flushIntervalMs()));
+        } else {
+            ESP32BASE_LOG_W("filelog", "mode_changed from=%s to=%s saved=%s path=%s max=%lu rotate=%u buffer=%u flushMs=%lu",
+                            ::modeName(previousMode),
+                            ::modeName(g_fileLogMode),
+                            saved ? "success" : "failed",
+                            g_fileLogPath,
+                            static_cast<unsigned long>(g_fileLogMaxBytes),
+                            static_cast<unsigned>(g_fileLogRotateFiles),
+                            static_cast<unsigned>(Esp32BaseFileLog::bufferSize()),
+                            static_cast<unsigned long>(Esp32BaseFileLog::flushIntervalMs()));
+        }
     }
     return saved;
+}
+}
+
+bool Esp32BaseFileLog::begin() {
+    Esp32BaseLog::setInternalLineSink(logLineSink);
+    strlcpy(g_fileLogPath, ESP32BASE_EB_FILELOG_PATH, sizeof(g_fileLogPath));
+    g_fileLogMaxBytes = ESP32BASE_EB_FILELOG_MAX_BYTES;
+    g_fileLogRotateFiles = ESP32BASE_EB_FILELOG_ROTATE_FILES;
+    return applyMode(readMode(), false, false);
+}
+
+bool Esp32BaseFileLog::setMode(Mode mode) {
+    return applyMode(mode, true, true);
 }
 
 bool Esp32BaseFileLog::flush() {

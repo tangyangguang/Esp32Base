@@ -232,7 +232,7 @@ CI 应覆盖核心矩阵，release 前执行完整矩阵。
 - NTP 默认按 UTC+8 输出本地时间，应用可通过 `ESP32BASE_NTP_GMT_OFFSET_SEC` / `ESP32BASE_NTP_DAYLIGHT_OFFSET_SEC` 覆盖。
 - NTP 同步判断默认要求 epoch >= `ESP32BASE_NTP_SYNC_MIN_EPOCH`，默认值为 `1700000000UL`；本 boot 首次可信同步后会锁存时间映射，后续不要求 SNTP status 持续保持 completed。
 - NTP 未同步状态不输出周期性 WARN/DEBUG；只有明确的单次同步失败事件才应输出 WARN。
-- NTP profile 启动时递增并持久化 `eb_sys.time_boot_id`，日志输出 `time_boot_session boot_id=N`；业务离线事件应保存该 bootId 和 uptimeSec，避免跨 boot 混淆。
+- NTP profile 启动时复用系统 boot count 作为 `bootId`，日志输出 `time_boot_session boot_id=N source=boot_count`；NTP 不再为 boot session 额外写启动期 NVS。业务离线事件应保存该 bootId 和 uptimeSec，避免跨 boot 混淆。
 - 字节数同时显示 raw bytes 与 KB/MB。
 - NTP 对时成功后输出实际时间、当前 uptime、推算 boot wall time，并让 `TimeSnapshot.synced`、Status 页 Time 行和日志绝对时间切换共享同一可信同步语义。
 - WiFi 连接、断开、重连 backoff、进入/退出 config portal 都必须有清晰日志。

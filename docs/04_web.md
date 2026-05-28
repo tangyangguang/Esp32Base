@@ -127,10 +127,14 @@ OTA 规则：
 默认容量：
 
 ```cpp
-#define ESP32BASE_WEB_MAX_ROUTES 24
+#if defined(CONFIG_IDF_TARGET_ESP32C3)
+#define ESP32BASE_WEB_MAX_ROUTES 12
+#else
+#define ESP32BASE_WEB_MAX_ROUTES 16
+#endif
 ```
 
-该默认值对 ESP32、ESP32-S3 和 ESP32-C3 保持一致；资源紧张的具体应用可通过构建参数自行调小。
+页面/API 较多的应用可以在构建参数中显式调大 `ESP32BASE_WEB_MAX_ROUTES`；基础库默认值保持保守，避免所有项目都承担额外静态 RAM 占用。
 
 ## 6. 内置路径
 
