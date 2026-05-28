@@ -144,12 +144,15 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, "Cache-Control: public, max-age=86400");
     RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".pagehead{padding:12px");
     RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".pagination .btnlink,.pagination button,.pagination select,.pagination input{font-size:12px;min-height:26px");
+    RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".uactions{display:grid;grid-template-columns:4em 96px;gap:16px");
+    RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".uactions .btnlink,.uactions input[type=submit]{width:96px");
     RUN_SELFTEST("GET", "/ui-records?page=2", nullptr, true, 200, "aria-current='page'>2</span>", "当前第");
     RUN_SELFTEST("GET", "/ui-records?range=24h&type=all&per=20&page=2", nullptr, true, 200, "filterbar", "name='start'");
     RUN_SELFTEST("GET", "/ui-records?range=custom&type=all&start=2026-05-28T08:00&end=2026-05-28T09:00", nullptr, true, 200, "name='start'");
     RUN_SELFTEST("GET", "/ui-records?range=30d&type=guard&page=4", nullptr, true, 200, "aria-current='page'>4</span>");
     RUN_SELFTEST("GET", "/ui-records?range=30d&type=guard&page=4", nullptr, true, 200, "filterbar", "每页 20 条");
     RUN_SELFTEST("GET", "/ui-config?saved=1", nullptr, true, 200, "保存成功");
+    RUN_SELFTEST("GET", "/ui-config", nullptr, true, 200, "class='uactions'><span class='uvalue'>花坛</span><a class='btnlink info' href='/ui-config?edit=name'>展开修改</a>");
     RUN_SELFTEST("GET", "/ui-config", nullptr, true, 200, "href='/ui-form'>进入编辑页</a>");
     RUN_SELFTEST("GET", "/ui-config?edit=name", nullptr, true, 200, "行内编辑");
     RUN_SELFTEST("POST", "/ui-config/name", "name=flower", true, 303, "Location: /ui-config?saved=1");
@@ -158,7 +161,7 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/ui-config/flow?saved=1", nullptr, true, 200, "流程向导");
     RUN_SELFTEST("GET", "/ui-status/maintenance", nullptr, true, 200, "诊断维护");
     RUN_SELFTEST("GET", "/ui-status/maintenance", nullptr, true, 200, "class='uactions readonly'><span class='uvalue'>正常</span>");
-    RUN_SELFTEST("GET", "/ui-status/maintenance", nullptr, true, 200, "class='uactions'><span class='uvalue'>空闲</span><a class='btnlink' href='/esp32base/tools'>查看</a>");
+    RUN_SELFTEST("GET", "/ui-status/maintenance", nullptr, true, 200, "class='uactions'><span class='uvalue'>空闲</span><a class='btnlink info' href='/esp32base/tools'>查看</a>");
     RUN_SELFTEST("GET", "/ui-status/access", nullptr, false, 200, "访问控制");
     RUN_SELFTEST("GET", "/ui-config/confirm", nullptr, true, 200, "确认保护");
     RUN_SELFTEST("POST", "/ui-confirm/run", "confirm=1", true, 303, "Location: /ui-config/confirm?done=1");
@@ -353,9 +356,9 @@ void handleConfigPage() {
     Esp32BaseWeb::beginPanel("紧凑配置列表");
     char editMode[12] = "";
     const bool editingName = Esp32BaseWeb::getParam("edit", editMode, sizeof(editMode)) && strcmp(editMode, "name") == 0;
-    Esp32BaseWeb::sendChunk("<div class='urow'><div><b>第 1 路名称</b><small>用于页面和记录展示，不影响实际控制。</small></div><div><span class='uvalue'>花坛</span> ");
-    Esp32BaseWeb::sendChunk(editingName ? "<a class='btnlink' href='/ui-config'>取消</a>" : "<a class='btnlink' href='/ui-config?edit=name'>展开修改</a>");
-    Esp32BaseWeb::sendChunk("</div></div>");
+    Esp32BaseWeb::sendInfoRowCompactLink("第 1 路名称", "用于页面和记录展示，不影响实际控制。", "花坛",
+                                         editingName ? "/ui-config" : "/ui-config?edit=name",
+                                         editingName ? "取消" : "展开修改");
     if (editingName) {
         Esp32BaseWeb::sendChunk("<div class='inlineedit'><b>行内编辑</b><form method='post' action='/ui-config/name' onsubmit='return once(this)'><p><label>名称</label><input name='name' maxlength='12' value='花坛'><small class='muted'>最多 12 个中文字符；只影响页面和记录中的显示名称。</small></p><input type='button' value='取消' onclick=\"location.href='/ui-config'\"><input type='submit' value='保存'></form></div>");
     }
