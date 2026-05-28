@@ -187,6 +187,13 @@ void handleStatusPage() {
     Esp32BaseWeb::endMetricGrid();
     Esp32BaseWeb::sendInfoRowCompactLink("最近记录", "只放和判断状态有关的最近事件。", "2 条", "/ui-records", "查看");
     Esp32BaseWeb::endPanel();
+    Esp32BaseWeb::beginPanel("页面模板目录");
+    Esp32BaseWeb::sendInfoRowCompactLink("状态与统计", "设备首页和轻量统计摘要，避免引入图表库。", nullptr, "/ui-stats", "查看");
+    Esp32BaseWeb::sendInfoRowCompactLink("记录与分页", "筛选、表头、空状态和页码型分页。", nullptr, "/ui-records", "查看");
+    Esp32BaseWeb::sendInfoRowCompactLink("配置与表单", "紧凑配置列表、行内动作和多字段独立编辑页。", nullptr, "/ui-config", "查看");
+    Esp32BaseWeb::sendInfoRowCompactLink("命令与确认", "一次性动作、危险确认和 PRG 防重复提交。", nullptr, "/ui-action", "查看");
+    Esp32BaseWeb::sendInfoRowCompactLink("维护与权限", "诊断维护、访问受限和空状态。", nullptr, "/ui-maintenance", "查看");
+    Esp32BaseWeb::endPanel();
     Esp32BaseWeb::sendFooter();
 }
 
@@ -282,6 +289,8 @@ void handleMaintenancePage() {
     Esp32BaseWeb::beginPanel("系统诊断");
     Esp32BaseWeb::sendInfoRowCompact("WiFi", "连接状态、RSSI、IP。", "正常");
     Esp32BaseWeb::sendInfoRowCompactLink("维护任务", "导出、扫描、重启等长任务显示状态和下一步。", "空闲", "/esp32base/tools", "查看");
+    Esp32BaseWeb::sendInfoRowCompactLink("访问控制", "登录、权限不足、会话失效和只读受限状态。", nullptr, "/ui-access", "查看");
+    Esp32BaseWeb::sendInfoRowCompactLink("空状态", "列表、记录或配置项暂不存在时的基准表达。", nullptr, "/ui-empty", "查看");
     Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_INFO, "原始数据受控", "限制长度，可复制或导出，不做无限滚动调试平台。");
     Esp32BaseWeb::endPanel();
     Esp32BaseWeb::sendFooter();
@@ -340,22 +349,22 @@ void handleFormPage() {
 void setup() {
     Esp32Base::setFirmwareInfo("web-ui-gallery", "1.0.0");
     Esp32BaseWeb::setDefaultAuth("admin", "admin");
-    Esp32BaseWeb::setDeviceName("Web UI Gallery");
+    Esp32BaseWeb::setDeviceName("UI 样式");
     Esp32BaseWeb::setHomePath("/ui-status");
     Esp32BaseWeb::setHomeMode(Esp32BaseWeb::HOME_APP);
     Esp32BaseWeb::setSystemNavMode(Esp32BaseWeb::SYSTEM_NAV_BOTTOM);
     Esp32BaseWeb::setHeadExtraCallback(handleHeadExtra);
-    Esp32BaseWeb::addPage("/ui-status", "Status", handleStatusPage);
-    Esp32BaseWeb::addPage("/ui-stats", "Stats", handleStatsPage);
-    Esp32BaseWeb::addPage("/ui-records", "Records", handleRecordsPage);
-    Esp32BaseWeb::addPage("/ui-config", "Config", handleConfigPage);
-    Esp32BaseWeb::addPage("/ui-action", "Action", handleActionPage);
-    Esp32BaseWeb::addPage("/ui-flow", "Flow", handleFlowPage);
-    Esp32BaseWeb::addPage("/ui-maintenance", "Maintenance", handleMaintenancePage);
-    Esp32BaseWeb::addPage("/ui-access", "Access", handleAccessPage);
-    Esp32BaseWeb::addPage("/ui-confirm", "Confirm", handleConfirmPage);
-    Esp32BaseWeb::addPage("/ui-empty", "Empty", handleEmptyPage);
-    Esp32BaseWeb::addPage("/ui-form", "Form", handleFormPage);
+    Esp32BaseWeb::addPage("/ui-status", "总览", handleStatusPage);
+    Esp32BaseWeb::addPage("/ui-records", "记录", handleRecordsPage);
+    Esp32BaseWeb::addPage("/ui-config", "配置", handleConfigPage);
+    Esp32BaseWeb::addPage("/ui-action", "命令", handleActionPage);
+    Esp32BaseWeb::addPage("/ui-form", "表单", handleFormPage);
+    Esp32BaseWeb::addRoute("/ui-stats", Esp32BaseWeb::METHOD_GET, handleStatsPage);
+    Esp32BaseWeb::addRoute("/ui-flow", Esp32BaseWeb::METHOD_GET, handleFlowPage);
+    Esp32BaseWeb::addRoute("/ui-maintenance", Esp32BaseWeb::METHOD_GET, handleMaintenancePage);
+    Esp32BaseWeb::addRoute("/ui-access", Esp32BaseWeb::METHOD_GET, handleAccessPage);
+    Esp32BaseWeb::addRoute("/ui-confirm", Esp32BaseWeb::METHOD_GET, handleConfirmPage);
+    Esp32BaseWeb::addRoute("/ui-empty", Esp32BaseWeb::METHOD_GET, handleEmptyPage);
     Esp32BaseWeb::addRoute("/ui-action/run", Esp32BaseWeb::METHOD_POST, handleActionRun);
     Esp32BaseWeb::addRoute("/ui-confirm/run", Esp32BaseWeb::METHOD_POST, handleConfirmRun);
     Esp32BaseWeb::addRoute("/ui-form/save", Esp32BaseWeb::METHOD_POST, handleFormSave);

@@ -163,6 +163,7 @@ static const char WEB_HEAD[] PROGMEM =
     ".metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:8px 0}.metric{border:1px solid var(--eb-line-soft);border-radius:7px;background:#fff;padding:8px}.metric b{display:block;font-size:18px}.metric span{display:block;color:var(--eb-muted);font-size:12px}"
     ".urow{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--eb-line-soft)}.urow:last-child{border-bottom:0}.urow small{display:block;color:var(--eb-muted);margin-top:2px}.urow form{display:inline}.uvalue{font-weight:800;white-space:nowrap}.pagination{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;border-top:1px solid var(--eb-line-soft);padding-top:8px;margin-top:8px}.pagination .right{text-align:right}"
     ".tag{display:inline-flex;align-items:center;min-height:21px;padding:2px 7px;border-radius:999px;background:#eef2f4;color:#475467;font-size:11px;font-weight:750;white-space:nowrap}.tag.ok{background:var(--eb-ok-soft);color:var(--eb-ok)}.tag.warn{background:var(--eb-warn-soft);color:var(--eb-warn)}.tag.danger{background:var(--eb-danger-soft);color:var(--eb-danger)}.tag.info{background:var(--eb-info-soft);color:var(--eb-info)}"
+    ".btnlink{display:inline-flex;align-items:center;justify-content:center;min-height:32px;padding:0 10px;border-radius:7px;background:var(--eb-info-soft);color:var(--eb-info);font-size:13px;font-weight:750;white-space:nowrap}.btnlink.ok{background:var(--eb-ok-soft);color:var(--eb-ok)}.btnlink.warn{background:var(--eb-warn-soft);color:var(--eb-warn)}.btnlink.danger{background:var(--eb-danger-soft);color:var(--eb-danger)}.btnlink.disabled{background:#eef2f4;color:#98a2b3}"
     ".kv{border-collapse:collapse;width:100%;margin:0}.kv th,.kv td{border-bottom:1px solid var(--eb-line);padding:7px 5px;text-align:left;vertical-align:top}.kv tr:last-child th,.kv tr:last-child td{border-bottom:0}.kv th{width:30%;color:var(--eb-muted);font-weight:650}"
     ".part{border-collapse:collapse;width:100%;font-size:13px}.part th,.part td{border-bottom:1px solid var(--eb-line);padding:6px 5px;text-align:left;vertical-align:top}.part th{color:var(--eb-muted);font-weight:650}.part tr:last-child td{border-bottom:0}"
     ".tabs,.quicklinks{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 10px}.tabs a,.quicklinks a{font-size:13px;padding:5px 8px;margin:0;background:#f1f4f3;color:var(--eb-muted);border-radius:6px}.tabs a{display:inline-flex;align-items:center;gap:8px}.tabs a.active{background:var(--eb-primary-soft);color:var(--eb-primary);font-weight:700}.segsize{padding-left:7px;border-left:1px solid var(--eb-line);font-variant-numeric:tabular-nums}"
@@ -691,13 +692,13 @@ void sendNavLink(const char* path, const char* title, bool paragraph, const char
 
 void sendPaginationLink(const char* label, const Esp32BaseWeb::Pagination& pagination, uint32_t page, bool disabled) {
     if (disabled) {
-        sendChunk("<span class='tag'>");
+        sendChunk("<span class='btnlink disabled'>");
         sendEscapedHtmlChunk(label);
         sendChunk("</span>");
         return;
     }
     const char* path = pagination.path ? pagination.path : "/esp32base";
-    sendChunk("<a class='tag info' href='");
+    sendChunk("<a class='btnlink' href='");
     sendEscapedHtmlChunk(path);
     sendChunk(strchr(path, '?') ? "&amp;" : "?");
     if (pagination.query && pagination.query[0]) {
@@ -3706,7 +3707,7 @@ static void sendInfoRowActionGap(bool hasValue) {
 }
 
 static void sendInfoRowActionLink(const char* href, const char* label, Esp32BaseWeb::UiTone tone) {
-    sendChunk("<a class='tag");
+    sendChunk("<a class='btnlink");
     sendChunk(uiToneClass(tone));
     sendChunk("' href='");
     sendEscapedHtmlChunk(href ? href : "#");

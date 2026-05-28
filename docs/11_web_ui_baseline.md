@@ -180,6 +180,7 @@
 - 简单字段可行内展开编辑。
 - 多字段对象进入独立编辑页。
 - 每项必须有一句必要说明。
+- 行动作必须使用按钮型链接或按钮，不使用状态标签尺寸承载点击动作。
 - 高风险配置进入确认保护页。
 - 系统级基础参数优先使用 App Config。
 - 业务运行状态不放进配置表单。
@@ -357,7 +358,7 @@ void handleHeadExtra() {
 - `sendNotice()` / `sendResultNotice()`：页面级反馈。
 - `beginMetricGrid()` / `sendMetric()` / `endMetricGrid()`：状态和统计摘要。
 - `sendInfoRowCompact()`：只读紧凑行。
-- `sendInfoRowCompactLink()`：带安全链接动作的紧凑行。
+- `sendInfoRowCompactLink()`：带按钮型链接动作的紧凑行。
 - `sendInfoRowCompactForm()`：带单按钮 POST 动作的紧凑行。
 - `sendPagination()`：页码型分页。
 
@@ -422,6 +423,7 @@ POST -> 303 Redirect -> GET
 - 手机端不重叠。
 - 表单控件对齐。
 - 分页信息完整。
+- 动作链接和分页跳转有足够点击高度，状态标签只表达状态。
 - 成功和失败状态可见。
 - 刷新不重复提交。
 - 皮肤变量覆盖后仍保持语义清楚。

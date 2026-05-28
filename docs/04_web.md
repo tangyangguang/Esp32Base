@@ -375,7 +375,7 @@ Esp32BaseWeb::addRoute("/api/faucet/config", Esp32BaseWeb::METHOD_ANY, handleCon
 - `sendResultNotice(notices, count)`：`POST -> 303 -> GET` 后的结果提示。
 - `beginMetricGrid()` / `sendMetric()` / `endMetricGrid()`：状态和统计摘要。
 - `sendInfoRowCompact(title, help, value)`：只读配置、操作、向导和诊断行。
-- `sendInfoRowCompactLink(title, help, value, href, label, tone)`：带安全链接动作的紧凑行。
+- `sendInfoRowCompactLink(title, help, value, href, label, tone)`：带按钮型链接动作的紧凑行。
 - `sendInfoRowCompactForm(title, help, value, action, label, hiddenName, hiddenValue, tone)`：带单按钮 POST 动作的紧凑行，默认包含 `once()` 防重复点击。
 - `sendPagination(pagination)`：页码型列表分页。
 
@@ -419,6 +419,7 @@ void handleHeadExtra() {
 - PC 宽屏下控件不无意义拉满。
 - 手机端导航、行、分页自然堆叠或横向滚动，不出现文字重叠。
 - 按钮文字居中，动态内容不改变整体布局。
+- 紧凑行动作和分页跳转使用按钮型链接，不使用小尺寸状态标签代替可点击控件。
 - 简单字段行内编辑和多字段独立编辑页有明显区别。
 - 分页显示总条数、总页数、首页、上一页、下一页、尾页和当前页。
 - 重定向后的成功、失败、拒绝状态清楚可见。
