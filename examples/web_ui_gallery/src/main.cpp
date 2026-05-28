@@ -12,6 +12,11 @@ const Esp32BaseWeb::ResultNotice GALLERY_RESULTS[] = {
     {"blocked", "1", Esp32BaseWeb::UI_WARN, "暂不能执行", "设备状态不满足条件时，应说明原因和下一步。"}
 };
 
+static const char* GALLERY_NS = "ui_gallery";
+static const char* GALLERY_KEY_TITLE = "title";
+static const char* GALLERY_KEY_INTERVAL = "interval";
+static const char* GALLERY_KEY_READONLY = "readonly";
+
 #if ESP32BASE_WEB_UI_GALLERY_SELFTEST
 static bool g_selfTestDone = false;
 
@@ -122,8 +127,10 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/ui-status", nullptr, true, 200, "状态概览");
     RUN_SELFTEST("GET", "/ui-status/stats", nullptr, true, 200, "统计摘要");
     RUN_SELFTEST("GET", "/ui-records?page=2", nullptr, true, 200, "共 128 条 / 7 页");
-    RUN_SELFTEST("GET", "/ui-records?page=2", nullptr, true, 200, "range=24h&amp;type=all&amp;page=1");
+    RUN_SELFTEST("GET", "/ui-records?page=2", nullptr, true, 200, "range=24h&amp;type=all&amp;per=20&amp;page=1");
     RUN_SELFTEST("GET", "/ui-config?saved=1", nullptr, true, 200, "保存成功");
+    RUN_SELFTEST("GET", "/ui-config?edit=name", nullptr, true, 200, "行内编辑");
+    RUN_SELFTEST("POST", "/ui-config/name", "name=flower", true, 303, "Location: /ui-config?saved=1");
     RUN_SELFTEST("GET", "/ui-action", nullptr, true, 200, "操作命令");
     RUN_SELFTEST("POST", "/ui-action/run", "run=1", true, 303, "Location: /ui-action?done=1");
     RUN_SELFTEST("GET", "/ui-config/flow?saved=1", nullptr, true, 200, "流程向导");
@@ -134,13 +141,15 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/ui-records/empty", nullptr, true, 200, "空状态");
     RUN_SELFTEST("GET", "/ui-form", nullptr, true, 200, "多字段表单");
     RUN_SELFTEST("POST", "/ui-form/save", "name=gallery&limit=30", true, 303, "Location: /ui-form?saved=1");
+    RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Device title");
+    RUN_SELFTEST("GET", "/ui-status", nullptr, true, 200, "<footer class='footerbar'><span class='syslinks'><a href='/esp32base'>Status</a><a href='/esp32base/logs'>Logs</a><a href='/esp32base/app-config'>App Config</a>");
 #undef RUN_SELFTEST
     ESP32BASE_LOG_I("selftest", "summary pass=%u total=%u", static_cast<unsigned>(pass), static_cast<unsigned>(total));
 }
 #endif
 
 void handleHeadExtra() {
-    Esp32BaseWeb::sendChunk("<style id='gallery-head-extra'>.swatch{display:inline-flex;gap:6px;align-items:center}.swatch i{display:inline-block;width:18px;height:18px;border-radius:5px;border:1px solid var(--eb-line)}.formgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.formgrid p{margin:0}@media(max-width:760px){.formgrid{grid-template-columns:1fr}}</style>");
+    Esp32BaseWeb::sendChunk("<style id='gallery-head-extra'>.swatch{display:inline-flex;gap:6px;align-items:center}.swatch i{display:inline-block;width:18px;height:18px;border-radius:5px;border:1px solid var(--eb-line)}.formgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.formgrid p{margin:0}.inlineedit{border:1px solid #b9e3d9;background:#f3fbf8;border-radius:8px;padding:10px;margin:0 0 10px}.inlineedit form{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:end}.inlineedit input{margin:0}@media(max-width:760px){.formgrid{grid-template-columns:1fr}.inlineedit form{grid-template-columns:1fr}.inlineedit .actions{margin-top:0}}</style>");
 }
 
 void handlePostRedirect(const char* location) {
@@ -164,6 +173,10 @@ void handleConfirmRun() {
 
 void handleFormSave() {
     handlePostRedirect("/ui-form?saved=1");
+}
+
+void handleConfigNameSave() {
+    handlePostRedirect("/ui-config?saved=1");
 }
 
 void sendGalleryResults() {
@@ -219,18 +232,106 @@ void handleRecordsPage() {
     if (!Esp32BaseWeb::checkAuth()) {
         return;
     }
+    char range[12] = "24h";
+    Esp32BaseWeb::getParam("range", range, sizeof(range));
+    if (strcmp(range, "24h") != 0 && strcmp(range, "7d") != 0 && strcmp(range, "30d") != 0 && strcmp(range, "custom") != 0) {
+        strlcpy(range, "24h", sizeof(range));
+    }
+    char type[12] = "all";
+    Esp32BaseWeb::getParam("type", type, sizeof(type));
+    if (strcmp(type, "all") != 0 && strcmp(type, "plan") != 0 && strcmp(type, "manual") != 0 && strcmp(type, "guard") != 0) {
+        strlcpy(type, "all", sizeof(type));
+    }
+    char startTime[24] = "";
+    char endTime[24] = "";
+    Esp32BaseWeb::getParam("start", startTime, sizeof(startTime));
+    Esp32BaseWeb::getParam("end", endTime, sizeof(endTime));
+    auto sanitizeDateTime = [](char* s) {
+        for (size_t i = 0; s[i]; ++i) {
+            const char c = s[i];
+            const bool ok = (c >= '0' && c <= '9') || c == '-' || c == ':' || c == 'T';
+            if (!ok) {
+                s[i] = '\0';
+                break;
+            }
+        }
+    };
+    sanitizeDateTime(startTime);
+    sanitizeDateTime(endTime);
     char pageText[12] = "1";
     Esp32BaseWeb::getParam("page", pageText, sizeof(pageText));
     uint32_t page = static_cast<uint32_t>(strtoul(pageText, nullptr, 10));
     if (page == 0) {
         page = 1;
     }
+    char perText[12] = "20";
+    Esp32BaseWeb::getParam("per", perText, sizeof(perText));
+    uint32_t perPage = static_cast<uint32_t>(strtoul(perText, nullptr, 10));
+    if (perPage != 10 && perPage != 20 && perPage != 50) {
+        perPage = 20;
+    }
     Esp32BaseWeb::sendHeader("UI Records");
     Esp32BaseWeb::sendPageTitle("记录列表", "筛选、表头、空状态和分页的基准样式。");
     Esp32BaseWeb::beginPanel("最近记录");
-    Esp32BaseWeb::sendChunk("<div class='actions'><span class='tag info'>最近 24 小时</span><span class='tag'>全部类型</span><span class='tag'>每页 20 条</span></div>");
+    Esp32BaseWeb::sendChunk("<form method='get' action='/ui-records' class='filterbar'><label>时间范围</label><select name='range'>");
+    const char* rangeValues[] = {"24h", "7d", "30d", "custom"};
+    const char* rangeLabels[] = {"最近 24 小时", "最近 7 天", "最近 30 天", "自定义"};
+    for (uint8_t i = 0; i < 4; ++i) {
+        Esp32BaseWeb::sendChunk("<option value='");
+        Esp32BaseWeb::sendChunk(rangeValues[i]);
+        Esp32BaseWeb::sendChunk(strcmp(range, rangeValues[i]) == 0 ? "' selected>" : "'>");
+        Esp32BaseWeb::sendChunk(rangeLabels[i]);
+        Esp32BaseWeb::sendChunk("</option>");
+    }
+    Esp32BaseWeb::sendChunk("</select><label>开始</label><input type='datetime-local' name='start' value='");
+    Esp32BaseWeb::writeHtmlEscaped(startTime);
+    Esp32BaseWeb::sendChunk("'><label>结束</label><input type='datetime-local' name='end' value='");
+    Esp32BaseWeb::writeHtmlEscaped(endTime);
+    Esp32BaseWeb::sendChunk("'><label>类型</label><select name='type'>");
+    const char* typeValues[] = {"all", "plan", "manual", "guard"};
+    const char* typeLabels[] = {"全部类型", "计划执行", "手动执行", "保护触发"};
+    for (uint8_t i = 0; i < 4; ++i) {
+        Esp32BaseWeb::sendChunk("<option value='");
+        Esp32BaseWeb::sendChunk(typeValues[i]);
+        Esp32BaseWeb::sendChunk(strcmp(type, typeValues[i]) == 0 ? "' selected>" : "'>");
+        Esp32BaseWeb::sendChunk(typeLabels[i]);
+        Esp32BaseWeb::sendChunk("</option>");
+    }
+    Esp32BaseWeb::sendChunk("</select><button type='submit'>筛选</button></form><div class='actions'><span class='tag info'>");
+    if (strcmp(range, "7d") == 0) {
+        Esp32BaseWeb::sendChunk("最近 7 天");
+    } else if (strcmp(range, "30d") == 0) {
+        Esp32BaseWeb::sendChunk("最近 30 天");
+    } else if (strcmp(range, "custom") == 0) {
+        Esp32BaseWeb::sendChunk("自定义范围");
+    } else {
+        Esp32BaseWeb::sendChunk("最近 24 小时");
+    }
+    Esp32BaseWeb::sendChunk("</span><span class='tag'>");
+    if (strcmp(type, "plan") == 0) {
+        Esp32BaseWeb::sendChunk("计划执行");
+    } else if (strcmp(type, "manual") == 0) {
+        Esp32BaseWeb::sendChunk("手动执行");
+    } else if (strcmp(type, "guard") == 0) {
+        Esp32BaseWeb::sendChunk("保护触发");
+    } else {
+        Esp32BaseWeb::sendChunk("全部类型");
+    }
+    Esp32BaseWeb::sendChunk("</span><span class='tag'>每页 ");
+    char perLabel[12];
+    snprintf(perLabel, sizeof(perLabel), "%lu", static_cast<unsigned long>(perPage));
+    Esp32BaseWeb::sendChunk(perLabel);
+    Esp32BaseWeb::sendChunk(" 条</span></div>");
     Esp32BaseWeb::sendChunk("<table class='kv'><tr><th>时间</th><th>类型</th><th>结果</th></tr><tr><td>18:30</td><td>计划执行</td><td><span class='tag ok'>完成</span></td></tr><tr><td>16:10</td><td>手动执行</td><td><span class='tag ok'>完成</span></td></tr><tr><td>14:02</td><td>保护触发</td><td><span class='tag warn'>已跳过</span></td></tr></table>");
-    Esp32BaseWeb::Pagination pagination = {"/ui-records?range=24h", "type=all", page, 20, 128};
+    char pagePath[40];
+    char pageQuery[120];
+    snprintf(pagePath, sizeof(pagePath), "/ui-records?range=%s", range);
+    if (strcmp(range, "custom") == 0) {
+        snprintf(pageQuery, sizeof(pageQuery), "type=%s&start=%s&end=%s", type, startTime, endTime);
+    } else {
+        snprintf(pageQuery, sizeof(pageQuery), "type=%s", type);
+    }
+    Esp32BaseWeb::Pagination pagination = {pagePath, pageQuery, page, perPage, 128};
     Esp32BaseWeb::sendPagination(pagination);
     Esp32BaseWeb::endPanel();
     Esp32BaseWeb::sendFooter();
@@ -244,7 +345,14 @@ void handleConfigPage() {
     Esp32BaseWeb::sendPageTitle("配置编辑", "简单字段行内改，多字段对象进入独立编辑页。");
     sendGalleryResults();
     Esp32BaseWeb::beginPanel("紧凑配置列表");
-    Esp32BaseWeb::sendInfoRowCompactLink("第 1 路名称", "用于页面和记录展示，不影响实际控制。", "花坛", "/ui-form", "展开修改");
+    char editMode[12] = "";
+    const bool editingName = Esp32BaseWeb::getParam("edit", editMode, sizeof(editMode)) && strcmp(editMode, "name") == 0;
+    Esp32BaseWeb::sendChunk("<div class='urow'><div><b>第 1 路名称</b><small>用于页面和记录展示，不影响实际控制。</small></div><div><span class='uvalue'>花坛</span> ");
+    Esp32BaseWeb::sendChunk(editingName ? "<a class='btnlink' href='/ui-config'>取消</a>" : "<a class='btnlink' href='/ui-config?edit=name'>展开修改</a>");
+    Esp32BaseWeb::sendChunk("</div></div>");
+    if (editingName) {
+        Esp32BaseWeb::sendChunk("<div class='inlineedit'><b>行内编辑</b><form method='post' action='/ui-config/name' onsubmit='return once(this)'><p><label>名称</label><input name='name' maxlength='12' value='花坛'><small class='muted'>最多 12 个中文字符；只影响页面和记录中的显示名称。</small></p><input type='button' value='取消' onclick=\"location.href='/ui-config'\"><input type='submit' value='保存'></form></div>");
+    }
     Esp32BaseWeb::sendInfoRowCompactLink("默认计划", "包含时间、通道、执行天数和目标量。", "3 条", "/ui-config/flow", "进入编辑页");
     Esp32BaseWeb::sendInfoRowCompactLink("恢复出厂", "高风险操作必须进入确认保护页。", nullptr, "/ui-config/confirm", "确认页", Esp32BaseWeb::UI_DANGER);
     Esp32BaseWeb::endPanel();
@@ -352,8 +460,16 @@ void setup() {
     Esp32BaseWeb::setDeviceName("UI 样式");
     Esp32BaseWeb::setHomePath("/ui-status");
     Esp32BaseWeb::setHomeMode(Esp32BaseWeb::HOME_APP);
-    Esp32BaseWeb::setSystemNavMode(Esp32BaseWeb::SYSTEM_NAV_BOTTOM);
+    Esp32BaseWeb::setSystemNavMode(Esp32BaseWeb::SYSTEM_NAV_SECTION);
     Esp32BaseWeb::setHeadExtraCallback(handleHeadExtra);
+    Esp32BaseAppConfig::setTitle("App Config");
+    Esp32BaseAppConfig::addGroup({"display", "Display"});
+    Esp32BaseAppConfig::addString({"display", GALLERY_NS, GALLERY_KEY_TITLE, "Device title", "UI Gallery", 1, 24,
+                                   "System-level sample field shown in the built-in App Config page.", false, nullptr});
+    Esp32BaseAppConfig::addInt({"display", GALLERY_NS, GALLERY_KEY_INTERVAL, "Refresh interval", 30, 5, 300, 5, "s",
+                                "Example numeric system setting.", false, nullptr});
+    Esp32BaseAppConfig::addBool({"display", GALLERY_NS, GALLERY_KEY_READONLY, "Read-only mode", false,
+                                 "Example boolean switch for App Config visibility.", false, nullptr});
     Esp32BaseWeb::addPage("/ui-status", "总览", handleStatusPage);
     Esp32BaseWeb::addPage("/ui-records", "记录", handleRecordsPage);
     Esp32BaseWeb::addPage("/ui-config", "配置", handleConfigPage);
@@ -368,6 +484,7 @@ void setup() {
     Esp32BaseWeb::addRoute("/ui-action/run", Esp32BaseWeb::METHOD_POST, handleActionRun);
     Esp32BaseWeb::addRoute("/ui-confirm/run", Esp32BaseWeb::METHOD_POST, handleConfirmRun);
     Esp32BaseWeb::addRoute("/ui-form/save", Esp32BaseWeb::METHOD_POST, handleFormSave);
+    Esp32BaseWeb::addRoute("/ui-config/name", Esp32BaseWeb::METHOD_POST, handleConfigNameSave);
     Esp32Base::begin();
     ESP32BASE_LOG_I("example", "web ui gallery ready");
 }
