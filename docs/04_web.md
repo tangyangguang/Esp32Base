@@ -223,6 +223,7 @@ App Config 页面：
 - 启用后必须显式设置 `ESP32BASE_APP_CONFIG_MAX_GROUPS` 和 `ESP32BASE_APP_CONFIG_MAX_FIELDS`，硬上限为 16 组、128 字段。
 - 支持 string、int、decimal 定点数、bool、enum；string 最大 256 bytes，enum value 最大 31 bytes，label/option label 最大 31 bytes，help 最大 96 bytes，unit 最大 12 bytes，decimal 使用 `int32_t raw` 和 `scale=0..6`。
 - 页面按 group 输出紧凑 panel，字段默认直接可编辑；点击 Save 时前端只展示变更核对清单，不作为服务端事实来源。
+- 变更核对清单使用中性 review 样式，不使用成功色或警告色；只有实际保存结果才使用 `ok`/`danger` notice。
 - POST 保存时后端重新解析、执行内置校验、执行字段级和页面级业务校验、读取当前 NVS 并计算实际变化字段。
 - 任一校验失败时零写入；校验通过后只保存变化字段，未变化字段绝不写 NVS。
 - 校验通过后若发生 NVS 写入失败，已成功写入的字段不会回滚；`ChangeCallback` 只对成功字段触发，整次保存结束的 `SaveCallback` summary 会报告失败数量，页面返回 partial 提示。

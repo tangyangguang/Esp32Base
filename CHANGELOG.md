@@ -4,6 +4,18 @@
 
 ## 2026-05-28
 
+### App Config 保存前核对区配色优化
+
+优化：
+
+- `/esp32base/app-config` 的 Confirm changes 区域改为中性 review 样式，移除大面积成功色背景，避免用户误以为变更已经保存。
+- Cancel 按钮改为低权重中性按钮，只保留 Confirm Save 作为主操作；分组行同步改为中性灰底。
+
+业务侧影响：
+
+- App Config 保存流程、revision 防旧页面提交、POST 参数、校验语义和 pending restart 行为不变。
+- 业务页面的保存前核对区也应使用中性 review 语义，成功色只用于保存完成后的结果反馈。
+
 ### Logs 页视觉深化
 
 优化：
