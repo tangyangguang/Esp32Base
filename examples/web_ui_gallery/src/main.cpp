@@ -140,6 +140,9 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/ui-status/stats", nullptr, true, 200, "统计摘要");
     RUN_SELFTEST("GET", "/ui-records?page=2", nullptr, true, 200, "共 128 条 / 7 页");
     RUN_SELFTEST("GET", "/ui-records?page=2", nullptr, true, 200, "range=24h&amp;type=all&amp;per=20&amp;page=1");
+    RUN_SELFTEST("GET", "/ui-records?page=2", nullptr, true, 200, ".pagination .btnlink,.pagination button,.pagination select,.pagination input{font-size:12px;min-height:26px");
+    RUN_SELFTEST("GET", "/ui-records?range=24h&type=all&per=20&page=2", nullptr, true, 200, "filterbar", "name='start'");
+    RUN_SELFTEST("GET", "/ui-records?range=custom&type=all&start=2026-05-28T08:00&end=2026-05-28T09:00", nullptr, true, 200, "name='start'");
     RUN_SELFTEST("GET", "/ui-records?range=30d&type=guard&page=4", nullptr, true, 200, "aria-current='page'>4</span>");
     RUN_SELFTEST("GET", "/ui-records?range=30d&type=guard&page=4", nullptr, true, 200, "filterbar", "每页 20 条");
     RUN_SELFTEST("GET", "/ui-config?saved=1", nullptr, true, 200, "保存成功");
@@ -288,7 +291,8 @@ void handleRecordsPage() {
     Esp32BaseWeb::sendHeader("UI Records");
     Esp32BaseWeb::sendPageTitle("记录列表", "筛选、表头、空状态和分页的基准样式。");
     Esp32BaseWeb::beginPanel("最近记录");
-    Esp32BaseWeb::sendChunk("<form method='get' action='/ui-records' class='filterbar'><label>时间范围</label><select name='range'>");
+    const bool customRange = strcmp(range, "custom") == 0;
+    Esp32BaseWeb::sendChunk("<form method='get' action='/ui-records' class='filterbar'><label>时间范围</label><select name='range' onchange='this.form.submit()'>");
     const char* rangeValues[] = {"24h", "7d", "30d", "custom"};
     const char* rangeLabels[] = {"最近 24 小时", "最近 7 天", "最近 30 天", "自定义"};
     for (uint8_t i = 0; i < 4; ++i) {
@@ -298,11 +302,15 @@ void handleRecordsPage() {
         Esp32BaseWeb::sendChunk(rangeLabels[i]);
         Esp32BaseWeb::sendChunk("</option>");
     }
-    Esp32BaseWeb::sendChunk("</select><label>开始</label><input type='datetime-local' name='start' value='");
-    Esp32BaseWeb::writeHtmlEscaped(startTime);
-    Esp32BaseWeb::sendChunk("'><label>结束</label><input type='datetime-local' name='end' value='");
-    Esp32BaseWeb::writeHtmlEscaped(endTime);
-    Esp32BaseWeb::sendChunk("'><label>类型</label><select name='type'>");
+    Esp32BaseWeb::sendChunk("</select>");
+    if (customRange) {
+        Esp32BaseWeb::sendChunk("<label>开始</label><input type='datetime-local' name='start' value='");
+        Esp32BaseWeb::writeHtmlEscaped(startTime);
+        Esp32BaseWeb::sendChunk("'><label>结束</label><input type='datetime-local' name='end' value='");
+        Esp32BaseWeb::writeHtmlEscaped(endTime);
+        Esp32BaseWeb::sendChunk("'>");
+    }
+    Esp32BaseWeb::sendChunk("<label>类型</label><select name='type'>");
     const char* typeValues[] = {"all", "plan", "manual", "guard"};
     const char* typeLabels[] = {"全部类型", "计划执行", "手动执行", "保护触发"};
     for (uint8_t i = 0; i < 4; ++i) {
@@ -317,7 +325,7 @@ void handleRecordsPage() {
     char pagePath[40];
     char pageQuery[120];
     snprintf(pagePath, sizeof(pagePath), "/ui-records?range=%s", range);
-    if (strcmp(range, "custom") == 0) {
+    if (customRange) {
         snprintf(pageQuery, sizeof(pageQuery), "type=%s&start=%s&end=%s", type, startTime, endTime);
     } else {
         snprintf(pageQuery, sizeof(pageQuery), "type=%s", type);
