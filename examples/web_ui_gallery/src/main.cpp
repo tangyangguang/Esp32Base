@@ -147,12 +147,15 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/ui-records?range=30d&type=guard&page=4", nullptr, true, 200, "aria-current='page'>4</span>");
     RUN_SELFTEST("GET", "/ui-records?range=30d&type=guard&page=4", nullptr, true, 200, "filterbar", "每页 20 条");
     RUN_SELFTEST("GET", "/ui-config?saved=1", nullptr, true, 200, "保存成功");
+    RUN_SELFTEST("GET", "/ui-config", nullptr, true, 200, "href='/ui-form'>进入编辑页</a>");
     RUN_SELFTEST("GET", "/ui-config?edit=name", nullptr, true, 200, "行内编辑");
     RUN_SELFTEST("POST", "/ui-config/name", "name=flower", true, 303, "Location: /ui-config?saved=1");
     RUN_SELFTEST("GET", "/ui-action", nullptr, true, 200, "操作命令");
     RUN_SELFTEST("POST", "/ui-action/run", "run=1", true, 303, "Location: /ui-action?done=1");
     RUN_SELFTEST("GET", "/ui-config/flow?saved=1", nullptr, true, 200, "流程向导");
     RUN_SELFTEST("GET", "/ui-status/maintenance", nullptr, true, 200, "诊断维护");
+    RUN_SELFTEST("GET", "/ui-status/maintenance", nullptr, true, 200, "class='uactions readonly'><span class='uvalue'>正常</span>");
+    RUN_SELFTEST("GET", "/ui-status/maintenance", nullptr, true, 200, "class='uactions'><span class='uvalue'>空闲</span><a class='btnlink' href='/esp32base/tools'>查看</a>");
     RUN_SELFTEST("GET", "/ui-status/access", nullptr, false, 200, "访问控制");
     RUN_SELFTEST("GET", "/ui-config/confirm", nullptr, true, 200, "确认保护");
     RUN_SELFTEST("POST", "/ui-confirm/run", "confirm=1", true, 303, "Location: /ui-config/confirm?done=1");
@@ -353,7 +356,7 @@ void handleConfigPage() {
     if (editingName) {
         Esp32BaseWeb::sendChunk("<div class='inlineedit'><b>行内编辑</b><form method='post' action='/ui-config/name' onsubmit='return once(this)'><p><label>名称</label><input name='name' maxlength='12' value='花坛'><small class='muted'>最多 12 个中文字符；只影响页面和记录中的显示名称。</small></p><input type='button' value='取消' onclick=\"location.href='/ui-config'\"><input type='submit' value='保存'></form></div>");
     }
-    Esp32BaseWeb::sendInfoRowCompactLink("默认计划", "包含时间、通道、执行天数和目标量。", "3 条", "/ui-config/flow", "进入编辑页");
+    Esp32BaseWeb::sendInfoRowCompactLink("默认计划", "包含时间、通道、执行天数和目标量。", "3 条", "/ui-form", "进入编辑页");
     Esp32BaseWeb::sendInfoRowCompactLink("恢复出厂", "高风险操作必须进入确认保护页。", nullptr, "/ui-config/confirm", "确认页", Esp32BaseWeb::UI_DANGER);
     Esp32BaseWeb::endPanel();
     Esp32BaseWeb::sendFooter();

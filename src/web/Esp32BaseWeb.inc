@@ -161,7 +161,7 @@ static const char WEB_HEAD[] PROGMEM =
     ".syslinks{min-width:0;flex:1 1 auto;display:flex;flex-wrap:wrap;gap:5px;align-items:center}.syslinks a{display:inline-flex;align-items:center;min-height:32px;font-size:13px;line-height:1.35;padding:0 8px;margin:0;background:#f1f4f3;color:var(--eb-muted);border-radius:6px}.heap{flex:0 0 auto;margin-left:auto;white-space:nowrap;text-align:right;font-size:12px}"
     ".notice{border:1px solid var(--eb-line);background:var(--eb-soft);border-radius:8px;padding:9px 10px;margin:8px 0;color:var(--eb-ink)}.notice.ok{border-color:#bfe0d4;background:var(--eb-ok-soft);color:#185b4e}.notice.warn{border-color:#efcf96;background:var(--eb-warn-soft);color:#7a4608}.notice.danger{border-color:#ebb8b2;background:var(--eb-danger-soft);color:#84251f}.notice.info{border-color:#c6d7ea;background:var(--eb-info-soft);color:var(--eb-info)}"
     ".metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:8px 0}.metric{border:1px solid var(--eb-line-soft);border-radius:7px;background:#fff;padding:8px}.metric b{display:block;font-size:18px}.metric span{display:block;color:var(--eb-muted);font-size:12px}"
-    ".urow{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--eb-line-soft)}.urow:last-child{border-bottom:0}.urow small{display:block;color:var(--eb-muted);margin-top:2px}.urow form{display:inline}.uvalue{font-weight:800;white-space:nowrap}.pagination{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;border-top:1px solid var(--eb-line-soft);padding-top:7px;margin-top:7px;font-size:12px;font-weight:400}.pagerlinks,.pagerform{display:flex;flex-wrap:wrap;align-items:center;gap:4px}.pagerlinks{justify-content:center}.pagerform{justify-content:flex-end}.pagination .muted,.pagination label{display:inline-flex;align-items:center;min-height:26px;margin:0;font-weight:400;line-height:1}.pagination .btnlink,.pagination button,.pagination select,.pagination input{font-size:12px;min-height:26px;border-radius:6px;font-weight:400;line-height:1.1}.pagination .btnlink{padding:0 7px;background:#f3f6f8;color:#526071}.pagination .btnlink.disabled{background:#f5f6f7;color:#9aa4b2}.pagination .current{background:#e6f2ef;color:#14685d;border:1px solid #bddbd3}.pagination button{padding:0 8px;background:#f3f6f8;color:#344054;border:1px solid var(--eb-line)}.pagination button:hover{background:#e9eef2}.pagination select,.pagination input{padding:2px 7px}.pagerform input[type=number]{width:6ch;margin:0}.pagerform select{width:auto;max-width:82px;margin:0}"
+    ".urow{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--eb-line-soft)}.urow:last-child{border-bottom:0}.urow small{display:block;color:var(--eb-muted);margin-top:2px}.urow form{display:inline}.uactions{display:flex;align-items:center;justify-content:flex-end;gap:12px;min-width:0}.uvalue{font-weight:700;white-space:nowrap}.uactions .uvalue{min-width:4em;text-align:right;color:#344054}.uactions.readonly .uvalue{margin-right:64px}.pagination{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;border-top:1px solid var(--eb-line-soft);padding-top:7px;margin-top:7px;font-size:12px;font-weight:400}.pagerlinks,.pagerform{display:flex;flex-wrap:wrap;align-items:center;gap:4px}.pagerlinks{justify-content:center}.pagerform{justify-content:flex-end}.pagination .muted,.pagination label{display:inline-flex;align-items:center;min-height:26px;margin:0;font-weight:400;line-height:1}.pagination .btnlink,.pagination button,.pagination select,.pagination input{font-size:12px;min-height:26px;border-radius:6px;font-weight:400;line-height:1.1}.pagination .btnlink{padding:0 7px;background:#f3f6f8;color:#526071}.pagination .btnlink.disabled{background:#f5f6f7;color:#9aa4b2}.pagination .current{background:#e6f2ef;color:#14685d;border:1px solid #bddbd3}.pagination button{padding:0 8px;background:#f3f6f8;color:#344054;border:1px solid var(--eb-line)}.pagination button:hover{background:#e9eef2}.pagination select,.pagination input{padding:2px 7px}.pagerform input[type=number]{width:6ch;margin:0}.pagerform select{width:auto;max-width:82px;margin:0}"
     ".tag{display:inline-flex;align-items:center;min-height:21px;padding:2px 7px;border-radius:999px;background:#eef2f4;color:#475467;font-size:11px;font-weight:750;white-space:nowrap}.tag.ok{background:var(--eb-ok-soft);color:var(--eb-ok)}.tag.warn{background:var(--eb-warn-soft);color:var(--eb-warn)}.tag.danger{background:var(--eb-danger-soft);color:var(--eb-danger)}.tag.info{background:var(--eb-info-soft);color:var(--eb-info)}"
     ".btnlink{display:inline-flex;align-items:center;justify-content:center;min-height:32px;padding:0 10px;border-radius:7px;background:var(--eb-info-soft);color:var(--eb-info);font-size:13px;font-weight:750;white-space:nowrap}.btnlink.ok{background:var(--eb-ok-soft);color:var(--eb-ok)}.btnlink.warn{background:var(--eb-warn-soft);color:var(--eb-warn)}.btnlink.danger{background:var(--eb-danger-soft);color:var(--eb-danger)}.btnlink.disabled{background:#eef2f4;color:#98a2b3}"
     ".kv{border-collapse:collapse;width:100%;margin:0}.kv th,.kv td{border-bottom:1px solid var(--eb-line);padding:7px 5px;text-align:left;vertical-align:top}.kv tr:last-child th,.kv tr:last-child td{border-bottom:0}.kv th{width:30%;color:var(--eb-muted);font-weight:650}"
@@ -169,7 +169,7 @@ static const char WEB_HEAD[] PROGMEM =
     ".tabs,.quicklinks{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 10px}.tabs a,.quicklinks a{font-size:13px;padding:5px 8px;margin:0;background:#f1f4f3;color:var(--eb-muted);border-radius:6px}.tabs a{display:inline-flex;align-items:center;gap:8px}.tabs a.active{background:var(--eb-primary-soft);color:var(--eb-primary);font-weight:700}.segsize{padding-left:7px;border-left:1px solid var(--eb-line);font-variant-numeric:tabular-nums}"
     ".logmeta{border-collapse:collapse;font-size:13px;line-height:1.45;margin:0}.logmeta th,.logmeta td{padding:2px 10px 2px 0;text-align:left;vertical-align:top}.logmeta th{width:112px;color:var(--eb-muted);font-weight:650}.logmeta td{color:var(--eb-ink)}.statusline{min-height:1.45em}.toolsection{padding:12px;margin:12px 0;background:#fff;border:1px solid var(--eb-line);border-radius:8px}"
     "pre{white-space:pre;overflow-x:auto;word-break:normal;font-size:12px;line-height:1.45;background:#f1f4f3;border:1px solid var(--eb-line);border-radius:7px;padding:9px}.logframe{display:block;width:100%;height:62vh;min-height:320px;border:1px solid var(--eb-line);border-radius:7px;background:#f1f4f3}"
-    "@media(max-width:760px){body{padding:10px}.metrics,.pagination,.urow{grid-template-columns:1fr}.fieldgrid{grid-template-columns:1fr}.field.short,.field.med,.field.long,.field.full{grid-column:auto;max-width:none}.pagerlinks,.pagerform{justify-content:flex-start}.pagination .btnlink,.pagination button,.pagination select,.pagination input{min-height:32px}.heap{margin-left:0;text-align:left;white-space:normal}nav a{font-size:13px;padding:0 9px}.tag{white-space:normal}}"
+    "@media(max-width:760px){body{padding:10px}.metrics,.pagination,.urow{grid-template-columns:1fr}.fieldgrid{grid-template-columns:1fr}.field.short,.field.med,.field.long,.field.full{grid-column:auto;max-width:none}.uactions{justify-content:flex-start}.uactions .uvalue{min-width:0;text-align:left}.uactions.readonly .uvalue{margin-right:0}.pagerlinks,.pagerform{justify-content:flex-start}.pagination .btnlink,.pagination button,.pagination select,.pagination input{min-height:32px}.heap{margin-left:0;text-align:left;white-space:normal}nav a{font-size:13px;padding:0 9px}.tag{white-space:normal}}"
     "</style>"
     "<script>function once(f){if(f.dataset.busy)return false;f.dataset.busy=1;var b=f.querySelector('[type=submit]');if(b)b.disabled=true;return true;}</script>";
 
@@ -3750,7 +3750,7 @@ void Esp32BaseWeb::endMetricGrid() {
     sendChunk("</div>");
 }
 
-static bool sendInfoRowCompactStart(const char* title, const char* help, const char* value) {
+static bool sendInfoRowCompactStart(const char* title, const char* help, const char* value, bool hasAction) {
     sendChunk("<div class='urow'><div><b>");
     sendEscapedHtmlChunk(title ? title : "");
     sendChunk("</b>");
@@ -3759,7 +3759,7 @@ static bool sendInfoRowCompactStart(const char* title, const char* help, const c
         sendEscapedHtmlChunk(help);
         sendChunk("</small>");
     }
-    sendChunk("</div><div>");
+    sendChunk(hasAction ? "</div><div class='uactions'>" : "</div><div class='uactions readonly'>");
     const bool hasValue = value && value[0];
     if (hasValue) {
         sendChunk("<span class='uvalue'>");
@@ -3790,13 +3790,13 @@ static void sendInfoRowActionLink(const char* href, const char* label, Esp32Base
 }
 
 void Esp32BaseWeb::sendInfoRowCompact(const char* title, const char* help, const char* value) {
-    sendInfoRowCompactStart(title, help, value);
+    sendInfoRowCompactStart(title, help, value, false);
     sendInfoRowCompactEnd();
 }
 
 void Esp32BaseWeb::sendInfoRowCompactLink(const char* title, const char* help, const char* value,
                                           const char* href, const char* label, UiTone tone) {
-    const bool hasValue = sendInfoRowCompactStart(title, help, value);
+    const bool hasValue = sendInfoRowCompactStart(title, help, value, true);
     sendInfoRowActionGap(hasValue);
     sendInfoRowActionLink(href, label, tone);
     sendInfoRowCompactEnd();
@@ -3806,7 +3806,7 @@ void Esp32BaseWeb::sendInfoRowCompactForm(const char* title, const char* help, c
                                           const char* action, const char* label,
                                           const char* hiddenName, const char* hiddenValue,
                                           UiTone tone) {
-    const bool hasValue = sendInfoRowCompactStart(title, help, value);
+    const bool hasValue = sendInfoRowCompactStart(title, help, value, true);
     sendInfoRowActionGap(hasValue);
     sendChunk("<form method='post' action='");
     sendEscapedHtmlChunk(action ? action : "");
