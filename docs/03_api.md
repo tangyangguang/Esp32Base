@@ -193,7 +193,7 @@ public:
 };
 ```
 
-`isEnabled()` 表示当前运行期是否还在写文件日志；`mode()` 表示配置模式。FS 满、文件损坏或底层写失败时，FileLog 会进入运行期故障保护：`faulted()` 返回 true，`mode()` 仍保留用户配置，`isEnabled()` 返回 false，避免后续 WARN/ERROR 继续冲击异常文件系统。清理/格式化文件系统或重新保存 FileLog 模式后可重试启用。
+`isEnabled()` 表示当前运行期是否还在写文件日志；`mode()` 表示配置模式。FS 满、文件损坏或底层写失败时，FileLog 会进入运行期故障保护：`faulted()` 返回 true，`mode()` 仍保留用户配置，`isEnabled()` 返回 false，避免后续 WARN/ERROR 继续冲击异常文件系统。Web 显示为 `write fault`，表示新日志写入已停，不表示已有日志一定不可读取。清理/格式化文件系统或重新保存 FileLog 模式后可重试启用。
 
 最小可运行示例：
 
@@ -1021,7 +1021,7 @@ Offset binary API 用于业务二进制定长记录、分页读取和环形覆�
 - `writeFile()` / `writeBytes()` / `appendFile()` / `appendBytes()` 会在写入后 flush 并校验最终大小；非空写入还会确认写入后文件末端可读。`writeBytesAt()` 只覆盖已存在文件中的现有字节，不隐式创建文件、不扩展文件、不填洞；FS 未 ready、path 非绝对路径、文件不存在、data 为空但 len 非 0、`offset + len > fileSize`、底层写失败、写后大小不符或写入范围不可读时返回 false。
 - 需要固定容量环形文件时，应用可先用 `writeBytes()` 或分块 `appendBytes()` 初始化文件，再用 `writeBytesAt()` 覆盖记录槽位。
 - 业务代码必须检查所有 FS API 返回值；如果连续返回 false，不能继续假设记录已写入，应进入降级、清理或提示维护流程。
-- FileLog 会把追加、清空和轮转截断视为可能较慢的 FS 操作处理；即使 FS 已满或损坏，系统级 WARN 日志写入失败也不应导致 task WDT 重启。检测到 FileLog 写入故障后，会先在运行时停止继续写 FileLog，避免后续 WARN 重复冲击异常文件系统；Web Status/Logs/System 页显示为 `fault` 而不是 `disabled`，表示配置仍开启但运行保护停写。Web 清理、格式化或重新保存模式后可重新启用模式。
+- FileLog 会把追加、清空和轮转截断视为可能较慢的 FS 操作处理；即使 FS 已满或损坏，系统级 WARN 日志写入失败也不应导致 task WDT 重启。检测到 FileLog 写入故障后，会先在运行时停止继续写 FileLog，避免后续 WARN 重复冲击异常文件系统；Web Status/Logs/System 页显示为 `write fault` 而不是 `disabled`，表示配置仍开启但运行保护停写。Web 清理、格式化或重新保存模式后可重新启用模式。
 
 Health 仅负责周期性采样、loop 周期统计和发布 `health.tick` 事件。heap、reset reason、WiFi state、FS state 等详情通过对应模块查询，Health 不重复包装所有字段。
 

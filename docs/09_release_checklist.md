@@ -139,7 +139,7 @@
 - INFO 使用 `1KB / 2s` 缓存。
 - Web System 页只能设置 Off/ERROR/WARN/INFO，非法 POST 值必须失败。
 - Web System 页切换 FileLog 模式时，WARN 审计日志必须包含上一次模式和新模式。
-- FileLog 配置模式开启但运行期因 FS 写入故障停写时，Status、Logs、System 页必须显示 `fault`，不能显示成 `disabled`。
+- FileLog 配置模式开启但运行期因 FS 写入故障停写时，Status、Logs、System 页必须显示 `write fault`，并说明已有日志可能仍可读取，不能显示成 `disabled`。
 - FileLog OFF 后 Logs 页面仍能查看已有历史 segment。
 - `setSerialLevel(NONE)` 后 Serial 不输出，但 FileLog 仍按当前模式写入。
 - `setRuntimeLevel(NONE)` 后 Serial 和 FileLog 都停止。

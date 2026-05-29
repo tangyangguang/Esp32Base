@@ -2101,7 +2101,7 @@ const char* fileLogModeName(Esp32BaseFileLog::Mode mode) {
 }
 
 const char* fileLogRuntimeStateName() {
-    return Esp32BaseFileLog::faulted() ? "fault" : (Esp32BaseFileLog::isEnabled() ? "enabled" : "disabled");
+    return Esp32BaseFileLog::faulted() ? "write fault" : (Esp32BaseFileLog::isEnabled() ? "enabled" : "disabled");
 }
 
 Esp32BaseWeb::UiTone fileLogRuntimeStateTone() {
@@ -2111,6 +2111,12 @@ Esp32BaseWeb::UiTone fileLogRuntimeStateTone() {
 
 bool fileLogHasRuntimeDetails() {
     return Esp32BaseFileLog::faulted() || Esp32BaseFileLog::isEnabled() || Esp32BaseFileLog::mode() != Esp32BaseFileLog::OFF;
+}
+
+void sendFileLogWriteFaultHint() {
+    if (Esp32BaseFileLog::faulted()) {
+        sendChunk("<p class='muted'>Existing log files may still be readable; new FileLog writes are stopped after a FS write failure.</p>");
+    }
 }
 #endif
 
@@ -3065,7 +3071,9 @@ void handleToolsPage() {
     sendInfoRow("Current mode", Esp32BaseFileLog::modeName());
     sendInfoRow("Runtime state", fileLogRuntimeStateName());
     sendInfoRow("Path", Esp32BaseFileLog::path());
-    sendChunk("</table></div><form method='post' action='/esp32base/tools/filelog' onsubmit=\"return once(this)\"><div class='radioopts'>");
+    sendChunk("</table></div>");
+    sendFileLogWriteFaultHint();
+    sendChunk("<form method='post' action='/esp32base/tools/filelog' onsubmit=\"return once(this)\"><div class='radioopts'>");
     sendFileLogModeOption("off", "Off", Esp32BaseFileLog::OFF);
 #if ESP32BASE_LOG_LEVEL >= ESP32BASE_LOG_ERROR
     sendFileLogModeOption("error", "ERROR", Esp32BaseFileLog::ERROR);
@@ -3966,6 +3974,7 @@ void handleLogsPage() {
     }
     const uint8_t selectedSegment = selectedLogSegment();
     sendChunk("</td></tr></table></div>");
+    sendFileLogWriteFaultHint();
     sendLogSegmentTabs(selectedSegment);
     snprintf(line, sizeof(line), "<p><a href='/esp32base/logs/raw?segment=%u'>Open raw log</a></p><iframe class='logframe' src='/esp32base/logs/raw?segment=%u'></iframe>",
              static_cast<unsigned>(selectedSegment),

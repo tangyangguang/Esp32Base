@@ -61,8 +61,13 @@ checks = [
     ),
     (
         "src/web/Esp32BaseWeb.inc",
-        'Esp32BaseFileLog::faulted() ? "fault"',
-        "Status/Logs pages must distinguish runtime fault from disabled mode",
+        'Esp32BaseFileLog::faulted() ? "write fault"',
+        "Status/Logs pages must distinguish runtime write fault from disabled mode",
+    ),
+    (
+        "src/web/Esp32BaseWeb.inc",
+        "Existing log files may still be readable; new FileLog writes are stopped after a FS write failure.",
+        "Logs/System pages must explain that write fault does not mean old logs are unreadable",
     ),
     (
         "src/web/Esp32BaseWeb.inc",
