@@ -170,7 +170,7 @@ static const char WEB_CSS[] PROGMEM =
     ".statusgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;align-items:start}.statusgrid .panel{margin:0}.appsection{padding:10px 12px}.appsection .quicklinks{margin-bottom:0}"
     ".urow{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--eb-line-soft)}.urow:last-child{border-bottom:0}.urow small{display:block;color:var(--eb-muted);margin-top:2px}.urow form{display:inline}.uactions{display:grid;grid-template-columns:4em 96px;gap:16px;align-items:center;justify-content:end;min-width:0}.uvalue{font-weight:700;white-space:nowrap}.uactions .uvalue{min-width:0;text-align:right;color:#344054}.uactions .btnlink,.uactions input[type=submit]{width:96px}.uactions form{display:block;width:96px;margin:0}.uactions form input[type=submit]{width:100%;margin:0}.uactions.readonly{grid-template-columns:4em 96px}.pagination{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;border-top:1px solid var(--eb-line-soft);padding-top:7px;margin-top:7px;font-size:12px;font-weight:400}.pagerlinks,.pagerform{display:flex;flex-wrap:wrap;align-items:center;gap:4px}.pagerlinks{justify-content:center}.pagerform{justify-content:flex-end}.pagination .muted,.pagination label{display:inline-flex;align-items:center;min-height:26px;margin:0;font-weight:400;line-height:1}.pagination .btnlink,.pagination button,.pagination select,.pagination input{font-size:12px;min-height:26px;border-radius:6px;font-weight:400;line-height:1.1}.pagination .btnlink{padding:0 7px;background:#f3f6f8;color:#526071}.pagination .btnlink.disabled{background:#f5f6f7;color:#9aa4b2}.pagination .current{background:#e6f2ef;color:#14685d;border:1px solid #bddbd3}.pagination button{padding:0 8px;background:#f3f6f8;color:#344054;border:1px solid var(--eb-line)}.pagination button:hover{background:#e9eef2}.pagination select,.pagination input{padding:2px 7px}.pagerform input[type=number]{width:6ch;margin:0}.pagerform select{width:auto;max-width:82px;margin:0}"
     ".tag{display:inline-flex;align-items:center;min-height:21px;padding:2px 7px;border-radius:999px;background:#eef2f4;color:#475467;font-size:11px;font-weight:750;white-space:nowrap}.tag.ok{background:var(--eb-ok-soft);color:var(--eb-ok)}.tag.warn{background:var(--eb-warn-soft);color:var(--eb-warn)}.tag.danger{background:var(--eb-danger-soft);color:var(--eb-danger)}.tag.info{background:var(--eb-info-soft);color:var(--eb-info)}.submetrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(86px,1fr));gap:4px 12px;margin:0}.tag+.submetrics{margin-top:5px}.submetrics span{min-width:0}.submetrics b{display:block;color:var(--eb-muted);font-size:11px;font-weight:650;line-height:1.2}.submetrics em{display:block;font-style:normal;overflow-wrap:anywhere}.fsummary{border-collapse:collapse;width:100%;min-width:560px;font-size:13px}.fsummary th,.fsummary td{border-bottom:1px solid var(--eb-line);padding:7px 8px;text-align:left;vertical-align:top}.fsummary tr:last-child th,.fsummary tr:last-child td{border-bottom:0}.fsummary th{width:150px;color:var(--eb-muted);font-weight:650}.fsummary b{display:block;color:var(--eb-muted);font-size:11px;font-weight:650;line-height:1.2}.fsummary em{display:block;font-style:normal;overflow-wrap:anywhere}.fsummary .tag{margin-top:-1px}"
-    ".btnlink{display:inline-flex;align-items:center;justify-content:center;min-height:32px;padding:0 10px;border-radius:7px;background:var(--eb-info-soft);color:var(--eb-info);font-size:13px;font-weight:750;white-space:nowrap}.btnlink.ok{background:var(--eb-ok-soft);color:var(--eb-ok)}.btnlink.warn{background:var(--eb-warn-soft);color:var(--eb-warn)}.btnlink.danger{background:var(--eb-danger-soft);color:var(--eb-danger)}.btnlink.disabled{background:#eef2f4;color:#98a2b3}"
+    ".btnlink{display:inline-flex;align-items:center;justify-content:center;min-height:32px;padding:0 10px;border-radius:7px;background:var(--eb-info-soft);color:var(--eb-info);font-size:13px;font-weight:750;white-space:nowrap}.btnlink.ok{background:var(--eb-ok-soft);color:var(--eb-ok)}.btnlink.warn{background:var(--eb-warn-soft);color:var(--eb-warn)}.btnlink.danger{background:var(--eb-danger-soft);color:var(--eb-danger)}.btnlink.disabled{background:#eef2f4;color:#98a2b3}.fsdelete{min-height:26px;padding:0 8px;border-radius:6px;font-size:12px}.part form{margin:0}"
     ".kv{border-collapse:collapse;width:100%;margin:0}.kv th,.kv td{border-bottom:1px solid var(--eb-line);padding:7px 5px;text-align:left;vertical-align:top}.kv tr:last-child th,.kv tr:last-child td{border-bottom:0}.kv th{width:30%;color:var(--eb-muted);font-weight:650}.statuspage{padding:10px 12px}.statuspage h2,.logpanel h2{margin-bottom:6px}.statuspage .kv{font-size:13px}.statuspage .kv th{width:176px;max-width:38%}"
     ".part{border-collapse:collapse;width:100%;min-width:640px;font-size:13px}.part th,.part td{border-bottom:1px solid var(--eb-line);padding:6px 5px;text-align:left;vertical-align:top}.part th{color:var(--eb-muted);font-weight:650}.part tr:last-child td{border-bottom:0}"
     ".tabs,.quicklinks{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 10px}.tabs a,.quicklinks a{font-size:13px;padding:5px 8px;margin:0;background:#f1f4f3;color:var(--eb-muted);border-radius:6px}.tabs a{display:inline-flex;align-items:center;gap:8px}.tabs a.active{background:var(--eb-primary-soft);color:var(--eb-primary);font-weight:700}.segsize{padding-left:7px;border-left:1px solid var(--eb-line);font-variant-numeric:tabular-nums}"
@@ -937,6 +937,7 @@ struct FsWalkFrame {
     const char* dir;
     uint8_t depth;
     bool emitRows;
+    bool manage;
     uint16_t emitLimit;
     uint16_t* emittedRows;
 };
@@ -990,7 +991,13 @@ void fsAddTopFile(FsScan& scan, const char* path, uint64_t size) {
     strlcpy(scan.top[pos].path, path && path[0] ? path : "-", sizeof(scan.top[pos].path));
 }
 
-void sendFsTreeRow(const char* path, size_t size, bool isDir) {
+void sendFsDeleteForm(const char* path) {
+    sendChunk("<form method='post' action='/esp32base/fs/delete' onsubmit=\"return confirm('Delete this file? This cannot be undone.')&&once(this)\">");
+    sendHiddenInput("path", path && path[0] ? path : "");
+    sendChunk("<input class='danger fsdelete' type='submit' value='Delete'></form>");
+}
+
+void sendFsTreeRow(const char* path, size_t size, bool isDir, bool manage) {
     char sizeBuf[48];
     sendChunk("<tr><td>");
     sendEscapedHtmlChunk(path && path[0] ? path : "-");
@@ -1003,13 +1010,21 @@ void sendFsTreeRow(const char* path, size_t size, bool isDir) {
         formatReadableBytes(size, sizeBuf, sizeof(sizeBuf));
         sendEscapedHtmlChunk(sizeBuf);
     }
+    if (manage) {
+        sendChunk("</td><td>");
+        if (isDir) {
+            sendChunk("-");
+        } else {
+            sendFsDeleteForm(path);
+        }
+    }
     sendChunk("</td></tr>");
 }
 
 void fsWalkCallback(const char* name, size_t size, bool isDir, void* user);
 
-bool fsWalkDir(FsScan& scan, const char* dir, uint8_t depth, bool emitRows, uint16_t emitLimit, uint16_t* emittedRows) {
-    FsWalkFrame frame = {&scan, dir, depth, emitRows, emitLimit, emittedRows};
+bool fsWalkDir(FsScan& scan, const char* dir, uint8_t depth, bool emitRows, bool manage, uint16_t emitLimit, uint16_t* emittedRows) {
+    FsWalkFrame frame = {&scan, dir, depth, emitRows, manage, emitLimit, emittedRows};
     return Esp32BaseFs::listDir(dir, fsWalkCallback, &frame);
 }
 
@@ -1029,18 +1044,39 @@ void fsWalkCallback(const char* name, size_t size, bool isDir, void* user) {
         fsAddTopFile(*frame->scan, path, size);
     }
     if (frame->emitRows && frame->emittedRows && *frame->emittedRows < frame->emitLimit) {
-        sendFsTreeRow(path, size, isDir);
+        sendFsTreeRow(path, size, isDir, frame->manage);
         (*frame->emittedRows)++;
     }
     fsScanYield();
     if (isDir && frame->depth + 1 < FS_SCAN_MAX_DEPTH && (!frame->emitRows || !frame->emittedRows || *frame->emittedRows < frame->emitLimit)) {
-        fsWalkDir(*frame->scan, path, static_cast<uint8_t>(frame->depth + 1), frame->emitRows, frame->emitLimit, frame->emittedRows);
+        fsWalkDir(*frame->scan, path, static_cast<uint8_t>(frame->depth + 1), frame->emitRows, frame->manage, frame->emitLimit, frame->emittedRows);
     }
 }
 
 bool scanFs(FsScan& scan) {
     memset(&scan, 0, sizeof(scan));
-    return Esp32BaseFs::isReady() && fsWalkDir(scan, "/", 0, false, 0, nullptr);
+    return Esp32BaseFs::isReady() && fsWalkDir(scan, "/", 0, false, false, 0, nullptr);
+}
+
+bool fsManageMode() {
+    return g_server.hasArg("manage") && g_server.arg("manage") != "0";
+}
+
+bool fsInternalUsageHigh(const FsScan& scan) {
+    const uint64_t used = Esp32BaseFs::usedBytes();
+    if (used <= scan.listedSize) {
+        return false;
+    }
+    const uint64_t gap = used - scan.listedSize;
+    return gap > 131072ULL && gap > scan.listedSize;
+}
+
+bool validFsDeletePath(const char* path) {
+    return path && path[0] == '/' && path[1] != '\0' && strlen(path) < 96 &&
+           !strstr(path, "..") && !strstr(path, "//");
+}
+
+void fsNoopListCallback(const char*, size_t, bool, void*) {
 }
 
 void sendFsInventoryValue(const FsScan& scan, uint64_t fsUsed) {
@@ -3575,8 +3611,14 @@ void handleFsPage() {
     if (!ensureAuth()) {
         return;
     }
+    const bool manage = fsManageMode();
     Esp32BaseWeb::sendHeader("File system");
     Esp32BaseWeb::sendPageTitle("File system", "Read-only LittleFS inventory and storage usage.");
+    if (g_server.hasArg("deleted")) {
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "File deleted");
+    } else if (g_server.hasArg("error")) {
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_DANGER, "File action failed", g_server.arg("error").c_str());
+    }
     if (!Esp32BaseFs::isReady()) {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_WARN, "LittleFS unavailable");
         Esp32BaseWeb::sendFooter();
@@ -3587,6 +3629,15 @@ void handleFsPage() {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_WARN, "LittleFS scan failed");
         Esp32BaseWeb::sendFooter();
         return;
+    }
+    if (fsInternalUsageHigh(scan)) {
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_WARN, "Internal FS usage is high", "Visible files are much smaller than FS used. Delete may not fully recover space; back up needed files and format LittleFS if free space stays low.");
+    }
+    if (manage) {
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_WARN, "File management mode", "Only single-file delete is available. Directories, batch actions, download and edit are intentionally not provided.");
+        sendChunk("<p class='statusline'><a class='btnlink secondary' href='/esp32base/fs'>View only</a></p>");
+    } else {
+        sendChunk("<p class='statusline'><a class='btnlink warn' href='/esp32base/fs?manage=1'>Manage files</a></p>");
     }
     sendChunk("<section class='panel statuspage'><h2>Summary</h2><div class='tablewrap'>");
     sendFsSummaryTable(scan);
@@ -3609,13 +3660,17 @@ void handleFsPage() {
     }
     sendChunk("</table></div></section>");
 
-    sendChunk("<section class='panel statuspage'><h2>File tree</h2><div class='tablewrap'><table class='part'><tr><th>Path</th><th>Type</th><th>Size</th></tr>");
+    sendChunk("<section class='panel statuspage'><h2>File tree</h2><div class='tablewrap'><table class='part'><tr><th>Path</th><th>Type</th><th>Size</th>");
+    if (manage) {
+        sendChunk("<th>Action</th>");
+    }
+    sendChunk("</tr>");
     FsScan treeScan;
     memset(&treeScan, 0, sizeof(treeScan));
     uint16_t emittedRows = 0;
-    fsWalkDir(treeScan, "/", 0, true, FS_TREE_LIST_LIMIT, &emittedRows);
+    fsWalkDir(treeScan, "/", 0, true, manage, FS_TREE_LIST_LIMIT, &emittedRows);
     if (emittedRows == 0) {
-        sendChunk("<tr><td colspan='3'>No files</td></tr>");
+        sendChunk(manage ? "<tr><td colspan='4'>No files</td></tr>" : "<tr><td colspan='3'>No files</td></tr>");
     }
     sendChunk("</table></div>");
     if (scan.entries > FS_TREE_LIST_LIMIT) {
@@ -3623,6 +3678,40 @@ void handleFsPage() {
     }
     sendChunk("</section>");
     Esp32BaseWeb::sendFooter();
+}
+
+void handleFsDeletePost() {
+    markRequest();
+    if (!ensurePostAllowed("fs_delete")) {
+        return;
+    }
+    if (!Esp32BaseFs::isReady()) {
+        redirectSeeOther("/esp32base/fs?manage=1&error=fs_unavailable");
+        return;
+    }
+    char path[96];
+    strlcpy(path, g_server.hasArg("path") ? g_server.arg("path").c_str() : "", sizeof(path));
+    if (!validFsDeletePath(path)) {
+        ESP32BASE_LOG_W("web", "fs_delete_rejected reason=invalid_path");
+        redirectSeeOther("/esp32base/fs?manage=1&error=delete_invalid");
+        return;
+    }
+    if (Esp32BaseFs::listDir(path, fsNoopListCallback, nullptr)) {
+        ESP32BASE_LOG_W("web", "fs_delete_rejected path=%s reason=directory", path);
+        redirectSeeOther("/esp32base/fs?manage=1&error=delete_directory");
+        return;
+    }
+    if (Esp32BaseFs::fileSize(path) < 0) {
+        ESP32BASE_LOG_W("web", "fs_delete_rejected path=%s reason=missing", path);
+        redirectSeeOther("/esp32base/fs?manage=1&error=delete_missing");
+        return;
+    }
+#if ESP32BASE_ENABLE_FILELOG
+    Esp32BaseFileLog::flush();
+#endif
+    const bool ok = Esp32BaseFs::removeFile(path);
+    ESP32BASE_LOG_W("web", "fs_delete_requested path=%s result=%s", path, ok ? "success" : "failed");
+    redirectSeeOther(ok ? "/esp32base/fs?manage=1&deleted=1" : "/esp32base/fs?manage=1&error=delete_failed");
 }
 #endif
 
@@ -3879,6 +3968,7 @@ bool Esp32BaseWeb::begin() {
     g_server.on("/esp32base/logs/clear", HTTP_POST, handleLogsClear);
 #if ESP32BASE_ENABLE_FS
     g_server.on("/esp32base/fs", HTTP_GET, handleFsPage);
+    g_server.on("/esp32base/fs/delete", HTTP_POST, handleFsDeletePost);
 #endif
     g_server.on("/esp32base/auth", HTTP_GET, handleAuthPage);
     g_server.on("/esp32base/auth", HTTP_POST, handleAuthSubmit);

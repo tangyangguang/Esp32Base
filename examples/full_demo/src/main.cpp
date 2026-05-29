@@ -278,6 +278,9 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/fs", nullptr, true, 200, "Files</b>");
     RUN_SELFTEST("GET", "/esp32base/fs", nullptr, true, 200, "Dirs</b>");
     RUN_SELFTEST("GET", "/esp32base/fs", nullptr, true, 200, "Listed size</b>");
+    RUN_SELFTEST("GET", "/esp32base/fs?manage=1", nullptr, true, 200, "File management mode");
+    RUN_SELFTEST("GET", "/esp32base/fs?manage=1", nullptr, true, 200, "<th>Action</th>");
+    RUN_SELFTEST("POST", "/esp32base/fs/delete", "path=%2Fmissing.tmp", true, 303, "Location: /esp32base/fs?manage=1&error=delete_missing");
     RUN_SELFTEST("GET", "/esp32base/auth", nullptr, true, 200, "<title>Auth</title>");
     RUN_SELFTEST("GET", "/esp32base/auth", nullptr, true, 200, "<section class='panel formpanel authpanel'><h2>Credentials</h2><form class='editform'");
     RUN_SELFTEST("GET", "/esp32base/auth", nullptr, true, 200, "type='password'");
