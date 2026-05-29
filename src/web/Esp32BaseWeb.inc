@@ -1136,6 +1136,24 @@ void fsDownloadFilename(const char* path, char* out, size_t len) {
 void fsNoopListCallback(const char*, size_t, bool, void*) {
 }
 
+#if ESP32BASE_ENABLE_FILELOG
+bool fileLogOwnsPath(const char* path) {
+    if (!path || !path[0]) {
+        return false;
+    }
+    if (strcmp(path, Esp32BaseFileLog::path()) == 0) {
+        return true;
+    }
+    char segment[64];
+    for (uint8_t i = 0; i < Esp32BaseFileLog::rotateFiles(); ++i) {
+        if (Esp32BaseFileLog::segmentPath(i, segment, sizeof(segment)) && strcmp(path, segment) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+#endif
+
 void sendFsInventoryValue(const FsScan& scan, uint64_t fsUsed) {
     char files[16];
     char dirs[16];
@@ -2106,16 +2124,28 @@ const char* fileLogRuntimeStateName() {
 
 Esp32BaseWeb::UiTone fileLogRuntimeStateTone() {
     return Esp32BaseFileLog::faulted() ? Esp32BaseWeb::UI_WARN :
-           (Esp32BaseFileLog::isEnabled() ? Esp32BaseWeb::UI_OK : Esp32BaseWeb::UI_NEUTRAL);
+           (Esp32BaseFileLog::isEnabled() ? Esp32BaseWeb::UI_OK : Esp32BaseWeb::UI_INFO);
 }
 
 bool fileLogHasRuntimeDetails() {
     return Esp32BaseFileLog::faulted() || Esp32BaseFileLog::isEnabled() || Esp32BaseFileLog::mode() != Esp32BaseFileLog::OFF;
 }
 
-void sendFileLogWriteFaultHint() {
+void sendFileLogRuntimeStateTag() {
+    sendStatusTag(fileLogRuntimeStateTone(), fileLogRuntimeStateName());
+}
+
+void sendFileLogRuntimeStateRow(const char* label) {
+    sendInfoRowStart(label);
+    sendFileLogRuntimeStateTag();
+    sendInfoRowEnd();
+}
+
+void sendFileLogRuntimeNotice() {
     if (Esp32BaseFileLog::faulted()) {
-        sendChunk("<p class='muted'>Existing log files may still be readable; new FileLog writes are stopped after a FS write failure.</p>");
+        sendChunk("<p class='notice warn'>New FileLog writes are stopped after a FS write failure. Existing log files may still be readable. Clear space or save the FileLog mode again after maintenance.</p>");
+    } else if (Esp32BaseFileLog::mode() == Esp32BaseFileLog::OFF) {
+        sendChunk("<p class='notice info'>FileLog mode is OFF. Existing log files are historical; new logs are not written.</p>");
     }
 }
 #endif
@@ -3069,10 +3099,10 @@ void handleToolsPage() {
 #if ESP32BASE_ENABLE_FILELOG
     sendChunk("<section class='panel actionpanel'><h2>File log</h2><div class='tablewrap'><table class='kv'>");
     sendInfoRow("Current mode", Esp32BaseFileLog::modeName());
-    sendInfoRow("Runtime state", fileLogRuntimeStateName());
+    sendFileLogRuntimeStateRow("Runtime state");
     sendInfoRow("Path", Esp32BaseFileLog::path());
     sendChunk("</table></div>");
-    sendFileLogWriteFaultHint();
+    sendFileLogRuntimeNotice();
     sendChunk("<form method='post' action='/esp32base/tools/filelog' onsubmit=\"return once(this)\"><div class='radioopts'>");
     sendFileLogModeOption("off", "Off", Esp32BaseFileLog::OFF);
 #if ESP32BASE_LOG_LEVEL >= ESP32BASE_LOG_ERROR
@@ -3608,7 +3638,7 @@ void handleRoot() {
 #endif
 #if ESP32BASE_ENABLE_FILELOG
     sendInfoRowStart("File log");
-    sendStatusTag(fileLogRuntimeStateTone(), fileLogRuntimeStateName());
+    sendFileLogRuntimeStateTag();
     if (fileLogHasRuntimeDetails()) {
         char sizeBuf[48];
         formatReadableBytes(Esp32BaseFileLog::size(), sizeBuf, sizeof(sizeBuf));
@@ -3694,9 +3724,13 @@ void handleFsPage() {
     Esp32BaseWeb::sendHeader("File system");
     Esp32BaseWeb::sendPageTitle("File system", "Read-only LittleFS inventory and storage usage.");
     if (g_server.hasArg("deleted")) {
-        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "File deleted");
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "File deleted or cleared");
     } else if (g_server.hasArg("error")) {
-        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_DANGER, "File action failed", g_server.arg("error").c_str());
+        const String error = g_server.arg("error");
+        const char* message = error == "delete_failed" ?
+            "LittleFS could not remove or clear the file. For FileLog files, use Clear logs or format LittleFS if storage remains full." :
+            error.c_str();
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_DANGER, "File action failed", message);
     }
     if (!Esp32BaseFs::isReady()) {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_WARN, "LittleFS unavailable");
@@ -3857,10 +3891,24 @@ void handleFsDeletePost() {
         return;
     }
 #if ESP32BASE_ENABLE_FILELOG
-    Esp32BaseFileLog::flush();
+    const bool targetIsFileLog = fileLogOwnsPath(path);
+    const bool retryFileLogAfterDelete = Esp32BaseFileLog::faulted();
+    if (targetIsFileLog && Esp32BaseFileLog::isEnabled()) {
+        ESP32BASE_LOG_W("web", "fs_delete_requested path=%s target=filelog", path);
+        Esp32BaseFileLog::flush();
+    }
 #endif
     const bool ok = Esp32BaseFs::removeFile(path);
+#if ESP32BASE_ENABLE_FILELOG
+    if (!targetIsFileLog) {
+        ESP32BASE_LOG_W("web", "fs_delete_requested path=%s result=%s", path, ok ? "success" : "failed");
+    }
+    if (ok && (targetIsFileLog || retryFileLogAfterDelete)) {
+        Esp32BaseFileLog::begin();
+    }
+#else
     ESP32BASE_LOG_W("web", "fs_delete_requested path=%s result=%s", path, ok ? "success" : "failed");
+#endif
     redirectSeeOther(ok ? "/esp32base/fs?manage=1&deleted=1" : "/esp32base/fs?manage=1&error=delete_failed");
 }
 #endif
@@ -3953,9 +4001,9 @@ void handleLogsPage() {
     formatReadableBytes(Esp32BaseFileLog::bufferUsed(), bufferUsed, sizeof(bufferUsed));
     formatReadableBytes(Esp32BaseFileLog::bufferSize(), bufferTotal, sizeof(bufferTotal));
     char line[320];
-    sendChunk("<section class='panel logpanel'><div class='tablewrap'><table class='logmeta'><tr><th>File log</th><td><b>");
-    sendEscapedHtmlChunk(fileLogRuntimeStateName());
-    sendChunk("</b></td></tr><tr><th>Path</th><td>");
+    sendChunk("<section class='panel logpanel'><div class='tablewrap'><table class='logmeta'><tr><th>File log</th><td>");
+    sendFileLogRuntimeStateTag();
+    sendChunk("</td></tr><tr><th>Path</th><td>");
     sendEscapedHtmlChunk(Esp32BaseFileLog::path());
     snprintf(line, sizeof(line), "</td></tr><tr><th>Rotation files</th><td>%u</td></tr><tr><th>Mode</th><td>%s</td></tr><tr><th>Buffer</th><td>%s / %s</td></tr><tr><th>Flush interval</th><td>%lu ms</td></tr><tr><th>Max per file</th><td>%s</td></tr><tr><th>Max total</th><td>%s</td></tr><tr><th>Segments</th><td>",
              static_cast<unsigned>(Esp32BaseFileLog::rotateFiles()),
@@ -3974,7 +4022,7 @@ void handleLogsPage() {
     }
     const uint8_t selectedSegment = selectedLogSegment();
     sendChunk("</td></tr></table></div>");
-    sendFileLogWriteFaultHint();
+    sendFileLogRuntimeNotice();
     sendLogSegmentTabs(selectedSegment);
     snprintf(line, sizeof(line), "<p><a href='/esp32base/logs/raw?segment=%u'>Open raw log</a></p><iframe class='logframe' src='/esp32base/logs/raw?segment=%u'></iframe>",
              static_cast<unsigned>(selectedSegment),

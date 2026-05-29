@@ -198,7 +198,23 @@ bool Esp32BaseFs::writeBytesAt(const char* path, uint32_t offset, const uint8_t*
 }
 
 bool Esp32BaseFs::removeFile(const char* path) {
-    return g_fsReady && validPath(path) && LittleFS.remove(path);
+    if (!g_fsReady || !validPath(path) || !LittleFS.exists(path)) {
+        return false;
+    }
+    if (LittleFS.remove(path)) {
+        return true;
+    }
+    File file = LittleFS.open(path, "w");
+    if (!file) {
+        return false;
+    }
+    file.flush();
+    file.close();
+    if (LittleFS.remove(path)) {
+        return true;
+    }
+    const int64_t remainingSize = fileSize(path);
+    return remainingSize == 0;
 }
 
 bool Esp32BaseFs::rename(const char* from, const char* to) {

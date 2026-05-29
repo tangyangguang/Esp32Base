@@ -66,12 +66,17 @@ checks = [
     ),
     (
         "src/web/Esp32BaseWeb.inc",
-        "Existing log files may still be readable; new FileLog writes are stopped after a FS write failure.",
+        "New FileLog writes are stopped after a FS write failure.",
         "Logs/System pages must explain that write fault does not mean old logs are unreadable",
     ),
     (
         "src/web/Esp32BaseWeb.inc",
-        'sendInfoRow("Runtime state", fileLogRuntimeStateName());',
+        "FileLog mode is OFF. Existing log files are historical; new logs are not written.",
+        "Logs/System pages must make disabled FileLog state visible",
+    ),
+    (
+        "src/web/Esp32BaseWeb.inc",
+        'sendFileLogRuntimeStateRow("Runtime state");',
         "Tools page must expose FileLog runtime state",
     ),
     (

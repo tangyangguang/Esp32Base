@@ -23,6 +23,8 @@ checks = [
     ("file.flush();", "write API must flush before post-write verification"),
     ("verifyFileSize(path, expectedSize)", "write API must verify final file size"),
     ("verifyReadableByte(path, verifyOffset)", "write API must verify written range is readable"),
+    ("File file = LittleFS.open(path, \"w\");", "remove API must try truncate fallback after LittleFS remove fails"),
+    ("return remainingSize == 0;", "remove API must treat successful zeroing as maintenance recovery"),
 ]
 
 errors = []
@@ -37,6 +39,8 @@ for needle, message in (
     ("void sendFsUnreadableActions(", "FS management must keep delete available for unreadable files"),
     ("sendFsUnreadableActions(path, manage);", "FS tree must render unreadable delete actions in manage mode"),
     ("sendFsDeleteForm(path);", "FS unreadable action must reuse the normal delete form"),
+    ("File deleted or cleared", "FS page success notice must not claim every recovery was a hard delete"),
+    ("Esp32BaseFileLog::begin();", "FS delete should let FileLog retry after maintenance frees space"),
 ):
     if needle not in web:
         errors.append(f"src/web/Esp32BaseWeb.inc: {message}")

@@ -59,7 +59,7 @@ Web/API 保存的 hostname 存储在 `eb_sys.hostname`，重启后覆盖构建�
 
 Web 应用路由默认容量统一为 24。该上限只覆盖业务 `addRoute()` / `addPage()` / `addApi()` 注册的静态路由表；内置 Web 路由不占用此表。route 较少且需要节省静态 RAM 的应用，可在完成 route 数量核算后通过构建参数显式调小 `ESP32BASE_WEB_MAX_ROUTES`。
 
-启用 FS 的 profile 会默认启用 Runtime 文件日志：`/logs/eb_app.log`，默认 `4 × 32KB`，模式 WARN。运行时可配置为 OFF、ERROR、WARN、INFO；如果 FS 满或文件损坏导致写入失败，Web 会显示 FileLog 运行态为 `write fault`，表示配置仍开启、已有日志可能仍可读取，但新日志写入已被保护停写。示例通过构建参数把默认模式改为 INFO：
+启用 FS 的 profile 会默认启用 Runtime 文件日志：`/logs/eb_app.log`，默认 `4 × 32KB`，模式 WARN。运行时可配置为 OFF、ERROR、WARN、INFO；如果 FS 满或文件损坏导致写入失败，Web 会显示 FileLog 运行态为 `write fault`，表示配置仍开启、已有日志可能仍可读取，但新日志写入已被保护停写。`disabled` 表示模式为 OFF，新日志不会写入。示例通过构建参数把默认模式改为 INFO：
 
 ```ini
 build_flags =

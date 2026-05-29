@@ -140,6 +140,7 @@
 - Web System 页只能设置 Off/ERROR/WARN/INFO，非法 POST 值必须失败。
 - Web System 页切换 FileLog 模式时，WARN 审计日志必须包含上一次模式和新模式。
 - FileLog 配置模式开启但运行期因 FS 写入故障停写时，Status、Logs、System 页必须显示 `write fault`，并说明已有日志可能仍可读取，不能显示成 `disabled`。
+- FileLog 模式为 OFF 时，Logs 和 System 页必须醒目显示 `disabled`，并说明新日志不会写入。
 - FileLog OFF 后 Logs 页面仍能查看已有历史 segment。
 - `setSerialLevel(NONE)` 后 Serial 不输出，但 FileLog 仍按当前模式写入。
 - `setRuntimeLevel(NONE)` 后 Serial 和 FileLog 都停止。
@@ -163,6 +164,8 @@
 - `writeBytesAt()` 支持已有文件固定位置覆盖，文件不存在和写越界返回失败，不隐式扩展文件；覆盖后文件大小不变且覆盖范围可读。
 - FS 已满或存在不可读文件时，Web 诊断返回错误不应触发 task WDT 重启。
 - `/esp32base/fs?manage=1` 对 `unreadable` 文件仍必须提供单文件删除入口，但不能提供下载入口。
+- 单文件删除失败后应尝试截断为 0；如果因此释放可见文件占用，页面不能只显示 `delete_failed`。
+- 清理文件后如果 FileLog 处于写入故障保护，应重新加载当前 FileLog 模式以便恢复写入。
 - listDir / mkdir / rmdir 正常。
 - FS 失败不影响 WiFi/Web。
 

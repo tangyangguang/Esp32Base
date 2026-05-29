@@ -13,7 +13,9 @@
 - `writeBytesAt()` 覆盖写入后会校验文件大小未变，并确认覆盖范围末端可读；如果 FS 满、底层写失败或已有文件损坏，返回 `false`。
 - FileLog 的普通追加、清空和轮转截断都会按长 FS 操作处理；当 FS 已满或损坏时，系统级 WARN 日志写入失败不应再触发 task WDT 重启。检测到 FileLog 写入故障后，本轮会先在运行时停止继续写 FileLog，避免每条后续 WARN 都重复冲击异常文件系统；Web 清理或格式化后可再重新启用模式。
 - `Esp32BaseFileLog::faulted()` 暴露运行期故障保护状态；Status、Logs 和 System 页会把“配置开启但运行保护停写”显示为 `write fault`，并说明已有日志可能仍可读取，不再误显示为 `disabled`。
+- Logs 和 System 页现在把 `write fault` 说明显示为 WARN notice；FileLog 关闭时显示 INFO notice，明确表示新日志不会写入但旧日志仍可查看。
 - `/esp32base/fs?manage=1` 对不可读文件仍提供单文件删除入口，但继续隐藏下载入口，便于清理坏文件且避免浏览器保存 0 字节伪成功文件。
+- 单文件删除在 `LittleFS.remove()` 失败后会尝试把文件截断为 0；如果成功释放可见文件占用，页面显示 `File deleted or cleared`。删除或清理文件后，如果 FileLog 之前处于写入故障保护，会重新加载当前 FileLog 模式尝试恢复写入。
 - 新增 `scripts/check_fs_api_reliability.py`，防止后续把 FS 读写失败语义退回到“只看 open/write 返回值”的弱判断。
 
 业务侧影响：
@@ -21,6 +23,7 @@
 - 业务项目必须检查所有 `Esp32BaseFs` 写入和读取返回值；连续失败时应停止继续追加记录，进入清理、提示维护或格式化前确认流程。
 - LittleFS 的逻辑文件大小不等于内容一定可读。跨项目反复烧录、brownout、FS 满或旧业务代码忽略写失败后，文件树可能仍能列出大小，但读取内容会失败；此时 `/esp32base/fs` 会标记 `unreadable`。
 - 如果 Web 显示 FileLog 为 `write fault`，表示配置模式仍是 ERROR/WARN/INFO，但底层 FS 写入失败触发运行期保护；日志页面能显示旧内容并不代表新日志仍能写入。先通过 `/esp32base/fs` 清理坏文件或在 System 页格式化 LittleFS，再重新保存 FileLog 模式。
+- 如果删除 FileLog 文件仍失败，通常说明 LittleFS 元数据或内部占用已经异常；优先用 System 页 `Clear logs` 清空日志段，仍不能恢复时再确认格式化 LittleFS。
 
 ## 2026-05-28
 
