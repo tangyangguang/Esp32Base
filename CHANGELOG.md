@@ -121,8 +121,8 @@
 
 优化：
 
-- `/esp32base` Status 页回归紧凑只读诊断结构，移除顶部 Device Health 大摘要，避免运行时间、WiFi/RSSI、可用 heap 和固件/profile 在第一屏重复展示。
-- Overview、Hardware、Firmware & OTA、Runtime Health、Network、Storage & Logs、Boot Reasons 改为两列紧凑信息区，Partition Table 保留为最后的详细诊断表。
+- `/esp32base` Status 页调整为诊断优先结构，首屏使用 `System Overview` 汇总设备/hostname、固件/profile、uptime/boot count、WiFi/IP/RSSI、free/min heap、NTP、FS、FileLog 和 OTA upload 空间。
+- 详细区改按 Runtime Health、Network、Storage & Logs、Firmware & OTA、Hardware 展开，Partition Table 保留为最后的详细诊断表；reset/wake 原因归入 Runtime Health，不再单独占用 Boot Reasons 分区。
 - FileLog 从健康摘要中移出，归入 Storage & Logs，并拆分为启用状态、日志级别、当前文件大小和路径，避免把 WARN 日志级别误读成设备健康告警。
 - Application 入口在出现时使用低频 appsection，避免和设备体检摘要抢第一屏注意力。
 - 内置 CSS 移除 Status 页不再使用的 health hero 样式，减少公共 CSS 体积。

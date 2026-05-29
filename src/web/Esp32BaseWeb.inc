@@ -873,6 +873,20 @@ void sendInfoRow(const char* label, const char* value) {
     sendInfoRowEnd();
 }
 
+void sendStatusTag(Esp32BaseWeb::UiTone tone, const char* text) {
+    sendChunk("<span class='tag");
+    sendChunk(uiToneClass(tone));
+    sendChunk("'>");
+    sendEscapedHtmlChunk(text && text[0] ? text : "-");
+    sendChunk("</span>");
+}
+
+void sendTaggedInfoRow(const char* label, const char* value, Esp32BaseWeb::UiTone tone) {
+    sendInfoRowStart(label);
+    sendStatusTag(tone, value);
+    sendInfoRowEnd();
+}
+
 void sendStatusSectionStart(const char* title) {
     sendChunk("<section class='panel statuspage'><h2>");
     sendEscapedHtmlChunk(title);
@@ -3093,21 +3107,51 @@ void handleRoot() {
     Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_HOME]);
     Esp32BaseWeb::sendPageTitle(g_deviceName);
 
-    char value[128];
+    char value[160];
     char uptime[32];
     char freeHeap[48];
     char minHeap[48];
     char maxAllocHeap[48];
     char totalHeap[48];
+    char sketch[48];
+    char otaTargetSize[48] = "unavailable";
+    char otaHeadroom[48] = "unknown";
+    char runningSlot[80] = "unknown";
+    char otaTargetSlot[80] = "unavailable";
+    char flash[48];
     Esp32BaseLog::formatUptime(Esp32BaseSystem::uptimeMs(), uptime, sizeof(uptime));
     formatReadableBytes(Esp32BaseSystem::freeHeap(), freeHeap, sizeof(freeHeap));
     formatReadableBytes(Esp32BaseSystem::minFreeHeap(), minHeap, sizeof(minHeap));
     formatReadableBytes(ESP.getMaxAllocHeap(), maxAllocHeap, sizeof(maxAllocHeap));
     formatReadableBytes(Esp32BaseSystem::totalHeap(), totalHeap, sizeof(totalHeap));
+    formatReadableBytes(ESP.getSketchSize(), sketch, sizeof(sketch));
+    formatReadableBytes(Esp32BaseSystem::flashSize(), flash, sizeof(flash));
+    const esp_partition_t* runningPartition = esp_ota_get_running_partition();
+    const esp_partition_t* nextPartition = esp_ota_get_next_update_partition(nullptr);
+    if (runningPartition) {
+        char runningSize[48];
+        formatReadableBytes(runningPartition->size, runningSize, sizeof(runningSize));
+        snprintf(runningSlot, sizeof(runningSlot), "%s / %s", runningPartition->label, runningSize);
+    }
+    if (nextPartition) {
+        formatReadableBytes(nextPartition->size, otaTargetSize, sizeof(otaTargetSize));
+        snprintf(otaTargetSlot, sizeof(otaTargetSlot), "%s / %s", nextPartition->label, otaTargetSize);
+        if (nextPartition->size >= ESP.getSketchSize()) {
+            formatReadableBytes(nextPartition->size - ESP.getSketchSize(), otaHeadroom, sizeof(otaHeadroom));
+        } else {
+            strlcpy(otaHeadroom, "0 B", sizeof(otaHeadroom));
+        }
+    }
     sendChunk("<div class='statusgrid'>");
 
-    sendStatusSectionStart("Overview");
-    sendInfoRowStart("Firmware");
+    sendStatusSectionStart("System Overview");
+    sendInfoRowStart("Device");
+    sendEscapedHtmlChunk(g_deviceName);
+    sendChunk("<br><span class='info'>Hostname ");
+    sendEscapedHtmlChunk(Esp32Base::hostname());
+    sendChunk("</span>");
+    sendInfoRowEnd();
+    sendInfoRowStart("Firmware/Profile");
     sendEscapedHtmlChunk(Esp32Base::firmwareName());
     sendChunk(" ");
     sendEscapedHtmlChunk(Esp32Base::firmwareVersion());
@@ -3116,80 +3160,111 @@ void handleRoot() {
         sendEscapedHtmlChunk(Esp32Base::firmwareBuild());
         sendChunk("</span>");
     }
+    sendChunk("<br><span class='info'>");
+    sendEscapedHtmlChunk(Esp32Base::profileName());
+    sendChunk("</span>");
     sendInfoRowEnd();
-    sendInfoRow("Profile", Esp32Base::profileName());
-    sendInfoRow("Hostname", Esp32Base::hostname());
-    sendInfoRow("Uptime", uptime);
-    snprintf(value, sizeof(value), "%lu", static_cast<unsigned long>(Esp32BaseSystem::bootCount()));
-    sendInfoRow("Boot count", value);
-    sendStatusSectionEnd();
-
-    char mac[18];
-    char flash[48];
-    formatReadableBytes(Esp32BaseSystem::flashSize(), flash, sizeof(flash));
-    sendStatusSectionStart("Hardware");
-    sendInfoRow("Chip", ESP.getChipModel());
-    snprintf(value, sizeof(value), "%d", ESP.getChipRevision());
-    sendInfoRow("Revision", value);
-    snprintf(value, sizeof(value), "%u MHz", static_cast<unsigned>(ESP.getCpuFreqMHz()));
-    sendInfoRow("CPU", value);
-    sendInfoRow("SDK", ESP.getSdkVersion());
-    sendInfoRow("Flash chip", flash);
-    if (ESP.getPsramSize() > 0) {
-        char psramTotal[48];
-        char psramFree[48];
-        formatReadableBytes(ESP.getPsramSize(), psramTotal, sizeof(psramTotal));
-        formatReadableBytes(ESP.getFreePsram(), psramFree, sizeof(psramFree));
-        snprintf(value, sizeof(value), "free %s, total %s", psramFree, psramTotal);
-        sendInfoRow("PSRAM", value);
-    }
-    formatMac(ESP.getEfuseMac(), mac, sizeof(mac));
-    sendInfoRow("eFuse MAC", mac);
-    sendStatusSectionEnd();
-
-    sendStatusSectionStart("Firmware & OTA");
-    char sketch[48];
-    formatReadableBytes(ESP.getSketchSize(), sketch, sizeof(sketch));
-    sendInfoRow("Current firmware", sketch);
-    const esp_partition_t* runningPartition = esp_ota_get_running_partition();
-    const esp_partition_t* nextPartition = esp_ota_get_next_update_partition(nullptr);
-    if (runningPartition) {
-        char runningSize[48];
-        formatReadableBytes(runningPartition->size, runningSize, sizeof(runningSize));
-        snprintf(value, sizeof(value), "%s / %s", runningPartition->label, runningSize);
-        sendInfoRow("Running slot", value);
+    snprintf(value, sizeof(value), "%s / boots %lu", uptime, static_cast<unsigned long>(Esp32BaseSystem::bootCount()));
+    sendInfoRow("Uptime", value);
+#if ESP32BASE_ENABLE_WIFI
+    sendInfoRowStart("WiFi");
+    if (Esp32BaseWiFi::isConnected()) {
+        sendStatusTag(Esp32BaseWeb::UI_OK, "connected");
     } else {
-        sendInfoRow("Running slot", "unknown");
+        sendStatusTag(Esp32BaseWeb::UI_WARN, Esp32BaseWiFi::stateName());
     }
-    if (nextPartition) {
-        char targetSize[48];
-        formatReadableBytes(nextPartition->size, targetSize, sizeof(targetSize));
-        snprintf(value, sizeof(value), "%s / %s", nextPartition->label, targetSize);
-        sendInfoRow("OTA target slot", value);
-        sendInfoRow("Max OTA upload", targetSize);
-        if (nextPartition->size >= ESP.getSketchSize()) {
-            char headroom[48];
-            formatReadableBytes(nextPartition->size - ESP.getSketchSize(), headroom, sizeof(headroom));
-            sendInfoRow("OTA slot minus current sketch", headroom);
-        } else {
-            sendInfoRow("OTA slot minus current sketch", "0 B");
+    if (Esp32BaseWiFi::ssid()[0]) {
+        sendChunk(" ");
+        sendEscapedHtmlChunk(Esp32BaseWiFi::ssid());
+    }
+    if (Esp32BaseWiFi::isConnected()) {
+        char ip[24];
+        if (Esp32BaseWiFi::ip(ip, sizeof(ip))) {
+            sendChunk("<br><span class='info'>IP ");
+            sendEscapedHtmlChunk(ip);
+            sendChunk("</span>");
         }
-    } else {
-        sendInfoRow("OTA target slot", "unavailable");
-        sendInfoRow("Max OTA upload", "unavailable");
-        sendInfoRow("OTA slot minus current sketch", "unknown");
+        snprintf(value, sizeof(value), "<span class='info'>RSSI %ld dBm</span>",
+                 static_cast<long>(Esp32BaseWiFi::rssi()));
+        sendChunk(" ");
+        sendChunk(value);
     }
-#if ESP32BASE_ENABLE_OTA
-    sendInfoRow("Rollback", Esp32BaseOta::isRollbackPossible() ? "possible" : "not possible");
-    if (Esp32BaseOta::lastError()[0]) {
-        sendInfoRow("Last OTA error", Esp32BaseOta::lastError());
+    sendInfoRowEnd();
+#endif
+    snprintf(value, sizeof(value), "%s free / %s min", freeHeap, minHeap);
+    sendInfoRow("Free heap", value);
+#if ESP32BASE_ENABLE_NTP
+    const Esp32BaseNtp::TimeSnapshot overviewTime = Esp32BaseNtp::snapshot();
+    sendInfoRowStart("NTP time");
+    if (!Esp32BaseNtp::isStarted()) {
+        sendStatusTag(Esp32BaseWeb::UI_NEUTRAL, "not started");
+    } else if (overviewTime.synced) {
+        sendStatusTag(Esp32BaseWeb::UI_OK, "synced");
+    } else {
+        sendStatusTag(Esp32BaseWeb::UI_WARN, "pending");
+    }
+    if (overviewTime.synced && Esp32BaseNtp::formatTime(value, sizeof(value), "%Y-%m-%d %H:%M:%S")) {
+        sendChunk("<br>");
+        sendEscapedHtmlChunk(value);
+    }
+    sendInfoRowEnd();
+#endif
+#if ESP32BASE_ENABLE_FS
+    if (Esp32BaseFs::isReady()) {
+        char used[48];
+        char total[48];
+        char freeBytes[48];
+        const size_t fsFree = Esp32BaseFs::freeBytes();
+        formatReadableBytes(Esp32BaseFs::usedBytes(), used, sizeof(used));
+        formatReadableBytes(Esp32BaseFs::totalBytes(), total, sizeof(total));
+        formatReadableBytes(fsFree, freeBytes, sizeof(freeBytes));
+        snprintf(value, sizeof(value), "used %s, free %s, total %s", used, freeBytes, total);
+        sendInfoRowStart("FS");
+        if (fsFree == 0) {
+            sendStatusTag(Esp32BaseWeb::UI_WARN, "full");
+            sendChunk(" ");
+        }
+        sendEscapedHtmlChunk(value);
+        sendInfoRowEnd();
+    } else {
+        sendTaggedInfoRow("FS", "unavailable", Esp32BaseWeb::UI_WARN);
     }
 #endif
+#if ESP32BASE_ENABLE_FILELOG
+    sendInfoRowStart("File log");
+    sendStatusTag(Esp32BaseFileLog::isEnabled() ? Esp32BaseWeb::UI_INFO : Esp32BaseWeb::UI_NEUTRAL,
+                  Esp32BaseFileLog::isEnabled() ? "enabled" : "disabled");
+    if (Esp32BaseFileLog::isEnabled()) {
+        char sizeBuf[48];
+        formatReadableBytes(Esp32BaseFileLog::size(), sizeBuf, sizeof(sizeBuf));
+        sendChunk(" mode ");
+        sendEscapedHtmlChunk(Esp32BaseFileLog::modeName());
+        sendChunk("<br><span class='info'>current ");
+        sendEscapedHtmlChunk(sizeBuf);
+        sendChunk("</span>");
+    }
+    sendInfoRowEnd();
+#endif
+    sendInfoRowStart("OTA upload");
+    if (nextPartition) {
+        sendEscapedHtmlChunk(otaTargetSize);
+        sendChunk(" max<br><span class='info'>");
+        sendEscapedHtmlChunk(otaHeadroom);
+        sendChunk(" headroom</span>");
+    } else {
+        sendStatusTag(Esp32BaseWeb::UI_WARN, "unavailable");
+    }
+    sendInfoRowEnd();
     sendStatusSectionEnd();
 
     sendStatusSectionStart("Runtime Health");
-    snprintf(value, sizeof(value), "free %s, min %s, max alloc %s, total %s", freeHeap, minHeap, maxAllocHeap, totalHeap);
-    sendInfoRow("Heap", value);
+    sendInfoRow("Uptime", uptime);
+    snprintf(value, sizeof(value), "%lu", static_cast<unsigned long>(Esp32BaseSystem::bootCount()));
+    sendInfoRow("Boot count", value);
+    sendInfoRow("Free heap", freeHeap);
+    sendInfoRow("Min free heap", minHeap);
+    sendInfoRow("Max alloc heap", maxAllocHeap);
+    sendInfoRow("Total heap", totalHeap);
 #if ESP32BASE_ENABLE_WATCHDOG
     const WatchdogTripState watchdogTrip = readWatchdogTripState();
     char tripResetAt[32];
@@ -3210,14 +3285,30 @@ void handleRoot() {
 #endif
 #if ESP32BASE_ENABLE_NTP
     const Esp32BaseNtp::TimeSnapshot time = Esp32BaseNtp::snapshot();
-    sendInfoRowStart("Time");
-    sendEscapedHtmlChunk(Esp32BaseNtp::isStarted() ? (time.synced ? "synced" : "pending") : "not started");
+    sendInfoRowStart("NTP time");
+    if (!Esp32BaseNtp::isStarted()) {
+        sendStatusTag(Esp32BaseWeb::UI_NEUTRAL, "not started");
+    } else if (time.synced) {
+        sendStatusTag(Esp32BaseWeb::UI_OK, "synced");
+    } else {
+        sendStatusTag(Esp32BaseWeb::UI_WARN, "pending");
+    }
     if (time.synced && Esp32BaseNtp::formatTime(value, sizeof(value), "%Y-%m-%d %H:%M:%S")) {
         sendChunk("<br>");
         sendEscapedHtmlChunk(value);
     }
     sendInfoRowEnd();
 #endif
+    sendInfoRowStart("Last reset");
+    sendEscapedHtmlChunk(Esp32BaseSystem::resetReason());
+    sendChunk(" / ");
+    sendEscapedHtmlChunk(Esp32BaseSystem::resetReasonText());
+    sendInfoRowEnd();
+    sendInfoRowStart("Last wake");
+    sendEscapedHtmlChunk(Esp32BaseSystem::wakeReason());
+    sendChunk(" / ");
+    sendEscapedHtmlChunk(Esp32BaseSystem::wakeReasonText());
+    sendInfoRowEnd();
     sendStatusSectionEnd();
 
 #if ESP32BASE_ENABLE_WIFI
@@ -3252,13 +3343,20 @@ void handleRoot() {
         char used[48];
         char total[48];
         char freeBytes[48];
+        const size_t fsFree = Esp32BaseFs::freeBytes();
         formatReadableBytes(Esp32BaseFs::usedBytes(), used, sizeof(used));
         formatReadableBytes(Esp32BaseFs::totalBytes(), total, sizeof(total));
-        formatReadableBytes(Esp32BaseFs::freeBytes(), freeBytes, sizeof(freeBytes));
+        formatReadableBytes(fsFree, freeBytes, sizeof(freeBytes));
         snprintf(value, sizeof(value), "used %s, free %s, total %s", used, freeBytes, total);
-        sendInfoRow("FS", value);
+        sendInfoRowStart("FS");
+        if (fsFree == 0) {
+            sendStatusTag(Esp32BaseWeb::UI_WARN, "full");
+            sendChunk(" ");
+        }
+        sendEscapedHtmlChunk(value);
+        sendInfoRowEnd();
     } else {
-        sendInfoRow("FS", "unavailable");
+        sendTaggedInfoRow("FS", "unavailable", Esp32BaseWeb::UI_WARN);
     }
 #endif
 #if ESP32BASE_ENABLE_FILELOG
@@ -3274,17 +3372,39 @@ void handleRoot() {
     sendStatusSectionEnd();
 #endif
 
-    sendStatusSectionStart("Boot Reasons");
-    sendInfoRowStart("Reset reason");
-    sendEscapedHtmlChunk(Esp32BaseSystem::resetReason());
-    sendChunk(" / ");
-    sendEscapedHtmlChunk(Esp32BaseSystem::resetReasonText());
-    sendInfoRowEnd();
-    sendInfoRowStart("Wake reason");
-    sendEscapedHtmlChunk(Esp32BaseSystem::wakeReason());
-    sendChunk(" / ");
-    sendEscapedHtmlChunk(Esp32BaseSystem::wakeReasonText());
-    sendInfoRowEnd();
+    sendStatusSectionStart("Firmware & OTA");
+    sendInfoRow("Current firmware", sketch);
+    sendInfoRow("Running slot", runningSlot);
+    sendInfoRow("OTA target slot", otaTargetSlot);
+    sendInfoRow("Max OTA upload", otaTargetSize);
+    sendInfoRow("OTA slot minus current sketch", otaHeadroom);
+#if ESP32BASE_ENABLE_OTA
+    sendInfoRow("Rollback", Esp32BaseOta::isRollbackPossible() ? "possible" : "not possible");
+    if (Esp32BaseOta::lastError()[0]) {
+        sendInfoRow("Last OTA error", Esp32BaseOta::lastError());
+    }
+#endif
+    sendStatusSectionEnd();
+
+    char mac[18];
+    sendStatusSectionStart("Hardware");
+    sendInfoRow("Chip", ESP.getChipModel());
+    snprintf(value, sizeof(value), "%d", ESP.getChipRevision());
+    sendInfoRow("Revision", value);
+    snprintf(value, sizeof(value), "%u MHz", static_cast<unsigned>(ESP.getCpuFreqMHz()));
+    sendInfoRow("CPU", value);
+    sendInfoRow("SDK", ESP.getSdkVersion());
+    sendInfoRow("Flash chip", flash);
+    if (ESP.getPsramSize() > 0) {
+        char psramTotal[48];
+        char psramFree[48];
+        formatReadableBytes(ESP.getPsramSize(), psramTotal, sizeof(psramTotal));
+        formatReadableBytes(ESP.getFreePsram(), psramFree, sizeof(psramFree));
+        snprintf(value, sizeof(value), "free %s, total %s", psramFree, psramTotal);
+        sendInfoRow("PSRAM", value);
+    }
+    formatMac(ESP.getEfuseMac(), mac, sizeof(mac));
+    sendInfoRow("eFuse MAC", mac);
     sendStatusSectionEnd();
     sendChunk("</div>");
 

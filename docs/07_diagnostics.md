@@ -234,7 +234,7 @@ CI 应覆盖核心矩阵，release 前执行完整矩阵。
 - NTP 未同步状态不输出周期性 WARN/DEBUG；只有明确的单次同步失败事件才应输出 WARN。
 - NTP profile 启动时复用系统 boot count 作为 `bootId`，日志输出 `time_boot_session boot_id=N source=boot_count`；NTP 不再为 boot session 额外写启动期 NVS。业务离线事件应保存该 bootId 和 uptimeSec，避免跨 boot 混淆。
 - 日志和人工页面中的字节数只显示 KB/MB/B 人性化值；状态/API JSON 可保留 raw `bytes` 并附带 `human`。
-- NTP 对时成功后输出实际时间、当前 uptime、推算 boot wall time，并让 `TimeSnapshot.synced`、Status 页 Time 行和日志绝对时间切换共享同一可信同步语义。
+- NTP 对时成功后输出实际时间、当前 uptime、推算 boot wall time，并让 `TimeSnapshot.synced`、Status 页 NTP time 行和日志绝对时间切换共享同一可信同步语义。
 - WiFi 连接、断开、重连 backoff、进入/退出 config portal 都必须有清晰日志。
 - 文件日志默认 WARN；量产极简现场记录可通过 Web System 页或 `Esp32BaseFileLog::setMode(Esp32BaseFileLog::ERROR)` 只记录 ERROR；现场调试可切到 INFO，方便通过 Logs 页面观察。
 - FileLog 模式变更必须输出 WARN 级审计日志，包含上一次模式和新模式。

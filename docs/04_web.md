@@ -212,8 +212,8 @@ System 维护页：
 Status 页：
 
 - `/esp32base` 默认作为只读设备体检页，不承载配置保存和危险操作。
-- 第一屏直接进入紧凑诊断分区，不再使用大摘要卡片重复展示运行时间、WiFi/RSSI、free heap 和固件/profile。
-- 详细诊断信息按 Overview、Hardware、Firmware & OTA、Runtime Health、Network、Storage & Logs、Boot Reasons 分组；Partition Table 作为最后的低频详细表。
+- 第一屏使用 `System Overview` 紧凑总览，优先展示设备/hostname、固件/profile、uptime/boot count、WiFi/IP/RSSI、free/min heap、NTP、FS、FileLog 和 OTA upload 空间，便于现场快速判断。
+- 详细诊断信息按 Runtime Health、Network、Storage & Logs、Firmware & OTA、Hardware 分组；Partition Table 作为最后的低频详细表。
 - FileLog 属于 Storage & Logs，不作为健康摘要项；日志级别、当前文件大小和路径应拆开显示，避免把 WARN/INFO 等日志级别误读为健康状态。
 
 App Config 页面：
@@ -268,10 +268,12 @@ Logs 页面：
 
 系统首页：
 
-- `/esp32base` 是只读设备体检页，按 Overview、Hardware、Firmware & OTA、Network、Storage & Logs、Partition Table、Boot Reasons 分组展示调试信息。
-- Hardware 显示芯片型号、revision、CPU、SDK、Flash、PSRAM 和 eFuse MAC；Network 显示 WiFi/IP/RSSI、power save、STA MAC 和 AP MAC。
+- `/esp32base` 是只读设备体检页，采用诊断优先结构：先显示 `System Overview`，再按 Runtime Health、Network、Storage & Logs、Firmware & OTA、Hardware、Partition Table 展示调试信息。
+- `System Overview` 只放高价值汇总，不使用大摘要卡片；异常或需关注项用轻量 tag 标识，不使用大面积背景色。
+- Runtime Health 显示 uptime、boot count、heap free/min/max alloc/total、Watchdog、NTP time、last reset 和 last wake；Network 显示 WiFi/IP/RSSI、power save、STA MAC 和 AP MAC。
+- Storage & Logs 显示 FS 使用、FileLog enabled/disabled、日志级别、当前文件大小和路径；Hardware 显示芯片型号、revision、CPU、SDK、Flash、PSRAM 和 eFuse MAC。
 - Firmware & OTA 显示当前固件大小、运行 app slot、下一 OTA slot、Max OTA upload、OTA slot minus current sketch、rollback 状态，以及仅在存在错误时显示的 Last OTA error；Max OTA upload 才是上传硬上限。
-- Runtime Health 显示 heap free/min/max alloc/total；启用 Watchdog 时显示 `enabled, lifetime resets N, trip resets M` 或 invalid baseline 和 trip reset time；Reset Trip 保存时间使用和页面 Time 行一致的可信 epoch 判断，无可用时间则显示 `unknown (time unavailable)`。
+- 启用 Watchdog 时显示 `enabled, lifetime resets N, trip resets M` 或 invalid baseline 和 trip reset time；Reset Trip 保存时间使用和页面 NTP time 行一致的可信 epoch 判断，无可用时间则显示 `unknown (time unavailable)`。
 - Partition Table 使用运行时分区表展示 Name、Type、SubType、Offset、Size、Role；Role 用于标识 running app、next OTA、app data、NVS config、OTA state、coredump 等。
 - 未启用的模块不显示对应行，避免非 FULL profile 引入额外依赖。
 
@@ -355,7 +357,7 @@ Esp32BaseWeb::addPage("/config", "配置", handleConfigPage);
 - `SYSTEM_NAV_SECTION` 会在页面底部以小字系统入口与 `Free heap`、`Up`、`RSSI` 同行展示；窄屏下系统入口和状态摘要可自然换行，避免遮挡和横向滚动。
 - Footer bar 可在 System 页面运行时切换 Off、Status only、Links + status；关闭底部横条时系统页面仍可通过直达 URL 访问。
 - 基础库页面复用同一套导航框架，业务页和系统页保持一致入口结构。
-- `/esp32base` 系统页按 Overview、Hardware、Firmware & OTA、Network、Storage & Logs、Partition Table、Boot Reasons 分组展示设备调试信息，包括 MAC、OTA slot minus current sketch 和运行时分区表。
+- `/esp32base` 系统页按 System Overview、Runtime Health、Network、Storage & Logs、Firmware & OTA、Hardware、Partition Table 展示设备调试信息，包括 MAC、OTA slot minus current sketch、last reset/wake 和运行时分区表。
 - `/esp32base/api/status` 保留 `resetReason` / `wakeReason` 原始字段，并提供 `resetReasonText` / `wakeReasonText` 中文说明字段；`wifi.rssi` 返回当前 WiFi RSSI，未连接时为 `0`。
 - `/esp32base/api/hostname` 返回 `currentHostname`、`defaultHostname`、`storedHostname`、`storedValid`、`restartRequired` 和校验规则；POST 参数 `hostname` 必须符合 1-32 位小写字母、数字和短横线规则，不能首尾短横线，不能包含 `.local`。
 
