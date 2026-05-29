@@ -121,11 +121,10 @@
 
 优化：
 
-- `/esp32base` Status 页调整为诊断优先结构，首屏使用 `System Overview` 汇总设备/hostname、固件/profile、uptime/boot count、WiFi/IP/RSSI、free/min heap、NTP、FS、FileLog 和 OTA upload 空间。
-- `System Overview` 改用 Run、Connection、Memory、Time sync、Storage、Logging、OTA 等摘要标签，下方详细区保留完整参数，减少 `NTP time`、heap、FS、FileLog 等同名同值重复。
-- Network 的 STA/AP MAC 合并为 `WiFi MACs`，Hardware 的 eFuse MAC 收敛到 `Hardware ID`，降低 MAC 信息在页面上的重复感。
-- 详细区改按 Runtime Health、Network、Storage & Logs、Firmware & OTA、Hardware 展开，Partition Table 保留为最后的详细诊断表；reset/wake 原因归入 Runtime Health，不再单独占用 Boot Reasons 分区。
-- FileLog 从健康摘要中移出，归入 Storage & Logs，并拆分为启用状态、日志级别、当前文件大小和路径，避免把 WARN 日志级别误读成设备健康告警。
+- `/esp32base` Status 页调整为诊断优先结构，不再显示和相邻详细区重复的 `System Overview` 预览块。
+- 常用信息直接前置为 Device、Network 两个正式分区，后续按 Runtime Health、Storage & Logs、Firmware & OTA、Hardware 展开，Partition Table 保留为最后的详细诊断表；reset/wake 原因归入 Runtime Health，不再单独占用 Boot Reasons 分区。
+- Network 的 STA MAC、AP MAC 改回独立键值行；Hardware 的 eFuse MAC 也使用普通键值行，避免把二级标签塞进值列导致对应关系不清。
+- FileLog 归入 Storage & Logs，并拆分为启用状态、日志级别、当前文件大小和路径，避免把 WARN 日志级别误读成设备健康告警。
 - Application 入口在出现时使用低频 appsection，避免和设备体检摘要抢第一屏注意力。
 - 内置 CSS 移除 Status 页不再使用的 health hero 样式，减少公共 CSS 体积。
 

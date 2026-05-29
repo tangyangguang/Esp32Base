@@ -3144,14 +3144,10 @@ void handleRoot() {
     }
     sendChunk("<div class='statusgrid'>");
 
-    sendStatusSectionStart("System Overview");
-    sendInfoRowStart("Device");
-    sendEscapedHtmlChunk(g_deviceName);
-    sendChunk("<br><span class='info'>Hostname ");
-    sendEscapedHtmlChunk(Esp32Base::hostname());
-    sendChunk("</span>");
-    sendInfoRowEnd();
-    sendInfoRowStart("Firmware/Profile");
+    sendStatusSectionStart("Device");
+    sendInfoRow("Name", g_deviceName);
+    sendInfoRow("Hostname", Esp32Base::hostname());
+    sendInfoRowStart("Firmware");
     sendEscapedHtmlChunk(Esp32Base::firmwareName());
     sendChunk(" ");
     sendEscapedHtmlChunk(Esp32Base::firmwareVersion());
@@ -3160,92 +3156,38 @@ void handleRoot() {
         sendEscapedHtmlChunk(Esp32Base::firmwareBuild());
         sendChunk("</span>");
     }
-    sendChunk("<br><span class='info'>");
-    sendEscapedHtmlChunk(Esp32Base::profileName());
-    sendChunk("</span>");
     sendInfoRowEnd();
-    snprintf(value, sizeof(value), "%s / boots %lu", uptime, static_cast<unsigned long>(Esp32BaseSystem::bootCount()));
-    sendInfoRow("Run", value);
+    sendInfoRow("Profile", Esp32Base::profileName());
+    sendInfoRow("Uptime", uptime);
+    snprintf(value, sizeof(value), "%lu", static_cast<unsigned long>(Esp32BaseSystem::bootCount()));
+    sendInfoRow("Boot count", value);
+    sendStatusSectionEnd();
+
 #if ESP32BASE_ENABLE_WIFI
-    sendInfoRowStart("Connection");
-    if (Esp32BaseWiFi::isConnected()) {
-        sendStatusTag(Esp32BaseWeb::UI_OK, "connected");
-    } else {
-        sendStatusTag(Esp32BaseWeb::UI_WARN, Esp32BaseWiFi::stateName());
-    }
+    sendStatusSectionStart("Network");
+    sendInfoRowStart("WiFi");
+    sendEscapedHtmlChunk(Esp32BaseWiFi::stateName());
     if (Esp32BaseWiFi::ssid()[0]) {
-        sendChunk(" ");
+        sendChunk(" / ");
         sendEscapedHtmlChunk(Esp32BaseWiFi::ssid());
     }
+    sendInfoRowEnd();
+    char ip[24] = "-";
     if (Esp32BaseWiFi::isConnected()) {
-        char ip[24];
-        if (Esp32BaseWiFi::ip(ip, sizeof(ip))) {
-            sendChunk("<br><span class='info'>IP ");
-            sendEscapedHtmlChunk(ip);
-            sendChunk("</span>");
-        }
-        snprintf(value, sizeof(value), "<span class='info'>RSSI %ld dBm</span>",
-                 static_cast<long>(Esp32BaseWiFi::rssi()));
-        sendChunk(" ");
-        sendChunk(value);
+        Esp32BaseWiFi::ip(ip, sizeof(ip));
     }
-    sendInfoRowEnd();
-#endif
-    snprintf(value, sizeof(value), "%s free / %s min", freeHeap, minHeap);
-    sendInfoRow("Memory", value);
-#if ESP32BASE_ENABLE_NTP
-    const Esp32BaseNtp::TimeSnapshot overviewTime = Esp32BaseNtp::snapshot();
-    sendInfoRowStart("Time sync");
-    if (!Esp32BaseNtp::isStarted()) {
-        sendStatusTag(Esp32BaseWeb::UI_NEUTRAL, "not started");
-    } else if (overviewTime.synced) {
-        sendStatusTag(Esp32BaseWeb::UI_OK, "synced");
+    sendInfoRow("IP", ip);
+    if (Esp32BaseWiFi::isConnected()) {
+        snprintf(value, sizeof(value), "%ld dBm", static_cast<long>(Esp32BaseWiFi::rssi()));
     } else {
-        sendStatusTag(Esp32BaseWeb::UI_WARN, "pending");
+        strlcpy(value, "-", sizeof(value));
     }
-    sendInfoRowEnd();
-#endif
-#if ESP32BASE_ENABLE_FS
-    if (Esp32BaseFs::isReady()) {
-        char freeBytes[48];
-        const size_t fsFree = Esp32BaseFs::freeBytes();
-        formatReadableBytes(fsFree, freeBytes, sizeof(freeBytes));
-        sendInfoRowStart("Storage");
-        if (fsFree == 0) {
-            sendStatusTag(Esp32BaseWeb::UI_WARN, "full");
-        } else {
-            sendStatusTag(Esp32BaseWeb::UI_OK, "ready");
-        }
-        sendChunk(" free ");
-        sendEscapedHtmlChunk(freeBytes);
-        sendInfoRowEnd();
-    } else {
-        sendTaggedInfoRow("Storage", "unavailable", Esp32BaseWeb::UI_WARN);
-    }
-#endif
-#if ESP32BASE_ENABLE_FILELOG
-    sendInfoRowStart("Logging");
-    sendStatusTag(Esp32BaseFileLog::isEnabled() ? Esp32BaseWeb::UI_INFO : Esp32BaseWeb::UI_NEUTRAL,
-                  Esp32BaseFileLog::isEnabled() ? "enabled" : "disabled");
-    if (Esp32BaseFileLog::isEnabled()) {
-        sendChunk(" mode ");
-        sendEscapedHtmlChunk(Esp32BaseFileLog::modeName());
-    }
-    sendInfoRowEnd();
-#endif
-    sendInfoRowStart("OTA");
-    if (nextPartition) {
-        sendStatusTag(Esp32BaseWeb::UI_OK, "ready");
-        sendChunk(" upload ");
-        sendEscapedHtmlChunk(otaTargetSize);
-        sendChunk("<br><span class='info'>headroom ");
-        sendEscapedHtmlChunk(otaHeadroom);
-        sendChunk("</span>");
-    } else {
-        sendStatusTag(Esp32BaseWeb::UI_WARN, "unavailable");
-    }
-    sendInfoRowEnd();
+    sendInfoRow("RSSI", value);
+    sendInfoRow("Power save", Esp32BaseWiFi::powerSave() ? "on" : "off");
+    sendInfoRow("STA MAC", WiFi.macAddress().c_str());
+    sendInfoRow("AP MAC", WiFi.softAPmacAddress().c_str());
     sendStatusSectionEnd();
+#endif
 
     sendStatusSectionStart("Runtime Health");
     snprintf(value, sizeof(value), "free %s, min %s, max alloc %s, total %s", freeHeap, minHeap, maxAllocHeap, totalHeap);
@@ -3295,36 +3237,6 @@ void handleRoot() {
     sendEscapedHtmlChunk(Esp32BaseSystem::wakeReasonText());
     sendInfoRowEnd();
     sendStatusSectionEnd();
-
-#if ESP32BASE_ENABLE_WIFI
-    sendStatusSectionStart("Network");
-    sendInfoRowStart("WiFi");
-    sendEscapedHtmlChunk(Esp32BaseWiFi::stateName());
-    if (Esp32BaseWiFi::ssid()[0]) {
-        sendChunk(" / ");
-        sendEscapedHtmlChunk(Esp32BaseWiFi::ssid());
-    }
-    if (Esp32BaseWiFi::isConnected()) {
-        char ip[24];
-        if (Esp32BaseWiFi::ip(ip, sizeof(ip))) {
-            sendChunk("<br>IP ");
-            sendEscapedHtmlChunk(ip);
-        }
-        snprintf(value, sizeof(value), "<br>RSSI %ld dBm",
-                 static_cast<long>(Esp32BaseWiFi::rssi()));
-        sendChunk(value);
-    }
-    sendInfoRowEnd();
-    sendInfoRow("Power save", Esp32BaseWiFi::powerSave() ? "on" : "off");
-    sendInfoRowStart("WiFi MACs");
-    sendEscapedHtmlChunk("STA ");
-    sendEscapedHtmlChunk(WiFi.macAddress().c_str());
-    sendChunk("<br>");
-    sendEscapedHtmlChunk("AP ");
-    sendEscapedHtmlChunk(WiFi.softAPmacAddress().c_str());
-    sendInfoRowEnd();
-    sendStatusSectionEnd();
-#endif
 
 #if ESP32BASE_ENABLE_FS || ESP32BASE_ENABLE_FILELOG
     sendStatusSectionStart("Storage & Logs");
@@ -3394,10 +3306,7 @@ void handleRoot() {
         sendInfoRow("PSRAM", value);
     }
     formatMac(ESP.getEfuseMac(), mac, sizeof(mac));
-    sendInfoRowStart("Hardware ID");
-    sendChunk("<span class='info'>eFuse MAC</span><br>");
-    sendEscapedHtmlChunk(mac);
-    sendInfoRowEnd();
+    sendInfoRow("eFuse MAC", mac);
     sendStatusSectionEnd();
     sendChunk("</div>");
 

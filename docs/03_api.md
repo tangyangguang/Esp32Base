@@ -754,7 +754,7 @@ Route 缓冲机制：
 - `setBuiltinLabel()` 覆盖内置导航标签，可用于中文本地化；系统工具页统一使用 `BUILTIN_TOOLS`，不提供旧 Reboot 历史别名。
 - `setHeadExtraCallback()` 设置额外 head 输出回调；`sendHeader()` 在默认 `WEB_HEAD` 后、`</head><body>` 和顶部导航前调用它，业务项目可在这里输出 `<style>`，避免页面刷新时先显示基础库默认导航样式。该回调不会注入 `/esp32base` 及其子路径的内置页面，避免业务 CSS 增加内置页体积。
 - 导航会给当前匹配项输出 `active` class；匹配规则为 path 完全相等，或当前路径以 `path + "/"` 开头，多个匹配时选择最长 path。`SYSTEM_NAV_SECTION` 下 WiFi/Auth/OTA 二级页会把底部 System 入口标记为 active；App Config 页面在启用时使用自己的底部入口标记 active。
-- `/esp32base` Status 页是只读设备体检页，采用诊断优先结构：`System Overview` 首屏以 Run、Connection、Memory、Time sync、Storage、Logging 和 OTA 等摘要标签汇总关键状态，避免和下方详细区同名同值重复；详细区再按 Runtime Health、Network、Storage & Logs、Firmware & OTA、Hardware、Partition Table 展示 heap、max alloc、Watchdog lifetime/trip resets、NTP time、last reset/wake、WiFi MACs、Hardware ID/eFuse MAC、OTA slot minus current sketch 和运行时分区表；页面容量值只显示 KB/MB/B 人性化格式，Max OTA upload 才是上传硬上限。
+- `/esp32base` Status 页是只读设备体检页，采用诊断优先结构：不额外显示和相邻详细区重复的 `System Overview` 预览块，而是按 Device、Network、Runtime Health、Storage & Logs、Firmware & OTA、Hardware、Partition Table 排序展示 hostname、固件/profile、uptime/boot count、WiFi/IP/RSSI、STA/AP/eFuse MAC、heap、max alloc、Watchdog lifetime/trip resets、NTP time、last reset/wake、FileLog、OTA slot minus current sketch 和运行时分区表；页面容量值只显示 KB/MB/B 人性化格式，Max OTA upload 才是上传硬上限。
 - `/esp32base/tools` System 页承载低频维护入口和操作，App Config 启用时作为首个入口显示，后面是 WiFi Setup、Web Auth、Firmware OTA 直达入口、hostname 保存、Watchdog trip reset、重启设备；启用 FS 的 profile 还提供手动格式化 LittleFS 操作，会清除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth 或 NVS 配置。
 - `/esp32base/auth` 是内置认证管理页面，受当前 Basic Auth 保护，提交成功后新账号密码立即生效。
 - Web Auth 认证优先级为：已保存认证 > 应用默认认证 > 库默认 `admin/admin`。
