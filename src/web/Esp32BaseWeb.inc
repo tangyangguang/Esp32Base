@@ -169,7 +169,7 @@ static const char WEB_CSS[] PROGMEM =
     ".metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:8px 0}.metric{border:1px solid var(--eb-line-soft);border-radius:7px;background:#fff;padding:8px}.metric b{display:block;font-size:17px}.metric span{display:block;color:var(--eb-muted);font-size:12px}"
     ".statusgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;align-items:start}.statusgrid .panel{margin:0}.appsection{padding:10px 12px}.appsection .quicklinks{margin-bottom:0}"
     ".urow{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--eb-line-soft)}.urow:last-child{border-bottom:0}.urow small{display:block;color:var(--eb-muted);margin-top:2px}.urow form{display:inline}.uactions{display:grid;grid-template-columns:4em 96px;gap:16px;align-items:center;justify-content:end;min-width:0}.uvalue{font-weight:700;white-space:nowrap}.uactions .uvalue{min-width:0;text-align:right;color:#344054}.uactions .btnlink,.uactions input[type=submit]{width:96px}.uactions form{display:block;width:96px;margin:0}.uactions form input[type=submit]{width:100%;margin:0}.uactions.readonly{grid-template-columns:4em 96px}.pagination{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;border-top:1px solid var(--eb-line-soft);padding-top:7px;margin-top:7px;font-size:12px;font-weight:400}.pagerlinks,.pagerform{display:flex;flex-wrap:wrap;align-items:center;gap:4px}.pagerlinks{justify-content:center}.pagerform{justify-content:flex-end}.pagination .muted,.pagination label{display:inline-flex;align-items:center;min-height:26px;margin:0;font-weight:400;line-height:1}.pagination .btnlink,.pagination button,.pagination select,.pagination input{font-size:12px;min-height:26px;border-radius:6px;font-weight:400;line-height:1.1}.pagination .btnlink{padding:0 7px;background:#f3f6f8;color:#526071}.pagination .btnlink.disabled{background:#f5f6f7;color:#9aa4b2}.pagination .current{background:#e6f2ef;color:#14685d;border:1px solid #bddbd3}.pagination button{padding:0 8px;background:#f3f6f8;color:#344054;border:1px solid var(--eb-line)}.pagination button:hover{background:#e9eef2}.pagination select,.pagination input{padding:2px 7px}.pagerform input[type=number]{width:6ch;margin:0}.pagerform select{width:auto;max-width:82px;margin:0}"
-    ".tag{display:inline-flex;align-items:center;min-height:21px;padding:2px 7px;border-radius:999px;background:#eef2f4;color:#475467;font-size:11px;font-weight:750;white-space:nowrap}.tag.ok{background:var(--eb-ok-soft);color:var(--eb-ok)}.tag.warn{background:var(--eb-warn-soft);color:var(--eb-warn)}.tag.danger{background:var(--eb-danger-soft);color:var(--eb-danger)}.tag.info{background:var(--eb-info-soft);color:var(--eb-info)}.submetrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(86px,1fr));gap:4px 12px;margin:0}.tag+.submetrics{margin-top:5px}.submetrics span{min-width:0}.submetrics b{display:block;color:var(--eb-muted);font-size:11px;font-weight:650;line-height:1.2}.submetrics em{display:block;font-style:normal;overflow-wrap:anywhere}"
+    ".tag{display:inline-flex;align-items:center;min-height:21px;padding:2px 7px;border-radius:999px;background:#eef2f4;color:#475467;font-size:11px;font-weight:750;white-space:nowrap}.tag.ok{background:var(--eb-ok-soft);color:var(--eb-ok)}.tag.warn{background:var(--eb-warn-soft);color:var(--eb-warn)}.tag.danger{background:var(--eb-danger-soft);color:var(--eb-danger)}.tag.info{background:var(--eb-info-soft);color:var(--eb-info)}.submetrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(86px,1fr));gap:4px 12px;margin:0}.tag+.submetrics{margin-top:5px}.submetrics span{min-width:0}.submetrics b{display:block;color:var(--eb-muted);font-size:11px;font-weight:650;line-height:1.2}.submetrics em{display:block;font-style:normal;overflow-wrap:anywhere}.filelist{display:grid;gap:3px}.fileitem{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:baseline}.fileitem code{overflow-wrap:anywhere}.fileitem .size{white-space:nowrap;color:var(--eb-muted)}"
     ".btnlink{display:inline-flex;align-items:center;justify-content:center;min-height:32px;padding:0 10px;border-radius:7px;background:var(--eb-info-soft);color:var(--eb-info);font-size:13px;font-weight:750;white-space:nowrap}.btnlink.ok{background:var(--eb-ok-soft);color:var(--eb-ok)}.btnlink.warn{background:var(--eb-warn-soft);color:var(--eb-warn)}.btnlink.danger{background:var(--eb-danger-soft);color:var(--eb-danger)}.btnlink.disabled{background:#eef2f4;color:#98a2b3}"
     ".kv{border-collapse:collapse;width:100%;margin:0}.kv th,.kv td{border-bottom:1px solid var(--eb-line);padding:7px 5px;text-align:left;vertical-align:top}.kv tr:last-child th,.kv tr:last-child td{border-bottom:0}.kv th{width:30%;color:var(--eb-muted);font-weight:650}.statuspage{padding:10px 12px}.statuspage h2,.logpanel h2{margin-bottom:6px}.statuspage .kv{font-size:13px}.statuspage .kv th{width:176px;max-width:38%}"
     ".part{border-collapse:collapse;width:100%;min-width:640px;font-size:13px}.part th,.part td{border-bottom:1px solid var(--eb-line);padding:6px 5px;text-align:left;vertical-align:top}.part th{color:var(--eb-muted);font-weight:650}.part tr:last-child td{border-bottom:0}"
@@ -912,6 +912,200 @@ void sendStatusSectionStart(const char* title) {
 void sendStatusSectionEnd() {
     sendChunk("</table></div></section>");
 }
+
+#if ESP32BASE_ENABLE_FS
+static const uint8_t FS_TOP_MAX = 10;
+static const uint8_t FS_STATUS_TOP_MAX = 5;
+static const uint16_t FS_TREE_LIST_LIMIT = 128;
+static const uint8_t FS_SCAN_MAX_DEPTH = 8;
+
+struct FsTopEntry {
+    char path[96];
+    uint64_t size;
+};
+
+struct FsScan {
+    uint32_t files;
+    uint32_t dirs;
+    uint32_t entries;
+    uint64_t listedSize;
+    uint8_t topCount;
+    FsTopEntry top[FS_TOP_MAX];
+};
+
+struct FsWalkFrame {
+    FsScan* scan;
+    const char* dir;
+    uint8_t depth;
+    bool emitRows;
+    uint16_t emitLimit;
+    uint16_t* emittedRows;
+};
+
+void fsScanYield() {
+#if ESP32BASE_ENABLE_WATCHDOG
+    Esp32BaseWatchdog::feed();
+#endif
+    yield();
+}
+
+void fsFormatCount(uint32_t count, char* out, size_t len) {
+    snprintf(out, len, "%lu", static_cast<unsigned long>(count));
+}
+
+void fsJoinPath(const char* dir, const char* name, char* out, size_t len) {
+    if (!out || len == 0) {
+        return;
+    }
+    if (!name || !name[0]) {
+        strlcpy(out, dir && dir[0] ? dir : "/", len);
+        return;
+    }
+    if (name[0] == '/') {
+        strlcpy(out, name, len);
+        return;
+    }
+    if (!dir || !dir[0] || strcmp(dir, "/") == 0) {
+        snprintf(out, len, "/%s", name);
+        return;
+    }
+    snprintf(out, len, "%s/%s", dir, name);
+}
+
+void fsAddTopFile(FsScan& scan, const char* path, uint64_t size) {
+    uint8_t pos = scan.topCount;
+    while (pos > 0 && size > scan.top[pos - 1].size) {
+        --pos;
+    }
+    if (pos >= FS_TOP_MAX) {
+        return;
+    }
+    const uint8_t limit = scan.topCount < FS_TOP_MAX ? scan.topCount : static_cast<uint8_t>(FS_TOP_MAX - 1);
+    for (int8_t i = static_cast<int8_t>(limit); i > static_cast<int8_t>(pos); --i) {
+        scan.top[i] = scan.top[i - 1];
+    }
+    if (scan.topCount < FS_TOP_MAX) {
+        ++scan.topCount;
+    }
+    scan.top[pos].size = size;
+    strlcpy(scan.top[pos].path, path && path[0] ? path : "-", sizeof(scan.top[pos].path));
+}
+
+void sendFsTreeRow(const char* path, size_t size, bool isDir) {
+    char sizeBuf[48];
+    sendChunk("<tr><td>");
+    sendEscapedHtmlChunk(path && path[0] ? path : "-");
+    sendChunk("</td><td>");
+    sendEscapedHtmlChunk(isDir ? "dir" : "file");
+    sendChunk("</td><td>");
+    if (isDir) {
+        sendChunk("-");
+    } else {
+        formatReadableBytes(size, sizeBuf, sizeof(sizeBuf));
+        sendEscapedHtmlChunk(sizeBuf);
+    }
+    sendChunk("</td></tr>");
+}
+
+void fsWalkCallback(const char* name, size_t size, bool isDir, void* user);
+
+bool fsWalkDir(FsScan& scan, const char* dir, uint8_t depth, bool emitRows, uint16_t emitLimit, uint16_t* emittedRows) {
+    FsWalkFrame frame = {&scan, dir, depth, emitRows, emitLimit, emittedRows};
+    return Esp32BaseFs::listDir(dir, fsWalkCallback, &frame);
+}
+
+void fsWalkCallback(const char* name, size_t size, bool isDir, void* user) {
+    FsWalkFrame* frame = static_cast<FsWalkFrame*>(user);
+    if (!frame || !frame->scan) {
+        return;
+    }
+    char path[96];
+    fsJoinPath(frame->dir, name, path, sizeof(path));
+    frame->scan->entries++;
+    if (isDir) {
+        frame->scan->dirs++;
+    } else {
+        frame->scan->files++;
+        frame->scan->listedSize += size;
+        fsAddTopFile(*frame->scan, path, size);
+    }
+    if (frame->emitRows && frame->emittedRows && *frame->emittedRows < frame->emitLimit) {
+        sendFsTreeRow(path, size, isDir);
+        (*frame->emittedRows)++;
+    }
+    fsScanYield();
+    if (isDir && frame->depth + 1 < FS_SCAN_MAX_DEPTH && (!frame->emitRows || !frame->emittedRows || *frame->emittedRows < frame->emitLimit)) {
+        fsWalkDir(*frame->scan, path, static_cast<uint8_t>(frame->depth + 1), frame->emitRows, frame->emitLimit, frame->emittedRows);
+    }
+}
+
+bool scanFs(FsScan& scan) {
+    memset(&scan, 0, sizeof(scan));
+    return Esp32BaseFs::isReady() && fsWalkDir(scan, "/", 0, false, 0, nullptr);
+}
+
+void sendFsInventoryValue(const FsScan& scan, uint64_t fsUsed) {
+    char files[16];
+    char dirs[16];
+    char listed[48];
+    char other[48];
+    fsFormatCount(scan.files, files, sizeof(files));
+    fsFormatCount(scan.dirs, dirs, sizeof(dirs));
+    formatReadableBytes(scan.listedSize, listed, sizeof(listed));
+    const uint64_t overheadBytes = fsUsed > scan.listedSize ? fsUsed - scan.listedSize : 0;
+    formatReadableBytes(overheadBytes, other, sizeof(other));
+    sendSubmetricsStart();
+    sendSubmetric("Files", files);
+    sendSubmetric("Dirs", dirs);
+    sendSubmetric("Listed size", listed);
+    sendSubmetric("Other/overhead", other);
+    sendSubmetricsEnd();
+}
+
+void sendFsTopFilesValue(const FsScan& scan, uint8_t maxCount, bool detailsLink) {
+    if (scan.topCount == 0) {
+        sendChunk("-");
+    } else {
+        char sizeBuf[48];
+        sendChunk("<div class='filelist'>");
+        const uint8_t count = scan.topCount < maxCount ? scan.topCount : maxCount;
+        for (uint8_t i = 0; i < count; ++i) {
+            formatReadableBytes(scan.top[i].size, sizeBuf, sizeof(sizeBuf));
+            sendChunk("<span class='fileitem'><code>");
+            sendEscapedHtmlChunk(scan.top[i].path);
+            sendChunk("</code><span class='size'>");
+            sendEscapedHtmlChunk(sizeBuf);
+            sendChunk("</span></span>");
+        }
+        sendChunk("</div>");
+    }
+    if (detailsLink) {
+        sendChunk("<p class='statusline'><a class='btnlink' href='/esp32base/fs'>Details</a></p>");
+    }
+}
+
+void sendFsSummaryRows(const FsScan& scan) {
+    char used[48];
+    char total[48];
+    char freeBytes[48];
+    const size_t fsUsed = Esp32BaseFs::usedBytes();
+    const size_t fsFree = Esp32BaseFs::freeBytes();
+    formatReadableBytes(fsUsed, used, sizeof(used));
+    formatReadableBytes(Esp32BaseFs::totalBytes(), total, sizeof(total));
+    formatReadableBytes(fsFree, freeBytes, sizeof(freeBytes));
+    sendInfoRowStart("FS");
+    sendStatusTag(fsFree == 0 ? Esp32BaseWeb::UI_WARN : Esp32BaseWeb::UI_OK, fsFree == 0 ? "full" : "ready");
+    sendSubmetricsStart();
+    sendSubmetric("Used", used);
+    sendSubmetric("Free", freeBytes);
+    sendSubmetric("Total", total);
+    sendSubmetricsEnd();
+    sendInfoRowEnd();
+    sendInfoRowStart("File inventory");
+    sendFsInventoryValue(scan, fsUsed);
+    sendInfoRowEnd();
+}
+#endif
 
 #if ESP32BASE_ENABLE_WATCHDOG
 struct WatchdogTripState {
@@ -2711,6 +2905,9 @@ void handleToolsPage() {
 #if ESP32BASE_ENABLE_OTA
     Esp32BaseWeb::sendInfoRowCompactLink("Firmware OTA", "Authenticated firmware upload endpoint.", nullptr, "/esp32base/ota", "Open", Esp32BaseWeb::UI_INFO);
 #endif
+#if ESP32BASE_ENABLE_FS
+    Esp32BaseWeb::sendInfoRowCompactLink("File system", "Read-only LittleFS inventory and size summary.", nullptr, "/esp32base/fs", "Open", Esp32BaseWeb::UI_INFO);
+#endif
     sendChunk("</div></section>");
     char storedHostname[64] = "";
     const bool hasStoredHostname = loadStoredHostname(storedHostname, sizeof(storedHostname));
@@ -3265,25 +3462,15 @@ void handleRoot() {
     sendStatusSectionStart("Storage & Logs");
 #if ESP32BASE_ENABLE_FS
     if (Esp32BaseFs::isReady()) {
-        char used[48];
-        char total[48];
-        char freeBytes[48];
-        const size_t fsFree = Esp32BaseFs::freeBytes();
-        formatReadableBytes(Esp32BaseFs::usedBytes(), used, sizeof(used));
-        formatReadableBytes(Esp32BaseFs::totalBytes(), total, sizeof(total));
-        formatReadableBytes(fsFree, freeBytes, sizeof(freeBytes));
-        sendInfoRowStart("FS");
-        if (fsFree == 0) {
-            sendStatusTag(Esp32BaseWeb::UI_WARN, "full");
+        FsScan fsScan;
+        if (scanFs(fsScan)) {
+            sendFsSummaryRows(fsScan);
+            sendInfoRowStart("Largest files");
+            sendFsTopFilesValue(fsScan, FS_STATUS_TOP_MAX, true);
+            sendInfoRowEnd();
         } else {
-            sendStatusTag(Esp32BaseWeb::UI_OK, "ready");
+            sendTaggedInfoRow("FS", "scan failed", Esp32BaseWeb::UI_WARN);
         }
-        sendSubmetricsStart();
-        sendSubmetric("Used", used);
-        sendSubmetric("Free", freeBytes);
-        sendSubmetric("Total", total);
-        sendSubmetricsEnd();
-        sendInfoRowEnd();
     } else {
         sendTaggedInfoRow("FS", "unavailable", Esp32BaseWeb::UI_WARN);
     }
@@ -3363,6 +3550,63 @@ void handleRoot() {
     sendPartitionTable();
     Esp32BaseWeb::sendFooter();
 }
+
+#if ESP32BASE_ENABLE_FS
+void handleFsPage() {
+    markRequest();
+    if (!ensureAuth()) {
+        return;
+    }
+    Esp32BaseWeb::sendHeader("File system");
+    Esp32BaseWeb::sendPageTitle("File system", "Read-only LittleFS inventory and storage usage.");
+    if (!Esp32BaseFs::isReady()) {
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_WARN, "LittleFS unavailable");
+        Esp32BaseWeb::sendFooter();
+        return;
+    }
+    FsScan scan;
+    if (!scanFs(scan)) {
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_WARN, "LittleFS scan failed");
+        Esp32BaseWeb::sendFooter();
+        return;
+    }
+    sendChunk("<section class='panel statuspage'><h2>Summary</h2><div class='tablewrap'><table class='kv'>");
+    sendFsSummaryRows(scan);
+    sendChunk("</table></div></section>");
+
+    sendChunk("<section class='panel statuspage'><h2>Largest files</h2><div class='tablewrap'><table class='part'><tr><th>Path</th><th>Size</th></tr>");
+    if (scan.topCount == 0) {
+        sendChunk("<tr><td colspan='2'>No files</td></tr>");
+    } else {
+        char sizeBuf[48];
+        const uint8_t count = scan.topCount < FS_TOP_MAX ? scan.topCount : FS_TOP_MAX;
+        for (uint8_t i = 0; i < count; ++i) {
+            formatReadableBytes(scan.top[i].size, sizeBuf, sizeof(sizeBuf));
+            sendChunk("<tr><td>");
+            sendEscapedHtmlChunk(scan.top[i].path);
+            sendChunk("</td><td>");
+            sendEscapedHtmlChunk(sizeBuf);
+            sendChunk("</td></tr>");
+        }
+    }
+    sendChunk("</table></div></section>");
+
+    sendChunk("<section class='panel statuspage'><h2>File tree</h2><div class='tablewrap'><table class='part'><tr><th>Path</th><th>Type</th><th>Size</th></tr>");
+    FsScan treeScan;
+    memset(&treeScan, 0, sizeof(treeScan));
+    uint16_t emittedRows = 0;
+    fsWalkDir(treeScan, "/", 0, true, FS_TREE_LIST_LIMIT, &emittedRows);
+    if (emittedRows == 0) {
+        sendChunk("<tr><td colspan='3'>No files</td></tr>");
+    }
+    sendChunk("</table></div>");
+    if (scan.entries > FS_TREE_LIST_LIMIT) {
+        sendChunk("<p class='notice warn'>File tree truncated at 128 entries.</p>");
+    }
+    sendChunk("</section>");
+    Esp32BaseWeb::sendFooter();
+}
+#endif
 
 #if ESP32BASE_ENABLE_FILELOG
 uint8_t selectedLogSegment() {
@@ -3585,6 +3829,9 @@ bool Esp32BaseWeb::begin() {
     const uint8_t appRoutes = routeCount(false);
     const uint8_t appPages = routeCount(true);
     uint8_t builtinRoutes = 25;
+#if ESP32BASE_ENABLE_FS
+    builtinRoutes += 1;
+#endif
 #if ESP32BASE_ENABLE_OTA
     builtinRoutes += 3;
 #endif
@@ -3612,6 +3859,9 @@ bool Esp32BaseWeb::begin() {
     g_server.on("/esp32base/logs", HTTP_GET, handleLogsPage);
     g_server.on("/esp32base/logs/raw", HTTP_GET, handleLogsRaw);
     g_server.on("/esp32base/logs/clear", HTTP_POST, handleLogsClear);
+#if ESP32BASE_ENABLE_FS
+    g_server.on("/esp32base/fs", HTTP_GET, handleFsPage);
+#endif
     g_server.on("/esp32base/auth", HTTP_GET, handleAuthPage);
     g_server.on("/esp32base/auth", HTTP_POST, handleAuthSubmit);
     g_server.on("/esp32base/tools", HTTP_GET, handleToolsPage);

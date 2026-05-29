@@ -165,6 +165,7 @@ Logs:
 System:
 
 - `GET /esp32base/tools`
+- `GET /esp32base/fs`，仅 `ESP32BASE_ENABLE_FS=1`，只读 LittleFS 文件占用诊断
 - `GET /esp32base/app-config`，仅 `ESP32BASE_ENABLE_APP_CONFIG=1`
 - `POST /esp32base/app-config`，仅 `ESP32BASE_ENABLE_APP_CONFIG=1`
 - `POST /esp32base/tools/hostname`
@@ -272,7 +273,8 @@ Logs 页面：
 - `/esp32base` 是只读设备体检页，采用诊断优先结构：按 Device、Network、Runtime Health、Storage & Logs、Firmware & OTA、Hardware、Partition Table 展示调试信息，不额外显示相邻重复的总览预览块。
 - Device 显示名称、hostname、固件、profile、uptime 和 boot count；Network 显示 WiFi/IP/RSSI、power save、STA MAC 和 AP MAC。
 - Runtime Health 显示 heap free/min/max alloc/total、Watchdog、NTP time、last reset 和 last wake；heap 与 Watchdog 的多值信息使用紧凑子指标展示，避免逗号串联造成阅读困难。
-- Storage & Logs 显示 FS used/free/total、FileLog enabled/disabled、日志级别、当前文件大小、日志总占用/上限和路径；Hardware 显示芯片型号、revision、CPU、SDK、Flash、PSRAM 和 eFuse MAC。
+- Storage & Logs 显示 FS used/free/total、文件/目录数量、已统计文件大小、other/overhead、Top 5 最大文件、FileLog enabled/disabled、日志级别、当前文件大小、日志总占用/上限和路径；Hardware 显示芯片型号、revision、CPU、SDK、Flash、PSRAM 和 eFuse MAC。
+- `/esp32base/fs` 是只读 LittleFS 详情页，显示 Summary、Top 10 最大文件和最多 128 项文件树；不提供删除、下载、编辑或格式化操作，格式化仍只在 System 页危险操作区。
 - Firmware & OTA 显示当前固件大小、运行 app slot、下一 OTA slot、Max OTA upload、OTA headroom、rollback 状态，以及仅在存在错误时显示的 Last OTA error；`OTA headroom` 表示 `target slot - current sketch`，Max OTA upload 才是上传硬上限。
 - 启用 Watchdog 时显示 `enabled, lifetime resets N, trip resets M` 或 invalid baseline 和 trip reset time；Reset Trip 保存时间使用和页面 NTP time 行一致的可信 epoch 判断，无可用时间则显示 `unknown (time unavailable)`。
 - Partition Table 使用运行时分区表展示 Name、Type、SubType、Offset、Size、Role；Role 用于标识 running app、next OTA、app data、NVS config、OTA state、coredump 等。

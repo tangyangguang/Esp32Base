@@ -236,6 +236,9 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Log level</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Current log file</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Log usage</th>");
+    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "File inventory</th>");
+    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Largest files</th>");
+    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "href='/esp32base/fs'");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Current firmware</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "OTA headroom</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "target slot - current sketch");
@@ -266,6 +269,14 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/logs?segment=99", nullptr, true, 200, "class='active' href='/esp32base/logs?segment=0'><span class='segname'>current-0");
     RUN_SELFTEST("GET", "/esp32base/logs?cleared=1", nullptr, true, 200, "Logs cleared");
     RUN_SELFTEST("GET", "/esp32base/logs?error=clear_failed", nullptr, true, 200, "Logs action failed");
+    RUN_SELFTEST("GET", "/esp32base/fs", nullptr, false, 401, "Unauthorized");
+    RUN_SELFTEST("GET", "/esp32base/fs", nullptr, true, 200, "<title>File system</title>");
+    RUN_SELFTEST("GET", "/esp32base/fs", nullptr, true, 200, "Summary");
+    RUN_SELFTEST("GET", "/esp32base/fs", nullptr, true, 200, "Largest files");
+    RUN_SELFTEST("GET", "/esp32base/fs", nullptr, true, 200, "File tree");
+    RUN_SELFTEST("GET", "/esp32base/fs", nullptr, true, 200, "Files</b>");
+    RUN_SELFTEST("GET", "/esp32base/fs", nullptr, true, 200, "Dirs</b>");
+    RUN_SELFTEST("GET", "/esp32base/fs", nullptr, true, 200, "Listed size</b>");
     RUN_SELFTEST("GET", "/esp32base/auth", nullptr, true, 200, "<title>Auth</title>");
     RUN_SELFTEST("GET", "/esp32base/auth", nullptr, true, 200, "<section class='panel formpanel authpanel'><h2>Credentials</h2><form class='editform'");
     RUN_SELFTEST("GET", "/esp32base/auth", nullptr, true, 200, "type='password'");
@@ -285,6 +296,7 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "HTTP Basic Auth credentials for built-in routes.");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Authenticated firmware upload endpoint.");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Firmware OTA");
+    RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Read-only LittleFS inventory and size summary.");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "class='toolgrid'");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "<section class='panel formpanel hostpanel'><h2>Hostname</h2>");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "class='hostfacts'");
