@@ -2359,7 +2359,7 @@ void sendAppConfigPage(const char* errorMessage = nullptr) {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_DANGER, "App Config was not saved", errorMessage);
     }
     if (g_appConfigGroupCount == 0 || g_appConfigFieldCount == 0) {
-        sendChunk("<section class='panel'><p class='muted'>No App Config fields registered.</p></section>");
+        sendChunk("<section class='panel actionpanel'><h2>No App Config fields</h2><p class='muted'>No application configuration values are registered by the app.</p></section>");
         sendChunk("</div>");
         Esp32BaseWeb::sendFooter();
         return;
@@ -3401,6 +3401,11 @@ void handleLogsPage() {
     }
     Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_LOGS]);
     Esp32BaseWeb::sendPageTitle(g_builtinLabels[Esp32BaseWeb::BUILTIN_LOGS]);
+    if (g_server.hasArg("cleared")) {
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "Logs cleared");
+    } else if (g_server.hasArg("error")) {
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_DANGER, "Logs action failed", g_server.arg("error").c_str());
+    }
 #if ESP32BASE_ENABLE_FILELOG
     Esp32BaseFileLog::flush();
     char maxBuf[48];
@@ -3440,7 +3445,7 @@ void handleLogsPage() {
     sendChunk(line);
     sendChunk("</section>");
 #else
-    sendChunk("<section class='panel logpanel'><p>File log: <b>unavailable</b></p></section>");
+    sendChunk("<section class='panel actionpanel'><h2>File log unavailable</h2><p class='muted'>File log is not available in this firmware profile.</p></section>");
 #endif
     Esp32BaseWeb::sendFooter();
 }

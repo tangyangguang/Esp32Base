@@ -185,7 +185,8 @@
 - WiFi 配置 API。
 - Logs 页面。
 - Logs clear POST + confirm + once + 303。
-- FS/FileLog 不可用时 Logs 页面显示 unavailable。
+- Logs clear 回到页面后显示成功/失败提示。
+- FS/FileLog 不可用时 Logs 页面显示 `File log unavailable`。
 - 日志内容 HTML escape。
 - 默认 Web 首页和导航开箱可用。
 - 业务优先导航可设置 device name、home path、home mode、system nav mode。

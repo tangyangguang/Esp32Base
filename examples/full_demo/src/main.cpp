@@ -251,6 +251,8 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "class='active' href='/esp32base/logs?segment=0'><span class='segname'>current-0");
     RUN_SELFTEST("GET", "/esp32base/logs?segment=1", nullptr, true, 200, "class='active' href='/esp32base/logs?segment=1'><span class='segname'>history-1");
     RUN_SELFTEST("GET", "/esp32base/logs?segment=99", nullptr, true, 200, "class='active' href='/esp32base/logs?segment=0'><span class='segname'>current-0");
+    RUN_SELFTEST("GET", "/esp32base/logs?cleared=1", nullptr, true, 200, "Logs cleared");
+    RUN_SELFTEST("GET", "/esp32base/logs?error=clear_failed", nullptr, true, 200, "Logs action failed");
     RUN_SELFTEST("GET", "/esp32base/auth", nullptr, true, 200, "<title>Auth</title>");
     RUN_SELFTEST("GET", "/esp32base/auth", nullptr, true, 200, "<section class='panel formpanel authpanel'><h2>Credentials</h2><form class='editform'");
     RUN_SELFTEST("GET", "/esp32base/auth", nullptr, true, 200, "type='password'");
@@ -328,6 +330,7 @@ void runSelfTest() {
     RUN_SELFTEST("POST", "/api/control", "value=selftest", true, 303, "Location: /control?saved=1");
     RUN_SELFTEST("GET", "/dashboard", nullptr, true, 200, "Stored value: selftest");
     RUN_SELFTEST("POST", "/esp32base/logs/clear", nullptr, true, 303, "Location: /esp32base/logs?cleared=1");
+    RUN_SELFTEST("GET", "/esp32base/logs?cleared=1", nullptr, true, 200, "Logs cleared");
     RUN_BOOL(Esp32BaseWeb::verifyAuth("admin", "admin"));
     RUN_BOOL(Esp32BaseWeb::saveAuth("selftest_user", "selftestPass1"));
     RUN_BOOL(Esp32BaseWeb::verifyAuth("selftest_user", "selftestPass1"));

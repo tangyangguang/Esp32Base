@@ -221,6 +221,7 @@ App Config 页面：
 - 仅在 `ESP32BASE_ENABLE_APP_CONFIG=1` 时注册，固定路径为 `/esp32base/app-config`。
 - 业务必须在 `Esp32Base::begin()` 前用 `Esp32BaseAppConfig` 注册 group 和字段；字段直接绑定业务 `Esp32BaseConfig` namespace/key；注册传入的字符串和 enum option 数组必须保持固件生命周期有效。
 - 启用后必须显式设置 `ESP32BASE_APP_CONFIG_MAX_GROUPS` 和 `ESP32BASE_APP_CONFIG_MAX_FIELDS`，硬上限为 16 组、128 字段。
+- 未注册 group 或字段时页面显示轻量空状态，提示应用尚未注册配置字段。
 - 支持 string、int、decimal 定点数、bool、enum；string 最大 256 bytes，enum value 最大 31 bytes，label/option label 最大 31 bytes，help 最大 96 bytes，unit 最大 12 bytes，decimal 使用 `int32_t raw` 和 `scale=0..6`。
 - 页面按 group 输出紧凑 panel，字段默认直接可编辑；点击 Save 时前端只展示变更核对清单，不作为服务端事实来源。
 - 变更核对清单使用中性 review 样式，不使用成功色或警告色；只有实际保存结果才使用 `ok`/`danger` notice。
@@ -245,7 +246,8 @@ OTA 上传页：
 Logs 页面：
 
 - 需要 Basic Auth。
-- FS/FileLog 不可用时显示 `File log: unavailable`。
+- FS/FileLog 不可用时显示轻量不可用面板，标题为 `File log unavailable`。
+- Clear logs POST 后通过 303 回到 Logs 页，并在页面顶部显示成功或失败提示；刷新页面不重复提交。
 - FileLog 模式为 OFF 时，Logs 页面仍展示已有历史日志；OFF 只表示停止后续写入。
 - 读取日志内容前必须调用 `Esp32BaseFileLog::flush()`。
 - 显示 enabled、path、mode、rotate files、buffer used/total、flush interval、max per file、max total、每段大小。

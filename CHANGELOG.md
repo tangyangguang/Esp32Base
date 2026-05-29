@@ -25,6 +25,7 @@
 
 - `/esp32base/app-config` 的 Confirm changes 区域改为中性 review 样式，移除大面积成功色背景，避免用户误以为变更已经保存。
 - Cancel 按钮改为低权重中性按钮，只保留 Confirm Save 作为主操作；分组行同步改为中性灰底。
+- 未注册 App Config group 或字段时显示轻量空状态，而不是一行弱提示。
 
 业务侧影响：
 
@@ -38,7 +39,8 @@
 - `/esp32base/logs` 恢复为紧凑元信息表格，不再使用指标卡片展示 FileLog 状态，避免诊断页显得复杂和分散。
 - FileLog 的 enabled、path、rotation files、mode、buffer、flush interval、max per file、max total 和 segments 继续集中显示。
 - segment 标签、Open raw log 链接和 raw iframe 保持原有行为，日志正文仍通过 `/esp32base/logs/raw?segment=N` 加载，不内联进主页面。
-- FS/FileLog 不可用时恢复为简单 `File log: unavailable` 表达。
+- Clear logs 完成后回到 Logs 页并显示成功或失败提示；刷新页面不会重复提交。
+- FS/FileLog 不可用时改为轻量不可用面板，避免只有一行弱提示。
 
 业务侧影响：
 
