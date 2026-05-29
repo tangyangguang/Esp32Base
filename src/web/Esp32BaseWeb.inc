@@ -1662,6 +1662,7 @@ void handleWifiPage() {
     Esp32BaseConfig::getStr("eb_wifi", "pass", password, sizeof(password), "");
 
     Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_WIFI]);
+    Esp32BaseWeb::sendPageTitle("WiFi Settings", "Stored credentials used by station mode and WiFi recovery.");
     if (g_server.hasArg("saved")) {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "Saved", "Credentials updated and connection started.");
     } else if (g_server.hasArg("error")) {
@@ -1673,7 +1674,6 @@ void handleWifiPage() {
     } else if (g_server.hasArg("cleared")) {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "Saved WiFi credentials were cleared");
     }
-    Esp32BaseWeb::sendPageTitle("WiFi Settings", "Stored credentials used by station mode and WiFi recovery.");
     sendChunk("<div class='toolgrid'><section class='panel formpanel wifipanel'><h2>Credentials</h2><form class='editform' method='post' action='/esp32base/wifi' onsubmit=\"if(!this.ssid.value.trim()){alert('SSID cannot be empty');return false;}if(this.ssid.value.length>32||this.password.value.length>64){alert('SSID or password is too long');return false;}return once(this);\"><div class='fieldgrid'>");
     sendChunk("<div class='field long'><label for='ssid'>SSID</label><input id='ssid' name='ssid' value='");
     sendEscapedHtmlChunk(ssid);
@@ -2652,16 +2652,6 @@ void handleToolsPage() {
     }
     Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_TOOLS]);
     Esp32BaseWeb::sendPageTitle(g_builtinLabels[Esp32BaseWeb::BUILTIN_TOOLS], "Low-frequency device settings and maintenance actions.");
-    sendChunk("<section class='panel actionpanel'><h2>System settings</h2><div class='toollinks'>");
-#if ESP32BASE_ENABLE_APP_CONFIG
-    Esp32BaseWeb::sendInfoRowCompactLink("App Config", "Application configuration values registered by the app.", nullptr, "/esp32base/app-config", "Open", Esp32BaseWeb::UI_INFO);
-#endif
-    Esp32BaseWeb::sendInfoRowCompactLink("WiFi Setup", "Stored credentials used by station mode and WiFi recovery.", nullptr, "/esp32base/wifi", "Open", Esp32BaseWeb::UI_INFO);
-    Esp32BaseWeb::sendInfoRowCompactLink("Web Auth", "HTTP Basic Auth credentials for built-in routes.", nullptr, "/esp32base/auth", "Open", Esp32BaseWeb::UI_INFO);
-#if ESP32BASE_ENABLE_OTA
-    Esp32BaseWeb::sendInfoRowCompactLink("Firmware OTA", "Authenticated firmware upload endpoint.", nullptr, "/esp32base/ota", "Open", Esp32BaseWeb::UI_INFO);
-#endif
-    sendChunk("</div></section>");
     if (g_server.hasArg("formatted")) {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "LittleFS formatted", "FileLog mode was reloaded.");
     } else if (g_server.hasArg("logs_cleared")) {
@@ -2682,6 +2672,16 @@ void handleToolsPage() {
     } else if (g_server.hasArg("hostname_error")) {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_DANGER, "Hostname was not saved", g_server.arg("hostname_error").c_str());
     }
+    sendChunk("<section class='panel actionpanel'><h2>System settings</h2><div class='toollinks'>");
+#if ESP32BASE_ENABLE_APP_CONFIG
+    Esp32BaseWeb::sendInfoRowCompactLink("App Config", "Application configuration values registered by the app.", nullptr, "/esp32base/app-config", "Open", Esp32BaseWeb::UI_INFO);
+#endif
+    Esp32BaseWeb::sendInfoRowCompactLink("WiFi Setup", "Stored credentials used by station mode and WiFi recovery.", nullptr, "/esp32base/wifi", "Open", Esp32BaseWeb::UI_INFO);
+    Esp32BaseWeb::sendInfoRowCompactLink("Web Auth", "HTTP Basic Auth credentials for built-in routes.", nullptr, "/esp32base/auth", "Open", Esp32BaseWeb::UI_INFO);
+#if ESP32BASE_ENABLE_OTA
+    Esp32BaseWeb::sendInfoRowCompactLink("Firmware OTA", "Authenticated firmware upload endpoint.", nullptr, "/esp32base/ota", "Open", Esp32BaseWeb::UI_INFO);
+#endif
+    sendChunk("</div></section>");
     char storedHostname[64] = "";
     const bool hasStoredHostname = loadStoredHostname(storedHostname, sizeof(storedHostname));
     sendChunk("<div class='toolgrid'>");

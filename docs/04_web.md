@@ -282,6 +282,7 @@ Logs 页面：
 - 默认页面最大宽度约 1180px，浅灰页面背景配白色轻量边框 panel，避免正文和操作块错位。
 - 顶部导航使用中性色和主色浅底 active 状态，主色由 CSS 变量控制。
 - 内置状态、WiFi、Auth、OTA、Logs、System 页面使用统一标题、panel、按钮和表单节奏；页面标题、正文 panel、导航和 footer 使用同一布局宽度。
+- 内置页的 `POST -> 303 -> GET` 操作结果提示统一紧跟页面标题，先反馈结果，再进入具体内容块。
 - 默认输入框样式只作用于文本类输入，例如未声明 type 的 input、text、password、number、email、url、tel、search。
 - checkbox、radio、file、range、color、hidden 等非文本控件保持浏览器原生尺寸和行为，业务页面不需要额外覆盖基础 CSS。
 - 统一 `.ok`、`.err`、`.info` 状态样式。

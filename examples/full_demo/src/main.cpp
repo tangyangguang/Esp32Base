@@ -241,6 +241,8 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/wifi", nullptr, true, 200, "<section class='panel dangerpanel'><h2>Clear WiFi</h2>");
     RUN_SELFTEST("GET", "/esp32base/wifi", nullptr, true, 200, "Password (optional)");
     RUN_SELFTEST("GET", "/esp32base/wifi", nullptr, true, 200, "class='secondary' type='button' value='Show/Hide Password'");
+    RUN_SELFTEST("GET", "/esp32base/wifi?saved=1", nullptr, true, 200, "Credentials updated and connection started.");
+    RUN_SELFTEST("GET", "/esp32base/wifi?error=clear_failed", nullptr, true, 200, "WiFi credentials were not cleared");
     RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "<section class='panel logpanel'><div class='tablewrap'><table class='logmeta'>");
     RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "<th>File log</th><td><b>enabled</b>");
     RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "class='logmeta'");
@@ -287,6 +289,8 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Format LittleFS");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Free heap:");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "RSSI:");
+    RUN_SELFTEST("GET", "/esp32base/tools?hostname_saved=1", nullptr, true, 200, "Hostname saved");
+    RUN_SELFTEST("GET", "/esp32base/tools?formatted=1", nullptr, true, 200, "LittleFS formatted");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "<title>App Config</title>");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Application configuration values stored by Esp32Base.");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Stored value");
