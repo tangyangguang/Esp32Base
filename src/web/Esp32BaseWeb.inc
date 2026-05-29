@@ -169,7 +169,7 @@ static const char WEB_CSS[] PROGMEM =
     ".metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:8px 0}.metric{border:1px solid var(--eb-line-soft);border-radius:7px;background:#fff;padding:8px}.metric b{display:block;font-size:17px}.metric span{display:block;color:var(--eb-muted);font-size:12px}"
     ".statusgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;align-items:start}.statusgrid .panel{margin:0}.appsection{padding:10px 12px}.appsection .quicklinks{margin-bottom:0}"
     ".urow{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--eb-line-soft)}.urow:last-child{border-bottom:0}.urow small{display:block;color:var(--eb-muted);margin-top:2px}.urow form{display:inline}.uactions{display:grid;grid-template-columns:4em 96px;gap:16px;align-items:center;justify-content:end;min-width:0}.uvalue{font-weight:700;white-space:nowrap}.uactions .uvalue{min-width:0;text-align:right;color:#344054}.uactions .btnlink,.uactions input[type=submit]{width:96px}.uactions form{display:block;width:96px;margin:0}.uactions form input[type=submit]{width:100%;margin:0}.uactions.readonly{grid-template-columns:4em 96px}.pagination{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;border-top:1px solid var(--eb-line-soft);padding-top:7px;margin-top:7px;font-size:12px;font-weight:400}.pagerlinks,.pagerform{display:flex;flex-wrap:wrap;align-items:center;gap:4px}.pagerlinks{justify-content:center}.pagerform{justify-content:flex-end}.pagination .muted,.pagination label{display:inline-flex;align-items:center;min-height:26px;margin:0;font-weight:400;line-height:1}.pagination .btnlink,.pagination button,.pagination select,.pagination input{font-size:12px;min-height:26px;border-radius:6px;font-weight:400;line-height:1.1}.pagination .btnlink{padding:0 7px;background:#f3f6f8;color:#526071}.pagination .btnlink.disabled{background:#f5f6f7;color:#9aa4b2}.pagination .current{background:#e6f2ef;color:#14685d;border:1px solid #bddbd3}.pagination button{padding:0 8px;background:#f3f6f8;color:#344054;border:1px solid var(--eb-line)}.pagination button:hover{background:#e9eef2}.pagination select,.pagination input{padding:2px 7px}.pagerform input[type=number]{width:6ch;margin:0}.pagerform select{width:auto;max-width:82px;margin:0}"
-    ".tag{display:inline-flex;align-items:center;min-height:21px;padding:2px 7px;border-radius:999px;background:#eef2f4;color:#475467;font-size:11px;font-weight:750;white-space:nowrap}.tag.ok{background:var(--eb-ok-soft);color:var(--eb-ok)}.tag.warn{background:var(--eb-warn-soft);color:var(--eb-warn)}.tag.danger{background:var(--eb-danger-soft);color:var(--eb-danger)}.tag.info{background:var(--eb-info-soft);color:var(--eb-info)}.submetrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(86px,1fr));gap:4px 12px;margin:0}.tag+.submetrics{margin-top:5px}.submetrics span{min-width:0}.submetrics b{display:block;color:var(--eb-muted);font-size:11px;font-weight:650;line-height:1.2}.submetrics em{display:block;font-style:normal;overflow-wrap:anywhere}.filelist{display:grid;gap:3px}.fileitem{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:baseline}.fileitem code{overflow-wrap:anywhere}.fileitem .size{white-space:nowrap;color:var(--eb-muted)}"
+    ".tag{display:inline-flex;align-items:center;min-height:21px;padding:2px 7px;border-radius:999px;background:#eef2f4;color:#475467;font-size:11px;font-weight:750;white-space:nowrap}.tag.ok{background:var(--eb-ok-soft);color:var(--eb-ok)}.tag.warn{background:var(--eb-warn-soft);color:var(--eb-warn)}.tag.danger{background:var(--eb-danger-soft);color:var(--eb-danger)}.tag.info{background:var(--eb-info-soft);color:var(--eb-info)}.submetrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(86px,1fr));gap:4px 12px;margin:0}.tag+.submetrics{margin-top:5px}.submetrics span{min-width:0}.submetrics b{display:block;color:var(--eb-muted);font-size:11px;font-weight:650;line-height:1.2}.submetrics em{display:block;font-style:normal;overflow-wrap:anywhere}.fsummary{border-collapse:collapse;width:100%;min-width:560px;font-size:13px}.fsummary th,.fsummary td{border-bottom:1px solid var(--eb-line);padding:7px 8px;text-align:left;vertical-align:top}.fsummary tr:last-child th,.fsummary tr:last-child td{border-bottom:0}.fsummary th{width:150px;color:var(--eb-muted);font-weight:650}.fsummary b{display:block;color:var(--eb-muted);font-size:11px;font-weight:650;line-height:1.2}.fsummary em{display:block;font-style:normal;overflow-wrap:anywhere}.fsummary .tag{margin-top:-1px}"
     ".btnlink{display:inline-flex;align-items:center;justify-content:center;min-height:32px;padding:0 10px;border-radius:7px;background:var(--eb-info-soft);color:var(--eb-info);font-size:13px;font-weight:750;white-space:nowrap}.btnlink.ok{background:var(--eb-ok-soft);color:var(--eb-ok)}.btnlink.warn{background:var(--eb-warn-soft);color:var(--eb-warn)}.btnlink.danger{background:var(--eb-danger-soft);color:var(--eb-danger)}.btnlink.disabled{background:#eef2f4;color:#98a2b3}"
     ".kv{border-collapse:collapse;width:100%;margin:0}.kv th,.kv td{border-bottom:1px solid var(--eb-line);padding:7px 5px;text-align:left;vertical-align:top}.kv tr:last-child th,.kv tr:last-child td{border-bottom:0}.kv th{width:30%;color:var(--eb-muted);font-weight:650}.statuspage{padding:10px 12px}.statuspage h2,.logpanel h2{margin-bottom:6px}.statuspage .kv{font-size:13px}.statuspage .kv th{width:176px;max-width:38%}"
     ".part{border-collapse:collapse;width:100%;min-width:640px;font-size:13px}.part th,.part td{border-bottom:1px solid var(--eb-line);padding:6px 5px;text-align:left;vertical-align:top}.part th{color:var(--eb-muted);font-weight:650}.part tr:last-child td{border-bottom:0}"
@@ -915,7 +915,6 @@ void sendStatusSectionEnd() {
 
 #if ESP32BASE_ENABLE_FS
 static const uint8_t FS_TOP_MAX = 10;
-static const uint8_t FS_STATUS_TOP_MAX = 5;
 static const uint16_t FS_TREE_LIST_LIMIT = 128;
 static const uint8_t FS_SCAN_MAX_DEPTH = 8;
 
@@ -1062,26 +1061,45 @@ void sendFsInventoryValue(const FsScan& scan, uint64_t fsUsed) {
     sendSubmetricsEnd();
 }
 
-void sendFsTopFilesValue(const FsScan& scan, uint8_t maxCount, bool detailsLink) {
-    if (scan.topCount == 0) {
-        sendChunk("-");
-    } else {
-        char sizeBuf[48];
-        sendChunk("<div class='filelist'>");
-        const uint8_t count = scan.topCount < maxCount ? scan.topCount : maxCount;
-        for (uint8_t i = 0; i < count; ++i) {
-            formatReadableBytes(scan.top[i].size, sizeBuf, sizeof(sizeBuf));
-            sendChunk("<span class='fileitem'><code>");
-            sendEscapedHtmlChunk(scan.top[i].path);
-            sendChunk("</code><span class='size'>");
-            sendEscapedHtmlChunk(sizeBuf);
-            sendChunk("</span></span>");
-        }
-        sendChunk("</div>");
-    }
-    if (detailsLink) {
-        sendChunk("<p class='statusline'><a class='btnlink' href='/esp32base/fs'>Details</a></p>");
-    }
+void sendFsSummaryCell(const char* label, const char* value) {
+    sendChunk("<td><b>");
+    sendEscapedHtmlChunk(label);
+    sendChunk("</b><em>");
+    sendEscapedHtmlChunk(value);
+    sendChunk("</em></td>");
+}
+
+void sendFsSummaryTable(const FsScan& scan) {
+    char used[48];
+    char total[48];
+    char freeBytes[48];
+    char files[16];
+    char dirs[16];
+    char listed[48];
+    char other[48];
+    const size_t fsUsed = Esp32BaseFs::usedBytes();
+    const size_t fsFree = Esp32BaseFs::freeBytes();
+    formatReadableBytes(fsUsed, used, sizeof(used));
+    formatReadableBytes(Esp32BaseFs::totalBytes(), total, sizeof(total));
+    formatReadableBytes(fsFree, freeBytes, sizeof(freeBytes));
+    fsFormatCount(scan.files, files, sizeof(files));
+    fsFormatCount(scan.dirs, dirs, sizeof(dirs));
+    formatReadableBytes(scan.listedSize, listed, sizeof(listed));
+    const uint64_t overheadBytes = fsUsed > scan.listedSize ? fsUsed - scan.listedSize : 0;
+    formatReadableBytes(overheadBytes, other, sizeof(other));
+
+    sendChunk("<table class='fsummary'><tr><th>FS</th><td>");
+    sendStatusTag(fsFree == 0 ? Esp32BaseWeb::UI_WARN : Esp32BaseWeb::UI_OK, fsFree == 0 ? "full" : "ready");
+    sendChunk("</td>");
+    sendFsSummaryCell("Used", used);
+    sendFsSummaryCell("Free", freeBytes);
+    sendFsSummaryCell("Total", total);
+    sendChunk("</tr><tr><th>File inventory</th>");
+    sendFsSummaryCell("Files", files);
+    sendFsSummaryCell("Dirs", dirs);
+    sendFsSummaryCell("Listed size", listed);
+    sendFsSummaryCell("Other/overhead", other);
+    sendChunk("</tr></table>");
 }
 
 void sendFsSummaryRows(const FsScan& scan) {
@@ -3465,8 +3483,8 @@ void handleRoot() {
         FsScan fsScan;
         if (scanFs(fsScan)) {
             sendFsSummaryRows(fsScan);
-            sendInfoRowStart("Largest files");
-            sendFsTopFilesValue(fsScan, FS_STATUS_TOP_MAX, true);
+            sendInfoRowStart("File details");
+            sendChunk("<a class='btnlink' href='/esp32base/fs'>Details</a>");
             sendInfoRowEnd();
         } else {
             sendTaggedInfoRow("FS", "scan failed", Esp32BaseWeb::UI_WARN);
@@ -3570,9 +3588,9 @@ void handleFsPage() {
         Esp32BaseWeb::sendFooter();
         return;
     }
-    sendChunk("<section class='panel statuspage'><h2>Summary</h2><div class='tablewrap'><table class='kv'>");
-    sendFsSummaryRows(scan);
-    sendChunk("</table></div></section>");
+    sendChunk("<section class='panel statuspage'><h2>Summary</h2><div class='tablewrap'>");
+    sendFsSummaryTable(scan);
+    sendChunk("</div></section>");
 
     sendChunk("<section class='panel statuspage'><h2>Largest files</h2><div class='tablewrap'><table class='part'><tr><th>Path</th><th>Size</th></tr>");
     if (scan.topCount == 0) {

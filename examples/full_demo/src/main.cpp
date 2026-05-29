@@ -237,7 +237,7 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Current log file</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Log usage</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "File inventory</th>");
-    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Largest files</th>");
+    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "File details</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "href='/esp32base/fs'");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Current firmware</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "OTA headroom</th>");
@@ -272,6 +272,7 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/fs", nullptr, false, 401, "Unauthorized");
     RUN_SELFTEST("GET", "/esp32base/fs", nullptr, true, 200, "<title>File system</title>");
     RUN_SELFTEST("GET", "/esp32base/fs", nullptr, true, 200, "Summary");
+    RUN_SELFTEST("GET", "/esp32base/fs", nullptr, true, 200, "class='fsummary'");
     RUN_SELFTEST("GET", "/esp32base/fs", nullptr, true, 200, "Largest files");
     RUN_SELFTEST("GET", "/esp32base/fs", nullptr, true, 200, "File tree");
     RUN_SELFTEST("GET", "/esp32base/fs", nullptr, true, 200, "Files</b>");
