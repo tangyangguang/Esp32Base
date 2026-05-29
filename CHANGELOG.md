@@ -14,6 +14,7 @@
 - System settings 入口进一步改为 PC 两列按钮网格，App Config、WiFi Setup、Web Auth 和 Firmware OTA 直接点击进入，不再显示额外 Open 列。
 - Hostname 面板压缩为紧凑表格和同一行编辑区，减少单个面板在 PC 上撑高整行。
 - WiFi 和 System 页的操作结果提示统一挪到页面标题下方，先反馈保存/失败结果，再显示具体设置块。
+- System settings 入口在手机端保持“说明 + Open”左右结构，减少入口区纵向占用，同时保留说明文字。
 
 业务侧影响：
 
