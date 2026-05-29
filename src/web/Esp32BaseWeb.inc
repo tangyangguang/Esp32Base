@@ -2794,8 +2794,8 @@ void handleToolsRebootPost() {
     ESP32BASE_LOG_W("web", "restart_requested source=tools");
     Esp32BaseWeb::sendHeader("Rebooting");
     sendChunk("<script>history.replaceState(null,'','/esp32base/tools?restarting=1');</script>");
-    Esp32BaseWeb::sendPageTitle("Rebooting...");
-    sendChunk("<section class='panel statuspage'><p>Device is restarting. Please wait a few seconds, then reload.</p></section>");
+    Esp32BaseWeb::sendPageTitle("Rebooting", "Device restart was accepted.");
+    sendChunk("<section class='panel actionpanel'><h2>Restart requested</h2><p class='muted'>Device is restarting. Please wait a few seconds, then reload the System page.</p><div class='actions'><a class='btnlink' href='/esp32base/tools'>Reload System</a></div></section>");
     Esp32BaseWeb::sendFooter();
     delay(100);
     Esp32BaseSystem::restart("web");
