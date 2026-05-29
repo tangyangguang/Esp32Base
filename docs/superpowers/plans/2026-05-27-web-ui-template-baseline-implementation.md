@@ -4,7 +4,7 @@
 
 **Goal:** Add a lightweight reusable Web UI baseline to Esp32Base so built-in and business pages can share compact layout, styling, pagination, form-result notices, access-control states, statistics summaries, guided flows, and diagnostic-maintenance structures.
 
-**Execution status:** Implemented on branch `codex/web-ui-template-baseline`. The checklist below is retained as implementation history and future replay guidance; the current verification commands are listed in the Verification Matrix.
+**Execution status:** Implemented and folded into `main`. The canonical implementation now lives in `src/web/Esp32BaseWeb.*`, `examples/web_ui_gallery`, `docs/03_api.md`, `docs/04_web.md`, `docs/11_web_ui_baseline.md`, `README.md`, and `CHANGELOG.md`. The checklist below is retained as historical replay guidance, not as the current live task list; current validation is tracked by the commands in the Verification Matrix.
 
 **Architecture:** Keep the existing synchronous `WebServer` model and current `Esp32BaseWeb::sendHeader()` / `sendFooter()` / `sendChunk()` flow. Add small C++ output helpers and CSS classes inside `Esp32BaseWeb`, then demonstrate business usage through examples before migrating built-in pages opportunistically. Style iteration is expected: visual changes must stay concentrated in `WEB_HEAD` CSS variables/classes and helper markup, not copied into business project pages.
 

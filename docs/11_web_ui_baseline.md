@@ -347,8 +347,8 @@
 - 32-34px 控件高度。
 - 10-12px section 内边距。
 - 正文 14px。
-- 页面标题 22-24px。
-- section 标题 16-17px。
+- 页面标题约 18px。
+- section 标题约 16px。
 
 配色语义：
 
@@ -406,7 +406,7 @@ void handleHeadExtra() {
 - `Esp32BaseWeb::setHeadExtraCallback()`。
 - `Esp32BaseWeb::redirectSeeOther()`.
 
-新增能力应以 helper 形式提供，例如：
+新增能力以 helper 形式提供，例如：
 
 - `sendPageTitle()`：页面标题。
 - `beginPanel()` / `endPanel()`：内容分组。
@@ -437,6 +437,8 @@ void handleHeadExtra() {
 - 可换肤变量。
 
 基础样式由 `/esp32base/ui.css` 输出，页面通过 `sendHeader()` 自动引用。业务页面不需要手动引用该 CSS，也不应该复制整段基础 CSS；浏览器会缓存该资源，避免每个页面重复下载同一份样式。
+
+内置 Status、WiFi、Logs、System、Auth、OTA、FS 和 App Config 页面已经按这套 baseline 收敛。后续页面调整应优先改 `/esp32base/ui.css` 的公共 class 或 helper 输出结构，不在单个内置页复制一次性样式。
 
 ## 10. 提交与防重复规则
 

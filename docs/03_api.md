@@ -677,6 +677,30 @@ public:
         BUILTIN_AUTH
     };
 
+    enum UiTone : uint8_t {
+        UI_NEUTRAL,
+        UI_OK,
+        UI_WARN,
+        UI_DANGER,
+        UI_INFO
+    };
+
+    struct ResultNotice {
+        const char* param;
+        const char* value;
+        UiTone tone;
+        const char* title;
+        const char* message;
+    };
+
+    struct Pagination {
+        const char* path;
+        const char* query;
+        uint32_t page;
+        uint32_t perPage;
+        uint32_t total;
+    };
+
     using Handler = void (*)();
 
     static bool begin();
@@ -719,6 +743,22 @@ public:
 
     static void sendHeader(const char* title = nullptr);
     static void sendFooter();
+    static void sendPageTitle(const char* title, const char* subtitle = nullptr);
+    static void beginPanel(const char* title = nullptr);
+    static void endPanel();
+    static void sendNotice(UiTone tone, const char* title, const char* message = nullptr);
+    static void sendResultNotice(const ResultNotice* notices, uint8_t count);
+    static void beginMetricGrid();
+    static void sendMetric(const char* label, const char* value, const char* help = nullptr);
+    static void endMetricGrid();
+    static void sendInfoRowCompact(const char* title, const char* help, const char* value = nullptr);
+    static void sendInfoRowCompactLink(const char* title, const char* help, const char* value,
+                                       const char* href, const char* label, UiTone tone = UI_INFO);
+    static void sendInfoRowCompactForm(const char* title, const char* help, const char* value,
+                                       const char* action, const char* label,
+                                       const char* hiddenName = nullptr, const char* hiddenValue = nullptr,
+                                       UiTone tone = UI_INFO);
+    static void sendPagination(const Pagination& pagination);
     static bool sendResponseHeader(const char* name, const char* value);
     static bool beginResponse(int code, const char* contentType, const char* filename = nullptr);
     static bool beginText(int code);
@@ -756,6 +796,8 @@ Route 缓冲机制：
 - `FooterBarMode` 控制 `sendFooter()` 的底部横条输出：`FOOTER_BAR_OFF` 不显示，`FOOTER_BAR_STATUS_ONLY` 只显示运行摘要，`FOOTER_BAR_FULL` 显示系统入口和运行摘要。默认 `FOOTER_BAR_FULL`，System 页面保存后写入 `eb_ui.footer_mode` 并立即影响后续页面输出。
 - `setBuiltinLabel()` 覆盖内置导航标签，可用于中文本地化；系统工具页统一使用 `BUILTIN_TOOLS`，不提供旧 Reboot 历史别名。
 - `setHeadExtraCallback()` 设置额外 head 输出回调；`sendHeader()` 在默认 `WEB_HEAD` 后、`</head><body>` 和顶部导航前调用它，业务项目可在这里输出 `<style>`，避免页面刷新时先显示基础库默认导航样式。该回调不会注入 `/esp32base` 及其子路径的内置页面，避免业务 CSS 增加内置页体积。
+- Web UI helper 只负责轻量 HTML 结构和统一样式，不接管业务数据模型：`sendPageTitle()` 输出页面标题区，`beginPanel()` / `endPanel()` 输出内容分组，`sendNotice()` / `sendResultNotice()` 输出横向状态反馈，`beginMetricGrid()` / `sendMetric()` / `endMetricGrid()` 输出状态和统计摘要，`sendInfoRowCompact*()` 输出紧凑信息行和单动作，`sendPagination()` 输出页码型分页、每页条数和跳页表单。
+- `UiTone` 仅表达语义色：neutral、ok、warn、danger、info。业务项目不得把危险、警告、成功语义当作普通装饰色复用。
 - 导航会给当前匹配项输出 `active` class；匹配规则为 path 完全相等，或当前路径以 `path + "/"` 开头，多个匹配时选择最长 path。`SYSTEM_NAV_SECTION` 下 WiFi/Auth/OTA 二级页会把底部 System 入口标记为 active；App Config 页面在启用时使用自己的底部入口标记 active。
 - `/esp32base` Status 页是只读设备体检页，采用诊断优先结构：不额外显示和相邻详细区重复的 `System Overview` 预览块，而是按 Device、Network、Runtime Health、Storage & Logs、Firmware & OTA、Hardware、Partition Table 排序展示 hostname、固件/profile、uptime/boot count、WiFi/IP/RSSI、STA/AP/eFuse MAC、heap、max alloc、Watchdog lifetime/trip resets、NTP time、last reset/wake、FS/File inventory/FileLog/OTA headroom 和运行时分区表；File details 入口并入 FS 行，FileLog level/current/used/limit 合并为一行子指标，Top 文件列表只放在 `/esp32base/fs` 详情页，页面容量值只显示 KB/MB/B 人性化格式，`OTA headroom` 表示 `target slot - current sketch`，Max OTA upload 才是上传硬上限。
 - `/esp32base/fs` 是启用 FS profile 时注册的 LittleFS 诊断页，默认只读，显示 Summary、Top 10 最大文件和最多 128 项文件树；文件树提供单文件下载；当文件声明有大小但首块无法读取时，Action 显示 `unreadable`，不再给出会生成空文件的下载按钮；当 `FS used` 明显大于可见文件合计时提示内部/历史占用异常。
