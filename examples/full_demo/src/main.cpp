@@ -221,9 +221,9 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "lifetime resets");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "trip resets");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "trip reset at");
-    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "<section class='panel healthhero'>");
-    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "<div class='healthgrid'>");
-    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Firmware / Profile");
+    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "<header class='pagehead'><h1>Full Demo</h1></header><div class='statusgrid'><section class='panel statuspage'><h2>Overview</h2>");
+    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "<div class='statusgrid'>");
+    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Runtime Health");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Log level</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Current log file</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Current firmware</th>");

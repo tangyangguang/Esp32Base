@@ -212,7 +212,7 @@ System 维护页：
 Status 页：
 
 - `/esp32base` 默认作为只读设备体检页，不承载配置保存和危险操作。
-- 第一屏优先显示 Device Health 摘要，包含运行时间、WiFi/RSSI、free heap 和固件/profile。
+- 第一屏直接进入紧凑诊断分区，不再使用大摘要卡片重复展示运行时间、WiFi/RSSI、free heap 和固件/profile。
 - 详细诊断信息按 Overview、Hardware、Firmware & OTA、Runtime Health、Network、Storage & Logs、Boot Reasons 分组；Partition Table 作为最后的低频详细表。
 - FileLog 属于 Storage & Logs，不作为健康摘要项；日志级别、当前文件大小和路径应拆开显示，避免把 WARN/INFO 等日志级别误读为健康状态。
 

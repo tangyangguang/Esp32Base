@@ -167,7 +167,7 @@ static const char WEB_CSS[] PROGMEM =
     ".notice{border:1px solid var(--eb-line);background:var(--eb-soft);border-radius:8px;padding:9px 10px;margin:8px 0;color:var(--eb-ink)}.notice.ok{border-color:#bfe0d4;background:var(--eb-ok-soft);color:#185b4e}.notice.warn{border-color:#efcf96;background:var(--eb-warn-soft);color:#7a4608}.notice.danger{border-color:#ebb8b2;background:var(--eb-danger-soft);color:#84251f}.notice.info{border-color:#c6d7ea;background:var(--eb-info-soft);color:var(--eb-info)}"
     ".toolgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:12px 0}.toolgrid .panel{margin:0}.toollinks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.toollinks .urow{padding:8px;border:1px solid var(--eb-line-soft);border-radius:7px;background:#fff}.toollinks .urow:last-child{border-bottom:1px solid var(--eb-line-soft)}.toollinks .uactions{grid-template-columns:72px;gap:0}.toollinks .uactions .uvalue{display:none}.toollinks .uactions .btnlink{width:72px;min-height:30px}.hostfacts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 10px;margin:4px 0 8px;font-size:13px}.hostfacts span{min-width:0;overflow-wrap:anywhere}.hostfacts b{display:inline-block;min-width:5.8em;margin-right:4px;color:var(--eb-muted);font-weight:650}.hostedit{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:end;max-width:760px;margin-top:8px}.hostedit .field{min-width:0}.hostedit .actions{margin:0}"
     ".metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:8px 0}.metric{border:1px solid var(--eb-line-soft);border-radius:7px;background:#fff;padding:8px}.metric b{display:block;font-size:17px}.metric span{display:block;color:var(--eb-muted);font-size:12px}"
-    ".healthhero{padding:12px}.healthtop{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start;justify-content:space-between;margin-bottom:10px}.healthtop h2{margin:0}.healthtop p{margin:3px 0 0;color:var(--eb-muted);font-size:13px}.healthbadge{display:inline-flex;align-items:center;min-height:24px;padding:2px 8px;border-radius:999px;background:var(--eb-ok-soft);color:var(--eb-ok);font-size:12px;font-weight:750}.healthbadge.warn{background:var(--eb-warn-soft);color:var(--eb-warn)}.healthgrid,.statusgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.healthitem{border:1px solid var(--eb-line-soft);border-radius:7px;background:#fff;padding:8px;min-width:0}.healthitem b{display:block;font-size:16px;line-height:1.25;overflow-wrap:anywhere}.healthitem span{display:block;margin-top:2px;color:var(--eb-muted);font-size:12px}.statusgrid{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}.statusgrid .panel{margin:0}.appsection{padding:10px 12px}.appsection .quicklinks{margin-bottom:0}"
+    ".statusgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;align-items:start}.statusgrid .panel{margin:0}.appsection{padding:10px 12px}.appsection .quicklinks{margin-bottom:0}"
     ".urow{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--eb-line-soft)}.urow:last-child{border-bottom:0}.urow small{display:block;color:var(--eb-muted);margin-top:2px}.urow form{display:inline}.uactions{display:grid;grid-template-columns:4em 96px;gap:16px;align-items:center;justify-content:end;min-width:0}.uvalue{font-weight:700;white-space:nowrap}.uactions .uvalue{min-width:0;text-align:right;color:#344054}.uactions .btnlink,.uactions input[type=submit]{width:96px}.uactions form{display:block;width:96px;margin:0}.uactions form input[type=submit]{width:100%;margin:0}.uactions.readonly{grid-template-columns:4em 96px}.pagination{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;border-top:1px solid var(--eb-line-soft);padding-top:7px;margin-top:7px;font-size:12px;font-weight:400}.pagerlinks,.pagerform{display:flex;flex-wrap:wrap;align-items:center;gap:4px}.pagerlinks{justify-content:center}.pagerform{justify-content:flex-end}.pagination .muted,.pagination label{display:inline-flex;align-items:center;min-height:26px;margin:0;font-weight:400;line-height:1}.pagination .btnlink,.pagination button,.pagination select,.pagination input{font-size:12px;min-height:26px;border-radius:6px;font-weight:400;line-height:1.1}.pagination .btnlink{padding:0 7px;background:#f3f6f8;color:#526071}.pagination .btnlink.disabled{background:#f5f6f7;color:#9aa4b2}.pagination .current{background:#e6f2ef;color:#14685d;border:1px solid #bddbd3}.pagination button{padding:0 8px;background:#f3f6f8;color:#344054;border:1px solid var(--eb-line)}.pagination button:hover{background:#e9eef2}.pagination select,.pagination input{padding:2px 7px}.pagerform input[type=number]{width:6ch;margin:0}.pagerform select{width:auto;max-width:82px;margin:0}"
     ".tag{display:inline-flex;align-items:center;min-height:21px;padding:2px 7px;border-radius:999px;background:#eef2f4;color:#475467;font-size:11px;font-weight:750;white-space:nowrap}.tag.ok{background:var(--eb-ok-soft);color:var(--eb-ok)}.tag.warn{background:var(--eb-warn-soft);color:var(--eb-warn)}.tag.danger{background:var(--eb-danger-soft);color:var(--eb-danger)}.tag.info{background:var(--eb-info-soft);color:var(--eb-info)}"
     ".btnlink{display:inline-flex;align-items:center;justify-content:center;min-height:32px;padding:0 10px;border-radius:7px;background:var(--eb-info-soft);color:var(--eb-info);font-size:13px;font-weight:750;white-space:nowrap}.btnlink.ok{background:var(--eb-ok-soft);color:var(--eb-ok)}.btnlink.warn{background:var(--eb-warn-soft);color:var(--eb-warn)}.btnlink.danger{background:var(--eb-danger-soft);color:var(--eb-danger)}.btnlink.disabled{background:#eef2f4;color:#98a2b3}"
@@ -176,7 +176,7 @@ static const char WEB_CSS[] PROGMEM =
     ".tabs,.quicklinks{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 10px}.tabs a,.quicklinks a{font-size:13px;padding:5px 8px;margin:0;background:#f1f4f3;color:var(--eb-muted);border-radius:6px}.tabs a{display:inline-flex;align-items:center;gap:8px}.tabs a.active{background:var(--eb-primary-soft);color:var(--eb-primary);font-weight:700}.segsize{padding-left:7px;border-left:1px solid var(--eb-line);font-variant-numeric:tabular-nums}"
     ".logmeta{border-collapse:collapse;font-size:13px;line-height:1.45;margin:0}.logmeta th,.logmeta td{padding:3px 10px 3px 0;text-align:left;vertical-align:top}.logmeta th{width:112px;color:var(--eb-muted);font-weight:650}.logmeta td{color:var(--eb-ink)}.logpanel{padding:10px 12px}.logpanel .tabs{margin-bottom:8px}.statusline{min-height:1.45em}.toolsection{padding:12px;margin:12px 0;background:#fff;border:1px solid var(--eb-line);border-radius:8px}"
     "pre{white-space:pre;overflow-x:auto;word-break:normal;font-size:12px;line-height:1.45;background:#f1f4f3;border:1px solid var(--eb-line);border-radius:7px;padding:9px}.logframe{display:block;width:100%;height:62vh;min-height:320px;border:1px solid var(--eb-line);border-radius:7px;background:#f1f4f3}"
-    "@media(max-width:760px){body{padding:10px}.metrics,.pagination,.urow,.healthgrid,.statusgrid,.toolgrid,.toollinks,.hostfacts,.hostedit{grid-template-columns:1fr}.fieldgrid{grid-template-columns:1fr}.field.short,.field.med,.field.long,.field.full,.authpanel .field.med{grid-column:auto;max-width:none}.uactions,.uactions.readonly{grid-template-columns:minmax(0,max-content) minmax(88px,96px);justify-content:flex-start}.toollinks .urow{grid-template-columns:minmax(0,1fr) auto;gap:8px}.toollinks .uactions{grid-template-columns:72px;justify-content:end}.uactions .uvalue{text-align:left}.pagerlinks,.pagerform{justify-content:flex-start}.pagination .btnlink,.pagination button,.pagination select,.pagination input{min-height:32px}.heap{margin-left:0;text-align:left;white-space:normal}nav a{font-size:14px;padding:0 10px}.tag{white-space:normal}}";
+    "@media(max-width:760px){body{padding:10px}.metrics,.pagination,.urow,.statusgrid,.toolgrid,.toollinks,.hostfacts,.hostedit{grid-template-columns:1fr}.fieldgrid{grid-template-columns:1fr}.field.short,.field.med,.field.long,.field.full,.authpanel .field.med{grid-column:auto;max-width:none}.uactions,.uactions.readonly{grid-template-columns:minmax(0,max-content) minmax(88px,96px);justify-content:flex-start}.toollinks .urow{grid-template-columns:minmax(0,1fr) auto;gap:8px}.toollinks .uactions{grid-template-columns:72px;justify-content:end}.uactions .uvalue{text-align:left}.pagerlinks,.pagerform{justify-content:flex-start}.pagination .btnlink,.pagination button,.pagination select,.pagination input{min-height:32px}.heap{margin-left:0;text-align:left;white-space:normal}nav a{font-size:14px;padding:0 10px}.tag{white-space:normal}}";
 
 static const char WEB_HEAD[] PROGMEM =
     "<meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
@@ -3099,42 +3099,11 @@ void handleRoot() {
     char minHeap[48];
     char maxAllocHeap[48];
     char totalHeap[48];
-    char wifiValue[64];
-    char firmwareValue[64];
     Esp32BaseLog::formatUptime(Esp32BaseSystem::uptimeMs(), uptime, sizeof(uptime));
     formatReadableBytes(Esp32BaseSystem::freeHeap(), freeHeap, sizeof(freeHeap));
     formatReadableBytes(Esp32BaseSystem::minFreeHeap(), minHeap, sizeof(minHeap));
     formatReadableBytes(ESP.getMaxAllocHeap(), maxAllocHeap, sizeof(maxAllocHeap));
     formatReadableBytes(Esp32BaseSystem::totalHeap(), totalHeap, sizeof(totalHeap));
-#if ESP32BASE_ENABLE_WIFI
-    const bool wifiConnected = Esp32BaseWiFi::isConnected();
-    if (wifiConnected) {
-        snprintf(wifiValue, sizeof(wifiValue), "%ld dBm", static_cast<long>(Esp32BaseWiFi::rssi()));
-    } else {
-        strlcpy(wifiValue, Esp32BaseWiFi::stateName(), sizeof(wifiValue));
-    }
-#else
-    const bool wifiConnected = true;
-    strlcpy(wifiValue, "disabled", sizeof(wifiValue));
-#endif
-    snprintf(firmwareValue, sizeof(firmwareValue), "%s / %s", Esp32Base::firmwareVersion(), Esp32Base::profileName());
-    sendChunk("<section class='panel healthhero'><div class='healthtop'><div><h2>Device Health</h2><p>");
-    sendEscapedHtmlChunk(wifiConnected ? "Core runtime is available. Check the key operating indicators first." : "Core runtime is available, but WiFi is not connected.");
-    sendChunk("</p></div><span class='healthbadge");
-    if (!wifiConnected) {
-        sendChunk(" warn");
-    }
-    sendChunk("'>");
-    sendEscapedHtmlChunk(wifiConnected ? "Healthy" : "Check network");
-    sendChunk("</span></div><div class='healthgrid'><div class='healthitem'><b>");
-    sendEscapedHtmlChunk(uptime);
-    sendChunk("</b><span>Uptime</span></div><div class='healthitem'><b>");
-    sendEscapedHtmlChunk(wifiValue);
-    sendChunk("</b><span>WiFi / RSSI</span></div><div class='healthitem'><b>");
-    sendEscapedHtmlChunk(freeHeap);
-    sendChunk("</b><span>Free heap</span></div><div class='healthitem'><b>");
-    sendEscapedHtmlChunk(firmwareValue);
-    sendChunk("</b><span>Firmware / Profile</span></div></div></section>");
     sendChunk("<div class='statusgrid'>");
 
     sendStatusSectionStart("Overview");
