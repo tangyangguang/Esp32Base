@@ -289,4 +289,4 @@ ESP32BASE_OTA_MARK_VALID_TIMEOUT_MS=30000
 - OTA 期间 1Hz NVS 写入，确认 deferred flush pause。
 - Watchdog 启用时 OTA 不触发误复位。
 - Brownout during OTA 不变砖。
-- 上传页进度显示百分比、raw bytes 和 KB/MB。
+- 上传页进度显示百分比、已上传容量和总容量；页面只显示 KB/MB/B 人性化值，状态/API JSON 保留 raw `bytes` 字段。

@@ -84,7 +84,7 @@
 - 中途断电不变砖。
 - rollback 可用。
 - 上传页进度显示正确。
-- 进度字节数包含 raw bytes 和 KB/MB。
+- 上传页进度容量只显示 KB/MB/B 人性化值；状态/API JSON 保留 raw `bytes` 字段。
 
 ## 7. 配网检查
 
@@ -212,7 +212,7 @@
 - 自定义路由 begin 前注册。
 - 自定义路由 Web ready 后注册。
 - JSON escape。
-- 大字节数 raw bytes + KB/MB 展示。
+- 内置页面大字节数只显示 KB/MB/B 人性化值；状态/API JSON 保留 raw `bytes` 字段。
 - 慢请求日志。
 - 长 handler 限制已文档化。
 

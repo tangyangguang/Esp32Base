@@ -25,6 +25,14 @@
 - 如果 Web 显示 FileLog 为 `write fault`，表示配置模式仍是 ERROR/WARN/INFO，但底层 FS 写入失败触发运行期保护；日志页面能显示旧内容并不代表新日志仍能写入。先通过 `/esp32base/fs` 清理坏文件或在 System 页格式化 LittleFS，再重新保存 FileLog 模式。
 - 如果删除 FileLog 文件仍失败，通常说明 LittleFS 元数据或内部占用已经异常；优先用 System 页 `Clear logs` 清空日志段，仍不能恢复时再确认格式化 LittleFS。
 
+### 历史安全边界文档同步
+
+文档：
+
+- `docs/10_known_limitations.md` 补齐默认 `admin/admin` 且不强制首次改密、开放 config portal AP、普通 NVS 明文凭据、危险 POST 的轻量同源检查边界，以及诊断端点信息量大且不做 rate limit 的说明。
+- `docs/03_api.md` 补充 Config deferred 的 `millis()` 回绕边界、Web Auth 超长 Authorization header 拒绝行为，以及 config portal AP 默认开放的 API 语义。
+- 修正 OTA 上传页和发布检查清单中的容量展示说明：内置页面只显示 KB/MB/B 人性化值，状态/API JSON 保留 raw `bytes`。
+
 ## 2026-05-28
 
 ### System 页工具布局收敛

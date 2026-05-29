@@ -6,11 +6,15 @@
 
 - Web 使用 HTTP Basic Auth，不提供 HTTPS。
 - Basic Auth 明文传输，只用于降低误操作风险，不抵御同一局域网内的嗅探、MITM 或主动攻击。
+- 未调用 `Esp32BaseWeb::setDefaultAuth()` 且没有已保存认证时，库默认账号密码为 `admin/admin`；内置 Web 不提供首次登录强制改密流程。
 - Web Auth 密码不在 HTML、JSON 或 API 响应中明文输出；持久化时保存明文密码；`INFO` 日志会明文输出 Web 用户名和密码。
+- WiFi 凭据和 Web Auth 凭据保存到普通 NVS；未启用芯片/平台级 flash encryption 时，具备物理 flash 读取能力的人可以取得明文凭据。
 - OTA 只提供上传认证和完整性校验，不提供固件加密、签名信任链或差分升级；Web OTA 使用可选 SHA256，ArduinoOTA/espota 使用内建 MD5。
 - Web OTA 与 Web Auth 配置解耦；关闭 Web Auth 时 Web OTA 仍可访问，但没有密码保护，风险由应用和用户自行承担。
 - 关闭 Web Auth 不会关闭 ArduinoOTA/espota 密码；命令行 OTA 仍要求当前 Web Auth 密码。
+- 内置危险 POST 使用 POST method、Web Auth 和轻量 `Origin` / `Referer` 同源检查，不提供完整 CSRF token；缺少 Origin/Referer 的请求会继续放行，以兼容 curl、PlatformIO `webota` 和简单脚本。
 - Web 配置页面在用户通过 Basic Auth 后会回显当前 WiFi 密码，这是运维查看当前配置所需。该回显与日志的 INFO 级密码屏蔽策略分别考虑；生产固件应避免在公共网络环境下打开配置页。
+- 内置诊断页面和状态 API 会输出 hostname、MAC、heap、flash、分区、reset/wake reason、OTA 和文件系统等设备指纹信息；当前不做 rate limit，Web Auth 只提供访问门槛，不提供抗扫描或滥用保护。
 
 ## 2. Web 边界
 
@@ -24,6 +28,7 @@
 
 - 有已保存 WiFi 凭证但连接失败时，库不会自动进入 AP/config portal，而是持续 STA 重连。
 - 进入 AP/config portal 只发生在无凭证、显式 `startConfigPortal()` 或应用自定义策略下。
+- Config portal AP 默认不设置密码，SSID 为可预测的 `ESP32-Config-XXXX`，其中后缀来自 eFuse MAC 的最后两个字节；应用应只在预期配网窗口进入 portal。
 - 该策略用于防止量产设备在路由器临时故障时被陌生人通过 AP 修改凭证。
 - 如果应用面向消费场景，需要换路由器后自动配网，应由应用在长 backoff 后显式调用 `Esp32BaseWiFi::startConfigPortal()`，并配合按键长按、状态灯或屏幕提示等用户确认方式。
 - deep sleep 期间 STA、AP、DNS、Web 均不可访问；唤醒后按新启动流程恢复。
