@@ -169,7 +169,7 @@ static const char WEB_CSS[] PROGMEM =
     ".metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:8px 0}.metric{border:1px solid var(--eb-line-soft);border-radius:7px;background:#fff;padding:8px}.metric b{display:block;font-size:17px}.metric span{display:block;color:var(--eb-muted);font-size:12px}"
     ".statusgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;align-items:start}.statusgrid .panel{margin:0}.appsection{padding:10px 12px}.appsection .quicklinks{margin-bottom:0}"
     ".urow{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--eb-line-soft)}.urow:last-child{border-bottom:0}.urow small{display:block;color:var(--eb-muted);margin-top:2px}.urow form{display:inline}.uactions{display:grid;grid-template-columns:4em 96px;gap:16px;align-items:center;justify-content:end;min-width:0}.uvalue{font-weight:700;white-space:nowrap}.uactions .uvalue{min-width:0;text-align:right;color:#344054}.uactions .btnlink,.uactions input[type=submit]{width:96px}.uactions form{display:block;width:96px;margin:0}.uactions form input[type=submit]{width:100%;margin:0}.uactions.readonly{grid-template-columns:4em 96px}.pagination{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;border-top:1px solid var(--eb-line-soft);padding-top:7px;margin-top:7px;font-size:12px;font-weight:400}.pagerlinks,.pagerform{display:flex;flex-wrap:wrap;align-items:center;gap:4px}.pagerlinks{justify-content:center}.pagerform{justify-content:flex-end}.pagination .muted,.pagination label{display:inline-flex;align-items:center;min-height:26px;margin:0;font-weight:400;line-height:1}.pagination .btnlink,.pagination button,.pagination select,.pagination input{font-size:12px;min-height:26px;border-radius:6px;font-weight:400;line-height:1.1}.pagination .btnlink{padding:0 7px;background:#f3f6f8;color:#526071}.pagination .btnlink.disabled{background:#f5f6f7;color:#9aa4b2}.pagination .current{background:#e6f2ef;color:#14685d;border:1px solid #bddbd3}.pagination button{padding:0 8px;background:#f3f6f8;color:#344054;border:1px solid var(--eb-line)}.pagination button:hover{background:#e9eef2}.pagination select,.pagination input{padding:2px 7px}.pagerform input[type=number]{width:6ch;margin:0}.pagerform select{width:auto;max-width:82px;margin:0}"
-    ".tag{display:inline-flex;align-items:center;min-height:21px;padding:2px 7px;border-radius:999px;background:#eef2f4;color:#475467;font-size:11px;font-weight:750;white-space:nowrap}.tag.ok{background:var(--eb-ok-soft);color:var(--eb-ok)}.tag.warn{background:var(--eb-warn-soft);color:var(--eb-warn)}.tag.danger{background:var(--eb-danger-soft);color:var(--eb-danger)}.tag.info{background:var(--eb-info-soft);color:var(--eb-info)}"
+    ".tag{display:inline-flex;align-items:center;min-height:21px;padding:2px 7px;border-radius:999px;background:#eef2f4;color:#475467;font-size:11px;font-weight:750;white-space:nowrap}.tag.ok{background:var(--eb-ok-soft);color:var(--eb-ok)}.tag.warn{background:var(--eb-warn-soft);color:var(--eb-warn)}.tag.danger{background:var(--eb-danger-soft);color:var(--eb-danger)}.tag.info{background:var(--eb-info-soft);color:var(--eb-info)}.submetrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(86px,1fr));gap:4px 12px;margin:0}.tag+.submetrics{margin-top:5px}.submetrics span{min-width:0}.submetrics b{display:block;color:var(--eb-muted);font-size:11px;font-weight:650;line-height:1.2}.submetrics em{display:block;font-style:normal;overflow-wrap:anywhere}"
     ".btnlink{display:inline-flex;align-items:center;justify-content:center;min-height:32px;padding:0 10px;border-radius:7px;background:var(--eb-info-soft);color:var(--eb-info);font-size:13px;font-weight:750;white-space:nowrap}.btnlink.ok{background:var(--eb-ok-soft);color:var(--eb-ok)}.btnlink.warn{background:var(--eb-warn-soft);color:var(--eb-warn)}.btnlink.danger{background:var(--eb-danger-soft);color:var(--eb-danger)}.btnlink.disabled{background:#eef2f4;color:#98a2b3}"
     ".kv{border-collapse:collapse;width:100%;margin:0}.kv th,.kv td{border-bottom:1px solid var(--eb-line);padding:7px 5px;text-align:left;vertical-align:top}.kv tr:last-child th,.kv tr:last-child td{border-bottom:0}.kv th{width:30%;color:var(--eb-muted);font-weight:650}.statuspage{padding:10px 12px}.statuspage h2,.logpanel h2{margin-bottom:6px}.statuspage .kv{font-size:13px}.statuspage .kv th{width:176px;max-width:38%}"
     ".part{border-collapse:collapse;width:100%;min-width:640px;font-size:13px}.part th,.part td{border-bottom:1px solid var(--eb-line);padding:6px 5px;text-align:left;vertical-align:top}.part th{color:var(--eb-muted);font-weight:650}.part tr:last-child td{border-bottom:0}"
@@ -871,6 +871,22 @@ void sendInfoRow(const char* label, const char* value) {
     sendInfoRowStart(label);
     sendEscapedHtmlChunk(value && value[0] ? value : "-");
     sendInfoRowEnd();
+}
+
+void sendSubmetricsStart() {
+    sendChunk("<div class='submetrics'>");
+}
+
+void sendSubmetric(const char* label, const char* value) {
+    sendChunk("<span><b>");
+    sendEscapedHtmlChunk(label && label[0] ? label : "-");
+    sendChunk("</b><em>");
+    sendEscapedHtmlChunk(value && value[0] ? value : "-");
+    sendChunk("</em></span>");
+}
+
+void sendSubmetricsEnd() {
+    sendChunk("</div>");
 }
 
 void sendStatusTag(Esp32BaseWeb::UiTone tone, const char* text) {
@@ -3190,24 +3206,31 @@ void handleRoot() {
 #endif
 
     sendStatusSectionStart("Runtime Health");
-    snprintf(value, sizeof(value), "free %s, min %s, max alloc %s, total %s", freeHeap, minHeap, maxAllocHeap, totalHeap);
-    sendInfoRow("Heap", value);
+    sendInfoRowStart("Heap");
+    sendSubmetricsStart();
+    sendSubmetric("Free", freeHeap);
+    sendSubmetric("Min", minHeap);
+    sendSubmetric("Max alloc", maxAllocHeap);
+    sendSubmetric("Total", totalHeap);
+    sendSubmetricsEnd();
+    sendInfoRowEnd();
 #if ESP32BASE_ENABLE_WATCHDOG
     const WatchdogTripState watchdogTrip = readWatchdogTripState();
     char tripResetAt[32];
     formatWatchdogTripResetAt(watchdogTrip, tripResetAt, sizeof(tripResetAt));
     sendInfoRowStart("Watchdog");
+    sendStatusTag(Esp32BaseWeb::UI_OK, "enabled");
+    sendSubmetricsStart();
+    snprintf(value, sizeof(value), "%lu", static_cast<unsigned long>(watchdogTrip.lifetime));
+    sendSubmetric("Lifetime resets", value);
     if (watchdogTrip.invalidBase) {
-        snprintf(value, sizeof(value), "enabled, lifetime resets %lu, trip resets invalid baseline",
-                 static_cast<unsigned long>(watchdogTrip.lifetime));
+        strlcpy(value, "invalid baseline", sizeof(value));
     } else {
-        snprintf(value, sizeof(value), "enabled, lifetime resets %lu, trip resets %lu",
-                 static_cast<unsigned long>(watchdogTrip.lifetime),
-                 static_cast<unsigned long>(watchdogTrip.trip));
+        snprintf(value, sizeof(value), "%lu", static_cast<unsigned long>(watchdogTrip.trip));
     }
-    sendEscapedHtmlChunk(value);
-    sendChunk("<br>trip reset at ");
-    sendEscapedHtmlChunk(tripResetAt);
+    sendSubmetric("Trip resets", value);
+    sendSubmetric("Trip reset at", tripResetAt);
+    sendSubmetricsEnd();
     sendInfoRowEnd();
 #endif
 #if ESP32BASE_ENABLE_NTP
@@ -3249,13 +3272,17 @@ void handleRoot() {
         formatReadableBytes(Esp32BaseFs::usedBytes(), used, sizeof(used));
         formatReadableBytes(Esp32BaseFs::totalBytes(), total, sizeof(total));
         formatReadableBytes(fsFree, freeBytes, sizeof(freeBytes));
-        snprintf(value, sizeof(value), "used %s, free %s, total %s", used, freeBytes, total);
         sendInfoRowStart("FS");
         if (fsFree == 0) {
             sendStatusTag(Esp32BaseWeb::UI_WARN, "full");
-            sendChunk(" ");
+        } else {
+            sendStatusTag(Esp32BaseWeb::UI_OK, "ready");
         }
-        sendEscapedHtmlChunk(value);
+        sendSubmetricsStart();
+        sendSubmetric("Used", used);
+        sendSubmetric("Free", freeBytes);
+        sendSubmetric("Total", total);
+        sendSubmetricsEnd();
         sendInfoRowEnd();
     } else {
         sendTaggedInfoRow("FS", "unavailable", Esp32BaseWeb::UI_WARN);
@@ -3268,6 +3295,20 @@ void handleRoot() {
         formatReadableBytes(Esp32BaseFileLog::size(), sizeBuf, sizeof(sizeBuf));
         sendInfoRow("Log level", Esp32BaseFileLog::modeName());
         sendInfoRow("Current log file", sizeBuf);
+        uint64_t logUsedBytes = 0;
+        for (uint8_t i = 0; i < Esp32BaseFileLog::rotateFiles(); ++i) {
+            logUsedBytes += Esp32BaseFileLog::segmentSize(i);
+        }
+        char logUsed[48];
+        char logLimit[48];
+        formatReadableBytes(logUsedBytes, logUsed, sizeof(logUsed));
+        formatReadableBytes(static_cast<uint64_t>(Esp32BaseFileLog::maxBytes()) * Esp32BaseFileLog::rotateFiles(), logLimit, sizeof(logLimit));
+        sendInfoRowStart("Log usage");
+        sendSubmetricsStart();
+        sendSubmetric("Used", logUsed);
+        sendSubmetric("Limit", logLimit);
+        sendSubmetricsEnd();
+        sendInfoRowEnd();
         sendInfoRow("Log path", Esp32BaseFileLog::path());
     }
 #endif
@@ -3279,7 +3320,10 @@ void handleRoot() {
     sendInfoRow("Running slot", runningSlot);
     sendInfoRow("OTA target slot", otaTargetSlot);
     sendInfoRow("Max OTA upload", otaTargetSize);
-    sendInfoRow("OTA slot minus current sketch", otaHeadroom);
+    sendInfoRowStart("OTA headroom");
+    sendEscapedHtmlChunk(otaHeadroom);
+    sendChunk("<br><span class='info'>target slot - current sketch</span>");
+    sendInfoRowEnd();
 #if ESP32BASE_ENABLE_OTA
     sendInfoRow("Rollback", Esp32BaseOta::isRollbackPossible() ? "possible" : "not possible");
     if (Esp32BaseOta::lastError()[0]) {
