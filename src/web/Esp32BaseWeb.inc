@@ -3165,9 +3165,9 @@ void handleRoot() {
     sendChunk("</span>");
     sendInfoRowEnd();
     snprintf(value, sizeof(value), "%s / boots %lu", uptime, static_cast<unsigned long>(Esp32BaseSystem::bootCount()));
-    sendInfoRow("Uptime", value);
+    sendInfoRow("Run", value);
 #if ESP32BASE_ENABLE_WIFI
-    sendInfoRowStart("WiFi");
+    sendInfoRowStart("Connection");
     if (Esp32BaseWiFi::isConnected()) {
         sendStatusTag(Esp32BaseWeb::UI_OK, "connected");
     } else {
@@ -3192,10 +3192,10 @@ void handleRoot() {
     sendInfoRowEnd();
 #endif
     snprintf(value, sizeof(value), "%s free / %s min", freeHeap, minHeap);
-    sendInfoRow("Free heap", value);
+    sendInfoRow("Memory", value);
 #if ESP32BASE_ENABLE_NTP
     const Esp32BaseNtp::TimeSnapshot overviewTime = Esp32BaseNtp::snapshot();
-    sendInfoRowStart("NTP time");
+    sendInfoRowStart("Time sync");
     if (!Esp32BaseNtp::isStarted()) {
         sendStatusTag(Esp32BaseWeb::UI_NEUTRAL, "not started");
     } else if (overviewTime.synced) {
@@ -3203,54 +3203,44 @@ void handleRoot() {
     } else {
         sendStatusTag(Esp32BaseWeb::UI_WARN, "pending");
     }
-    if (overviewTime.synced && Esp32BaseNtp::formatTime(value, sizeof(value), "%Y-%m-%d %H:%M:%S")) {
-        sendChunk("<br>");
-        sendEscapedHtmlChunk(value);
-    }
     sendInfoRowEnd();
 #endif
 #if ESP32BASE_ENABLE_FS
     if (Esp32BaseFs::isReady()) {
-        char used[48];
-        char total[48];
         char freeBytes[48];
         const size_t fsFree = Esp32BaseFs::freeBytes();
-        formatReadableBytes(Esp32BaseFs::usedBytes(), used, sizeof(used));
-        formatReadableBytes(Esp32BaseFs::totalBytes(), total, sizeof(total));
         formatReadableBytes(fsFree, freeBytes, sizeof(freeBytes));
-        snprintf(value, sizeof(value), "used %s, free %s, total %s", used, freeBytes, total);
-        sendInfoRowStart("FS");
+        sendInfoRowStart("Storage");
         if (fsFree == 0) {
             sendStatusTag(Esp32BaseWeb::UI_WARN, "full");
-            sendChunk(" ");
+        } else {
+            sendStatusTag(Esp32BaseWeb::UI_OK, "ready");
         }
-        sendEscapedHtmlChunk(value);
+        sendChunk(" free ");
+        sendEscapedHtmlChunk(freeBytes);
         sendInfoRowEnd();
     } else {
-        sendTaggedInfoRow("FS", "unavailable", Esp32BaseWeb::UI_WARN);
+        sendTaggedInfoRow("Storage", "unavailable", Esp32BaseWeb::UI_WARN);
     }
 #endif
 #if ESP32BASE_ENABLE_FILELOG
-    sendInfoRowStart("File log");
+    sendInfoRowStart("Logging");
     sendStatusTag(Esp32BaseFileLog::isEnabled() ? Esp32BaseWeb::UI_INFO : Esp32BaseWeb::UI_NEUTRAL,
                   Esp32BaseFileLog::isEnabled() ? "enabled" : "disabled");
     if (Esp32BaseFileLog::isEnabled()) {
-        char sizeBuf[48];
-        formatReadableBytes(Esp32BaseFileLog::size(), sizeBuf, sizeof(sizeBuf));
         sendChunk(" mode ");
         sendEscapedHtmlChunk(Esp32BaseFileLog::modeName());
-        sendChunk("<br><span class='info'>current ");
-        sendEscapedHtmlChunk(sizeBuf);
-        sendChunk("</span>");
     }
     sendInfoRowEnd();
 #endif
-    sendInfoRowStart("OTA upload");
+    sendInfoRowStart("OTA");
     if (nextPartition) {
+        sendStatusTag(Esp32BaseWeb::UI_OK, "ready");
+        sendChunk(" upload ");
         sendEscapedHtmlChunk(otaTargetSize);
-        sendChunk(" max<br><span class='info'>");
+        sendChunk("<br><span class='info'>headroom ");
         sendEscapedHtmlChunk(otaHeadroom);
-        sendChunk(" headroom</span>");
+        sendChunk("</span>");
     } else {
         sendStatusTag(Esp32BaseWeb::UI_WARN, "unavailable");
     }
@@ -3258,13 +3248,8 @@ void handleRoot() {
     sendStatusSectionEnd();
 
     sendStatusSectionStart("Runtime Health");
-    sendInfoRow("Uptime", uptime);
-    snprintf(value, sizeof(value), "%lu", static_cast<unsigned long>(Esp32BaseSystem::bootCount()));
-    sendInfoRow("Boot count", value);
-    sendInfoRow("Free heap", freeHeap);
-    sendInfoRow("Min free heap", minHeap);
-    sendInfoRow("Max alloc heap", maxAllocHeap);
-    sendInfoRow("Total heap", totalHeap);
+    snprintf(value, sizeof(value), "free %s, min %s, max alloc %s, total %s", freeHeap, minHeap, maxAllocHeap, totalHeap);
+    sendInfoRow("Heap", value);
 #if ESP32BASE_ENABLE_WATCHDOG
     const WatchdogTripState watchdogTrip = readWatchdogTripState();
     char tripResetAt[32];
@@ -3331,8 +3316,13 @@ void handleRoot() {
     }
     sendInfoRowEnd();
     sendInfoRow("Power save", Esp32BaseWiFi::powerSave() ? "on" : "off");
-    sendInfoRow("STA MAC", WiFi.macAddress().c_str());
-    sendInfoRow("AP MAC", WiFi.softAPmacAddress().c_str());
+    sendInfoRowStart("WiFi MACs");
+    sendEscapedHtmlChunk("STA ");
+    sendEscapedHtmlChunk(WiFi.macAddress().c_str());
+    sendChunk("<br>");
+    sendEscapedHtmlChunk("AP ");
+    sendEscapedHtmlChunk(WiFi.softAPmacAddress().c_str());
+    sendInfoRowEnd();
     sendStatusSectionEnd();
 #endif
 
@@ -3404,7 +3394,10 @@ void handleRoot() {
         sendInfoRow("PSRAM", value);
     }
     formatMac(ESP.getEfuseMac(), mac, sizeof(mac));
-    sendInfoRow("eFuse MAC", mac);
+    sendInfoRowStart("Hardware ID");
+    sendChunk("<span class='info'>eFuse MAC</span><br>");
+    sendEscapedHtmlChunk(mac);
+    sendInfoRowEnd();
     sendStatusSectionEnd();
     sendChunk("</div>");
 

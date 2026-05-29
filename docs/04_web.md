@@ -212,7 +212,8 @@ System 维护页：
 Status 页：
 
 - `/esp32base` 默认作为只读设备体检页，不承载配置保存和危险操作。
-- 第一屏使用 `System Overview` 紧凑总览，优先展示设备/hostname、固件/profile、uptime/boot count、WiFi/IP/RSSI、free/min heap、NTP、FS、FileLog 和 OTA upload 空间，便于现场快速判断。
+- 第一屏使用 `System Overview` 紧凑总览，优先展示设备/hostname、固件/profile、Run、Connection、Memory、Time sync、Storage、Logging 和 OTA 摘要，便于现场快速判断。
+- 总览区使用摘要语义，详细区使用完整事实；同一数据不应在相邻分区用同名同值重复展示。
 - 详细诊断信息按 Runtime Health、Network、Storage & Logs、Firmware & OTA、Hardware 分组；Partition Table 作为最后的低频详细表。
 - FileLog 属于 Storage & Logs，不作为健康摘要项；日志级别、当前文件大小和路径应拆开显示，避免把 WARN/INFO 等日志级别误读为健康状态。
 
@@ -270,8 +271,8 @@ Logs 页面：
 
 - `/esp32base` 是只读设备体检页，采用诊断优先结构：先显示 `System Overview`，再按 Runtime Health、Network、Storage & Logs、Firmware & OTA、Hardware、Partition Table 展示调试信息。
 - `System Overview` 只放高价值汇总，不使用大摘要卡片；异常或需关注项用轻量 tag 标识，不使用大面积背景色。
-- Runtime Health 显示 uptime、boot count、heap free/min/max alloc/total、Watchdog、NTP time、last reset 和 last wake；Network 显示 WiFi/IP/RSSI、power save、STA MAC 和 AP MAC。
-- Storage & Logs 显示 FS 使用、FileLog enabled/disabled、日志级别、当前文件大小和路径；Hardware 显示芯片型号、revision、CPU、SDK、Flash、PSRAM 和 eFuse MAC。
+- Runtime Health 显示 heap free/min/max alloc/total、Watchdog、NTP time、last reset 和 last wake；Network 显示 WiFi/IP/RSSI、power save 和 WiFi MACs。
+- Storage & Logs 显示 FS 使用、FileLog enabled/disabled、日志级别、当前文件大小和路径；Hardware 显示芯片型号、revision、CPU、SDK、Flash、PSRAM 和 Hardware ID，其中 Hardware ID 包含 eFuse MAC。
 - Firmware & OTA 显示当前固件大小、运行 app slot、下一 OTA slot、Max OTA upload、OTA slot minus current sketch、rollback 状态，以及仅在存在错误时显示的 Last OTA error；Max OTA upload 才是上传硬上限。
 - 启用 Watchdog 时显示 `enabled, lifetime resets N, trip resets M` 或 invalid baseline 和 trip reset time；Reset Trip 保存时间使用和页面 NTP time 行一致的可信 epoch 判断，无可用时间则显示 `unknown (time unavailable)`。
 - Partition Table 使用运行时分区表展示 Name、Type、SubType、Offset、Size、Role；Role 用于标识 running app、next OTA、app data、NVS config、OTA state、coredump 等。

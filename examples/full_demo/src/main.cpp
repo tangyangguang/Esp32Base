@@ -206,9 +206,12 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "<div class='tablewrap'><table class='kv'>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "System Overview");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Device</th>");
-    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Free heap</th>");
-    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "NTP time</th>");
-    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "OTA upload</th>");
+    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Connection</th>");
+    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Memory</th>");
+    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Time sync</th>");
+    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Storage</th>");
+    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Logging</th>");
+    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "OTA</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Firmware &amp; OTA");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Runtime Health");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Network");
@@ -218,9 +221,9 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Last reset</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Last wake</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Chip</th>");
-    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "eFuse MAC</th>");
-    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "STA MAC</th>");
-    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "AP MAC</th>");
+    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Hardware ID</th>");
+    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "eFuse MAC");
+    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "WiFi MACs</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "max alloc");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Watchdog</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "lifetime resets");

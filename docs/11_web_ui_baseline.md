@@ -146,7 +146,8 @@
 
 - 首行回答设备是否正常。
 - 关键指标不超过 4 个。
-- 基础库 Status 页采用“诊断优先总览 + 紧凑详细分区 + 末尾详细表”的结构：首屏先回答现场最关心的运行、网络、内存、时间、存储日志和 OTA 空间状态，再进入 Runtime Health、Network、Storage & Logs、Firmware & OTA、Hardware 和 Partition Table。
+- 基础库 Status 页采用“诊断优先总览 + 紧凑详细分区 + 末尾详细表”的结构：首屏先用摘要标签回答现场最关心的运行、网络、内存、时间、存储日志和 OTA 空间状态，再进入 Runtime Health、Network、Storage & Logs、Firmware & OTA、Hardware 和 Partition Table。
+- 总览区和详细区允许必要的信息重复，但不能同名同值堆叠；总览区应表达状态摘要，详细区再表达完整参数。
 - 业务设备首页也应优先让用户先判断状态，再进入详细信息；信息已经清楚时不要额外增加大摘要或大面积状态背景。
 - 异常优先于普通摘要。
 - 首页只保留有限主操作，不做大仪表盘。
