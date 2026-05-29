@@ -206,7 +206,7 @@ System 维护页：
 - 重启和格式化等危险操作必须分组显示，避免按钮与下一项标题贴得太近。
 - 启用 Watchdog 的 profile 显示 Watchdog lifetime/trip 小计维护；当 `wdt_trip_base` 大于 lifetime 时显示 `invalid baseline`，Reset Watchdog Trip 写入并回读确认 `eb_sys.wdt_trip_base` 和 `eb_sys.wdt_trip_time`，不清 `eb_sys.wdt_cnt`。
 - 启用 FS 的 profile 显示 `Format LittleFS`，该操作会删除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth 或 NVS 配置。
-- 启用 FileLog 的 profile 显示 File log 模式设置和 `Clear logs`；模式设置只接受 OFF、ERROR、WARN、INFO，保存后立即生效并写入 `eb_log.mode`，清空日志只接受 POST，表单使用 `confirm()` 和 `once(form)`，成功后回到 System 页面显示结果。
+- 启用 FileLog 的 profile 显示 File log 模式设置、运行态和 `Clear logs`；模式设置只接受 OFF、ERROR、WARN、INFO，保存后立即生效并写入 `eb_log.mode`，清空日志只接受 POST，表单使用 `confirm()` 和 `once(form)`，成功后回到 System 页面显示结果。运行态为 `fault` 时表示配置模式仍开启，但 FileLog 因 FS 写入故障被运行期保护停写，不应显示成 `disabled`。
 - 格式化 FS 是显式 POST 操作；执行前 flush 文件日志，成功后重新 mount FS，并重新加载 FileLog 模式；成功提示应明确显示在 System 页面，同时输出 WARN 级维护日志记录请求、format/mount/FileLog reload 结果。重启请求同样输出 WARN 级维护日志。
 - 普通 `GET` 页面慢请求只输出 DEBUG；`POST` 等操作慢请求继续输出 WARN。
 - API 层仍建议要求 POST，不使用 GET 触发重启。
@@ -275,9 +275,9 @@ Logs 页面：
 - `/esp32base` 是只读设备体检页，采用诊断优先结构：按 Device、Network、Runtime Health、Storage & Logs、Firmware & OTA、Hardware、Partition Table 展示调试信息，不额外显示相邻重复的总览预览块。
 - Device 显示名称、hostname、固件、profile、uptime 和 boot count；Network 显示 WiFi/IP/RSSI、power save、STA MAC 和 AP MAC。
 - Runtime Health 显示 heap free/min/max alloc/total、Watchdog、NTP time、last reset 和 last wake；heap 与 Watchdog 的多值信息使用紧凑子指标展示，避免逗号串联造成阅读困难。
-- Storage & Logs 显示 FS used/free/total、Details 入口、文件/目录数量、已统计文件大小、other/overhead、FileLog enabled/disabled、日志级别、当前文件大小、日志总占用/上限和路径；File details 入口并入 FS 行，FileLog level/current/used/limit 合并为一行子指标，避免右侧卡片明显高于 Runtime Health；Top 文件列表只放在 `/esp32base/fs` 详情页，避免状态页被低频诊断明细撑高；Hardware 显示芯片型号、revision、CPU、SDK、Flash、PSRAM 和 eFuse MAC。
+- Storage & Logs 显示 FS used/free/total、Details 入口、文件/目录数量、已统计文件大小、other/overhead、FileLog enabled/disabled/fault、日志级别、当前文件大小、日志总占用/上限和路径；File details 入口并入 FS 行，FileLog level/current/used/limit 合并为一行子指标，避免右侧卡片明显高于 Runtime Health；Top 文件列表只放在 `/esp32base/fs` 详情页，避免状态页被低频诊断明细撑高；Hardware 显示芯片型号、revision、CPU、SDK、Flash、PSRAM 和 eFuse MAC。
 - `/esp32base/fs` 默认是只读 LittleFS 详情页，显示 Summary、Top 10 最大文件和最多 128 项文件树；文件树提供单文件下载；当文件声明有大小但首块无法读取时，Action 显示 `unreadable`，下载路由返回 `500 File read failed`，避免浏览器保存 0 字节伪成功文件；当 FS used 明显大于可见文件合计时显示内部/历史占用告警，提示删除可见文件不一定释放全部空间。业务侧如果使用 `Esp32BaseFs` 读写文件，也必须检查返回值；逻辑大小存在不代表内容块一定可读。
-- `/esp32base/fs?manage=1` 只增加单文件删除按钮，不提供目录删除、批量删除、编辑或任意路径输入；删除必须通过 `POST /esp32base/fs/delete -> 303 -> GET`，格式化仍只在 System 页危险操作区。
+- `/esp32base/fs?manage=1` 只增加单文件删除按钮，不提供目录删除、批量删除、编辑或任意路径输入；删除必须通过 `POST /esp32base/fs/delete -> 303 -> GET`，格式化仍只在 System 页危险操作区。不可读文件在管理模式仍显示删除入口，因为删除只依赖路径存在且是文件，不要求内容块可读。
 - Firmware & OTA 显示当前固件大小、运行 app slot、下一 OTA slot、Max OTA upload、OTA headroom、rollback 状态，以及仅在存在错误时显示的 Last OTA error；`OTA headroom` 表示 `target slot - current sketch`，Max OTA upload 才是上传硬上限。
 - 启用 Watchdog 时显示 `enabled, lifetime resets N, trip resets M` 或 invalid baseline 和 trip reset time；Reset Trip 保存时间使用和页面 NTP time 行一致的可信 epoch 判断，无可用时间则显示 `unknown (time unavailable)`。
 - Partition Table 使用运行时分区表展示 Name、Type、SubType、Offset、Size、Role；Role 用于标识 running app、next OTA、app data、NVS config、OTA state、coredump 等。

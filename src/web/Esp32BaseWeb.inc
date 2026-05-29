@@ -1013,6 +1013,15 @@ void sendFsFileActions(const char* path, bool manage) {
     sendChunk("</div>");
 }
 
+void sendFsUnreadableActions(const char* path, bool manage) {
+    sendChunk("<div class='fsactions'>");
+    sendStatusTag(Esp32BaseWeb::UI_WARN, "unreadable");
+    if (manage) {
+        sendFsDeleteForm(path);
+    }
+    sendChunk("</div>");
+}
+
 bool fsFileReadableStart(const char* path, size_t size) {
     if (size == 0) {
         return true;
@@ -1039,7 +1048,7 @@ void sendFsTreeRow(const char* path, size_t size, bool isDir, bool manage) {
     if (isDir) {
         sendChunk("-");
     } else if (!fsFileReadableStart(path, size)) {
-        sendStatusTag(Esp32BaseWeb::UI_WARN, "unreadable");
+        sendFsUnreadableActions(path, manage);
     } else {
         sendFsFileActions(path, manage);
     }
@@ -2090,6 +2099,19 @@ const char* fileLogModeName(Esp32BaseFileLog::Mode mode) {
         default: return "OFF";
     }
 }
+
+const char* fileLogRuntimeStateName() {
+    return Esp32BaseFileLog::faulted() ? "fault" : (Esp32BaseFileLog::isEnabled() ? "enabled" : "disabled");
+}
+
+Esp32BaseWeb::UiTone fileLogRuntimeStateTone() {
+    return Esp32BaseFileLog::faulted() ? Esp32BaseWeb::UI_WARN :
+           (Esp32BaseFileLog::isEnabled() ? Esp32BaseWeb::UI_OK : Esp32BaseWeb::UI_NEUTRAL);
+}
+
+bool fileLogHasRuntimeDetails() {
+    return Esp32BaseFileLog::faulted() || Esp32BaseFileLog::isEnabled() || Esp32BaseFileLog::mode() != Esp32BaseFileLog::OFF;
+}
 #endif
 
 void sendFooterBarModeOption(const char* value, const char* label, Esp32BaseWeb::FooterBarMode mode) {
@@ -3041,6 +3063,7 @@ void handleToolsPage() {
 #if ESP32BASE_ENABLE_FILELOG
     sendChunk("<section class='panel actionpanel'><h2>File log</h2><div class='tablewrap'><table class='kv'>");
     sendInfoRow("Current mode", Esp32BaseFileLog::modeName());
+    sendInfoRow("Runtime state", fileLogRuntimeStateName());
     sendInfoRow("Path", Esp32BaseFileLog::path());
     sendChunk("</table></div><form method='post' action='/esp32base/tools/filelog' onsubmit=\"return once(this)\"><div class='radioopts'>");
     sendFileLogModeOption("off", "Off", Esp32BaseFileLog::OFF);
@@ -3577,9 +3600,8 @@ void handleRoot() {
 #endif
 #if ESP32BASE_ENABLE_FILELOG
     sendInfoRowStart("File log");
-    sendStatusTag(Esp32BaseFileLog::isEnabled() ? Esp32BaseWeb::UI_OK : Esp32BaseWeb::UI_NEUTRAL,
-                  Esp32BaseFileLog::isEnabled() ? "enabled" : "disabled");
-    if (Esp32BaseFileLog::isEnabled()) {
+    sendStatusTag(fileLogRuntimeStateTone(), fileLogRuntimeStateName());
+    if (fileLogHasRuntimeDetails()) {
         char sizeBuf[48];
         formatReadableBytes(Esp32BaseFileLog::size(), sizeBuf, sizeof(sizeBuf));
         uint64_t logUsedBytes = 0;
@@ -3598,7 +3620,7 @@ void handleRoot() {
         sendSubmetricsEnd();
     }
     sendInfoRowEnd();
-    if (Esp32BaseFileLog::isEnabled()) {
+    if (fileLogHasRuntimeDetails()) {
         sendInfoRow("Log path", Esp32BaseFileLog::path());
     }
 #endif
@@ -3924,7 +3946,7 @@ void handleLogsPage() {
     formatReadableBytes(Esp32BaseFileLog::bufferSize(), bufferTotal, sizeof(bufferTotal));
     char line[320];
     sendChunk("<section class='panel logpanel'><div class='tablewrap'><table class='logmeta'><tr><th>File log</th><td><b>");
-    sendEscapedHtmlChunk(Esp32BaseFileLog::isEnabled() ? "enabled" : "disabled");
+    sendEscapedHtmlChunk(fileLogRuntimeStateName());
     sendChunk("</b></td></tr><tr><th>Path</th><td>");
     sendEscapedHtmlChunk(Esp32BaseFileLog::path());
     snprintf(line, sizeof(line), "</td></tr><tr><th>Rotation files</th><td>%u</td></tr><tr><th>Mode</th><td>%s</td></tr><tr><th>Buffer</th><td>%s / %s</td></tr><tr><th>Flush interval</th><td>%lu ms</td></tr><tr><th>Max per file</th><td>%s</td></tr><tr><th>Max total</th><td>%s</td></tr><tr><th>Segments</th><td>",

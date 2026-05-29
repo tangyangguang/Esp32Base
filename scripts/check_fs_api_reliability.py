@@ -34,6 +34,14 @@ if "Esp32BaseFs::readBytesAt(path, 0, &value, 1, &readLen) && readLen == 1" not 
     errors.append("src/web/Esp32BaseWeb.inc: FS tree readability check must use Esp32BaseFs failure semantics")
 
 for needle, message in (
+    ("void sendFsUnreadableActions(", "FS management must keep delete available for unreadable files"),
+    ("sendFsUnreadableActions(path, manage);", "FS tree must render unreadable delete actions in manage mode"),
+    ("sendFsDeleteForm(path);", "FS unreadable action must reuse the normal delete form"),
+):
+    if needle not in web:
+        errors.append(f"src/web/Esp32BaseWeb.inc: {message}")
+
+for needle, message in (
     ("bool appendCurrentChunk(", "FileLog append must isolate potentially slow FS writes"),
     ("const bool watchdogReleased = beginLongFsOperation();\n    const bool ok = Esp32BaseFs::writeBytes", "FileLog truncate must be protected as a long FS operation"),
     ("void markFileLogFault()", "FileLog must stop repeated writes after FS fault"),

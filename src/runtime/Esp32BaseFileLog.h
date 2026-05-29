@@ -65,6 +65,7 @@ public:
     static void handle();
 
     static bool isEnabled();
+    static bool faulted();
     static Mode mode();
     static const char* modeName();
     static const char* path();

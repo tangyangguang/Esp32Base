@@ -17,6 +17,7 @@
 namespace {
 bool g_fileLogEnabled = false;
 bool g_fileLogDirReady = false;
+bool g_fileLogFault = false;
 uint32_t g_fileLogMaxBytes = ESP32BASE_EB_FILELOG_MAX_BYTES;
 uint32_t g_fileLogCurrentBytes = 0;
 uint8_t g_fileLogRotateFiles = ESP32BASE_EB_FILELOG_ROTATE_FILES;
@@ -66,6 +67,7 @@ bool beginLongFsOperation();
 void endLongFsOperation(bool active);
 
 void markFileLogFault() {
+    g_fileLogFault = true;
     g_fileLogEnabled = false;
     g_fileLogDirReady = false;
     g_fileLogCurrentBytes = 0;
@@ -362,6 +364,7 @@ bool applyMode(Esp32BaseFileLog::Mode mode, bool persist, bool logChange) {
     const Esp32BaseFileLog::Mode previousMode = g_fileLogMode;
     if (mode == Esp32BaseFileLog::OFF) {
         Esp32BaseFileLog::flush();
+        g_fileLogFault = false;
         g_fileLogEnabled = false;
         g_fileLogMode = Esp32BaseFileLog::OFF;
         g_fileLogDirReady = false;
@@ -398,6 +401,7 @@ bool applyMode(Esp32BaseFileLog::Mode mode, bool persist, bool logChange) {
         Esp32BaseFileLog::flush();
     }
     g_fileLogMode = mode;
+    g_fileLogFault = false;
     const Esp32BaseLog::Level fileLevel = modeLevel(g_fileLogMode);
     if (Esp32BaseLog::runtimeLevel() < fileLevel) {
         Esp32BaseLog::setRuntimeLevel(fileLevel);
@@ -485,6 +489,9 @@ bool Esp32BaseFileLog::clear() {
         }
     }
     g_fileLogCurrentBytes = 0;
+    g_fileLogFault = false;
+    g_fileLogEnabled = g_fileLogMode != Esp32BaseFileLog::OFF;
+    g_fileLogDirReady = true;
     ESP32BASE_LOG_I("filelog", "cleared path=%s", g_fileLogPath);
     return true;
 }
@@ -499,6 +506,7 @@ void Esp32BaseFileLog::handle() {
 }
 
 bool Esp32BaseFileLog::isEnabled() { return g_fileLogEnabled; }
+bool Esp32BaseFileLog::faulted() { return g_fileLogFault; }
 Esp32BaseFileLog::Mode Esp32BaseFileLog::mode() { return g_fileLogMode; }
 const char* Esp32BaseFileLog::modeName() { return ::modeName(g_fileLogMode); }
 const char* Esp32BaseFileLog::path() { return g_fileLogPath; }

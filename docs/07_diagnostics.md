@@ -174,7 +174,7 @@ CI 应覆盖核心矩阵，release 前执行完整矩阵。
 - 已保存凭证但连接失败时不进入 AP，持续重连并 backoff。
 - NVS 写满。
 - LittleFS 首次挂载失败不 halt。
-- LittleFS 二进制文件读写和目录列举；文件逻辑大小存在但内容不可读时，FS API 应返回失败并由 `/esp32base/fs` 标记 `unreadable`。
+- LittleFS 二进制文件读写和目录列举；文件逻辑大小存在但内容不可读时，FS API 应返回失败并由 `/esp32base/fs` 标记 `unreadable`。只读模式不提供下载，管理模式仍允许单文件删除，便于清理损坏文件。
 - FS 满或损坏时触发 Web WARN 诊断，不应因为 FileLog 写入失败导致 task WDT 重启。
 - FileLog 默认 `4 × 32KB` 轮转。
 - Logs 页面可读取 history/current。

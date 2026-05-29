@@ -50,6 +50,26 @@ checks = [
         "setMode() must be the explicit persist-and-log mode change path",
     ),
     (
+        "src/runtime/Esp32BaseFileLog.h",
+        "static bool faulted();",
+        "missing FileLog runtime fault state accessor",
+    ),
+    (
+        "src/runtime/Esp32BaseFileLog.inc",
+        "bool Esp32BaseFileLog::faulted() { return g_fileLogFault; }",
+        "missing FileLog faulted() implementation",
+    ),
+    (
+        "src/web/Esp32BaseWeb.inc",
+        'Esp32BaseFileLog::faulted() ? "fault"',
+        "Status/Logs pages must distinguish runtime fault from disabled mode",
+    ),
+    (
+        "src/web/Esp32BaseWeb.inc",
+        'sendInfoRow("Runtime state", fileLogRuntimeStateName());',
+        "Tools page must expose FileLog runtime state",
+    ),
+    (
         "src/web/Esp32BaseWeb.inc",
         'ESP32BASE_LOG_W("web", "filelog_mode_requested source=tools',
         "FileLog mode request should stay WARN because it is a system-level configuration change",
