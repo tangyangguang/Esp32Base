@@ -1017,17 +1017,9 @@ bool fsFileReadableStart(const char* path, size_t size) {
     if (size == 0) {
         return true;
     }
-    File file = LittleFS.open(path, "r");
-    if (!file || file.isDirectory()) {
-        if (file) {
-            file.close();
-        }
-        return false;
-    }
     uint8_t value = 0;
-    const size_t readLen = file.readBytes(reinterpret_cast<char*>(&value), 1);
-    file.close();
-    return readLen == 1;
+    size_t readLen = 0;
+    return Esp32BaseFs::readBytesAt(path, 0, &value, 1, &readLen) && readLen == 1;
 }
 
 void sendFsTreeRow(const char* path, size_t size, bool isDir, bool manage) {

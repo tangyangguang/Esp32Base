@@ -157,8 +157,10 @@
 - 读写删文件正常。
 - 二进制读写正常。
 - append 正常。
-- `readBytesAt()` 支持分页读取，文件不存在和 offset 越界返回失败，EOF 短读返回实际长度。
-- `writeBytesAt()` 支持已有文件固定位置覆盖，文件不存在和写越界返回失败，不隐式扩展文件。
+- `readBytes()` / `readBytesAt()` 支持分页读取，文件不存在和 offset 越界返回失败，EOF 短读返回实际长度；未到 EOF 却读出 0 字节必须返回失败。
+- `writeFile()` / `writeBytes()` / `appendFile()` / `appendBytes()` 写后大小校验正常，非空写入后末端可读。
+- `writeBytesAt()` 支持已有文件固定位置覆盖，文件不存在和写越界返回失败，不隐式扩展文件；覆盖后文件大小不变且覆盖范围可读。
+- FS 已满或存在不可读文件时，Web 诊断返回错误不应触发 task WDT 重启。
 - listDir / mkdir / rmdir 正常。
 - FS 失败不影响 WiFi/Web。
 

@@ -62,27 +62,48 @@ Esp32BaseLog::Level modeLevel(Esp32BaseFileLog::Mode mode) {
     }
 }
 
+bool beginLongFsOperation();
+void endLongFsOperation(bool active);
+
+void markFileLogFault() {
+    g_fileLogEnabled = false;
+    g_fileLogDirReady = false;
+    g_fileLogCurrentBytes = 0;
+#if ESP32BASE_EB_FILELOG_BUFFER_SIZE > 0
+    g_fileLogBufferUsed = 0;
+    g_fileLogLastFlushMs = 0;
+#endif
+}
+
 bool truncateSegment(uint8_t index) {
     char seg[64];
     if (!Esp32BaseFileLog::segmentPath(index, seg, sizeof(seg))) {
         return false;
     }
-    return Esp32BaseFs::writeBytes(seg, nullptr, 0);
+    const bool watchdogReleased = beginLongFsOperation();
+    const bool ok = Esp32BaseFs::writeBytes(seg, nullptr, 0);
+    endLongFsOperation(watchdogReleased);
+    return ok;
 }
 
 bool ensureSegmentFiles() {
+    const bool watchdogReleased = beginLongFsOperation();
+    bool ok = true;
     for (uint8_t i = 0; i < g_fileLogRotateFiles; ++i) {
         char seg[64];
         if (!Esp32BaseFileLog::segmentPath(i, seg, sizeof(seg))) {
-            return false;
+            ok = false;
+            break;
         }
         File file = LittleFS.open(seg, "a");
         if (!file) {
-            return false;
+            ok = false;
+            break;
         }
         file.close();
     }
-    return true;
+    endLongFsOperation(watchdogReleased);
+    return ok;
 }
 
 bool ensureDirReady() {
@@ -101,12 +122,17 @@ bool ensureDirReady() {
         }
         memcpy(dir, g_fileLogPath, len);
         dir[len] = '\0';
-        if (!Esp32BaseFs::mkdir(dir) && !Esp32BaseFs::exists(dir)) {
+        const bool watchdogReleased = beginLongFsOperation();
+        const bool dirReady = Esp32BaseFs::mkdir(dir) || Esp32BaseFs::exists(dir);
+        endLongFsOperation(watchdogReleased);
+        if (!dirReady) {
+            markFileLogFault();
             ESP32BASE_LOG_W("filelog", "dir_create_failed path=%s", dir);
             return false;
         }
     }
     if (!ensureSegmentFiles()) {
+        markFileLogFault();
         ESP32BASE_LOG_W("filelog", "segment_prepare_failed path=%s rotate=%u",
                         g_fileLogPath,
                         static_cast<unsigned>(g_fileLogRotateFiles));
@@ -122,7 +148,9 @@ bool truncateCurrent() {
     if (!g_fileLogEnabled || !g_fileLogPath[0]) {
         return false;
     }
+    const bool watchdogReleased = beginLongFsOperation();
     const bool ok = Esp32BaseFs::writeBytes(g_fileLogPath, nullptr, 0);
+    endLongFsOperation(watchdogReleased);
     if (ok) {
         g_fileLogCurrentBytes = 0;
     }
@@ -148,6 +176,15 @@ void endLongFsOperation(bool active) {
 #else
     (void)active;
 #endif
+}
+
+bool appendCurrentChunk(const char* data, size_t len) {
+    const bool watchdogReleased = beginLongFsOperation();
+    const bool ok = Esp32BaseFs::appendBytes(g_fileLogPath,
+                                             reinterpret_cast<const uint8_t*>(data),
+                                             len);
+    endLongFsOperation(watchdogReleased);
+    return ok;
 }
 
 bool rotateFile() {
@@ -203,6 +240,7 @@ bool writeBytes(const char* data, size_t len) {
         return false;
     }
     if (!ensureDirReady()) {
+        markFileLogFault();
         return false;
     }
 
@@ -222,11 +260,13 @@ bool writeBytes(const char* data, size_t len) {
         if (chunk == 0) {
             continue;
         }
-        if (!Esp32BaseFs::appendBytes(g_fileLogPath, reinterpret_cast<const uint8_t*>(data + offset), chunk)) {
+        if (!appendCurrentChunk(data + offset, chunk)) {
             if (!truncateCurrent()) {
+                markFileLogFault();
                 return false;
             }
-            if (!Esp32BaseFs::appendBytes(g_fileLogPath, reinterpret_cast<const uint8_t*>(data + offset), chunk)) {
+            if (!appendCurrentChunk(data + offset, chunk)) {
+                markFileLogFault();
                 return false;
             }
         }

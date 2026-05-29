@@ -14,17 +14,71 @@ bool validPath(const char* path) {
     return path && path[0] == '/';
 }
 
+bool readFromOpenFile(File& file, uint8_t* out, size_t maxLen, size_t* readLen) {
+    const size_t positionBefore = file.position();
+    const size_t size = file.size();
+    const size_t n = maxLen ? file.read(out, maxLen) : 0;
+    if (readLen) {
+        *readLen = n;
+    }
+    if (maxLen == 0 || n > 0 || positionBefore >= size) {
+        return true;
+    }
+    return !(positionBefore < size && n == 0);
+}
+
+bool verifyFileSize(const char* path, uint64_t expectedSize) {
+    File verify = LittleFS.open(path, "r");
+    if (!verify || verify.isDirectory()) {
+        if (verify) {
+            verify.close();
+        }
+        return false;
+    }
+    const bool ok = static_cast<uint64_t>(verify.size()) == expectedSize;
+    verify.close();
+    return ok;
+}
+
+bool verifyReadableByte(const char* path, uint64_t offset) {
+    if (offset > UINT32_MAX) {
+        return false;
+    }
+    uint8_t value = 0;
+    size_t readLen = 0;
+    return Esp32BaseFs::readBytesAt(path,
+                                    static_cast<uint32_t>(offset),
+                                    &value,
+                                    1,
+                                    &readLen) &&
+           readLen == 1;
+}
+
 bool writeMode(const char* path, const uint8_t* data, size_t len, const char* mode) {
     if (!g_fsReady || !validPath(path) || (!data && len > 0)) {
         return false;
     }
+    const bool append = mode && mode[0] == 'a';
+    const int64_t before = append ? Esp32BaseFs::fileSize(path) : 0;
+    if (append && before > 0 && !verifyReadableByte(path, static_cast<uint64_t>(before - 1))) {
+        return false;
+    }
+    const uint64_t expectedSize = (append && before > 0 ? static_cast<uint64_t>(before) : 0ULL) + len;
     File file = LittleFS.open(path, mode);
     if (!file) {
         return false;
     }
     const size_t written = len ? file.write(data, len) : 0;
+    file.flush();
     file.close();
-    return written == len;
+    if (written != len || !verifyFileSize(path, expectedSize)) {
+        return false;
+    }
+    if (expectedSize == 0 || len == 0) {
+        return true;
+    }
+    const uint64_t verifyOffset = expectedSize - 1U;
+    return verifyReadableByte(path, verifyOffset);
 }
 }
 
@@ -87,12 +141,9 @@ bool Esp32BaseFs::readBytes(const char* path, uint8_t* out, size_t maxLen, size_
     if (!file) {
         return false;
     }
-    const size_t n = file.read(out, maxLen);
+    const bool ok = readFromOpenFile(file, out, maxLen, readLen);
     file.close();
-    if (readLen) {
-        *readLen = n;
-    }
-    return true;
+    return ok;
 }
 
 bool Esp32BaseFs::appendBytes(const char* path, const uint8_t* data, size_t len) {
@@ -115,12 +166,9 @@ bool Esp32BaseFs::readBytesAt(const char* path, uint32_t offset, uint8_t* out, s
         file.close();
         return false;
     }
-    const size_t n = maxLen ? file.read(out, maxLen) : 0;
+    const bool ok = readFromOpenFile(file, out, maxLen, readLen);
     file.close();
-    if (readLen) {
-        *readLen = n;
-    }
-    return true;
+    return ok;
 }
 
 bool Esp32BaseFs::writeBytesAt(const char* path, uint32_t offset, const uint8_t* data, size_t len) {
@@ -137,8 +185,16 @@ bool Esp32BaseFs::writeBytesAt(const char* path, uint32_t offset, const uint8_t*
         return false;
     }
     const size_t written = len ? file.write(data, len) : 0;
+    file.flush();
     file.close();
-    return written == len;
+    if (written != len || !verifyFileSize(path, size)) {
+        return false;
+    }
+    if (len == 0) {
+        return true;
+    }
+    const uint64_t verifyOffset = static_cast<uint64_t>(offset) + len - 1U;
+    return verifyReadableByte(path, verifyOffset);
 }
 
 bool Esp32BaseFs::removeFile(const char* path) {

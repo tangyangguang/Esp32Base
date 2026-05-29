@@ -54,6 +54,7 @@
 - LittleFS 用于小型配置文件、诊断文件和 Web 静态小资源。
 - 业务需要二进制定长日志时，应通过 `Esp32BaseFs::readBytesAt()` / `writeBytesAt()` 做分页读取和固定位置覆盖，不直接依赖 LittleFS 或 Arduino `File`。
 - `writeBytesAt()` 只覆盖已有文件内容，不创建、不扩展文件；环形文件容量需要业务初始化。
+- 逻辑文件大小不等于内容一定可读；brownout、FS 满、跨项目反复烧录或业务侧未处理写失败后，LittleFS 可能仍能列出文件大小，但读取内容失败。`Esp32BaseFs` 会把这种“未到 EOF 却读出 0 字节”的情况返回为失败，业务必须检查返回值。
 - 不提供大型文件管理器。
 - 不保证在 OTA 写 flash 时并行执行大量 FS 写入的实时性。
 - Fs 没有 maintenance handle；挂载后按显式 API 操作。
