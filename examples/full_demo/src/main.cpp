@@ -237,7 +237,6 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Current log file</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Log usage</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "File inventory</th>");
-    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "File details</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "href='/esp32base/fs'");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Current firmware</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "OTA headroom</th>");
@@ -278,6 +277,8 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/fs", nullptr, true, 200, "Files</b>");
     RUN_SELFTEST("GET", "/esp32base/fs", nullptr, true, 200, "Dirs</b>");
     RUN_SELFTEST("GET", "/esp32base/fs", nullptr, true, 200, "Listed size</b>");
+    RUN_SELFTEST("GET", "/esp32base/fs", nullptr, true, 200, "action='/esp32base/fs/download'");
+    RUN_SELFTEST("GET", "/esp32base/fs/download?path=%2Fmissing.tmp", nullptr, true, 404, "File not found");
     RUN_SELFTEST("GET", "/esp32base/fs?manage=1", nullptr, true, 200, "File management mode");
     RUN_SELFTEST("GET", "/esp32base/fs?manage=1", nullptr, true, 200, "<th>Action</th>");
     RUN_SELFTEST("POST", "/esp32base/fs/delete", "path=%2Fmissing.tmp", true, 303, "Location: /esp32base/fs?manage=1&error=delete_missing");
