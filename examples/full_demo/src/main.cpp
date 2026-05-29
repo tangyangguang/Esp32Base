@@ -233,9 +233,9 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Trip reset at</b>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "<header class='pagehead'><h1>Full Demo</h1></header><div class='statusgrid'><section class='panel statuspage'><h2>Device</h2>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "<div class='statusgrid'>");
-    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Log level</th>");
-    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Current log file</th>");
-    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Log usage</th>");
+    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Log level</b>");
+    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Current file</b>");
+    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Limit</b>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "File inventory</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "href='/esp32base/fs'");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Current firmware</th>");
