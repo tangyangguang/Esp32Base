@@ -2,7 +2,7 @@
 
 `Esp32Base` 是面向 ESP32 / ESP32-S3 / ESP32-C3、基于 Arduino ESP32 Core 的轻量基础库设计。
 
-本仓库当前按 `docs/` 中的新架构实施。历史设计方案与评审记录已归档到 `design-history/`，不参与编译。
+本仓库当前按 `docs/` 中的新架构实施。历史设计方案、评审记录和临时评估文件已从发布分支清理，不参与编译，也不作为实现依据。
 
 ## 定位
 
@@ -14,6 +14,7 @@
 - 常见量产设备通过 profile 选择能力组合。
 - 未启用模块不编译、不链接、不初始化。
 - WiFi、Web、OTA 等重能力全部非阻塞启动。
+- WiFi STA 启动带安全保护：连续 STA guarded brownout/panic/watchdog 复位后暂停已保存凭据并回退 AP 配网，避免坏 STA 状态造成永久重启循环。
 - OTA、NVS、Watchdog、LittleFS、Captive Portal 等关键路径按量产可靠性设计。
 
 已知限制、明确不支持能力和风险边界详见 [已知限制](docs/10_known_limitations.md)。
@@ -127,7 +128,7 @@ Profile 是默认组合，用户仍可用 `ESP32BASE_ENABLE_*` 精细覆盖。�
 
 仓库示例默认面向 ESP32 4MB Flash，并使用 `partitions/esp32-4mb-ota-balanced.csv`。ESP32-S3、ESP32-C3 或 8MB 板型请优先使用示例中对应 env，或在业务项目里选择匹配芯片和 Flash 容量的分区表，避免 FULL/Web OTA 固件超过 app slot。
 
-`Esp32BaseFs` 对业务暴露文本、二进制、追加、目录和容量 API，并提供 `readBytesAt()` / `writeBytesAt()` 按偏移读写能力。业务可通过这些 API 实现二进制定长日志分页读取和环形覆盖写入，不需要 include `LittleFS.h` 或 Arduino `File`。固定容量环形文件需先用 `writeBytes()` 或分块 `appendBytes()` 初始化容量，再用 `writeBytesAt()` 覆盖槽位。业务必须检查这些 API 的返回值；当 LittleFS 元数据仍声明文件大小但内容块不可读、FS 满或写后校验失败时，API 会返回 `false`。内置 `/esp32base/fs` 会标记这类文件为 `unreadable`，只在管理模式提供删除，不提供下载。
+`Esp32BaseFs` 对业务暴露文本、二进制、追加、目录和容量 API，并提供 `readBytesAt()` / `writeBytesAt()` 按偏移读写能力。业务可通过这些 API 实现二进制定长日志分页读取和环形覆盖写入，不需要 include `LittleFS.h` 或 Arduino `File`。固定容量环形文件需先用 `writeBytes()` 或分块 `appendBytes()` 初始化容量，再用 `writeBytesAt()` 覆盖槽位。业务必须检查这些 API 的返回值；当 LittleFS 元数据仍声明文件大小但内容块不可读、FS 满或写后校验失败时，API 会返回 `false`。内置 `/esp32base/fs` 会标记这类文件为 `unreadable`，只在管理模式提供删除，不提供下载。`/esp32base/fs?manage=1` 还提供受限上传，用于测试期导入业务数据文件：上传保留本地文件名，只能选择已有目录，不创建目录；同名文件会在浏览器确认后覆盖，`/logs` 等基础库日志路径受保护。
 
 `ESP32BASE_PROFILE_FULL` 默认同时支持 Web OTA 和 PlatformIO/espota 命令行 OTA。命令行 OTA 使用 `Esp32Base::hostname()` 对应的 `<hostname>.local`、标准端口 3232，以及当前 Web Auth 密码：
 
@@ -175,7 +176,7 @@ pio run -t webota
 11. [已知限制](docs/10_known_limitations.md)
 12. [Web UI 页面结构与样式基线](docs/11_web_ui_baseline.md)
 
-历史设计方案与评审记录已归档到 `design-history/`，只作为背景材料，不作为新实现的直接依据。
+历史设计方案、评审记录和临时评估文件已从发布分支清理，不作为新实现的直接依据。
 
 ## 最终实施原则
 

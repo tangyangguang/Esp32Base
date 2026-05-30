@@ -87,6 +87,16 @@ bool g_responseBroken = false;
 bool g_authLoggedForRequest = false;
 bool g_otaUploadForbidden = false;
 bool g_otaUploadStartFailed = false;
+#if ESP32BASE_ENABLE_FS
+bool g_fsUploadForbidden = false;
+bool g_fsUploadStartFailed = false;
+bool g_fsUploadActive = false;
+bool g_fsUploadOverwrite = false;
+size_t g_fsUploadBytes = 0;
+char g_fsUploadPath[96] = "";
+char g_fsUploadError[96] = "";
+File g_fsUploadFile;
+#endif
 
 #if ESP32BASE_ENABLE_APP_CONFIG
 enum AppConfigStoredType : uint8_t {
@@ -197,10 +207,13 @@ void flushChunkBuffer();
 bool sendResponseContent(const char* data, size_t len);
 bool sendRawChunkedContent(const char* data, size_t len);
 bool sendResponseHeader(const char* name, const char* value);
+bool beginResponse(int code, const char* contentType, const char* filename);
+void endResponse();
 void markRequest();
 void sendChunk(const char* data, size_t len);
 void sendChunk(const char* text);
 void sendEscapedHtmlChunk(const char* text);
+void sendEscapedJsonChunk(const char* text);
 void formatReadableBytes(uint64_t bytes, char* out, size_t len);
 bool ensureAuth();
 
@@ -917,6 +930,7 @@ void sendStatusSectionEnd() {
 #if ESP32BASE_ENABLE_FS
 static const uint8_t FS_TOP_MAX = 10;
 static const uint16_t FS_TREE_LIST_LIMIT = 128;
+static const uint16_t FS_UPLOAD_DIR_LIMIT = 64;
 static const uint8_t FS_SCAN_MAX_DEPTH = 8;
 
 struct FsTopEntry {
@@ -941,6 +955,12 @@ struct FsWalkFrame {
     bool manage;
     uint16_t emitLimit;
     uint16_t* emittedRows;
+};
+
+struct FsUploadDirFrame {
+    const char* dir;
+    uint8_t depth;
+    uint16_t* emitted;
 };
 
 void fsScanYield() {
@@ -1056,6 +1076,7 @@ void sendFsTreeRow(const char* path, size_t size, bool isDir, bool manage) {
 }
 
 void fsWalkCallback(const char* name, size_t size, bool isDir, void* user);
+void fsNoopListCallback(const char*, size_t, bool, void*);
 
 bool fsWalkDir(FsScan& scan, const char* dir, uint8_t depth, bool emitRows, bool manage, uint16_t emitLimit, uint16_t* emittedRows) {
     FsWalkFrame frame = {&scan, dir, depth, emitRows, manage, emitLimit, emittedRows};
@@ -1112,6 +1133,138 @@ bool validFsFilePath(const char* path) {
 
 bool validFsDeletePath(const char* path) {
     return validFsFilePath(path);
+}
+
+bool validFsDirectoryPath(const char* path) {
+    return path && ((strcmp(path, "/") == 0) || validFsFilePath(path));
+}
+
+bool fsUploadPathProtected(const char* path) {
+    return path && (strcmp(path, "/logs") == 0 || strncmp(path, "/logs/", 6) == 0);
+}
+
+bool fsUploadFilenameValid(const char* name) {
+    if (!name || !name[0] || strlen(name) > 63 || strcmp(name, ".") == 0 || strcmp(name, "..") == 0) {
+        return false;
+    }
+    for (const char* p = name; *p; ++p) {
+        const unsigned char c = static_cast<unsigned char>(*p);
+        if (c < 32 || c == 127 || *p == '/' || *p == '\\' || *p == ':') {
+            return false;
+        }
+    }
+    return !strstr(name, "..");
+}
+
+bool fsUploadDirectoryExists(const char* dir) {
+    if (!validFsDirectoryPath(dir) || fsUploadPathProtected(dir)) {
+        return false;
+    }
+    if (strcmp(dir, "/") == 0) {
+        return Esp32BaseFs::isReady();
+    }
+    return Esp32BaseFs::listDir(dir, fsNoopListCallback, nullptr);
+}
+
+bool fsBuildUploadPath(const char* dir, const char* name, char* out, size_t len) {
+    if (!out || len == 0 || !validFsDirectoryPath(dir) || !fsUploadFilenameValid(name)) {
+        return false;
+    }
+    if (strcmp(dir, "/") == 0) {
+        snprintf(out, len, "/%s", name);
+    } else {
+        snprintf(out, len, "%s/%s", dir, name);
+    }
+    return validFsFilePath(out) && !fsUploadPathProtected(out);
+}
+
+void fsSetUploadError(const char* message) {
+    strlcpy(g_fsUploadError, message && message[0] ? message : "upload failed", sizeof(g_fsUploadError));
+}
+
+void fsCloseUploadFile() {
+    if (g_fsUploadActive) {
+        g_fsUploadFile.flush();
+        g_fsUploadFile.close();
+    }
+    g_fsUploadActive = false;
+}
+
+bool fsUploadTargetIsDirectory(const char* path) {
+    return validFsFilePath(path) && Esp32BaseFs::listDir(path, fsNoopListCallback, nullptr);
+}
+
+void fsSendJsonBool(const char* name, bool value, bool comma = true) {
+    if (comma) {
+        sendChunk(",");
+    }
+    sendChunk("\"");
+    sendChunk(name);
+    sendChunk("\":");
+    sendChunk(value ? "true" : "false");
+}
+
+void fsSendUploadJson(int code, bool ok, const char* error, const char* path, bool exists = false, bool isDir = false) {
+    if (!beginResponse(code, "application/json", nullptr)) {
+        return;
+    }
+    sendChunk("{\"ok\":");
+    sendChunk(ok ? "true" : "false");
+    fsSendJsonBool("exists", exists);
+    fsSendJsonBool("directory", isDir);
+    if (path && path[0]) {
+        sendChunk(",\"path\":\"");
+        sendEscapedJsonChunk(path);
+        sendChunk("\"");
+    }
+    if (error && error[0]) {
+        sendChunk(",\"error\":\"");
+        sendEscapedJsonChunk(error);
+        sendChunk("\"");
+    }
+    sendChunk("}");
+    endResponse();
+}
+
+void fsUploadDirOptionCallback(const char* name, size_t, bool isDir, void* user);
+
+void sendFsUploadDirectoryOptionsFor(const char* dir, uint8_t depth, uint16_t* emitted) {
+    if (!emitted || *emitted >= FS_UPLOAD_DIR_LIMIT || depth >= FS_SCAN_MAX_DEPTH) {
+        return;
+    }
+    FsUploadDirFrame frame = {dir, depth, emitted};
+    Esp32BaseFs::listDir(dir, fsUploadDirOptionCallback, &frame);
+}
+
+void fsUploadDirOptionCallback(const char* name, size_t, bool isDir, void* user) {
+    if (!isDir || !user) {
+        return;
+    }
+    FsUploadDirFrame* frame = static_cast<FsUploadDirFrame*>(user);
+    if (!frame->emitted || *frame->emitted >= FS_UPLOAD_DIR_LIMIT) {
+        return;
+    }
+    char path[96];
+    fsJoinPath(frame->dir, name, path, sizeof(path));
+    if (!validFsDirectoryPath(path) || fsUploadPathProtected(path)) {
+        return;
+    }
+    sendChunk("<option value='");
+    sendEscapedHtmlChunk(path);
+    sendChunk("'>");
+    sendEscapedHtmlChunk(path);
+    sendChunk("</option>");
+    (*frame->emitted)++;
+    fsScanYield();
+    sendFsUploadDirectoryOptionsFor(path, static_cast<uint8_t>(frame->depth + 1), frame->emitted);
+}
+
+void sendFsUploadPanel() {
+    sendChunk("<section class='panel formpanel uploadpanel'><h2>Upload file</h2><form id='fsu' class='editform'><div class='fieldgrid'><div class='field med'><label for='fsudir'>Device directory</label><select id='fsudir' name='dir'><option value='/'>/</option>");
+    uint16_t emitted = 1;
+    sendFsUploadDirectoryOptionsFor("/", 0, &emitted);
+    sendChunk("</select><small>Upload uses the local filename. Directories must already exist.</small></div><div class='field long'><label for='fsufile'>File</label><input id='fsufile' type='file' name='file' required></div></div><div class='actions'><input type='submit' value='Upload'></div></form><progress id='fsup' value='0' max='100' style='width:100%;display:none'></progress><p id='fsus' class='statusline muted'></p></section>");
+    sendChunk("<script>function fsUH(n){var u=['B','KB','MB','GB'],i=0,x=n;while(x>=1024&&i<u.length-1){x/=1024;i++;}return (i?x.toFixed(2):Math.round(x))+' '+u[i];}function fsUEnc(s){return encodeURIComponent(s);}function fsUFail(t){var f=document.getElementById('fsu'),b=f.querySelector('[type=submit]');document.getElementById('fsus').textContent=t;f.dataset.busy='';if(b)b.disabled=false;}function fsUSend(dir,file,ow){var f=document.getElementById('fsu'),st=document.getElementById('fsus'),pg=document.getElementById('fsup'),b=f.querySelector('[type=submit]'),d=new FormData(),x=new XMLHttpRequest();d.append('file',file,file.name);if(b)b.disabled=true;pg.style.display='block';st.textContent='Uploading 0%';x.upload.onprogress=function(ev){if(ev.lengthComputable){var p=Math.floor(ev.loaded*100/ev.total);pg.value=p;st.textContent='Uploading '+p+'% '+fsUH(ev.loaded)+' / '+fsUH(ev.total);}};x.onload=function(){var r={};try{r=JSON.parse(x.responseText||'{}');}catch(e){}if(x.status==200&&r.ok){location.href=r.redirect||'/esp32base/fs?manage=1&uploaded=1';return;}fsUFail('Upload failed: '+(r.error||('HTTP '+x.status)));};x.onerror=function(){fsUFail('Upload failed: network error');};x.open('POST','/esp32base/fs/upload?dir='+fsUEnc(dir)+(ow?'&overwrite=1':''));x.send(d);}document.getElementById('fsu').onsubmit=function(e){e.preventDefault();if(this.dataset.busy)return false;this.dataset.busy=1;var dir=document.getElementById('fsudir').value,file=document.getElementById('fsufile').files[0],st=document.getElementById('fsus'),b=this.querySelector('[type=submit]');if(!file){this.dataset.busy='';return false;}if(b)b.disabled=true;st.textContent='Checking target...';var x=new XMLHttpRequest();x.onload=function(){var r={};try{r=JSON.parse(x.responseText||'{}');}catch(e){}if(x.status!=200||!r.ok){fsUFail('Upload blocked: '+(r.error||('HTTP '+x.status)));return;}var ow=false;if(r.exists){ow=confirm((r.path||file.name)+' already exists. Overwrite?');if(!ow){fsUFail('Upload canceled');return;}}fsUSend(dir,file,ow);};x.onerror=function(){fsUFail('Upload blocked: network error');};x.open('GET','/esp32base/fs/check?dir='+fsUEnc(dir)+'&name='+fsUEnc(file.name));x.send();return false;};</script>");
 }
 
 void fsDownloadFilename(const char* path, char* out, size_t len) {
@@ -3723,7 +3876,9 @@ void handleFsPage() {
     const bool manage = fsManageMode();
     Esp32BaseWeb::sendHeader("File system");
     Esp32BaseWeb::sendPageTitle("File system", "Read-only LittleFS inventory and storage usage.");
-    if (g_server.hasArg("deleted")) {
+    if (g_server.hasArg("uploaded")) {
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "File uploaded");
+    } else if (g_server.hasArg("deleted")) {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "File deleted or cleared");
     } else if (g_server.hasArg("error")) {
         const String error = g_server.arg("error");
@@ -3749,6 +3904,7 @@ void handleFsPage() {
     if (manage) {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_WARN, "File management mode", "Only single-file delete is available. Directories, batch actions and edit are intentionally not provided.");
         sendChunk("<p class='statusline'><a class='btnlink secondary' href='/esp32base/fs'>View only</a></p>");
+        sendFsUploadPanel();
     } else {
         sendChunk("<p class='statusline'><a class='btnlink warn' href='/esp32base/fs?manage=1'>Manage files</a></p>");
     }
@@ -3862,6 +4018,162 @@ void handleFsDownloadGet() {
     file.close();
     endResponse();
     ESP32BASE_LOG_I("web", "fs_download_requested path=%s bytes=%lu", path, static_cast<unsigned long>(sent));
+}
+
+void handleFsCheckGet() {
+    markRequest();
+    if (!ensureAuth()) {
+        return;
+    }
+    if (!Esp32BaseFs::isReady()) {
+        fsSendUploadJson(503, false, "File system unavailable", nullptr);
+        return;
+    }
+    char dir[96];
+    char name[64];
+    char path[96];
+    strlcpy(dir, g_server.hasArg("dir") ? g_server.arg("dir").c_str() : "", sizeof(dir));
+    strlcpy(name, g_server.hasArg("name") ? g_server.arg("name").c_str() : "", sizeof(name));
+    if (!fsUploadDirectoryExists(dir)) {
+        fsSendUploadJson(400, false, "Target directory missing or protected", nullptr);
+        return;
+    }
+    if (!fsBuildUploadPath(dir, name, path, sizeof(path))) {
+        fsSendUploadJson(400, false, "Invalid filename or target path", nullptr);
+        return;
+    }
+    if (fsUploadTargetIsDirectory(path)) {
+        fsSendUploadJson(400, false, "Target is a directory", path, false, true);
+        return;
+    }
+    const bool exists = Esp32BaseFs::fileSize(path) >= 0;
+    fsSendUploadJson(200, true, nullptr, path, exists, false);
+}
+
+void handleFsUploadDone() {
+    markRequest();
+    if (!ensureAuth()) {
+        return;
+    }
+    if (g_fsUploadForbidden || !requestSameOrigin()) {
+        ESP32BASE_LOG_W("web", "post_rejected context=fs_upload reason=cross_origin");
+        g_fsUploadForbidden = false;
+        g_fsUploadStartFailed = false;
+        fsCloseUploadFile();
+        fsSendUploadJson(403, false, "forbidden", g_fsUploadPath);
+        return;
+    }
+    g_fsUploadForbidden = false;
+    const bool startFailed = g_fsUploadStartFailed;
+    g_fsUploadStartFailed = false;
+    fsCloseUploadFile();
+    if (startFailed || g_fsUploadError[0]) {
+        ESP32BASE_LOG_W("web", "fs_upload_rejected path=%s error=%s", g_fsUploadPath[0] ? g_fsUploadPath : "-", g_fsUploadError[0] ? g_fsUploadError : "upload rejected");
+        fsSendUploadJson(400, false, g_fsUploadError[0] ? g_fsUploadError : "upload rejected", g_fsUploadPath);
+        return;
+    }
+    if (g_fsUploadPath[0] && Esp32BaseFs::fileSize(g_fsUploadPath) >= 0) {
+        ESP32BASE_LOG_W("web", "fs_upload_completed path=%s bytes=%lu overwrite=%s",
+                        g_fsUploadPath,
+                        static_cast<unsigned long>(g_fsUploadBytes),
+                        g_fsUploadOverwrite ? "yes" : "no");
+        if (beginResponse(200, "application/json", nullptr)) {
+            sendChunk("{\"ok\":true,\"redirect\":\"/esp32base/fs?manage=1&uploaded=1\",\"path\":\"");
+            sendEscapedJsonChunk(g_fsUploadPath);
+            sendChunk("\"}");
+            endResponse();
+        }
+        return;
+    }
+    fsSendUploadJson(500, false, "Upload verification failed", g_fsUploadPath);
+}
+
+void handleFsUpload() {
+    if (!isAuthenticated()) {
+        if (g_server.upload().status == UPLOAD_FILE_START) {
+            g_fsUploadStartFailed = true;
+            fsSetUploadError("unauthorized");
+        }
+        return;
+    }
+    HTTPUpload& upload = g_server.upload();
+    if (upload.status == UPLOAD_FILE_START) {
+        g_fsUploadForbidden = false;
+        g_fsUploadStartFailed = false;
+        g_fsUploadActive = false;
+        g_fsUploadOverwrite = g_server.hasArg("overwrite") && g_server.arg("overwrite") == "1";
+        g_fsUploadBytes = 0;
+        g_fsUploadPath[0] = '\0';
+        g_fsUploadError[0] = '\0';
+        if (!requestSameOrigin()) {
+            g_fsUploadForbidden = true;
+            g_fsUploadStartFailed = true;
+            fsSetUploadError("forbidden");
+            ESP32BASE_LOG_W("web", "post_rejected context=fs_upload reason=cross_origin");
+            return;
+        }
+        if (!Esp32BaseFs::isReady()) {
+            g_fsUploadStartFailed = true;
+            fsSetUploadError("File system unavailable");
+            return;
+        }
+        char dir[96];
+        strlcpy(dir, g_server.hasArg("dir") ? g_server.arg("dir").c_str() : "", sizeof(dir));
+        if (!fsUploadDirectoryExists(dir)) {
+            g_fsUploadStartFailed = true;
+            fsSetUploadError("Target directory missing or protected");
+            return;
+        }
+        if (!fsBuildUploadPath(dir, upload.filename.c_str(), g_fsUploadPath, sizeof(g_fsUploadPath))) {
+            g_fsUploadStartFailed = true;
+            fsSetUploadError("Invalid filename or target path");
+            return;
+        }
+        if (fsUploadTargetIsDirectory(g_fsUploadPath)) {
+            g_fsUploadStartFailed = true;
+            fsSetUploadError("Target is a directory");
+            return;
+        }
+        const bool exists = Esp32BaseFs::fileSize(g_fsUploadPath) >= 0;
+        if (exists && !g_fsUploadOverwrite) {
+            g_fsUploadStartFailed = true;
+            fsSetUploadError("File exists");
+            return;
+        }
+        g_fsUploadFile = LittleFS.open(g_fsUploadPath, "w");
+        if (!g_fsUploadFile) {
+            g_fsUploadStartFailed = true;
+            fsSetUploadError("Could not open target file");
+            return;
+        }
+        g_fsUploadActive = true;
+    } else if (upload.status == UPLOAD_FILE_WRITE) {
+        if (g_fsUploadForbidden || g_fsUploadStartFailed || !g_fsUploadActive) {
+            return;
+        }
+        const size_t written = g_fsUploadFile.write(upload.buf, upload.currentSize);
+        g_fsUploadBytes += written;
+        if (written != upload.currentSize) {
+            g_fsUploadStartFailed = true;
+            fsSetUploadError("File write failed");
+            fsCloseUploadFile();
+        }
+        fsScanYield();
+    } else if (upload.status == UPLOAD_FILE_END) {
+        if (g_fsUploadForbidden || g_fsUploadStartFailed || !g_fsUploadActive) {
+            return;
+        }
+        fsCloseUploadFile();
+        if (upload.totalSize > 0 && g_fsUploadBytes != upload.totalSize) {
+            g_fsUploadStartFailed = true;
+            fsSetUploadError("Upload size mismatch");
+            return;
+        }
+    } else if (upload.status == UPLOAD_FILE_ABORTED) {
+        g_fsUploadStartFailed = true;
+        fsSetUploadError("Upload aborted");
+        fsCloseUploadFile();
+    }
 }
 
 void handleFsDeletePost() {
@@ -4136,7 +4448,7 @@ bool Esp32BaseWeb::begin() {
     const uint8_t appPages = routeCount(true);
     uint8_t builtinRoutes = 25;
 #if ESP32BASE_ENABLE_FS
-    builtinRoutes += 1;
+    builtinRoutes += 3;
 #endif
 #if ESP32BASE_ENABLE_OTA
     builtinRoutes += 3;
@@ -4167,8 +4479,10 @@ bool Esp32BaseWeb::begin() {
     g_server.on("/esp32base/logs/clear", HTTP_POST, handleLogsClear);
 #if ESP32BASE_ENABLE_FS
     g_server.on("/esp32base/fs", HTTP_GET, handleFsPage);
+    g_server.on("/esp32base/fs/check", HTTP_GET, handleFsCheckGet);
     g_server.on("/esp32base/fs/download", HTTP_GET, handleFsDownloadGet);
     g_server.on("/esp32base/fs/delete", HTTP_POST, handleFsDeletePost);
+    g_server.on("/esp32base/fs/upload", HTTP_POST, handleFsUploadDone, handleFsUpload);
 #endif
     g_server.on("/esp32base/auth", HTTP_GET, handleAuthPage);
     g_server.on("/esp32base/auth", HTTP_POST, handleAuthSubmit);

@@ -50,7 +50,7 @@
 - 推荐分区表的 `app0` 偏移必须和 PlatformIO / Arduino 上传地址一致；默认应为 `0x10000`。
 - 发布包包含示例依赖哨兵 `examples/basic/src/deps_*.cpp`。
 - 发布包包含独立 PIO 示例 `examples/full_demo`、`examples/web_ui_gallery`、`examples/web_logs_ota`、`examples/net_runtime`。
-- 发布包不包含 `design-history/`。
+- 发布包不包含历史设计、评审、评估等过程文件。
 - 发布包不包含 `.pio/`、`.cache/`、`idf_component.yml` 等构建生成物。
 
 ## 5. 裁剪检查
@@ -92,6 +92,7 @@
 
 - 无凭证进入 AP config portal。
 - 有凭证但连接失败时不自动进入 AP。
+- STA 安全启动保护：制造 `sta_guard=true` + brownout/panic/watchdog reset reason 后累计 `sta_rst`；达到阈值后设置 `sta_pause=true` 并进入 AP config portal；重新提交凭据后清除 pause/guard/count。
 - Web 在 config portal 下启动。
 - DNS 拦截生效。
 - 所有 DNS 查询通配到 AP IP。

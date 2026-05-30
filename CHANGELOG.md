@@ -2,6 +2,42 @@
 
 本文从 2026-05-06 起记录 Esp32Base 新增和优化的能力，面向正在接入本库的业务项目。业务项目应优先查看本文，了解最近可用的新 API、行为变化和推荐接入方式。
 
+## 2026-05-30
+
+### WiFi STA 安全启动保护
+
+新增：
+
+- 有已保存 WiFi 凭据时，STA 启动前会写入 `eb_wifi.sta_guard` guarded 标记；成功连接后清除 guard、计数和 pause。
+- 如果设备在 guarded STA 启动后连续以 brownout、panic 或 watchdog 类 reset reason 重启，达到 `ESP32BASE_WIFI_SAFE_BOOT_MAX_RESETS`（默认 2）后会设置 `eb_wifi.sta_pause=true`，保留原 `ssid/pass`，暂停 STA 并自动进入 AP config portal。
+- 重新提交 WiFi 凭据会清除 pause/guard/count 并恢复 STA 尝试；普通连接超时仍按原有 backoff 重试，不因路由器临时离线直接开放 AP。
+- 新增 `scripts/check_wifi_safe_boot.py`，检查 STA 安全启动保护代码标记、日志标记和文档边界。
+
+业务侧影响：
+
+- ESP32_Faucet 这类设备如果因保存的 STA 状态在 `WiFi.mode(WIFI_STA)` 附近触发 brownout 重启，不会永久卡在重启循环；连续异常后可通过 `ESP32-Config-XXXX` AP 重新配网。
+- 该机制不关闭 brownout detector，也不掩盖供电问题；日志中的 `sta_safe_boot_pause` 表示需要同时检查供电余量和当前 WiFi 凭据/射频启动路径。
+
+### FS 管理模式支持受限上传
+
+新增：
+
+- `/esp32base/fs?manage=1` 增加单文件上传，用于测试环境导入真实场景下载下来的业务数据文件。
+- 上传保留本地文件名，只能选择已有 LittleFS 目录，不创建目录；目标文件存在时，前端先调用 `/esp32base/fs/check` 检查并弹确认框，确认后才带 `overwrite=1` 上传。
+- 新增 `GET /esp32base/fs/check?dir=/data&name=file.bin` 和 `POST /esp32base/fs/upload`，复用 Web Auth、同源 POST 和服务器端路径校验；`/logs` 等基础库 FileLog 路径受保护，不能通过上传覆盖。
+- 新增 `scripts/check_fs_upload.py`，检查上传路由、冲突确认、日志目录保护和文档边界说明。
+
+业务侧影响：
+
+- 上传只负责把文件写入 LittleFS，不校验业务数据格式、索引、NVS 状态或运行时缓存。业务如果希望导入后完全等价于自己生成的数据，应自行在应用层提供格式校验、索引重建或重启提示。
+
+### 仓库历史/过程文件清理
+
+文档：
+
+- 删除 `bug-ticklish-kitten.md` 以及 `design-history/` 下已过期的历史方案、评审和评估文件；这些内容不再作为仓库内交付资料。
+- README、设计说明和发布检查清单同步移除“查看 `design-history/` 归档”的表述；后续以 `README.md`、`docs/`、`CHANGELOG.md` 和现有代码为准。
+
 ## 2026-05-29
 
 ### FS API 读写失败语义收紧

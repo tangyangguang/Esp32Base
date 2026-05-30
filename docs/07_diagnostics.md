@@ -237,6 +237,7 @@ CI 应覆盖核心矩阵，release 前执行完整矩阵。
 - 日志和人工页面中的字节数只显示 KB/MB/B 人性化值；状态/API JSON 可保留 raw `bytes` 并附带 `human`。
 - NTP 对时成功后输出实际时间、当前 uptime、推算 boot wall time，并让 `TimeSnapshot.synced`、Status 页 NTP time 行和日志绝对时间切换共享同一可信同步语义。
 - WiFi 连接、断开、重连 backoff、进入/退出 config portal 都必须有清晰日志。
+- WiFi STA 安全启动保护必须输出可诊断日志：`sta_safe_boot_guard_set` 表示已进入 guarded STA 尝试，`sta_safe_boot_guarded_reset` 表示检测到连续 guarded brownout/panic/watchdog 复位但仍未达到阈值，`sta_safe_boot_pause` 表示已暂停凭据并回退 AP 配网，`sta_safe_boot_resume` 表示用户重新提交凭据后恢复 STA 尝试，`sta_safe_boot_cleared` 表示连接成功或凭据清除后保护状态已清空。
 - 文件日志默认 WARN；量产极简现场记录可通过 Web System 页或 `Esp32BaseFileLog::setMode(Esp32BaseFileLog::ERROR)` 只记录 ERROR；现场调试可切到 INFO，方便通过 Logs 页面观察。
 - FileLog 模式变更必须输出 WARN 级审计日志，包含上一次模式和新模式。
 - Serial 日志和 FileLog 必须可独立控制；量产设备可通过 `Esp32BaseLog::setSerialLevel(Esp32BaseLog::NONE)` 关闭串口，同时保持 FileLog WARN/ERROR 或 INFO 正常写入。
