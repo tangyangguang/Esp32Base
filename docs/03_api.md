@@ -540,13 +540,15 @@ WiFi 凭证和重连策略：
 - 有已保存凭证但连接失败时，不自动进入 AP/config portal，而是持续重连。
 - 单次 STA 连接尝试有非阻塞超时，默认 `ESP32BASE_WIFI_CONNECT_TIMEOUT_MS=15000`。
 - 前几次重连使用短间隔，连续失败后进入长间隔 backoff；backoff 必须非阻塞，不影响 `handle()`、Watchdog feed 和必要休眠。
+- STA 安全启动保护：有已保存凭证并准备进入 STA 时，库会在 `eb_wifi.sta_guard` 写入 guarded 启动标记；成功连接后清除 `sta_guard`、`sta_rst` 和 `sta_pause`。如果下一次启动发现 guarded 标记仍存在，且本次 reset reason 是 `brownout`、`panic` 或 watchdog 类复位，则累计 `eb_wifi.sta_rst`；连续达到 `ESP32BASE_WIFI_SAFE_BOOT_MAX_RESETS`（默认 2）后设置 `eb_wifi.sta_pause=true`，保留 `ssid/pass`，暂停 STA 并进入 AP/config portal。
+- `sta_pause=true` 时，`begin()` 会把保存凭据视为暂不可用并进入 `CONFIG_PORTAL`；用户通过 WiFi 页面或 `connect()` 重新提交凭据后清除 pause 和计数并重新尝试 STA。普通连接超时、AP 不在线或密码错误仍按 backoff 重试，不单独触发安全启动 AP 回退。
 - 只有显式 `clearCredentials()`、`startConfigPortal()` 或应用自定义策略，才能进入 AP/config portal。
 - `clearCredentials()` 只清空库管理的 WiFi 凭证，不立即触发重连、断线或 portal；NVS 清理失败时返回 false。
 - `connect(..., persist=true)` 必须先同步写入 NVS 保存凭证，写入失败时返回 false 且不切换连接；这是显式配置提交的可靠性取舍，避免页面提交后立即重启导致新凭证丢失。
 - `INFO` 日志明文输出 SSID 和密码，便于业务接入和现场调试。
 - `begin()` 默认禁用 WiFi modem sleep，并在启动时显式下发 `WiFi.setSleep(false)`，使 Web/OTA 请求不受 Arduino ESP32 默认 `WIFI_PS_MIN_MODEM` 的 DTIM 唤醒延迟影响；电池设备可调用 `setPowerSave(true)` 恢复 modem sleep，但需要接受 Web 首屏可见延迟。
 - 进入 deep sleep 后 STA、AP、DNS、Web 均不可用；唤醒相当于新一轮启动，按凭证状态恢复网络。
-- 默认无限重试，`FAILED` 状态在默认配置下不出现。
+- 默认无限重试；`FAILED` 状态通常只在 STA mode 切换失败等底层异常下出现，安全启动触发时会发布 `wifi.failed` 并回退 AP/config portal。
 - 仅当应用显式设置有限 maxRetries 且全部用尽，才进入 `FAILED`。
 - 从 `FAILED` 恢复必须通过 `connect()` 重新提交凭证，或 `clearCredentials()` 后再显式 `startConfigPortal()`。
 
@@ -803,7 +805,9 @@ Route 缓冲机制：
 - `/esp32base` Status 页是只读设备体检页，采用诊断优先结构：不额外显示和相邻详细区重复的 `System Overview` 预览块，而是按 Device、Network、Runtime Health、Storage & Logs、Firmware & OTA、Hardware、Partition Table 排序展示 hostname、固件/profile、uptime/boot count、WiFi/IP/RSSI、STA/AP/eFuse MAC、heap、max alloc、Watchdog lifetime/trip resets、NTP time、last reset/wake、FS/File inventory/FileLog/OTA headroom 和运行时分区表；File details 入口并入 FS 行，FileLog level/current/used/limit 合并为一行子指标，Top 文件列表只放在 `/esp32base/fs` 详情页，页面容量值只显示 KB/MB/B 人性化格式，`OTA headroom` 表示 `target slot - current sketch`，Max OTA upload 才是上传硬上限。
 - `/esp32base/fs` 是启用 FS profile 时注册的 LittleFS 诊断页，默认只读，显示 Summary、Top 10 最大文件和最多 128 项文件树；文件树提供单文件下载；当文件声明有大小但首块无法读取时，Action 显示 `unreadable`，不再给出会生成空文件的下载按钮；当 `FS used` 明显大于可见文件合计时提示内部/历史占用异常。
 - `/esp32base/fs/download?path=/file` 下载一个已存在且可读取的文件，复用 Basic Auth 和路径校验，目录、缺失文件和非法路径不会下载；如果文件声明有大小但无法读取首块，返回 `500 File read failed`。
-- `/esp32base/fs?manage=1` 进入单文件删除管理模式；`POST /esp32base/fs/delete` 只接受一个已存在文件路径，复用 Basic Auth、同源检查和 `POST -> 303 -> GET`，不提供目录删除、批量删除、编辑或任意路径输入。不可读文件仍允许删除，便于清理损坏文件；删除不以文件内容可读为前提。
+- `/esp32base/fs?manage=1` 进入单文件删除和受限上传管理模式；`POST /esp32base/fs/delete` 只接受一个已存在文件路径，复用 Basic Auth、同源检查和 `POST -> 303 -> GET`，不提供目录删除、批量删除、编辑或任意路径输入。不可读文件仍允许删除，便于清理损坏文件；删除不以文件内容可读为前提。
+- `/esp32base/fs/check?dir=/data&name=records.bin` 是上传前检查接口，复用 Basic Auth，按“已有目录 + 本地文件名”计算目标路径，返回目标是否存在、是否是目录以及是否允许上传。
+- `POST /esp32base/fs/upload` 是 multipart 上传接口，复用 Basic Auth 和同源检查；上传保留本地文件名，只能写入已有目录，不创建目录。目标文件存在时必须传 `overwrite=1` 才会覆盖；`/logs` 等基础库 FileLog 路径受保护。上传只负责写入 LittleFS，不校验业务数据语义、索引、NVS 状态或运行时缓存。
 - `/esp32base/tools` System 页承载低频维护入口和操作，App Config 启用时作为首个入口显示，后面是 WiFi Setup、Web Auth、Firmware OTA、File system 直达入口、hostname 保存、Watchdog trip reset、重启设备；启用 FS 的 profile 还提供手动格式化 LittleFS 操作，会清除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth 或 NVS 配置。
 - `/esp32base/auth` 是内置认证管理页面，受当前 Basic Auth 保护，提交成功后新账号密码立即生效。
 - Web Auth 认证优先级为：已保存认证 > 应用默认认证 > 库默认 `admin/admin`。

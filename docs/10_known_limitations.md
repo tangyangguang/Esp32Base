@@ -26,8 +26,9 @@
 
 ## 3. 网络边界
 
-- 有已保存 WiFi 凭证但连接失败时，库不会自动进入 AP/config portal，而是持续 STA 重连。
-- 进入 AP/config portal 只发生在无凭证、显式 `startConfigPortal()` 或应用自定义策略下。
+- 有已保存 WiFi 凭证但普通连接失败时，库不会自动进入 AP/config portal，而是持续 STA 重连。
+- STA 安全启动保护是例外：如果上一次已进入 guarded STA 启动阶段，随后连续发生 brownout、panic 或 watchdog 类复位，达到阈值后会暂停 `eb_wifi` 凭据并回退 AP/config portal。该机制用于跳出坏 STA 状态造成的永久重启循环，不用于处理路由器临时离线。
+- 进入 AP/config portal 只发生在无凭证、显式 `startConfigPortal()`、STA 安全启动保护触发或应用自定义策略下。
 - Config portal AP 默认不设置密码，SSID 为可预测的 `ESP32-Config-XXXX`，其中后缀来自 eFuse MAC 的最后两个字节；应用应只在预期配网窗口进入 portal。
 - 该策略用于防止量产设备在路由器临时故障时被陌生人通过 AP 修改凭证。
 - 如果应用面向消费场景，需要换路由器后自动配网，应由应用在长 backoff 后显式调用 `Esp32BaseWiFi::startConfigPortal()`，并配合按键长按、状态灯或屏幕提示等用户确认方式。

@@ -12,6 +12,7 @@
 #endif
 
 #include <WiFi.h>
+#include <esp_system.h>
 #include <string.h>
 
 #ifndef ESP32BASE_WIFI_CONNECT_TIMEOUT_MS
@@ -26,6 +27,9 @@
 #ifndef ESP32BASE_WIFI_RETRY_SLOW_MS
 #define ESP32BASE_WIFI_RETRY_SLOW_MS 60000
 #endif
+#ifndef ESP32BASE_WIFI_SAFE_BOOT_MAX_RESETS
+#define ESP32BASE_WIFI_SAFE_BOOT_MAX_RESETS 2
+#endif
 
 namespace {
 bool g_wifiReady = false;
@@ -37,6 +41,16 @@ uint32_t g_wifiAttemptStartMs = 0;
 uint32_t g_wifiNextRetryMs = 0;
 uint8_t g_wifiRetryCount = 0;
 bool g_wifiPowerSave = false;
+bool g_staGuardActive = false;
+bool g_staCredentialsPaused = false;
+uint8_t g_staGuardedResetCount = 0;
+
+constexpr const char* WIFI_NS = "eb_wifi";
+constexpr const char* WIFI_KEY_SSID = "ssid";
+constexpr const char* WIFI_KEY_PASS = "pass";
+constexpr const char* WIFI_KEY_STA_GUARD = "sta_guard";
+constexpr const char* WIFI_KEY_STA_RESET_COUNT = "sta_rst";
+constexpr const char* WIFI_KEY_STA_PAUSE = "sta_pause";
 
 bool credentialsPresent() {
     return g_wifiSsid[0] != '\0';
@@ -50,6 +64,7 @@ bool credentialsValid(const char* ssidValue, const char* passwordValue) {
 }
 
 const char* wlStatusName(wl_status_t status);
+const char* resetReasonName(esp_reset_reason_t reason);
 
 uint16_t readableMacSuffix(uint64_t mac) {
     const uint8_t penultimate = static_cast<uint8_t>((mac >> 32) & 0xff);
@@ -73,8 +88,8 @@ void publish(const char* event) {
 }
 
 bool loadCredentials() {
-    if (!Esp32BaseConfig::getStr("eb_wifi", "ssid", g_wifiSsid, sizeof(g_wifiSsid), "") ||
-        !Esp32BaseConfig::getStr("eb_wifi", "pass", g_wifiPassword, sizeof(g_wifiPassword), "")) {
+    if (!Esp32BaseConfig::getStr(WIFI_NS, WIFI_KEY_SSID, g_wifiSsid, sizeof(g_wifiSsid), "") ||
+        !Esp32BaseConfig::getStr(WIFI_NS, WIFI_KEY_PASS, g_wifiPassword, sizeof(g_wifiPassword), "")) {
         g_wifiSsid[0] = '\0';
         g_wifiPassword[0] = '\0';
         return false;
@@ -82,13 +97,155 @@ bool loadCredentials() {
     return credentialsPresent();
 }
 
-void beginSta() {
+bool safeBootEnabled() {
+    return ESP32BASE_WIFI_SAFE_BOOT_MAX_RESETS > 0;
+}
+
+void loadStaSafeBootState() {
+    g_staGuardActive = Esp32BaseConfig::getBool(WIFI_NS, WIFI_KEY_STA_GUARD, false);
+    g_staCredentialsPaused = Esp32BaseConfig::getBool(WIFI_NS, WIFI_KEY_STA_PAUSE, false);
+    const int32_t storedCount = Esp32BaseConfig::getInt(WIFI_NS, WIFI_KEY_STA_RESET_COUNT, 0);
+    if (storedCount < 0) {
+        g_staGuardedResetCount = 0;
+    } else if (storedCount > 255) {
+        g_staGuardedResetCount = 255;
+    } else {
+        g_staGuardedResetCount = static_cast<uint8_t>(storedCount);
+    }
+}
+
+bool persistStaSafeBootState() {
+    bool ok = true;
+    ok = Esp32BaseConfig::setBool(WIFI_NS, WIFI_KEY_STA_GUARD, g_staGuardActive) && ok;
+    ok = Esp32BaseConfig::setInt(WIFI_NS, WIFI_KEY_STA_RESET_COUNT, g_staGuardedResetCount) && ok;
+    ok = Esp32BaseConfig::setBool(WIFI_NS, WIFI_KEY_STA_PAUSE, g_staCredentialsPaused) && ok;
+    if (!ok) {
+        ESP32BASE_LOG_W("wifi", "sta_safe_boot_state_save_failed guard=%s resets=%u paused=%s",
+                        g_staGuardActive ? "yes" : "no",
+                        static_cast<unsigned>(g_staGuardedResetCount),
+                        g_staCredentialsPaused ? "yes" : "no");
+    }
+    return ok;
+}
+
+void clearStaSafeBootState(const char* reason) {
+    const bool hadState = g_staGuardActive || g_staCredentialsPaused || g_staGuardedResetCount != 0;
+    const uint8_t previousCount = g_staGuardedResetCount;
+    const bool previousPaused = g_staCredentialsPaused;
+    g_staGuardActive = false;
+    g_staGuardedResetCount = 0;
+    g_staCredentialsPaused = false;
+    if (hadState) {
+        persistStaSafeBootState();
+    }
+    if (hadState) {
+        ESP32BASE_LOG_I("wifi", "sta_safe_boot_cleared reason=%s previous_resets=%u previous_paused=%s",
+                        reason ? reason : "unknown",
+                        static_cast<unsigned>(previousCount),
+                        previousPaused ? "yes" : "no");
+    }
+}
+
+void resumeStaCredentials(const char* reason) {
+    const bool wasPaused = g_staCredentialsPaused;
+    clearStaSafeBootState(reason);
+    if (wasPaused) {
+        ESP32BASE_LOG_I("wifi", "sta_safe_boot_resume reason=%s ssid=%s", reason ? reason : "unknown", g_wifiSsid);
+    }
+}
+
+bool guardedResetReason(esp_reset_reason_t reason) {
+    switch (reason) {
+        case ESP_RST_BROWNOUT:
+        case ESP_RST_PANIC:
+        case ESP_RST_INT_WDT:
+        case ESP_RST_TASK_WDT:
+        case ESP_RST_WDT:
+            return true;
+        default:
+            return false;
+    }
+}
+
+void pauseStaCredentialsForSafeBoot(const char* reason, uint8_t guardedResetCount) {
+    g_staGuardActive = false;
+    g_staCredentialsPaused = true;
+    g_staGuardedResetCount = guardedResetCount;
+    persistStaSafeBootState();
+    ESP32BASE_LOG_W("wifi",
+                    "sta_safe_boot_pause ssid=%s reason=%s guarded_resets=%u max=%u action=config_portal credentials=paused",
+                    g_wifiSsid,
+                    reason ? reason : "unknown",
+                    static_cast<unsigned>(g_staGuardedResetCount),
+                    static_cast<unsigned>(ESP32BASE_WIFI_SAFE_BOOT_MAX_RESETS));
+    publish(Esp32BaseWiFi::EVENT_FAILED);
+}
+
+bool evaluateStaSafeBootBeforeSta() {
+    if (!safeBootEnabled()) {
+        if (g_staGuardActive || g_staCredentialsPaused || g_staGuardedResetCount != 0) {
+            clearStaSafeBootState("safe_boot_disabled");
+        }
+        return true;
+    }
+    if (g_staCredentialsPaused) {
+        ESP32BASE_LOG_W("wifi",
+                        "sta_safe_boot_paused ssid=%s guarded_resets=%u action=config_portal",
+                        g_wifiSsid,
+                        static_cast<unsigned>(g_staGuardedResetCount));
+        return false;
+    }
+    if (!g_staGuardActive) {
+        return true;
+    }
+    const esp_reset_reason_t reason = esp_reset_reason();
+    if (!guardedResetReason(reason)) {
+        ESP32BASE_LOG_I("wifi", "sta_safe_boot_previous_guard_ignored reset_reason=%s action=retry_sta",
+                        resetReasonName(reason));
+        clearStaSafeBootState("normal_reset");
+        return true;
+    }
+    if (g_staGuardedResetCount < 255) {
+        ++g_staGuardedResetCount;
+    }
+    if (g_staGuardedResetCount >= ESP32BASE_WIFI_SAFE_BOOT_MAX_RESETS) {
+        pauseStaCredentialsForSafeBoot(resetReasonName(reason), g_staGuardedResetCount);
+        return false;
+    }
+    persistStaSafeBootState();
+    ESP32BASE_LOG_W("wifi",
+                    "sta_safe_boot_guarded_reset ssid=%s reset_reason=%s guarded_resets=%u max=%u action=retry_sta",
+                    g_wifiSsid,
+                    resetReasonName(reason),
+                    static_cast<unsigned>(g_staGuardedResetCount),
+                    static_cast<unsigned>(ESP32BASE_WIFI_SAFE_BOOT_MAX_RESETS));
+    return true;
+}
+
+void markStaSafeBootGuardActive() {
+    if (!safeBootEnabled() || g_staGuardActive) {
+        return;
+    }
+    g_staGuardActive = true;
+    persistStaSafeBootState();
+    ESP32BASE_LOG_I("wifi", "sta_safe_boot_guard_set ssid=%s max=%u",
+                    g_wifiSsid,
+                    static_cast<unsigned>(ESP32BASE_WIFI_SAFE_BOOT_MAX_RESETS));
+}
+
+bool beginSta() {
     if (!credentialsPresent()) {
         g_wifiState = Esp32BaseWiFi::IDLE;
         ESP32BASE_LOG_W("wifi", "sta connect skipped: no credentials");
-        return;
+        return false;
     }
-    WiFi.mode(WIFI_STA);
+    markStaSafeBootGuardActive();
+    if (!WiFi.mode(WIFI_STA)) {
+        g_wifiState = Esp32BaseWiFi::FAILED;
+        ESP32BASE_LOG_E("wifi", "station_mode_failed ssid=%s action=config_portal", g_wifiSsid);
+        pauseStaCredentialsForSafeBoot("mode_failed", g_staGuardedResetCount);
+        return false;
+    }
     if (!WiFi.setHostname(Esp32Base::hostname())) {
         ESP32BASE_LOG_W("wifi", "hostname_apply_failed value=%s", Esp32Base::hostname());
     }
@@ -104,6 +261,7 @@ void beginSta() {
                     g_wifiPassword,
                     wlStatusName(WiFi.status()),
                     static_cast<unsigned>(WiFi.status()));
+    return true;
 }
 
 void scheduleRetry(uint32_t now, const char* reason) {
@@ -133,15 +291,41 @@ const char* wlStatusName(wl_status_t status) {
         default: return "WL_UNKNOWN";
     }
 }
+
+const char* resetReasonName(esp_reset_reason_t reason) {
+    switch (reason) {
+        case ESP_RST_POWERON: return "poweron";
+        case ESP_RST_EXT: return "external";
+        case ESP_RST_SW: return "software";
+        case ESP_RST_PANIC: return "panic";
+        case ESP_RST_INT_WDT: return "int_wdt";
+        case ESP_RST_TASK_WDT: return "task_wdt";
+        case ESP_RST_WDT: return "wdt";
+        case ESP_RST_DEEPSLEEP: return "deep_sleep";
+        case ESP_RST_BROWNOUT: return "brownout";
+        case ESP_RST_SDIO: return "sdio";
+        case ESP_RST_UNKNOWN:
+        default: return "unknown";
+    }
+}
 }
 
 bool Esp32BaseWiFi::begin() {
     g_wifiReady = true;
     WiFi.persistent(false);
     WiFi.setSleep(g_wifiPowerSave);
-    if (loadCredentials()) {
-        beginSta();
+    const bool hasCredentials = loadCredentials();
+    loadStaSafeBootState();
+    if (hasCredentials) {
+        if (evaluateStaSafeBootBeforeSta()) {
+            if (!beginSta()) {
+                startConfigPortal();
+            }
+        } else {
+            startConfigPortal();
+        }
     } else {
+        clearStaSafeBootState("no_credentials");
         startConfigPortal();
     }
     return true;
@@ -156,6 +340,7 @@ void Esp32BaseWiFi::handle() {
     if ((g_wifiState == CONNECTING || g_wifiState == RETRY_BACKOFF) && status == WL_CONNECTED) {
         g_wifiState = CONNECTED;
         g_wifiRetryCount = 0;
+        clearStaSafeBootState("connected");
         ESP32BASE_LOG_I("wifi", "connected ip=%s", WiFi.localIP().toString().c_str());
         publish(EVENT_CONNECTED);
         return;
@@ -186,7 +371,9 @@ void Esp32BaseWiFi::handle() {
             return;
         }
         ++g_wifiRetryCount;
-        beginSta();
+        if (!beginSta()) {
+            startConfigPortal();
+        }
     }
 }
 
@@ -201,8 +388,8 @@ bool Esp32BaseWiFi::connect(const char* ssidValue, const char* passwordValue, bo
     }
     if (persist) {
         // Explicit credential saves stay synchronous so a reboot right after the form submit keeps the new WiFi config.
-        if (!Esp32BaseConfig::setStr("eb_wifi", "ssid", ssidValue) ||
-            !Esp32BaseConfig::setStr("eb_wifi", "pass", passwordValue)) {
+        if (!Esp32BaseConfig::setStr(WIFI_NS, WIFI_KEY_SSID, ssidValue) ||
+            !Esp32BaseConfig::setStr(WIFI_NS, WIFI_KEY_PASS, passwordValue)) {
             ESP32BASE_LOG_E("wifi", "credential save failed");
             return false;
         }
@@ -214,15 +401,30 @@ bool Esp32BaseWiFi::connect(const char* ssidValue, const char* passwordValue, bo
                     g_wifiPassword,
                     persist ? "yes" : "no");
     g_wifiRetryCount = 0;
+    resumeStaCredentials("credentials_set");
     stopConfigPortal();
-    beginSta();
-    return true;
+    if (beginSta()) {
+        return true;
+    }
+    startConfigPortal();
+    return false;
 }
 
 bool Esp32BaseWiFi::clearCredentials() {
+    const bool hadSafeBootState = g_staGuardActive || g_staCredentialsPaused || g_staGuardedResetCount != 0;
+    const uint8_t previousCount = g_staGuardedResetCount;
+    const bool previousPaused = g_staCredentialsPaused;
     g_wifiSsid[0] = '\0';
     g_wifiPassword[0] = '\0';
-    const bool ok = Esp32BaseConfig::clearNamespace("eb_wifi");
+    g_staGuardActive = false;
+    g_staCredentialsPaused = false;
+    g_staGuardedResetCount = 0;
+    if (hadSafeBootState) {
+        ESP32BASE_LOG_I("wifi", "sta_safe_boot_cleared reason=credentials_cleared previous_resets=%u previous_paused=%s",
+                        static_cast<unsigned>(previousCount),
+                        previousPaused ? "yes" : "no");
+    }
+    const bool ok = Esp32BaseConfig::clearNamespace(WIFI_NS);
     if (!ok) {
         ESP32BASE_LOG_W("wifi", "credential_clear_failed");
     }
