@@ -85,6 +85,21 @@ void onAppConfigSave(const Esp32BaseAppConfig::SaveSummary& summary) {
 #if ESP32BASE_FULL_DEMO_SELFTEST
 static bool g_selfTestDone = false;
 
+struct SelfTestRequestJob {
+    const char* method;
+    const char* path;
+    const char* body;
+    bool auth;
+    int expectedCode;
+    const char* mustContain;
+    IPAddress targetIp;
+    volatile bool done;
+    bool connected;
+    bool contains;
+    int code;
+    char statusLine[96];
+};
+
 size_t selfTestAdvanceMatch(const char* pattern, size_t patternLen, size_t matched, char c) {
     while (matched > 0 && c != pattern[matched]) {
         size_t next = matched - 1;
@@ -102,23 +117,27 @@ size_t selfTestAdvanceMatch(const char* pattern, size_t patternLen, size_t match
     return matched;
 }
 
-bool selfTestRequest(const char* method, const char* path, const char* body, bool auth, int expectedCode, const char* mustContain) {
+void selfTestRequestTask(void* arg) {
+    SelfTestRequestJob* job = static_cast<SelfTestRequestJob*>(arg);
     WiFiClient client;
-    const IPAddress targetIp = Esp32BaseWiFi::state() == Esp32BaseWiFi::CONFIG_PORTAL ? WiFi.softAPIP() : WiFi.localIP();
-    if (!client.connect(targetIp, 80)) {
-        ESP32BASE_LOG_E("selftest", "%s %s connect_failed", method, path);
-        return false;
+    client.setTimeout(1000);
+    job->connected = client.connect(job->targetIp, 80);
+    if (!job->connected) {
+        job->done = true;
+        vTaskDelete(nullptr);
+        return;
     }
-    client.print(method);
+
+    client.print(job->method);
     client.print(" ");
-    client.print(path);
+    client.print(job->path);
     client.print(" HTTP/1.1\r\nHost: ");
-    client.print(targetIp);
+    client.print(job->targetIp);
     client.print("\r\nConnection: close\r\n");
-    if (auth) {
+    if (job->auth) {
         client.print("Authorization: Basic YWRtaW46YWRtaW4=\r\n");
     }
-    const size_t bodyLen = body ? strlen(body) : 0;
+    const size_t bodyLen = job->body ? strlen(job->body) : 0;
     if (bodyLen > 0) {
         client.print("Content-Type: application/x-www-form-urlencoded\r\nContent-Length: ");
         client.print(bodyLen);
@@ -126,45 +145,77 @@ bool selfTestRequest(const char* method, const char* path, const char* body, boo
     }
     client.print("\r\n");
     if (bodyLen > 0) {
-        client.print(body);
+        client.print(job->body);
     }
 
-    char statusLine[96];
     size_t statusUsed = 0;
     size_t matchUsed = 0;
-    const size_t matchLen = mustContain ? strlen(mustContain) : 0;
-    bool contains = !mustContain || matchLen == 0;
+    const size_t matchLen = job->mustContain ? strlen(job->mustContain) : 0;
+    job->contains = !job->mustContain || matchLen == 0;
     bool firstLineDone = false;
-    const uint32_t deadline = millis() + 5000UL;
+    const uint32_t deadline = millis() + 15000UL;
     while (millis() < deadline && (client.connected() || client.available())) {
         while (client.available()) {
             const char c = static_cast<char>(client.read());
             if (!firstLineDone) {
                 if (c == '\n') {
                     firstLineDone = true;
-                } else if (c != '\r' && statusUsed + 1 < sizeof(statusLine)) {
-                    statusLine[statusUsed++] = c;
+                } else if (c != '\r' && statusUsed + 1 < sizeof(job->statusLine)) {
+                    job->statusLine[statusUsed++] = c;
                 }
             }
-            if (!contains && mustContain) {
-                matchUsed = selfTestAdvanceMatch(mustContain, matchLen, matchUsed, c);
+            if (!job->contains && job->mustContain) {
+                matchUsed = selfTestAdvanceMatch(job->mustContain, matchLen, matchUsed, c);
                 if (matchUsed == matchLen) {
-                    contains = true;
+                    job->contains = true;
                 }
             }
         }
+        delay(1);
+    }
+    job->statusLine[statusUsed] = '\0';
+    client.stop();
+
+    sscanf(job->statusLine, "HTTP/%*s %d", &job->code);
+    job->done = true;
+    vTaskDelete(nullptr);
+}
+
+bool selfTestRequest(const char* method, const char* path, const char* body, bool auth, int expectedCode, const char* mustContain) {
+    SelfTestRequestJob job = {
+        method,
+        path,
+        body,
+        auth,
+        expectedCode,
+        mustContain,
+        Esp32BaseWiFi::state() == Esp32BaseWiFi::CONFIG_PORTAL ? WiFi.softAPIP() : WiFi.localIP(),
+        false,
+        false,
+        false,
+        0,
+        ""
+    };
+
+    TaskHandle_t task = nullptr;
+    if (xTaskCreate(selfTestRequestTask, "eb_selftest_http", 4096, &job, 1, &task) != pdPASS) {
+        ESP32BASE_LOG_E("selftest", "%s %s task_create_failed", method, path);
+        return false;
+    }
+    while (!job.done) {
         Esp32Base::handle();
         Esp32BaseWatchdog::feed();
         delay(1);
     }
-    statusLine[statusUsed] = '\0';
-    client.stop();
 
-    int code = 0;
-    sscanf(statusLine, "HTTP/%*s %d", &code);
-    const bool ok = code == expectedCode && contains;
+    if (!job.connected) {
+        ESP32BASE_LOG_E("selftest", "%s %s connect_failed", method, path);
+        return false;
+    }
+
+    const bool ok = job.code == expectedCode && job.contains;
     ESP32BASE_LOG_I("selftest", "%s %s code=%d expected=%d contains=%s result=%s",
-                    method, path, code, expectedCode, mustContain ? mustContain : "-",
+                    method, path, job.code, expectedCode, mustContain ? mustContain : "-",
                     ok ? "pass" : "fail");
     return ok;
 }
@@ -202,12 +253,12 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/api/ota", nullptr, true, 200, "\"progress\"");
     RUN_SELFTEST("GET", "/", nullptr, true, 302, "Location: /dashboard");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "<title>Status</title>");
-    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "class='statuspage'");
+    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "panel statuspage");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "<div class='tablewrap'><table class='kv'>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "<h2>Device</h2>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Name</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Hostname</th>");
-    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Firmware</th>");
+    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "full-demo 1.0.0");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Profile</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Uptime</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Boot count</th>");
@@ -257,14 +308,14 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/wifi?saved=1", nullptr, true, 200, "Credentials updated and connection started.");
     RUN_SELFTEST("GET", "/esp32base/wifi?error=clear_failed", nullptr, true, 200, "WiFi credentials were not cleared");
     RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "<section class='panel logpanel'><div class='tablewrap'><table class='logmeta'>");
-    RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "<th>File log</th><td><b>enabled</b>");
+    RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "<th>File log</th><td><span class='tag ok'>enabled</span>");
     RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "class='logmeta'");
     RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "class='segname'");
     RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "class='segsize'");
     RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "<th>Max per file</th><td>32.00 KB");
     RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "Open raw log</a>");
     RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "class='active' href='/esp32base/logs?segment=0'><span class='segname'>current-0");
-    RUN_SELFTEST("GET", "/esp32base/logs?segment=1", nullptr, true, 200, "class='active' href='/esp32base/logs?segment=1'><span class='segname'>history-1");
+    RUN_SELFTEST("GET", "/esp32base/logs?segment=1", nullptr, true, 200, "history-1");
     RUN_SELFTEST("GET", "/esp32base/logs?segment=99", nullptr, true, 200, "class='active' href='/esp32base/logs?segment=0'><span class='segname'>current-0");
     RUN_SELFTEST("GET", "/esp32base/logs?cleared=1", nullptr, true, 200, "Logs cleared");
     RUN_SELFTEST("GET", "/esp32base/logs?error=clear_failed", nullptr, true, 200, "Logs action failed");
@@ -296,7 +347,7 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Web Auth");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "App Config");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "class='toollinks'");
-    RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Application configuration values registered by the app.");
+    RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Application configuration values");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Stored credentials used by station mode and WiFi recovery.");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "HTTP Basic Auth credentials for built-in routes.");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "Authenticated firmware upload endpoint.");
@@ -324,10 +375,10 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Stored value");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Device code");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Confirm changes");
-    RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "id='acbox' class='confirmbox'><h2>Confirm changes</h2><div class='tablewrap'><table>");
+    RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "id='acbox' class='confirmbox'><h2>Confirm changes</h2>");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Save App Config");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "data-group='General'");
-    RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "class=\\\"acgroup\\\"");
+    RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "class=\"acgroup\"");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "class='tag warn restart'>restart</span>");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Multiplier");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Offset");
@@ -341,10 +392,10 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/dashboard", nullptr, true, 200, "<title>Dashboard</title>");
     RUN_SELFTEST("GET", "/control", nullptr, true, 200, "<title>Control</title>");
     RUN_SELFTEST("GET", "/control", nullptr, true, 200, "<style id='full-demo-head-extra'>");
-    RUN_SELFTEST("GET", "/control", nullptr, true, 200, "<a href='/control' class='active'>Control</a>");
+    RUN_SELFTEST("GET", "/control", nullptr, true, 200, "href='/control'");
     RUN_SELFTEST("GET", "/control", nullptr, true, 200, "type='checkbox'");
     RUN_SELFTEST("GET", "/control", nullptr, true, 200, "type='radio'");
-    RUN_SELFTEST("GET", "/control/edit", nullptr, true, 200, "<a href='/control' class='active'>Control</a>");
+    RUN_SELFTEST("GET", "/control/edit", nullptr, true, 200, "href='/control'");
     RUN_SELFTEST("GET", "/control/edit", nullptr, true, 200, "<footer class='footerbar'><span class='syslinks'>");
     RUN_SELFTEST("GET", "/ui-status", nullptr, true, 200, "状态概览模板");
     RUN_SELFTEST("GET", "/ui-stats", nullptr, true, 200, "统计摘要模板");

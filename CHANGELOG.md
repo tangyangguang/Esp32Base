@@ -11,6 +11,7 @@
 - Web 实现从单个巨型 `Esp32BaseWeb.inc` 拆为 `Esp32BaseWeb.cpp` facade、`WebContext`、`WebResponse`、`WebLayout`、`WebAssets` 和按功能分组的 Status/WiFi/Auth/Tools/Logs/FS/OTA/AppConfig 模块。
 - `library.json` 现在显式编译 `src/web/*.cpp` 与 `src/web/internal/*.cpp`；非 Web profile 仍由 profile 宏裁剪，不应链接 WebServer、Update、LittleFS 等重依赖。
 - 发送路径继续使用同一个 512 B chunk buffer、PROGMEM 资源和 raw chunked writer，不新增页面对象层级、动态分配或大 `String` 拼接。
+- FS 管理页上传表单将目录选择、文件选择和精简说明文案分离到稳定栅格，避免桌面宽屏下辅助说明被压窄换行。
 - Web/FS/OTA/FileLog 相关检查脚本改为检查新的 Web 模块集合，不再依赖旧 `.inc` 文件。
 
 业务侧影响：
