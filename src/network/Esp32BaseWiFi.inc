@@ -29,7 +29,7 @@
 #define ESP32BASE_WIFI_RETRY_SLOW_MS 60000
 #endif
 #ifndef ESP32BASE_WIFI_SAFE_BOOT_MAX_RESETS
-#define ESP32BASE_WIFI_SAFE_BOOT_MAX_RESETS 2
+#define ESP32BASE_WIFI_SAFE_BOOT_MAX_RESETS 3
 #endif
 
 namespace {
@@ -167,6 +167,15 @@ bool guardedResetReason(esp_reset_reason_t reason) {
     }
 }
 
+void autoResumeStaCredentialsForSafeBoot(const char* reason, uint8_t previousCount) {
+    ESP32BASE_LOG_I("wifi",
+                    "sta_safe_boot_auto_resume ssid=%s reason=%s previous_resets=%u action=retry_sta",
+                    g_wifiSsid,
+                    reason ? reason : "unknown",
+                    static_cast<unsigned>(previousCount));
+    clearStaSafeBootState("normal_reset_auto_resume");
+}
+
 void pauseStaCredentialsForSafeBoot(const char* reason, uint8_t guardedResetCount) {
     g_staGuardActive = false;
     g_staCredentialsPaused = true;
@@ -189,9 +198,15 @@ bool evaluateStaSafeBootBeforeSta() {
         return true;
     }
     if (g_staCredentialsPaused) {
+        const esp_reset_reason_t reason = esp_reset_reason();
+        if (!guardedResetReason(reason)) {
+            autoResumeStaCredentialsForSafeBoot(esp32base_internal::resetReasonName(reason), g_staGuardedResetCount);
+            return true;
+        }
         ESP32BASE_LOG_W("wifi",
-                        "sta_safe_boot_paused ssid=%s guarded_resets=%u action=config_portal",
+                        "sta_safe_boot_paused ssid=%s reset_reason=%s guarded_resets=%u action=config_portal",
                         g_wifiSsid,
+                        esp32base_internal::resetReasonName(reason),
                         static_cast<unsigned>(g_staGuardedResetCount));
         return false;
     }
@@ -414,6 +429,22 @@ bool Esp32BaseWiFi::clearCredentials() {
     return ok;
 }
 
+bool Esp32BaseWiFi::retrySavedCredentials() {
+    if (!loadCredentials()) {
+        ESP32BASE_LOG_W("wifi", "saved_credentials_retry_failed reason=no_credentials");
+        return false;
+    }
+    g_wifiRetryCount = 0;
+    resumeStaCredentials("saved_credentials_retry");
+    stopConfigPortal();
+    if (beginSta()) {
+        ESP32BASE_LOG_I("wifi", "saved_credentials_retry_started ssid=%s", g_wifiSsid);
+        return true;
+    }
+    startConfigPortal();
+    return false;
+}
+
 bool Esp32BaseWiFi::startConfigPortal() {
     WiFi.mode(WIFI_AP);
     g_wifiRetryCount = 0;
@@ -460,6 +491,14 @@ bool Esp32BaseWiFi::isConnected() {
 
 const char* Esp32BaseWiFi::ssid() {
     return g_wifiSsid;
+}
+
+bool Esp32BaseWiFi::safeBootPaused() {
+    return g_staCredentialsPaused;
+}
+
+uint8_t Esp32BaseWiFi::safeBootGuardedResetCount() {
+    return g_staGuardedResetCount;
 }
 
 bool Esp32BaseWiFi::ip(char* out, size_t len) {

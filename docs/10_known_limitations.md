@@ -27,7 +27,7 @@
 ## 3. 网络边界
 
 - 有已保存 WiFi 凭证但普通连接失败时，库不会自动进入 AP/config portal，而是持续 STA 重连。
-- STA 安全启动保护是例外：如果上一次已进入 guarded STA 启动阶段，随后连续发生 brownout、panic 或 watchdog 类复位，达到阈值后会暂停 `eb_wifi` 凭据并回退 AP/config portal。该机制用于跳出坏 STA 状态造成的永久重启循环，不用于处理路由器临时离线。
+- STA 安全启动保护是例外：如果上一次已进入 guarded STA 启动阶段，随后连续发生 brownout、panic 或 watchdog 类复位，达到阈值后会暂停 `eb_wifi` 凭据并回退 AP/config portal。后续正常 `poweron`、外部复位或其他非危险复位会自动恢复一次已保存 STA 尝试；Web WiFi 页面也提供重试已保存凭据入口，不要求重新保存同一组密码。该机制用于跳出坏 STA 状态造成的永久重启循环，不用于处理路由器临时离线。
 - 进入 AP/config portal 只发生在无凭证、显式 `startConfigPortal()`、STA 安全启动保护触发或应用自定义策略下。
 - Config portal AP 默认不设置密码，SSID 为可预测的 `ESP32-Config-XXXX`，其中后缀来自 eFuse MAC 的最后两个字节；应用应只在预期配网窗口进入 portal。
 - 该策略用于防止量产设备在路由器临时故障时被陌生人通过 AP 修改凭证。

@@ -12,7 +12,7 @@ errors = []
 wifi = read("src/network/Esp32BaseWiFi.inc")
 
 source_checks = [
-    ("ESP32BASE_WIFI_SAFE_BOOT_MAX_RESETS", "missing configurable guarded reset threshold"),
+    ("#define ESP32BASE_WIFI_SAFE_BOOT_MAX_RESETS 3", "default guarded reset threshold should be 3"),
     ('"sta_guard"', "missing STA boot guard NVS marker"),
     ('"sta_rst"', "missing guarded reset counter"),
     ('"sta_pause"', "missing paused credential marker"),
@@ -22,7 +22,9 @@ source_checks = [
     ("ESP_RST_TASK_WDT", "missing watchdog reset classification"),
     ("sta_safe_boot_pause", "missing explicit safe boot pause log"),
     ("sta_safe_boot_resume", "missing explicit safe boot resume log"),
+    ("sta_safe_boot_auto_resume", "missing safe boot auto resume log"),
     ("sta_safe_boot_cleared", "missing explicit guard clear log"),
+    ("retrySavedCredentials", "missing saved credential retry API"),
     ("startConfigPortal();", "safe boot recovery must fall back to config portal"),
 ]
 
@@ -32,8 +34,8 @@ for needle, message in source_checks:
 
 docs = {
     "docs/03_api.md": "STA 安全启动保护",
-    "docs/04_web.md": "STA 安全启动保护",
-    "docs/07_diagnostics.md": "sta_safe_boot_pause",
+    "docs/04_web.md": "恢复并重试已保存 WiFi",
+    "docs/07_diagnostics.md": "sta_safe_boot_auto_resume",
     "docs/10_known_limitations.md": "STA 安全启动保护",
 }
 

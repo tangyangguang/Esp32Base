@@ -20,9 +20,13 @@ void handleWifiPage() {
     Esp32BaseWeb::sendPageTitle("WiFi Settings", "Stored credentials used by station mode and WiFi recovery.");
     if (g_server.hasArg("saved")) {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "Saved", "Credentials updated and connection started.");
+    } else if (g_server.hasArg("retry")) {
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "Retry started", "Saved WiFi credentials are being retried.");
     } else if (g_server.hasArg("error")) {
         if (g_server.arg("error") == "clear_failed") {
             Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_DANGER, "WiFi credentials were not cleared");
+        } else if (g_server.arg("error") == "retry_failed") {
+            Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_DANGER, "Saved WiFi credentials could not be retried");
         } else {
             Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_DANGER, "WiFi settings were not saved");
         }
@@ -35,6 +39,11 @@ void handleWifiPage() {
     sendChunk("' maxlength='32' autocomplete='off'><small>1-32 characters.</small></div><div class='field long'><label for='wp'>Password (optional)</label><input id='wp' type='password' name='password' value='");
     sendEscapedHtmlChunk(password);
     sendChunk("' maxlength='64'><small>Leave empty for open networks.</small></div></div><div class='actions'><input class='secondary' type='button' value='Show/Hide Password' onclick=\"var p=document.getElementById('wp');p.type=p.type=='password'?'text':'password'\"><input type='submit' value='Save &amp; Connect'></div></form></section>");
+    if (ssid[0] && Esp32BaseWiFi::safeBootPaused()) {
+        sendChunk("<section class='panel actionpanel'><h2>WiFi recovery paused</h2><p class='muted'>Saved credentials are paused after repeated guarded STA resets.</p><p class='muted'>Guarded resets: ");
+        sendIntChunk(Esp32BaseWiFi::safeBootGuardedResetCount());
+        sendChunk("</p><form method='post' action='/esp32base/api/wifi/retry' onsubmit=\"return once(this)\"><div class='actions'><input type='submit' value='Retry Saved WiFi'></div></form></section>");
+    }
     sendChunk("<section class='panel dangerpanel'><h2>Clear WiFi</h2><p class='muted'>Remove stored WiFi credentials from this device.</p><form method='post' action='/esp32base/api/wifi/clear' onsubmit=\"return confirm('Clear WiFi credentials?')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Clear WiFi'></div></form></section></div>");
     Esp32BaseWeb::sendFooter();
 }
@@ -59,6 +68,15 @@ void handleWifiSubmit() {
         delay(250);
         Esp32BaseWiFi::connect(ssid.c_str(), password.c_str(), false);
     }
+}
+
+void handleWifiRetry() {
+    markRequest();
+    if (!ensurePostAllowed("wifi_retry")) {
+        return;
+    }
+    const bool ok = Esp32BaseWiFi::retrySavedCredentials();
+    redirectSeeOther(ok ? "/esp32base/wifi?retry=1" : "/esp32base/wifi?error=retry_failed");
 }
 
 void handleWifiClear() {

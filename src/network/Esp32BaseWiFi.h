@@ -26,6 +26,7 @@ public:
 
     static bool connect(const char* ssid, const char* password, bool persist = true);
     static bool clearCredentials();
+    static bool retrySavedCredentials();
     static bool startConfigPortal();
     static bool stopConfigPortal();
 
@@ -33,6 +34,8 @@ public:
     static const char* stateName();
     static bool isConnected();
     static const char* ssid();
+    static bool safeBootPaused();
+    static uint8_t safeBootGuardedResetCount();
     static bool ip(char* out, size_t len);
     static int32_t rssi();
 
