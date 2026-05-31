@@ -17,6 +17,7 @@ public:
     static bool writeBytes(const char* path, const uint8_t* data, size_t len);
     static bool readBytes(const char* path, uint8_t* out, size_t maxLen, size_t* readLen);
     static bool appendBytes(const char* path, const uint8_t* data, size_t len);
+    static bool createFixedFile(const char* path, uint32_t size, uint8_t fillByte = 0);
     static bool readBytesAt(const char* path, uint32_t offset, uint8_t* out, size_t maxLen, size_t* readLen);
     static bool writeBytesAt(const char* path, uint32_t offset, const uint8_t* data, size_t len);
 

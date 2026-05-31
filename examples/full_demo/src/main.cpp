@@ -85,6 +85,12 @@ void onAppConfigSave(const Esp32BaseAppConfig::SaveSummary& summary) {
 #if ESP32BASE_FULL_DEMO_SELFTEST
 static bool g_selfTestDone = false;
 
+struct FixedFileSelfTestCase {
+    const char* path;
+    uint32_t size;
+    uint8_t fill;
+};
+
 struct SelfTestRequestJob {
     const char* method;
     const char* path;
@@ -180,6 +186,55 @@ void selfTestRequestTask(void* arg) {
     vTaskDelete(nullptr);
 }
 
+bool verifyFixedFileByte(const char* path, uint32_t offset, uint8_t expected) {
+    uint8_t value = 0;
+    size_t readLen = 0;
+    return Esp32BaseFs::readBytesAt(path, offset, &value, 1, &readLen) &&
+           readLen == 1 &&
+           value == expected;
+}
+
+bool runFixedFileCase(const FixedFileSelfTestCase& testCase) {
+    Esp32BaseFs::removeFile(testCase.path);
+    if (!Esp32BaseFs::createFixedFile(testCase.path, testCase.size, testCase.fill)) {
+        ESP32BASE_LOG_E("selftest", "fixed_file create_failed path=%s size=%lu",
+                        testCase.path,
+                        static_cast<unsigned long>(testCase.size));
+        return false;
+    }
+    const int64_t size = Esp32BaseFs::fileSize(testCase.path);
+    if (size != static_cast<int64_t>(testCase.size)) {
+        ESP32BASE_LOG_E("selftest", "fixed_file size_mismatch path=%s size=%ld expected=%lu",
+                        testCase.path,
+                        static_cast<long>(size),
+                        static_cast<unsigned long>(testCase.size));
+        return false;
+    }
+    const bool ok = verifyFixedFileByte(testCase.path, 0, testCase.fill) &&
+                    verifyFixedFileByte(testCase.path, testCase.size / 2U, testCase.fill) &&
+                    verifyFixedFileByte(testCase.path, testCase.size - 1U, testCase.fill);
+    Esp32BaseFs::removeFile(testCase.path);
+    if (!ok) {
+        ESP32BASE_LOG_E("selftest", "fixed_file sample_mismatch path=%s", testCase.path);
+    }
+    return ok;
+}
+
+bool runFixedFileSelfTest() {
+    const FixedFileSelfTestCase cases[] = {
+        {"/fixed-file-16k.bin", 16UL * 1024UL, 0x00},
+        {"/fixed-file-32k.bin", 32UL * 1024UL, 0x5A},
+        {"/fixed-file-64k.bin", 64UL * 1024UL, 0xA5},
+    };
+    bool ok = Esp32BaseFs::isReady() &&
+              !Esp32BaseFs::createFixedFile("relative.bin", 16) &&
+              !Esp32BaseFs::createFixedFile(nullptr, 16);
+    for (const auto& testCase : cases) {
+        ok = runFixedFileCase(testCase) && ok;
+    }
+    return ok;
+}
+
 bool selfTestRequest(const char* method, const char* path, const char* body, bool auth, int expectedCode, const char* mustContain) {
     SelfTestRequestJob job = {
         method,
@@ -242,6 +297,7 @@ void runSelfTest() {
     uint8_t total = 0;
 #define RUN_SELFTEST(method, path, body, auth, code, contains) do { ++total; if (selfTestRequest(method, path, body, auth, code, contains)) ++pass; } while (0)
 #define RUN_BOOL(expr) do { ++total; if (expr) ++pass; } while (0)
+    RUN_BOOL(runFixedFileSelfTest());
     RUN_SELFTEST("GET", "/esp32base/api/status", nullptr, false, 401, "Unauthorized");
     RUN_SELFTEST("GET", "/esp32base/api/status", nullptr, true, 200, "\"profile\":\"FULL\"");
     RUN_SELFTEST("GET", "/esp32base/api/chip", nullptr, true, 200, "\"flash\"");

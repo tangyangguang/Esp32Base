@@ -4,11 +4,17 @@
 
 #include "Esp32BaseFs.h"
 #include "../core/Esp32BaseLog.h"
+#if ESP32BASE_ENABLE_WATCHDOG
+#include "Esp32BaseWatchdog.h"
+#endif
 
 #include <LittleFS.h>
 
+#include <string.h>
+
 namespace {
 bool g_fsReady = false;
+constexpr size_t kFixedFileChunkSize = 512;
 
 bool validPath(const char* path) {
     return path && path[0] == '/';
@@ -52,6 +58,58 @@ bool verifyReadableByte(const char* path, uint64_t offset) {
                                     1,
                                     &readLen) &&
            readLen == 1;
+}
+
+bool verifyByteEquals(const char* path, uint32_t offset, uint8_t expected) {
+    uint8_t value = 0;
+    size_t readLen = 0;
+    return Esp32BaseFs::readBytesAt(path, offset, &value, 1, &readLen) &&
+           readLen == 1 &&
+           value == expected;
+}
+
+bool existingFixedFileUsable(const char* path, uint32_t expectedSize) {
+    File file = LittleFS.open(path, "r");
+    if (!file || file.isDirectory()) {
+        if (file) {
+            file.close();
+        }
+        return false;
+    }
+    const bool sizeOk = static_cast<uint64_t>(file.size()) == expectedSize;
+    file.close();
+    if (!sizeOk) {
+        return false;
+    }
+    return expectedSize == 0 || verifyReadableByte(path, static_cast<uint64_t>(expectedSize - 1U));
+}
+
+bool beginFixedFileLongOperation() {
+#if ESP32BASE_ENABLE_WATCHDOG
+    if (Esp32BaseWatchdog::currentTaskRemovedForLongOperation()) {
+        return false;
+    }
+    return Esp32BaseWatchdog::removeCurrentTaskForLongOperation();
+#else
+    return false;
+#endif
+}
+
+void endFixedFileLongOperation(bool active) {
+#if ESP32BASE_ENABLE_WATCHDOG
+    if (active) {
+        Esp32BaseWatchdog::restoreCurrentTaskAfterLongOperation();
+    }
+#else
+    (void)active;
+#endif
+}
+
+void feedFixedFileLongOperation() {
+#if ESP32BASE_ENABLE_WATCHDOG
+    Esp32BaseWatchdog::feed();
+#endif
+    yield();
 }
 
 bool writeMode(const char* path, const uint8_t* data, size_t len, const char* mode) {
@@ -148,6 +206,53 @@ bool Esp32BaseFs::readBytes(const char* path, uint8_t* out, size_t maxLen, size_
 
 bool Esp32BaseFs::appendBytes(const char* path, const uint8_t* data, size_t len) {
     return writeMode(path, data, len, "a");
+}
+
+bool Esp32BaseFs::createFixedFile(const char* path, uint32_t size, uint8_t fillByte) {
+    if (!g_fsReady || !validPath(path)) {
+        return false;
+    }
+
+    if (existingFixedFileUsable(path, size)) {
+        return true;
+    }
+
+    const bool watchdogReleased = beginFixedFileLongOperation();
+    File file = LittleFS.open(path, "w");
+    if (!file) {
+        endFixedFileLongOperation(watchdogReleased);
+        return false;
+    }
+
+    uint8_t chunk[kFixedFileChunkSize];
+    memset(chunk, fillByte, sizeof(chunk));
+    uint32_t remaining = size;
+    bool ok = true;
+    while (remaining > 0) {
+        const size_t chunkLen = remaining > sizeof(chunk) ? sizeof(chunk) : static_cast<size_t>(remaining);
+        if (file.write(chunk, chunkLen) != chunkLen) {
+            ok = false;
+            break;
+        }
+        remaining -= static_cast<uint32_t>(chunkLen);
+        feedFixedFileLongOperation();
+    }
+
+    file.flush();
+    file.close();
+    endFixedFileLongOperation(watchdogReleased);
+
+    if (!ok || !verifyFileSize(path, size)) {
+        return false;
+    }
+    if (size == 0) {
+        return true;
+    }
+
+    const uint32_t middle = size / 2U;
+    return verifyByteEquals(path, 0, fillByte) &&
+           verifyByteEquals(path, middle, fillByte) &&
+           verifyByteEquals(path, size - 1U, fillByte);
 }
 
 bool Esp32BaseFs::readBytesAt(const char* path, uint32_t offset, uint8_t* out, size_t maxLen, size_t* readLen) {

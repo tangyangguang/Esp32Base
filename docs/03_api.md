@@ -1029,6 +1029,7 @@ public:
     static bool writeBytes(const char* path, const uint8_t* data, size_t len);
     static bool readBytes(const char* path, uint8_t* out, size_t maxLen, size_t* readLen);
     static bool appendBytes(const char* path, const uint8_t* data, size_t len);
+    static bool createFixedFile(const char* path, uint32_t size, uint8_t fillByte = 0);
     static bool readBytesAt(const char* path, uint32_t offset, uint8_t* out, size_t maxLen, size_t* readLen);
     static bool writeBytesAt(const char* path, uint32_t offset, const uint8_t* data, size_t len);
 
@@ -1071,9 +1072,11 @@ Offset binary API 用于业务二进制定长记录、分页读取和环形覆�
 
 - `readBytesAt()` 打开已存在文件并从 `offset` 读取最多 `maxLen` 字节，实际读取长度写入 `readLen`；读到 EOF 前允许短读并返回 true。
 - `readBytes()` / `readBytesAt()` 在 FS 未 ready、path 非绝对路径、文件不存在、out 为空或 `offset > fileSize` 时返回 false；失败时 `readLen` 为 0。`offset == fileSize` 返回 true 且读取 0 字节。底层声明文件仍有剩余内容但读出 0 字节时，`readBytes()` / `readBytesAt()` 返回 false，避免把 LittleFS 元数据仍存在但内容块不可读的文件误判为成功读取。
-- `writeFile()` / `writeBytes()` / `appendFile()` / `appendBytes()` 会在写入后 flush 并校验最终大小；非空写入还会确认写入后文件末端可读。`writeBytesAt()` 只覆盖已存在文件中的现有字节，不隐式创建文件、不扩展文件、不填洞；FS 未 ready、path 非绝对路径、文件不存在、data 为空但 len 非 0、`offset + len > fileSize`、底层写失败、写后大小不符或写入范围不可读时返回 false。
+- `writeFile()` / `writeBytes()` / `appendFile()` / `appendBytes()` 会在写入后 flush 并校验最终大小；非空写入还会确认写入后文件末端可读。`appendBytes()` 面向低频追加，不适合用循环追加来初始化大容量定长文件。
+- `createFixedFile(const char* path, uint32_t size, uint8_t fillByte = 0)` 用于固定容量二进制文件初始化。FS 未 ready、path 非绝对路径或底层创建/写入/校验失败时返回 false；`size == 0` 会创建或截断为空文件。文件不存在、大小不匹配，或同尺寸但末端不可读时会用 `fillByte` 分块重建；已存在且大小一致、末端可读时返回 true 并保留原内容，避免业务每次启动清空持久环形记录。重建过程使用固定小块写入，避免一次性占用大 heap，并按长 FS 操作处理 watchdog；完成后校验最终大小并抽样校验首字节、中间字节和末尾字节。
+- `writeBytesAt()` 只覆盖已存在文件中的现有字节，不隐式创建文件、不扩展文件、不填洞；FS 未 ready、path 非绝对路径、文件不存在、data 为空但 len 非 0、`offset + len > fileSize`、底层写失败、写后大小不符或写入范围不可读时返回 false。
 - `removeFile()` 在 `LittleFS.remove()` 失败后会尝试把目标文件截断为 0；如果删除失败但成功清空文件内容，也返回 true，用于 FS 满或坏文件场景下优先释放可见文件占用。
-- 需要固定容量环形文件时，应用可先用 `writeBytes()` 或分块 `appendBytes()` 初始化文件，再用 `writeBytesAt()` 覆盖记录槽位。
+- 需要固定容量环形文件时，应用应优先用 `createFixedFile()` 初始化或校验文件容量，再用 `writeBytesAt()` 覆盖记录槽位。
 - 业务代码必须检查所有 FS API 返回值；如果连续返回 false，不能继续假设记录已写入，应进入降级、清理或提示维护流程。
 - FileLog 会把追加、清空和轮转截断视为可能较慢的 FS 操作处理；即使 FS 已满或损坏，系统级 WARN 日志写入失败也不应导致 task WDT 重启。检测到 FileLog 写入故障后，会先在运行时停止继续写 FileLog，避免后续 WARN 重复冲击异常文件系统；Web Status/Logs/System 页显示为 `write fault` 而不是 `disabled`，表示配置仍开启但运行保护停写。Web 清理、格式化或重新保存模式后可重新启用模式。
 
