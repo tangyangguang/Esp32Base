@@ -90,7 +90,6 @@ struct SelfTestRequestJob {
     const char* path;
     const char* body;
     bool auth;
-    int expectedCode;
     const char* mustContain;
     IPAddress targetIp;
     volatile bool done;
@@ -153,8 +152,8 @@ void selfTestRequestTask(void* arg) {
     const size_t matchLen = job->mustContain ? strlen(job->mustContain) : 0;
     job->contains = !job->mustContain || matchLen == 0;
     bool firstLineDone = false;
-    const uint32_t deadline = millis() + 15000UL;
-    while (millis() < deadline && (client.connected() || client.available())) {
+    const uint32_t startMs = millis();
+    while ((millis() - startMs) < 15000UL && (client.connected() || client.available())) {
         while (client.available()) {
             const char c = static_cast<char>(client.read());
             if (!firstLineDone) {
@@ -187,7 +186,6 @@ bool selfTestRequest(const char* method, const char* path, const char* body, boo
         path,
         body,
         auth,
-        expectedCode,
         mustContain,
         Esp32BaseWiFi::state() == Esp32BaseWiFi::CONFIG_PORTAL ? WiFi.softAPIP() : WiFi.localIP(),
         false,

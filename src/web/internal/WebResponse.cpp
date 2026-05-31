@@ -193,9 +193,7 @@ void markRequest() {
     const Esp32BaseWeb::Method method = fromHttpMethod(g_server.method());
     g_lastRequestMethod = method;
     g_requestContextActive = true;
-    if (g_requestContextActive) {
-        g_currentMethod = method;
-    }
+    g_currentMethod = method;
     strlcpy(g_activeUri, g_server.uri().c_str(), sizeof(g_activeUri));
 }
 

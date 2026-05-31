@@ -74,8 +74,8 @@ bool selfTestRequest(const char* method, const char* path, const char* body, boo
     bool forbidden = false;
     bool firstLineDone = false;
     size_t forbidUsed = 0;
-    const uint32_t deadline = millis() + 5000UL;
-    while (millis() < deadline && (client.connected() || client.available())) {
+    const uint32_t startMs = millis();
+    while ((millis() - startMs) < 5000UL && (client.connected() || client.available())) {
         while (client.available()) {
             const char c = static_cast<char>(client.read());
             if (!firstLineDone) {
