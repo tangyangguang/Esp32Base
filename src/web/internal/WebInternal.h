@@ -266,6 +266,12 @@ void sendLogSegmentTabs(uint8_t selected);
 void handleLogsPage();
 void handleLogsRaw();
 void handleLogsClear();
+#if ESP32BASE_ENABLE_APP_EVENTS
+void handleAppEventsPage();
+void handleAppEventsApi();
+void handleAppEventsCsv();
+void handleAppEventsClearPost();
+#endif
 void handleAuthPage();
 void handleAuthSubmit();
 

@@ -24,7 +24,7 @@ WebContext::WebContext()
       homeMode(Esp32BaseWeb::HOME_ESP32BASE),
       systemNavMode(Esp32BaseWeb::SYSTEM_NAV_SECTION),
       footerBarMode(Esp32BaseWeb::FOOTER_BAR_FULL),
-      builtinLabels{"Status", "WiFi", "OTA", "Logs", "System", "System", "Auth"},
+      builtinLabels{"Status", "WiFi", "OTA", "Logs", "App Events", "System", "System", "Auth"},
       headExtraCallback(nullptr),
       pageHeadProgmem(nullptr),
       chunkBuffer{""},
@@ -87,7 +87,7 @@ char (&g_homePath)[48] = ctx().homePath;
 Esp32BaseWeb::HomeMode& g_homeMode = ctx().homeMode;
 Esp32BaseWeb::SystemNavMode& g_systemNavMode = ctx().systemNavMode;
 Esp32BaseWeb::FooterBarMode& g_footerBarMode = ctx().footerBarMode;
-char (&g_builtinLabels)[7][16] = ctx().builtinLabels;
+char (&g_builtinLabels)[8][16] = ctx().builtinLabels;
 Esp32BaseWeb::Handler& g_headExtraCallback = ctx().headExtraCallback;
 const char*& g_pageHeadProgmem = ctx().pageHeadProgmem;
 char (&g_chunkBuffer)[512] = ctx().chunkBuffer;

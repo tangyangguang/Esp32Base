@@ -16,6 +16,9 @@ bool Esp32BaseWeb::begin() {
 #if ESP32BASE_ENABLE_FS
     builtinRoutes += 3;
 #endif
+#if ESP32BASE_ENABLE_APP_EVENTS
+    builtinRoutes += 4;
+#endif
 #if ESP32BASE_ENABLE_OTA
     builtinRoutes += 3;
 #endif
@@ -44,6 +47,12 @@ bool Esp32BaseWeb::begin() {
     g_server.on("/esp32base/logs", HTTP_GET, handleLogsPage);
     g_server.on("/esp32base/logs/raw", HTTP_GET, handleLogsRaw);
     g_server.on("/esp32base/logs/clear", HTTP_POST, handleLogsClear);
+#if ESP32BASE_ENABLE_APP_EVENTS
+    g_server.on("/esp32base/app-events", HTTP_GET, handleAppEventsPage);
+    g_server.on("/esp32base/api/app-events", HTTP_GET, handleAppEventsApi);
+    g_server.on("/esp32base/app-events.csv", HTTP_GET, handleAppEventsCsv);
+    g_server.on("/esp32base/app-events/clear", HTTP_POST, handleAppEventsClearPost);
+#endif
 #if ESP32BASE_ENABLE_FS
     g_server.on("/esp32base/fs", HTTP_GET, handleFsPage);
     g_server.on("/esp32base/fs/check", HTTP_GET, handleFsCheckGet);
@@ -166,6 +175,10 @@ void Esp32BaseWeb::setAuthEnabled(bool enabled) {
 
 bool Esp32BaseWeb::checkAuth() {
     return ensureAuth();
+}
+
+bool Esp32BaseWeb::checkPostAllowed(const char* context) {
+    return ensurePostAllowed(context);
 }
 
 bool Esp32BaseWeb::verifyAuth() {

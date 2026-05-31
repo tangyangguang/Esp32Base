@@ -118,7 +118,7 @@ OTA 规则：
 - `setHomeMode()` 控制 `/` 和 `/esp32base` 的首页模型：基础库首页、业务首页优先或融合首页。
 - `setSystemNavMode()` 控制 Status、Logs、System 等系统入口在顶部、底部或底部紧凑系统工具区展示；默认使用底部紧凑系统工具区，让顶部主要服务业务导航。
 - `setFooterBarMode()` 控制 `sendFooter()` 输出的底部横条：Off 不显示，Status only 只显示右侧运行摘要，Links + status 同时显示左侧系统入口和右侧运行摘要。
-- `setBuiltinLabel()` 可覆盖 Status/WiFi/OTA/Logs/System/Auth 标签，用于应用统一本地化；系统维护页统一使用 `BUILTIN_TOOLS`，不提供旧 Reboot 历史别名。
+- `setBuiltinLabel()` 可覆盖 Status/WiFi/OTA/Logs/App Events/System/Auth 标签，用于应用统一本地化；系统维护页统一使用 `BUILTIN_TOOLS`，不提供旧 Reboot 历史别名。
 - `setHeadExtraCallback()` 可在 `sendHeader()` 的 `</head>` 和顶部导航输出前注入业务 CSS，业务页面不需要复制基础库 header/nav；`/esp32base` 及其子路径的内置页面会跳过该业务注入，避免内置页重复下发业务样式。
 - 导航按当前请求路径输出 `active` class：完全匹配优先，嵌套路由按最长 path 前缀匹配；`SYSTEM_NAV_SECTION` 下系统维护入口只在 footer 中展示，WiFi/Auth/OTA 二级页会把 System 标记为 active，App Config 页面在启用时标记自己的 footer 入口。
 - 默认 Web 样式采用简洁中性色，普通链接、导航和 tabs 不使用蓝色主色；业务项目最终视觉仍由 `setHeadExtraCallback()` 注入 CSS 覆盖。
@@ -163,6 +163,13 @@ Logs:
 - `GET /esp32base/logs/raw?segment=N`，以 `text/plain; charset=utf-8` 流式输出单个日志 segment，供 Logs 页面 iframe 和原文查看使用
 - `POST /esp32base/logs/clear`，保留直达入口，成功后回到 Logs 页面
 
+App Events，仅 `ESP32BASE_ENABLE_APP_EVENTS=1`：
+
+- `GET /esp32base/app-events`，独立应用事件页面，不混入系统 FileLog；支持 `page/per/level/time/source/type/reason/q` 筛选参数。
+- `GET /esp32base/api/app-events?offset=0&limit=50`，按最新优先分页输出 JSON；支持 `level/time/source/type/reason/q` 筛选参数，事件对象同时包含 `uptimeSec` 和 64-bit 派生 `uptimeMs`。
+- `GET /esp32base/app-events.csv`，导出当前筛选后的应用事件 CSV。
+- `POST /esp32base/app-events/clear`，清空应用事件；需要认证、POST 和同源检查，成功后 303 回到页面。
+
 System:
 
 - `GET /esp32base/tools`
@@ -200,7 +207,7 @@ WiFi 配置页：
 
 System 维护页：
 
-- 默认底部系统导航展示 Status、Logs、System；启用 App Config 时额外展示 App Config 直达入口。WiFi、Auth、OTA 是低频配置/维护入口，收在 System 页面中并显示为 WiFi Setup、Web Auth、Firmware OTA，但保留原直达 URL。
+- 默认底部系统导航展示 Status、Logs、System；启用 App Events 时额外展示 App Events 直达入口，启用 App Config 时额外展示 App Config 直达入口。WiFi、Auth、OTA 是低频配置/维护入口，收在 System 页面中并显示为 WiFi Setup、Web Auth、Firmware OTA，但保留原直达 URL。
 - System 页面使用 baseline 分块：低频入口使用两列入口网格，Open 按钮固定为紧凑浅按钮并贴齐右侧列，不能跨列或遮挡说明；手机端保持“说明 + Open”左右结构；设置项和维护项在 PC 上用两列 `toolgrid` 收敛高度，手机端自然单列；可编辑基础参数使用 `formpanel`，普通维护项使用 `actionpanel`，重启、格式化、清日志等危险操作使用 `dangerpanel`。
 - 启用 App Config 时，System 页面首位仍显示 App Config 入口；App Config 是业务持久化参数配置页，不和基础库维护参数混在 System 长页面中。
 - Hostname 设置区显示当前 hostname、构建默认 hostname、已保存 hostname 和是否需要重启；保存只写入 `eb_sys.hostname`，不热切换当前 DHCP hostname、mDNS、OTA 或 Web 身份，页面必须提示重启后生效。
@@ -215,6 +222,7 @@ System 维护页：
 - 普通 `GET` 页面慢请求只输出 DEBUG；`POST` 等操作慢请求继续输出 WARN。
 - API 层仍建议要求 POST，不使用 GET 触发重启。
 - 内置危险 POST 包括 WiFi 保存/清除、App Config 保存、Hostname 保存、Auth 保存、重启、System 操作、Logs clear、Web OTA upload/done；跨站 `Origin` 或 `Referer` 会被拒绝。
+- 业务自定义 POST 或危险操作应优先调用 `Esp32BaseWeb::checkPostAllowed(context)`，不要只做 `checkAuth()`。
 
 Status 页：
 
@@ -258,6 +266,7 @@ Logs 页面：
 - Clear logs POST 后通过 303 回到 Logs 页，并在页面顶部显示成功或失败提示；刷新页面不重复提交。
 - FileLog 模式为 OFF 时，Logs 页面仍展示已有历史日志；OFF 只表示停止后续写入。
 - 读取日志内容前必须调用 `Esp32BaseFileLog::flush()`。
+- Logs 页面只面向 Esp32Base 系统文件日志，不读取 `Esp32BaseAppEventLog`，也不展示业务事件。
 - 显示 enabled、path、mode、rotate files、buffer used/total、flush interval、max per file、max total、每段大小。
 - 文件日志状态信息使用 panel 内紧凑小字号表格展示，label/value 纵向对齐；其中的容量值只显示 KB/MB/B 人性化值，不重复 raw bytes。
 - 页面顶部以标签展示所有 segment，顺序为 `current-0`、`history-1`、`history-2` 到最旧 history；标签里的文件名和大小分开展示，大小只显示 KB/MB/B 人性化值。
@@ -267,6 +276,18 @@ Logs 页面：
 - 日志正文一次只展示一个 segment，包括 0 字节文件；非法或越界 segment 回落到 `current-0`。
 - raw 日志内容不折叠、不省略、不规整空白行，页面展示应忠实反映文件内容。
 - 日志正文流式输出期间必须周期性 yield/feed Watchdog，避免大日志页面长请求触发看门狗。
+
+App Events 页面：
+
+- 仅在 `ESP32BASE_ENABLE_APP_EVENTS=1` 时注册，标题和导航标签为 `App Events`，可通过 `setBuiltinLabel(BUILTIN_APP_EVENTS, "...")` 覆盖。
+- 页面显示有效事件数、容量、存储路径、筛选状态、筛选表单、CSV 导出、清空按钮和分页表格；分页使用 `sendPagination()`，默认每页 20 条。
+- 筛选条件包括等级、时间类型、来源、类型、原因和关键词；HTML、JSON API、CSV 共用同一组筛选语义。筛选请求不额外做独立 count 扫描，而是在输出当前页时统计匹配总数。
+- 表格按日志阅读方式压缩为 ID、Time、Level、Event、Object、Details。`Event` 合并展示 `source/type/reason`，`Details` 展示短文本、code 和有效数值槽；基础库不解释事件类型和业务对象。
+- `epochSec` 可用时按本地时间显示；否则如果本次 boot 后续 NTP 已同步，则解析并显示真实时间；仍无法解析时显示 `uptime N ms` 和 `boot N`，不伪造日期。
+- 清空应用事件是危险操作，只接受 `POST /esp32base/app-events/clear`，必须通过 Web Auth 和同源检查，成功后 303 回到页面。
+- JSON API 事件包含 `epochSec`、`resolvedEpochSec`、`bootId`、`uptimeSec` 和 64-bit 派生 `uptimeMs`；`resolvedEpochSec=0` 表示没有可信真实时间。
+- JSON API 和 HTML 页面都必须使用统一 JSON/HTML escape；CSV 导出使用 CSV escape，并保留当前筛选条件。CSV 读取失败时必须在输出中追加可见错误行，避免客户端误以为 200 响应是完整导出。
+- 该页面明确和 `/esp32base/logs` 分离，避免把 WiFi、OTA、NTP、启动、健康状态等基础库系统日志与业务事件混在一起。
 
 状态页/API：
 
@@ -413,6 +434,8 @@ Esp32BaseWeb::addRoute("/api/faucet/config", Esp32BaseWeb::METHOD_ANY, handleCon
 - `sendInfoRowDialogForm(dialogId, targetId, title, help, value, action, fieldsHtml, label, tone)`：小表单弹层入口，适合 1-3 个字段；`fieldsHtml` 只传业务侧可信的静态表单片段，动态内容必须先 escape。
 - `isAjaxRequest()`、`sendAjaxReplace()`、`sendAjaxError()`：配合 `X-Esp32Base-Ajax: 1` 处理局部提交结果。
 - `sendPagination(pagination)`：页码型列表分页，包含总条数、总页数、首页、上一页、下一页、尾页、当前页附近页码、每页条数和跳页提交。
+
+如果业务页面已经使用浏览器原生 `<dialog>`，推荐写作 `<dialog class="panel eb-modal">`。基础 `/esp32base/ui.css` 会统一原生 dialog、遮罩、`dialog.panel` 和 `dialog.eb-modal` 的轻量弹层外观；弹层内部继续复用 `fieldgrid`、`field`、`actions`、`btnlink` 和 `secondary`，无需在业务库复制 modal 样式。
 
 示例：
 

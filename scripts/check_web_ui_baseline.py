@@ -75,6 +75,21 @@ enhancement_checks = [
     ),
     (
         assets,
+        "dialog::backdrop",
+        "CSS must style native dialog backdrops.",
+    ),
+    (
+        assets,
+        "dialog.panel",
+        "CSS must normalize native dialog.panel layout.",
+    ),
+    (
+        assets,
+        "dialog .fieldgrid{margin:0}",
+        "Native dialog forms must align field grids naturally.",
+    ),
+    (
+        assets,
         ".eb-inline-edit{",
         "CSS must include inline edit styles.",
     ),

@@ -4,6 +4,39 @@
 
 ## 2026-05-31
 
+### 应用事件日志
+
+新增：
+
+- 新增默认关闭的 `ESP32BASE_ENABLE_APP_EVENTS` 能力，用于应用项目记录结构化业务/应用事件；该能力依赖 FS，不包含任何具体业务枚举或领域语义。
+- 新增 `Esp32BaseAppEventLog` API，支持 `level/source/type/reason/object/code/value1..value3/text` 等通用字段、可信 epoch 或 `bootId+uptimeSec` 时间、固定容量、环形覆盖、分页读取和按需清空。
+- 默认 `ESP32BASE_APP_EVENT_LOG_CAPACITY=1024`，单条记录 188 bytes，默认存储约 188 KiB；容量可在 `64..2048` 内按项目调整。
+- 存储文件为 `/app/events.bin`，使用双 header、记录 `crc16`、header `crc32` 和写后校验。满环覆盖中断恢复时会丢弃未提交槽；单条损坏记录会被跳过且不阻止后续 append。双 header、文件尺寸或写后校验等结构性故障才进入 fault，不自动清空。
+- Web 启用时新增独立 App Events 入口：`GET /esp32base/app-events`、`GET /esp32base/api/app-events?offset=0&limit=50`、`GET /esp32base/app-events.csv`、`POST /esp32base/app-events/clear`。页面/API/CSV 支持等级、时间类型、来源、类型、原因和关键词筛选；筛选请求单次扫描完成当前页输出和匹配计数。时间优先显示可信真实时间，无法解析时显示 `uptime N ms` 和 boot id；JSON/CSV 同时保留 `uptimeSec` 和派生 `uptimeMs`。清空操作要求 POST、Web Auth 和同源检查。
+- 新增 `Esp32BaseWeb::checkPostAllowed(context)`，供业务自定义 POST 复用基础库 Auth 和 Origin/Referer 同源检查。
+- 新增 `examples/app_events_demo`，演示启动写入、分页查看、JSON/CSV 输出和手工 POST 写入事件。
+- 新增 `scripts/check_app_events.py`，静态检查开关、API、Web 分离、文档和样例。
+
+业务侧影响：
+
+- 业务项目不需要在应用层重复实现 BusinessEventStore；只需在合适业务决策点调用 `Esp32BaseAppEventLog::append()` 并定义自己的事件命名。
+- `/esp32base/logs` 仍只展示 Esp32Base/FileLog 系统日志；应用事件单独进入 `/esp32base/app-events`，避免和 WiFi、OTA、NTP、启动、健康状态等基础库诊断混在一起。
+- 恢复出厂或清空业务记录时，业务可按需调用 `Esp32BaseAppEventLog::clear()`；基础库的普通系统配置清理不会隐式删除应用事件。
+
+### Web UI 原生 dialog 基线
+
+新增：
+
+- 基础 `/esp32base/ui.css` 现在覆盖原生 `dialog`、`dialog::backdrop`、`dialog.panel` 和推荐的 `dialog.eb-modal`，用于业务页确认弹层和 1-3 个字段的小表单。
+- 弹层复用现有低饱和变量和按钮层级：白色内容面、浅边框、轻阴影、克制遮罩、8px 圆角和紧凑内边距，避免浏览器默认黑边框和厚重按钮。
+- 原生 dialog 内的 `fieldgrid`、`field`、`actions`、`btnlink`、`secondary` 会自然对齐；手机宽度下弹层自动收敛到近全宽并限制最大高度。
+- `examples/web_ui_gallery` 增加原生 `<dialog class="panel eb-modal">` 小表单示例，静态检查覆盖 dialog baseline 选择器。
+
+业务侧影响：
+
+- Esp32_Irrigation 这类业务库可把手动浇水确认写成 `<dialog class="panel eb-modal">`，继续复用基础库 `fieldgrid`、`actions` 和按钮类，不需要维护整套业务 modal CSS。
+- 基础库仍保留 `sendInfoRowDialogForm()` 自定义弹层 helper；原生 `<dialog>` 样式只是补齐 baseline，不改变现有内置页面路由、认证和导航行为。
+
 ### 根路径业务首页
 
 新增：

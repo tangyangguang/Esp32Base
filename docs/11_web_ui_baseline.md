@@ -369,6 +369,8 @@
 
 - 单字段编辑默认使用行内展开，不跳转新页面；保存成功后只替换当前行，编辑框消失，不改变滚动位置。
 - 1-3 个字段的小表单默认使用当前页弹层。桌面端为居中小弹窗，手机端贴底或近全宽；弹层不使用厚重阴影、大面积主色或复杂动画。
+- 业务侧可直接使用原生 `<dialog class="panel eb-modal">` 承载确认和小表单；baseline 会统一 `dialog`、`dialog::backdrop`、`dialog.panel` 和 `dialog.eb-modal` 的边框、遮罩、圆角、阴影、宽度和内边距。
+- 原生 dialog 内继续复用 `fieldgrid`、`field`、`actions`、`btnlink`、`secondary` 等表单和按钮类；不要为每个业务项目额外复制一套 modal CSS。
 - 局部提交失败时不关闭编辑区或弹层，不清空输入，只在当前区域显示错误。
 - 无 JavaScript、`fetch` 不可用或未带 AJAX header 时，页面必须仍可通过普通表单 fallback 完成操作。
 - 重启、格式化、清日志、OTA、文件上传/下载/删除、Auth 修改等高风险或长任务不默认局部刷新。

@@ -70,14 +70,34 @@ ESP32 full_demo 对照构建中，24 route 相比 16 route 让 `g_routes` 增加
 
 文件日志仅在 FS profile 中启用。默认 `4 × 32KB = 128KB`，低优先级缓存 1KB，flush interval 2s。量产推荐 WARN 模式；示例使用 INFO 默认模式方便观察。Core 和默认 NET 不链接 LittleFS，也不产生 FileLog 静态状态。
 
-### 3.5 Health
+### 3.5 App Events
+
+应用事件日志默认关闭，仅在 `ESP32BASE_ENABLE_APP_EVENTS=1` 时编译并初始化，依赖 FS。默认容量：
+
+```cpp
+#define ESP32BASE_APP_EVENT_LOG_CAPACITY 1024
+```
+
+单条记录固定 188 bytes，默认数据区约 188 KiB；加上两个 64-byte header 后文件大小约 188.1 KiB，路径为 `/app/events.bin`。该容量面向长期运行设备保留约千条可解释业务事件，比 16KB/32KB 小环更适合排查低频业务决策，同时仍明显小于常见 1MB+ LittleFS 分区。
+
+可按项目调整为 `64..2048` 条。若业务事件频率高于“用户可解释的关键事件”，应降低写入频率或把高频明细放到业务自己的数据文件；App Events 不替代调试日志、传感器采样或大 payload 存储。
+
+记录字段空间分配：
+
+- `object[56]` 最大，用于业务对象引用。
+- `type[24]`、`reason[24]` 用于机器可读分类。
+- `source[12]` 用于模块或子系统名。
+- `text[32]` 只放短说明，可 UTF-8 截断。
+- `value1..value3` 三个 `int32_t` 数值槽，配合 `valueMask` 标记有效性。
+
+### 3.6 Health
 
 ```cpp
 ESP32BASE_HEALTH_TICK_INTERVAL_MS=30000
 ESP32BASE_HEALTH_DEBUG_LOG_INTERVAL_MS=1800000
 ```
 
-### 3.6 Restart log
+### 3.7 Restart log
 
 ```cpp
 ESP32BASE_RESTART_LOG_CAPACITY=4

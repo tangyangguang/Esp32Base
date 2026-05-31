@@ -168,6 +168,9 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".uactions .btnlink,.uactions input[type=submit]{min-width:96px");
     RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".btnlink,input.btnlink{display:inline-flex;align-items:center;justify-content:center;min-height:30px");
     RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".eb-dialog{");
+    RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, "dialog::backdrop{background:rgba(15,23,42,.28)}");
+    RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, "dialog.panel,dialog.eb-modal{padding:14px;margin:auto}");
+    RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, "dialog .fieldgrid{margin:0}");
     RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".eb-inline-edit{");
     RUN_SELFTEST("GET", "/ui-records?page=2", nullptr, true, 200, "aria-current='page'>2</span>", "当前第");
     RUN_SELFTEST("GET", "/ui-records?range=24h&type=all&per=20&page=2", nullptr, true, 200, "filterbar", "name='start'");
@@ -177,6 +180,7 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/ui-config?saved=1", nullptr, true, 200, "保存成功");
     RUN_SELFTEST("GET", "/ui-config", nullptr, true, 200, "data-eb-inline-edit");
     RUN_SELFTEST("GET", "/ui-config", nullptr, true, 200, "data-eb-dialog");
+    RUN_SELFTEST("GET", "/ui-config", nullptr, true, 200, "<dialog id='native-confirm' class='panel eb-modal'>");
     RUN_SELFTEST("GET", "/ui-config", nullptr, true, 200, "id='row-plan'");
     RUN_SELFTEST("POST", "/ui-config/name", "name=flower", true, 303, "Location: /ui-config?saved=1");
     RUN_AJAX_SELFTEST("POST", "/ui-config/name", "name=flower", true, 200, "\"ok\":true");
@@ -497,6 +501,8 @@ void handleConfigPage() {
                                         "/ui-config/dialog",
                                         "<p><label>目标量</label><input type='number' name='limit' min='1' max='120' value='30'></p><p><label>模式</label><select name='mode'><option value='auto'>auto</option><option value='manual'>manual</option></select></p>",
                                         "快速编辑");
+    Esp32BaseWeb::sendChunk("<div class='urow'><div><b>原生确认弹层</b><small>业务可直接使用 &lt;dialog class='panel eb-modal'&gt; 承载 1-3 个字段。</small></div><div class='uactions'><span class='uvalue'>native</span><button type='button' class='btnlink info' onclick=\"document.getElementById('native-confirm').showModal()\">打开</button></div></div>");
+    Esp32BaseWeb::sendChunk("<dialog id='native-confirm' class='panel eb-modal'><h2>手动浇水确认</h2><form method='dialog'><div class='fieldgrid'><p class='field med'><label>通道</label><select><option>花坛</option><option>菜地</option></select></p><p class='field short'><label>时长</label><input type='number' min='1' max='30' value='5'><small>分钟。</small></p></div><div class='actions'><button type='submit' class='secondary' value='cancel'>取消</button><button type='submit' value='ok'>确认</button></div></form></dialog>");
     Esp32BaseWeb::sendInfoRowCompactLink("恢复出厂", "高风险操作必须进入确认保护页。", nullptr, "/ui-config/confirm", "确认页", Esp32BaseWeb::UI_DANGER);
     Esp32BaseWeb::endPanel();
     Esp32BaseWeb::sendFooter();

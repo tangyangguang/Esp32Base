@@ -86,6 +86,43 @@ void sendPaginationActionPath(const char* path) {
     sendChunk("'");
 }
 
+int8_t queryHexValue(char c) {
+    if (c >= '0' && c <= '9') {
+        return static_cast<int8_t>(c - '0');
+    }
+    if (c >= 'a' && c <= 'f') {
+        return static_cast<int8_t>(10 + c - 'a');
+    }
+    if (c >= 'A' && c <= 'F') {
+        return static_cast<int8_t>(10 + c - 'A');
+    }
+    return -1;
+}
+
+void decodeQueryComponent(char* value) {
+    if (!value) {
+        return;
+    }
+    char* out = value;
+    for (char* in = value; *in; ++in) {
+        if (*in == '+') {
+            *out++ = ' ';
+            continue;
+        }
+        if (*in == '%' && in[1] && in[2]) {
+            const int8_t high = queryHexValue(in[1]);
+            const int8_t low = queryHexValue(in[2]);
+            if (high >= 0 && low >= 0) {
+                *out++ = static_cast<char>((high << 4) | low);
+                in += 2;
+                continue;
+            }
+        }
+        *out++ = *in;
+    }
+    *out = '\0';
+}
+
 void sendHiddenInput(const char* name, const char* value) {
     if (!name || !name[0] || strcmp(name, "page") == 0 || strcmp(name, "per") == 0) {
         return;
@@ -125,6 +162,8 @@ void sendQueryHiddenInputs(const char* query) {
             }
             value[vi] = '\0';
         }
+        decodeQueryComponent(name);
+        decodeQueryComponent(value);
         sendHiddenInput(name, value);
         if (*p == '&') {
             ++p;
@@ -209,6 +248,9 @@ void sendAppLinks(bool paragraph, const char* activePath) {
 void sendSystemLinks(bool paragraph, const char* activePath = nullptr) {
     sendNavLink("/esp32base", g_builtinLabels[Esp32BaseWeb::BUILTIN_HOME], paragraph, activePath);
     sendNavLink("/esp32base/logs", g_builtinLabels[Esp32BaseWeb::BUILTIN_LOGS], paragraph, activePath);
+#if ESP32BASE_ENABLE_APP_EVENTS
+    sendNavLink("/esp32base/app-events", g_builtinLabels[Esp32BaseWeb::BUILTIN_APP_EVENTS], paragraph, activePath);
+#endif
 #if ESP32BASE_ENABLE_APP_CONFIG
     sendNavLink("/esp32base/app-config", "App Config", paragraph, activePath);
 #endif

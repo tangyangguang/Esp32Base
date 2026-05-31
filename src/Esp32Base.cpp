@@ -102,6 +102,18 @@ void logBootSessionStart() {
                     flash);
     ESP32BASE_LOG_I("boot", "============================================================");
 }
+
+#if ESP32BASE_ENABLE_APP_EVENTS && ESP32BASE_ENABLE_NTP
+Esp32BaseAppEventLog::TimeSnapshot appEventLogTimeFromNtp() {
+    const Esp32BaseNtp::TimeSnapshot ntp = Esp32BaseNtp::snapshot();
+    Esp32BaseAppEventLog::TimeSnapshot value = {};
+    value.synced = ntp.synced;
+    value.epochSec = ntp.epochSec;
+    value.bootId = ntp.bootId;
+    value.uptimeSec = ntp.uptimeSec;
+    return value;
+}
+#endif
 }
 
 bool Esp32Base::begin() {
@@ -142,6 +154,9 @@ bool Esp32Base::begin() {
 #if ESP32BASE_ENABLE_NTP
     Esp32BaseNtp::initBootSession();
 #endif
+#if ESP32BASE_ENABLE_APP_EVENTS && ESP32BASE_ENABLE_NTP
+    Esp32BaseAppEventLog::setTimeProvider(appEventLogTimeFromNtp);
+#endif
 
 #if ESP32BASE_ENABLE_BUS
     ESP32BASE_LOG_D("base", "module_begin name=bus");
@@ -157,6 +172,14 @@ bool Esp32Base::begin() {
         const bool ok = Esp32BaseFs::begin();
         if (!optionalOk(ok, "fs")) return false;
         if (ok) ESP32BASE_LOG_D("base", "module_ready name=fs");
+    }
+#endif
+#if ESP32BASE_ENABLE_APP_EVENTS
+    ESP32BASE_LOG_D("base", "module_begin name=app_events");
+    {
+        const bool ok = Esp32BaseAppEventLog::begin();
+        if (!optionalOk(ok, "app_events")) return false;
+        if (ok) ESP32BASE_LOG_D("base", "module_ready name=app_events");
     }
 #endif
 #if ESP32BASE_ENABLE_FILELOG
@@ -376,6 +399,9 @@ void Esp32Base::logResources() {
 #endif
 #if ESP32BASE_ENABLE_FS
 #include "runtime/Esp32BaseFs.inc"
+#endif
+#if ESP32BASE_ENABLE_APP_EVENTS
+#include "runtime/Esp32BaseAppEventLog.inc"
 #endif
 #if ESP32BASE_ENABLE_FILELOG
 #include "runtime/Esp32BaseFileLog.inc"

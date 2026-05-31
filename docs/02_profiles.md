@@ -22,6 +22,7 @@ ESP32BASE_PROFILE_CORE
 - `ESP32BASE_ENABLE_SLEEP`
 - `ESP32BASE_ENABLE_FS`
 - `ESP32BASE_ENABLE_FILELOG`
+- `ESP32BASE_ENABLE_APP_EVENTS`
 - `ESP32BASE_ENABLE_HEALTH`
 - `ESP32BASE_ENABLE_WIFI`
 - `ESP32BASE_ENABLE_DNS`
@@ -72,6 +73,7 @@ Profile 默认值不能覆盖用户显式 `-D`。
 - `NTP` 需要 `WIFI`。
 - `MDNS` 需要 `WIFI`。
 - `FILELOG` 需要 `FS`。
+- `APP_EVENTS` 需要 `FS`，默认关闭，不随任何 profile 自动开启。
 
 软依赖：
 
@@ -86,6 +88,8 @@ Profile 默认值不能覆盖用户显式 `-D`。
 - 查询 API 仍可用。
 
 启用 FS 的 profile 默认启用 FileLog；用户仍可显式关闭 `ESP32BASE_ENABLE_FILELOG`。
+
+应用事件日志通过 `ESP32BASE_ENABLE_APP_EVENTS=1` 显式启用，默认容量 `ESP32BASE_APP_EVENT_LOG_CAPACITY=1024`，允许范围 `64..2048`。该能力使用 LittleFS 固定文件存储，适合结构化业务事件，不作为系统 FileLog 或调试日志。
 
 ## 4. 最终 Profile 表
 

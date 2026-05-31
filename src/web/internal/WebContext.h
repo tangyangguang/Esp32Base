@@ -20,6 +20,9 @@
 #if ESP32BASE_ENABLE_FILELOG
 #include "../../runtime/Esp32BaseFileLog.h"
 #endif
+#if ESP32BASE_ENABLE_APP_EVENTS
+#include "../../runtime/Esp32BaseAppEventLog.h"
+#endif
 #if ESP32BASE_ENABLE_FS
 #include "../../runtime/Esp32BaseFs.h"
 #include <LittleFS.h>
@@ -167,7 +170,7 @@ struct WebContext {
     Esp32BaseWeb::HomeMode homeMode;
     Esp32BaseWeb::SystemNavMode systemNavMode;
     Esp32BaseWeb::FooterBarMode footerBarMode;
-    char builtinLabels[7][16];
+    char builtinLabels[8][16];
     Esp32BaseWeb::Handler headExtraCallback;
     const char* pageHeadProgmem;
     char chunkBuffer[512];
@@ -227,7 +230,7 @@ extern char (&g_homePath)[48];
 extern Esp32BaseWeb::HomeMode& g_homeMode;
 extern Esp32BaseWeb::SystemNavMode& g_systemNavMode;
 extern Esp32BaseWeb::FooterBarMode& g_footerBarMode;
-extern char (&g_builtinLabels)[7][16];
+extern char (&g_builtinLabels)[8][16];
 extern Esp32BaseWeb::Handler& g_headExtraCallback;
 extern const char*& g_pageHeadProgmem;
 extern char (&g_chunkBuffer)[512];

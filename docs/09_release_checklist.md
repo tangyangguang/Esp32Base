@@ -168,6 +168,9 @@
 - `createFixedFile()` 初始化大文件时不得用 `appendBytes()` 做分块循环；必须避免大 heap 分配，并避免触发 task watchdog。
 - `writeBytesAt()` 支持已有文件固定位置覆盖，文件不存在和写越界返回失败，不隐式扩展文件；覆盖后文件大小不变且覆盖范围可读。
 - FS 已满或存在不可读文件时，Web 诊断返回错误不应触发 task WDT 重启。
+- 启用 `ESP32BASE_ENABLE_APP_EVENTS=1` 时，`/app/events.bin` 固定容量创建成功；默认 1024 条、单条 188 bytes、约 188 KiB；重复写入后环形覆盖，重启后仍可分页读取。
+- App Events 双 header 损坏进入 fault，不自动扫描或清空；单条记录 CRC 错误时读取失败并暴露 `lastError()`。
+- `Esp32BaseAppEventLog::clear()` 幂等，清空后保留递增 id 并可继续写入。
 - `/esp32base/fs?manage=1` 对 `unreadable` 文件仍必须提供单文件删除入口，但不能提供下载入口。
 - 单文件删除失败后应尝试截断为 0；如果因此释放可见文件占用，页面不能只显示 `delete_failed`。
 - 清理文件后如果 FileLog 处于写入故障保护，应重新加载当前 FileLog 模式以便恢复写入。
@@ -208,6 +211,9 @@
 - Tools 维护页中的重启和格式化 FS 按钮都有二次确认。
 - Tools 维护页可保存 hostname，显示当前值、默认值、已保存值和重启需求；保存后不热切换当前运行时 hostname。
 - 启用 `ESP32BASE_ENABLE_APP_CONFIG` 后，System 页显示 App Config 入口，`/esp32base/app-config` 可按 group 展示业务参数。
+- 启用 `ESP32BASE_ENABLE_APP_EVENTS` 后，系统导航显示 App Events 入口，`/esp32base/app-events`、`/esp32base/api/app-events`、`/esp32base/app-events.csv` 可用。
+- `POST /esp32base/app-events/clear` 必须需要 Basic Auth、POST 和同源检查；GET 不得清空。
+- `/esp32base/logs` 不包含 App Events，仍只展示 FileLog 系统日志。
 - App Config 注册校验覆盖非法 namespace、重复 `ns/key`、非法长度/范围/step/decimal scale/enum option 和超容量。
 - App Config POST 必须服务端重新校验；字段级 validator 和页面级 validator 失败时零写入、零 change 回调。
 - App Config 保存只写变化字段，未变化字段不写 NVS；旧页面 revision 提交被拒绝。
@@ -233,6 +239,7 @@
 - `examples/web_ui_gallery` 覆盖 Web UI baseline 的状态、统计、分页记录、配置、命令、流程、维护、访问控制、确认、空状态和表单页面，并提供 selftest env。
 - `examples/web_logs_ota` 可在自身目录 `pio run`。
 - `examples/net_runtime` 可在自身目录 `pio run`。
+- `examples/app_events_demo` 可在自身目录 `pio run`，并演示 App Events 写入、分页查看、JSON/CSV 和 POST 写入。
 - 所有启用 FS 的示例通过 `ESP32BASE_EB_FILELOG_DEFAULT_MODE=ESP32BASE_FILELOG_MODE_INFO` 将文件日志默认模式设为 INFO。
 
 ## 14. Soak 检查

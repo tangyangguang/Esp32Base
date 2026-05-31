@@ -125,6 +125,26 @@
 - clear 幂等。
 - restart、deep sleep、OTA success、rollback restart 前 flush。
 
+### 2.8 App Events
+
+仅在 `ESP32BASE_ENABLE_APP_EVENTS=1` 时验证：
+
+- `Esp32BaseAppEventLog::append()` 可写入 info/warn/error 事件，`source/type/reason/object/text/code/value1..value3` 读取一致。
+- FS 未 ready 时 `begin()` / `append()` 返回 false，不崩溃。
+- 默认容量 1024 条，写满后环形覆盖，`readLatest(offset, limit)` 按最新优先分页。
+- 重启后 header 和记录可恢复，`nextId()` 继续递增。
+- 满容量环形覆盖时，模拟 record 已写入但 header 未提交的重启；恢复后不得进入 fault，未提交槽应不可见，后续 append 仍可继续。
+- Watchdog 启用后，在 setup、Web handler 或业务回调里同步 append/clear 不应因为 LittleFS flush 较慢触发 loopTask WDT。
+- 双 header 损坏、文件尺寸错误、写后校验失败等结构性问题进入 fault，不自动清空；单条记录 `crc16` 错误应跳过并继续允许 append。
+- clear 幂等，清空后可继续写入；业务恢复出厂或清空业务记录时可显式调用。
+- Web 页面支持等级、时间类型、来源、类型、原因和关键词筛选；JSON API 和 CSV 导出必须和页面使用同一筛选语义，并避免筛选请求为了 total 重复全量扫描。
+- `epochSec` 或当前 boot 可解析时显示真实时间；不可解析时显示 `uptime N ms` 和 `boot N`，不得伪造日期。
+- Web 页面、JSON API 和 CSV 导出分别验证 HTML/JSON/CSV escape。
+- CSV 导出读取失败时必须输出可见错误行或错误状态，不得静默返回截断内容。
+- `POST /esp32base/app-events/clear` 必须需要认证、POST 和同源检查；GET 不得触发清空。
+- `/esp32base/logs` 不显示 App Events，App Events 不混入 WiFi、OTA、NTP、启动、健康状态等系统日志。
+- `examples/app_events_demo` 可构建，并能演示写入、分页读取、Web/API 展示和清空。
+
 ## 3. CI 矩阵
 
 CI 应覆盖核心矩阵，release 前执行完整矩阵。
@@ -179,6 +199,7 @@ CI 应覆盖核心矩阵，release 前执行完整矩阵。
 - FileLog 默认 `4 × 32KB` 轮转。
 - Logs 页面可读取 history/current。
 - Logs 页面清空后可继续写 current。
+- App Events 启用后默认约 188 KiB 存储、分页读取、常用筛选、真实时间/uptime fallback、CSV 导出、POST 清空和环形覆盖正常；未启用时无 App Events 路由和符号依赖。
 - JSON escape。
 - ESP32-C3 单核重负载。
 - ESP32-S3 USB-CDC 日志可用。
@@ -283,6 +304,7 @@ ESP32BASE_HEALTH_DEBUG_LOG_INTERVAL_MS=1800000
 - Web auth 失败。
 - WiFi 配置表单校验失败。
 - FileLog append/rotate/clear 失败。
+- App Events append/header/record/clear 失败，必须通过 `lastError()` 和 Web fault notice 可见。
 - OTA start/write/verify/end 失败。
 - OTA progress。
 - OTA 上传生命周期日志：开始、10% 阶段进度、成功或失败；进度日志必须低频，避免按 chunk 刷屏。

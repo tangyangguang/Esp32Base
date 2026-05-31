@@ -61,6 +61,7 @@ Core 不包含 Event Bus。Bus 是 Runtime 可选模块。
 - `Esp32BaseSleep`
 - `Esp32BaseFs`
 - `Esp32BaseFileLog`
+- `Esp32BaseAppEventLog`
 - `Esp32BaseHealth`
 
 职责：
@@ -70,6 +71,7 @@ Core 不包含 Event Bus。Bus 是 Runtime 可选模块。
 - Sleep。
 - LittleFS。
 - 文件日志 sink，依赖 Fs，通过 Core Log 的 line sink 接收日志。
+- 应用事件日志，依赖 Fs，提供业务项目可复用的结构化事件环形存储，不解释业务语义。
 - 健康诊断。
 
 Runtime 只依赖 Core。
@@ -107,7 +109,7 @@ Network 可使用 Bus，但不强依赖 Bus。
 - `src/web/internal/WebResponse.cpp`：HTTP header、chunked 输出、HTML/JSON/CSV escape、断连和 watchdog 喂狗。
 - `src/web/internal/WebLayout.cpp`：导航、header/footer、panel、metric、pagination 等 HTML 组件。
 - `src/web/internal/WebAssets.cpp`：`/esp32base/ui.css`、基础 head 片段和页面级 PROGMEM 资源。
-- `src/web/internal/WebStatus.cpp`、`WebWifi.cpp`、`WebAuth.cpp`、`WebTools.cpp`、`WebLogs.cpp`、`WebFs.cpp`、`WebOta.cpp`、`WebAppConfig.cpp`：按功能分组的 handler。
+- `src/web/internal/WebStatus.cpp`、`WebWifi.cpp`、`WebAuth.cpp`、`WebTools.cpp`、`WebLogs.cpp`、`WebAppEvents.cpp`、`WebFs.cpp`、`WebOta.cpp`、`WebAppConfig.cpp`：按功能分组的 handler。
 
 职责：
 
@@ -182,12 +184,13 @@ Update 依赖 WiFi + Web。
 3. System
 4. Bus，如启用
 5. Fs，如启用
-6. FileLog，如启用
-7. Watchdog，如启用
-8. Sleep，如启用
-9. Health，如启用
-10. WiFi，如启用
-11. 标记 ready
+6. AppEvents，如启用
+7. FileLog，如启用
+8. Watchdog，如启用
+9. Sleep，如启用
+10. Health，如启用
+11. WiFi，如启用
+12. 标记 ready
 
 `begin()` 不等待网络相关状态。
 

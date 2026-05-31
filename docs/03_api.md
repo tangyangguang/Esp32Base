@@ -212,6 +212,128 @@ void loop() {
 }
 ```
 
+### 3.5 Esp32BaseAppEventLog
+
+仅在 `ESP32BASE_ENABLE_APP_EVENTS=1` 时可用，依赖 `ESP32BASE_ENABLE_FS=1`。该能力默认关闭，不随 FULL profile 自动开启。默认容量：
+
+```cpp
+#define ESP32BASE_APP_EVENT_LOG_CAPACITY 1024
+```
+
+单条 `Esp32BaseAppEventRecord` 固定 188 bytes，默认约 188 KiB，容量允许范围为 `64..2048`。文件路径固定为 `/app/events.bin`。基础库只理解通用结构，不理解业务语义；应用负责决定事件何时写入、类型如何命名和页面文案如何解释。
+
+```cpp
+struct Esp32BaseAppEventRecord {
+    uint32_t magic;
+    uint32_t id;
+    uint32_t epochSec;
+    uint32_t bootId;
+    uint32_t uptimeSec;
+    int32_t value1;
+    int32_t value2;
+    int32_t value3;
+    uint16_t code;
+    uint8_t level;
+    uint8_t flags;
+    uint8_t valueMask;
+    uint8_t reserved;
+    uint16_t crc16;
+    char source[12];
+    char type[24];
+    char reason[24];
+    char object[56];
+    char text[32];
+};
+
+class Esp32BaseAppEventLog {
+public:
+    enum Level : uint8_t { LEVEL_INFO = 1, LEVEL_WARN = 2, LEVEL_ERROR = 3 };
+    enum ValueMask : uint8_t { VALUE1 = 1 << 0, VALUE2 = 1 << 1, VALUE3 = 1 << 2 };
+    enum Flags : uint8_t { FLAG_TIME_SYNCED = 1 << 0, FLAG_TEXT_TRUNCATED = 1 << 1 };
+
+    struct Event {
+        Level level;
+        const char* source;
+        const char* type;
+        const char* reason;
+        const char* object;
+        uint16_t code;
+        int32_t value1;
+        int32_t value2;
+        int32_t value3;
+        uint8_t valueMask;
+        const char* text;
+    };
+
+    struct TimeSnapshot {
+        bool synced;
+        uint32_t epochSec;
+        uint32_t bootId;
+        uint32_t uptimeSec;
+    };
+
+    using TimeProvider = TimeSnapshot (*)();
+    using ReadCallback = void (*)(const Esp32BaseAppEventRecord& event, void* user);
+
+    static bool begin();
+    static bool append(const Event& event);
+    static bool readLatest(uint16_t offset, uint16_t limit, ReadCallback cb, void* user = nullptr);
+    static bool clear();
+    static void setTimeProvider(TimeProvider provider);
+    static bool isReady();
+    static bool faulted();
+    static const char* lastError();
+    static uint16_t count();
+    static uint16_t capacity();
+    static uint32_t nextId();
+    static const char* path();
+    static const char* levelName(Level level);
+};
+```
+
+字段约定：
+
+- `source` 和 `type` 必填；`reason`、`object` 可空。四者是机器可读 token，只允许字母、数字、`_`、`-`、`.`、`:`、`/`、`@`、`#`，且不会被静默截断。
+- `object[56]` 用于业务对象引用，例如设备、计划、任务、传感器、外部决策 id；不用于保存业务大 payload。
+- `text[32]` 是短说明，可 UTF-8 安全截断，并用 `FLAG_TEXT_TRUNCATED` 标记。
+- `value1..value3` 是三个通用 `int32_t` 数值槽；`valueMask` 表示哪个值有效，避免把缺失误读为 0。
+- `code` 是应用自定义短数值码，基础库不解释。
+- NTP 可用且可信时写入 `epochSec` 并设置 `FLAG_TIME_SYNCED`；否则保存 `bootId + uptimeSec`。Web/API 展示会额外给出派生的 `uptimeMs = uptimeSec * 1000`，用于避免把相对运行时间误读成真实日期。
+- 当前 boot 后续完成 NTP 同步时，Web/API 会通过 `Esp32BaseNtp::resolveCurrentBootEvent()` 把同一 boot 的未同步事件解析为 `resolvedEpochSec`；历史 boot 或无法确认的事件仍显示相对 uptime。
+- `Esp32BaseAppEventLog` 不是跨任务并发 API；建议只在 loop/system task、Web handler 或同一业务执行上下文中调用。其他 FreeRTOS task 需要写业务事件时，应通过业务 queue 投递回 loop/system task，避免 append/read/clear 并发修改同一文件和全局状态。
+
+存储和失败语义：
+
+- 固定文件双 header，记录带 `crc16`，header 带 `crc32`。
+- append 先写记录槽，再写 inactive header；未满时断电最多丢失未提交的新记录，不破坏上一版 header。
+- 满环覆盖最老槽时，如果断电发生在 record 写入后、header 提交前，恢复时会识别该未提交槽并从可见范围移除；结果可能丢失被覆盖的最老记录和未提交的新记录，但不会把整个日志打入 fault。
+- 双 header 都无效、文件尺寸不匹配、创建/删除/写 header 失败或写后校验失败属于结构性故障，会进入 `faulted()`。
+- 单条 record CRC 损坏或未提交 future record 不会进入全局 fault；读取会跳过该槽，`count()` 只统计可读取的有效记录，append 仍可继续覆盖后续槽。
+- FS 未 ready、空间不足、读写失败或记录跳过时通过 `lastError()` 暴露原因；读路径遇到不可读 I/O 会返回 `false`，但不会自动清空。
+- `clear()` 重建空文件，默认保留递增 `nextId()`；业务恢复出厂或清空业务记录时可显式调用。
+
+Web/API 查询：
+
+- HTML 页面 `/esp32base/app-events` 支持 `page`、`per` 以及常用筛选：`level=info|warn|error`、`time=real|uptime`、`source`、`type`、`reason`、`q`。`source/type/reason` 是精确匹配，`q` 在 `source/type/reason/object/text` 内做大小写不敏感关键词匹配。
+- JSON API `/esp32base/api/app-events` 支持 `offset`、`limit` 和同一组筛选条件，返回 `count`、`total`、`filters` 和最新优先的 `events`；筛选请求单次扫描完成当前页输出和匹配计数。
+- 每条 JSON 事件包含 `epochSec`、`resolvedEpochSec`、`bootId`、`uptimeSec`、`uptimeMs`、`level/source/type/reason/object/code/value1..value3/valueMask/flags/text`。`uptimeSec` 是存储稳定字段，`uptimeMs` 是 64-bit 派生展示值；`resolvedEpochSec=0` 表示没有可信真实时间。
+- CSV `/esp32base/app-events.csv` 使用同一组筛选条件，字段为 `id,epoch_sec,resolved_epoch_sec,boot_id,uptime_sec,uptime_ms,level,source,type,reason,object,code,value1,value2,value3,text`。如果导出过程中读取失败，响应末尾追加 `# error,...` 行暴露失败原因。
+
+示例：
+
+```cpp
+Esp32BaseAppEventLog::Event event;
+event.level = Esp32BaseAppEventLog::LEVEL_WARN;
+event.source = "scheduler";
+event.type = "job_skipped";
+event.reason = "manual";
+event.object = "job:alpha";
+event.value1 = 15;
+event.valueMask = Esp32BaseAppEventLog::VALUE1;
+event.text = "sample schedule decision";
+Esp32BaseAppEventLog::append(event);
+```
+
 ## 4. Esp32BaseConfig
 
 后端：ESP32 NVS。
@@ -681,6 +803,7 @@ public:
         BUILTIN_WIFI,
         BUILTIN_OTA,
         BUILTIN_LOGS,
+        BUILTIN_APP_EVENTS,
         BUILTIN_TOOLS,
         BUILTIN_SYSTEM,
         BUILTIN_AUTH
@@ -722,6 +845,7 @@ public:
     static bool isAuthEnabled();
     static void setAuthEnabled(bool enabled);
     static bool checkAuth();
+    static bool checkPostAllowed(const char* context = nullptr);
     static bool verifyAuth();
     static bool verifyAuth(const char* user, const char* pass);
     static bool saveAuth(const char* user, const char* pass);
@@ -833,6 +957,8 @@ Route 缓冲机制：
 - `authUser()` 返回当前用户名；`authPassword()` 返回当前生效密码，仅供本地 C++ 认证集成使用，例如 ArduinoOTA/espota，禁止输出到 HTML、JSON 或 API 响应。
 - Basic Auth `Authorization` header 有内部长度上限；超长 header 会被拒绝并输出 WARN，不会静默截断后继续认证。
 - `setAuthEnabled(false)` 会完全开放内置 HTTP 路由，包括 WiFi 保存/清除、Auth 保存、重启、System、Logs clear 和 Web OTA；只适合受控调试网络。
+- `checkAuth()` 用于业务页面复用基础库 Basic Auth；返回 `false` 时已发送认证挑战，业务 handler 应直接 return。
+- `checkPostAllowed(context)` 用于业务 POST/危险操作复用基础库 Web Auth 和 Origin/Referer 同源检查；返回 `false` 时已发送认证挑战或 `403 Forbidden`，业务 handler 应直接 return。`context` 只用于安全审计日志。
 - `verifyAuth(user, pass)` 校验显式传入的账号密码；无参 `verifyAuth()` 仍表示当前请求是否已认证。
 - `saveAuth(user, pass)` 保存 Web Auth 到 `eb_web.auth_user`、`eb_web.auth_pass`，并立即切换为新认证。
 - `resetAuth()` 清除 `eb_web` 持久化 Auth，并恢复应用默认认证；没有应用默认认证时恢复库默认 `admin/admin`。
