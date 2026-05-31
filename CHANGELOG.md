@@ -4,6 +4,21 @@
 
 ## 2026-05-31
 
+### FS 定长文件初始化 API
+
+新增：
+
+- 新增 `Esp32BaseFs::createFixedFile()`，签名为 `createFixedFile(const char* path, uint32_t size, uint8_t fillByte = 0)`，用于 RecordStore/EventStore 这类二进制定长环形文件初始化。
+- `createFixedFile()` 要求 path 为绝对路径，`size == 0` 会创建或截断为空文件；文件不存在、大小不匹配，或同尺寸但末端不可读时会分块重建并填充 `fillByte`。
+- 已存在且大小一致、末端可读的文件会直接返回 true 并保留内容，避免业务项目每次启动清空持久环形记录。
+- 重建过程使用固定小块写入，不一次性占用大 heap，并按长 FS 操作处理 task watchdog；完成后校验最终文件大小，并抽样校验首字节、中间字节和末尾字节。
+- `full_demo` selftest 增加 16KB、32KB、64KB 定长文件创建和首/中/尾读取验证。
+
+业务侧影响：
+
+- 需要固定容量二进制环形文件时，业务项目应改用 `createFixedFile()` 初始化或校验容量，再用 `readBytesAt()` / `writeBytesAt()` 做定点读写。
+- `appendBytes()` 仍适合低频追加；它每次都会打开、flush、校验大小和末端可读，不建议作为大文件 bulk 初始化循环。
+
 ### WiFi STA 安全启动恢复体验优化
 
 优化：
