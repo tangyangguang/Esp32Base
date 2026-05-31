@@ -50,6 +50,7 @@ size_t g_otaTotal = 0;
 size_t g_otaProcessed = 0;
 uint8_t g_otaNextProgressLog = 10;
 char g_otaExpected[65] = "";
+char g_otaCalculated[65] = "";
 char g_otaLastError[96] = "";
 mbedtls_sha256_context g_otaSha;
 bool g_otaShaActive = false;
@@ -59,6 +60,13 @@ uint32_t g_otaTransferFinishedMs = 0;
 bool g_otaSummaryLogged = false;
 uint32_t g_otaBootMs = 0;
 const esp_partition_t* g_otaBootPartition = nullptr;
+const esp_partition_t* g_otaTargetPartition = nullptr;
+char g_otaTargetPartitionLabel[17] = "";
+uint32_t g_otaTargetPartitionAddress = 0;
+size_t g_otaTargetPartitionSize = 0;
+char g_otaLastBootPartitionLabel[17] = "";
+uint32_t g_otaLastBootPartitionAddress = 0;
+size_t g_otaLastBootPartitionSize = 0;
 #if ESP32BASE_ENABLE_ARDUINO_OTA
 bool g_arduinoOtaReady = false;
 bool g_arduinoOtaTransferActive = false;
@@ -84,6 +92,28 @@ void bytesToHex(const uint8_t* bytes, size_t len, char* out, size_t outLen) {
         out[i * 2 + 1] = hex[bytes[i] & 0x0f];
     }
     out[len * 2] = '\0';
+}
+
+bool sameOtaPartition(const esp_partition_t* a, const esp_partition_t* b) {
+    return a && b && a->address == b->address && a->size == b->size &&
+           a->type == b->type && a->subtype == b->subtype &&
+           strncmp(a->label, b->label, sizeof(a->label)) == 0;
+}
+
+void storePartition(const esp_partition_t* partition, char* label, size_t labelLen, uint32_t& address, size_t& size) {
+    if (label && labelLen) {
+        label[0] = '\0';
+    }
+    address = 0;
+    size = 0;
+    if (!partition) {
+        return;
+    }
+    if (label && labelLen) {
+        strlcpy(label, partition->label, labelLen);
+    }
+    address = partition->address;
+    size = partition->size;
 }
 
 bool copySha256Hex(const char* in, char* out, size_t outLen) {
@@ -235,13 +265,27 @@ void configureArduinoOtaCallbacks() {
         g_otaProcessed = 0;
         g_otaNextProgressLog = 10;
         g_otaLastError[0] = '\0';
+        g_otaCalculated[0] = '\0';
+        g_otaTargetPartition = esp_ota_get_next_update_partition(nullptr);
+        storePartition(g_otaTargetPartition,
+                       g_otaTargetPartitionLabel,
+                       sizeof(g_otaTargetPartitionLabel),
+                       g_otaTargetPartitionAddress,
+                       g_otaTargetPartitionSize);
+        storePartition(nullptr,
+                       g_otaLastBootPartitionLabel,
+                       sizeof(g_otaLastBootPartitionLabel),
+                       g_otaLastBootPartitionAddress,
+                       g_otaLastBootPartitionSize);
         resetOtaTransferStats();
         g_otaStatus = Esp32BaseOta::UPLOADING;
         prepareLongOps();
         char totalBuf[32];
         formatOtaBytes(g_otaTotal, totalBuf, sizeof(totalBuf));
-        ESP32BASE_LOG_I("ota", "arduino_upload_start size=%s auth=enabled md5=arduinoota",
-                        g_otaTotal ? totalBuf : "unknown");
+        ESP32BASE_LOG_I("ota", "arduino_upload_start size=%s auth=enabled md5=arduinoota upload_target=%s address=0x%lx",
+                        g_otaTotal ? totalBuf : "unknown",
+                        g_otaTargetPartitionLabel[0] ? g_otaTargetPartitionLabel : "unknown",
+                        static_cast<unsigned long>(g_otaTargetPartitionAddress));
 #if ESP32BASE_ENABLE_BUS
         Esp32BaseBus::publish(Esp32BaseOta::EVENT_START, "");
 #endif
@@ -255,12 +299,33 @@ void configureArduinoOtaCallbacks() {
 #endif
     });
     ArduinoOTA.onEnd([]() {
+        const esp_partition_t* bootPartition = esp_ota_get_boot_partition();
+        storePartition(bootPartition,
+                       g_otaLastBootPartitionLabel,
+                       sizeof(g_otaLastBootPartitionLabel),
+                       g_otaLastBootPartitionAddress,
+                       g_otaLastBootPartitionSize);
+        if (g_otaTargetPartition && !sameOtaPartition(bootPartition, g_otaTargetPartition)) {
+            g_arduinoOtaTransferActive = false;
+            cleanupLongOps();
+            char message[96];
+            snprintf(message, sizeof(message), "boot partition mismatch target=%s boot=%s",
+                     g_otaTargetPartitionLabel[0] ? g_otaTargetPartitionLabel : "unknown",
+                     g_otaLastBootPartitionLabel[0] ? g_otaLastBootPartitionLabel : "unknown");
+            setError(message);
+            logOtaTransferSummary("arduino_upload_failed");
+            g_otaStatus = Esp32BaseOta::FAILED;
+            return;
+        }
         g_otaStatus = Esp32BaseOta::SUCCESS;
         g_arduinoOtaTransferActive = false;
         cleanupLongOps();
         char processedBuf[32];
         formatOtaBytes(g_otaProcessed, processedBuf, sizeof(processedBuf));
-        ESP32BASE_LOG_I("ota", "arduino_upload_success size=%s", processedBuf);
+        ESP32BASE_LOG_I("ota", "arduino_upload_success size=%s boot_partition=%s address=0x%lx",
+                        processedBuf,
+                        g_otaLastBootPartitionLabel[0] ? g_otaLastBootPartitionLabel : "unknown",
+                        static_cast<unsigned long>(g_otaLastBootPartitionAddress));
         logOtaTransferSummary("arduino_upload_summary");
 #if ESP32BASE_ENABLE_FILELOG
         Esp32BaseFileLog::flush();
@@ -323,15 +388,25 @@ bool Esp32BaseOta::begin() {
     g_otaStatus = READY;
     g_otaBootMs = millis();
     g_otaBootPartition = esp_ota_get_running_partition();
+    const esp_partition_t* configuredBootPartition = esp_ota_get_boot_partition();
+    char runningElfSha256[65] = "";
+    esp_ota_get_app_elf_sha256(runningElfSha256, sizeof(runningElfSha256));
     if (g_otaBootPartition) {
         char sizeBuf[32];
         formatOtaBytes(g_otaBootPartition->size, sizeBuf, sizeof(sizeBuf));
-        ESP32BASE_LOG_D("ota", "ready partition=%s address=0x%lx size=%s",
+        ESP32BASE_LOG_I("ota", "ready running_partition=%s address=0x%lx size=%s elf_sha256=%s",
                         g_otaBootPartition->label,
                         static_cast<unsigned long>(g_otaBootPartition->address),
-                        sizeBuf);
+                        sizeBuf,
+                        runningElfSha256[0] ? runningElfSha256 : "unavailable");
     } else {
-        ESP32BASE_LOG_D("ota", "ready partition=unknown");
+        ESP32BASE_LOG_I("ota", "ready running_partition=unknown elf_sha256=%s",
+                        runningElfSha256[0] ? runningElfSha256 : "unavailable");
+    }
+    if (configuredBootPartition) {
+        ESP32BASE_LOG_I("ota", "configured_boot_partition=%s address=0x%lx",
+                        configuredBootPartition->label,
+                        static_cast<unsigned long>(configuredBootPartition->address));
     }
 #if ESP32BASE_ENABLE_ARDUINO_OTA
     beginArduinoOta();
@@ -418,7 +493,19 @@ bool Esp32BaseOta::startUpload(size_t totalSize, const char* expectedSha256Hex) 
     g_otaProcessed = 0;
     g_otaNextProgressLog = 10;
     g_otaExpected[0] = '\0';
+    g_otaCalculated[0] = '\0';
     g_otaLastError[0] = '\0';
+    g_otaTargetPartition = nextPartition;
+    storePartition(nextPartition,
+                   g_otaTargetPartitionLabel,
+                   sizeof(g_otaTargetPartitionLabel),
+                   g_otaTargetPartitionAddress,
+                   g_otaTargetPartitionSize);
+    storePartition(nullptr,
+                   g_otaLastBootPartitionLabel,
+                   sizeof(g_otaLastBootPartitionLabel),
+                   g_otaLastBootPartitionAddress,
+                   g_otaLastBootPartitionSize);
     resetOtaTransferStats();
     if (expectedSha256Hex && expectedSha256Hex[0]) {
         if (!copySha256Hex(expectedSha256Hex, g_otaExpected, sizeof(g_otaExpected))) {
@@ -447,9 +534,11 @@ bool Esp32BaseOta::startUpload(size_t totalSize, const char* expectedSha256Hex) 
     g_otaStatus = UPLOADING;
     char totalBuf[32];
     formatOtaBytes(g_otaTotal, totalBuf, sizeof(totalBuf));
-    ESP32BASE_LOG_I("ota", "upload_start size=%s sha256=%s",
+    ESP32BASE_LOG_I("ota", "upload_start size=%s sha256=%s upload_target=%s address=0x%lx",
                     totalBuf,
-                    g_otaExpected[0] ? "provided" : "none");
+                    g_otaExpected[0] ? "provided" : "none",
+                    g_otaTargetPartitionLabel[0] ? g_otaTargetPartitionLabel : "unknown",
+                    static_cast<unsigned long>(g_otaTargetPartitionAddress));
 #if ESP32BASE_ENABLE_BUS
     Esp32BaseBus::publish(EVENT_START, "");
 #endif
@@ -494,8 +583,10 @@ bool Esp32BaseOta::finishUpload() {
         mbedtls_sha256_free(&g_otaSha);
         g_otaShaActive = false;
         bytesToHex(digest, sizeof(digest), actual, sizeof(actual));
+        strlcpy(g_otaCalculated, actual, sizeof(g_otaCalculated));
     } else {
         actual[0] = '\0';
+        g_otaCalculated[0] = '\0';
     }
 
     if (g_otaExpected[0] && strcmp(g_otaExpected, actual) != 0) {
@@ -527,14 +618,35 @@ bool Esp32BaseOta::finishUpload() {
         return false;
     }
 
+    const esp_partition_t* bootPartition = esp_ota_get_boot_partition();
+    storePartition(bootPartition,
+                   g_otaLastBootPartitionLabel,
+                   sizeof(g_otaLastBootPartitionLabel),
+                   g_otaLastBootPartitionAddress,
+                   g_otaLastBootPartitionSize);
+    if (!sameOtaPartition(bootPartition, g_otaTargetPartition)) {
+        cleanupLongOps();
+        finishOtaTransferStats();
+        char message[96];
+        snprintf(message, sizeof(message), "boot partition mismatch target=%s boot=%s",
+                 g_otaTargetPartitionLabel[0] ? g_otaTargetPartitionLabel : "unknown",
+                 g_otaLastBootPartitionLabel[0] ? g_otaLastBootPartitionLabel : "unknown");
+        setError(message);
+        logOtaTransferSummary("upload_failed");
+        g_otaStatus = FAILED;
+        return false;
+    }
+
     cleanupLongOps();
     finishOtaTransferStats();
     g_otaStatus = SUCCESS;
     char processedBuf[32];
     formatOtaBytes(g_otaProcessed, processedBuf, sizeof(processedBuf));
-    ESP32BASE_LOG_I("ota", "upload_success size=%s sha256=%s",
+    ESP32BASE_LOG_I("ota", "upload_success size=%s sha256=%s boot_partition=%s address=0x%lx",
                     processedBuf,
-                    actual[0] ? actual : "unavailable");
+                    actual[0] ? actual : "unavailable",
+                    g_otaLastBootPartitionLabel[0] ? g_otaLastBootPartitionLabel : "unknown",
+                    static_cast<unsigned long>(g_otaLastBootPartitionAddress));
     logOtaTransferSummary("upload_summary");
 #if ESP32BASE_ENABLE_FILELOG
     Esp32BaseFileLog::flush();
@@ -555,6 +667,21 @@ void Esp32BaseOta::abortUpload(const char* reason) {
     finishOtaTransferStats();
     setError(reason ? reason : "ota aborted");
     logOtaTransferSummary("upload_aborted");
+    g_otaStatus = FAILED;
+}
+
+void Esp32BaseOta::rejectUpload(const char* reason) {
+    g_otaTotal = 0;
+    g_otaProcessed = 0;
+    g_otaExpected[0] = '\0';
+    g_otaCalculated[0] = '\0';
+    g_otaTargetPartition = nullptr;
+    storePartition(nullptr,
+                   g_otaTargetPartitionLabel,
+                   sizeof(g_otaTargetPartitionLabel),
+                   g_otaTargetPartitionAddress,
+                   g_otaTargetPartitionSize);
+    setError(reason ? reason : "ota upload rejected");
     g_otaStatus = FAILED;
 }
 
@@ -595,6 +722,38 @@ uint32_t Esp32BaseOta::averageBytesPerSecond() {
 
 const char* Esp32BaseOta::lastError() {
     return g_otaLastError;
+}
+
+const char* Esp32BaseOta::expectedSha256() {
+    return g_otaExpected;
+}
+
+const char* Esp32BaseOta::calculatedSha256() {
+    return g_otaCalculated;
+}
+
+const char* Esp32BaseOta::lastTargetPartitionLabel() {
+    return g_otaTargetPartitionLabel;
+}
+
+uint32_t Esp32BaseOta::lastTargetPartitionAddress() {
+    return g_otaTargetPartitionAddress;
+}
+
+size_t Esp32BaseOta::lastTargetPartitionSize() {
+    return g_otaTargetPartitionSize;
+}
+
+const char* Esp32BaseOta::lastBootPartitionLabel() {
+    return g_otaLastBootPartitionLabel;
+}
+
+uint32_t Esp32BaseOta::lastBootPartitionAddress() {
+    return g_otaLastBootPartitionAddress;
+}
+
+size_t Esp32BaseOta::lastBootPartitionSize() {
+    return g_otaLastBootPartitionSize;
 }
 
 bool Esp32BaseOta::markCurrentValid() {

@@ -158,6 +158,17 @@ pio run -t webota
 
 `espota` 是 ArduinoOTA 标准协议；`webota` 是 Esp32Base 提供的 HTTP 上传方式，默认较大分块并在上传前预检认证，通常更适合反复快速烧录，但要求设备 Web OTA 可访问。
 
+双 OTA 设备如果已经通过 Web OTA 切换到另一个槽位，串口只写 `board_upload.offset_address` 对应的 `ota_0` 不一定会改变实际启动槽；`otadata` 仍可能指向旧的 `ota_1`。串口恢复优先使用基础库脚本，它会按分区表写入两个 OTA app 槽并清除 `otadata`：
+
+```sh
+python path/to/Esp32Base/scripts/esp32base_serial_recover_ota.py \
+  -d path/to/business/project \
+  -e esp32dev \
+  --port /dev/ttyUSB0
+```
+
+可先加 `--dry-run` 查看将执行的 `esptool.py` 命令；特殊分区表或板型可显式覆盖 bootloader、partition table 和 boot_app0 偏移。
+
 ## 文档入口
 
 建议按顺序阅读：

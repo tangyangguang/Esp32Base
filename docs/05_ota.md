@@ -81,6 +81,8 @@ pio run -t webota
 - `webota` 命令行日志会显示友好容量单位、开始时间、结束时间、上传前 3 次 RSSI 取样、完成时 RSSI、客户端写入 socket 用时、等待设备响应用时、端到端用时和平均速度，并按约 5% 粒度输出固定字段进度。上传进度表示客户端已写入 socket 的字节数，不等同于设备已完成 flash 写入。
 - 设备端会在 Web OTA 开始前检查下一 OTA 分区容量；固件大于可写 app slot 时直接失败。上传过程中实际写入字节数也不得超过声明总大小。
 - `Update.begin()` 失败时会把底层 Update 错误字符串写入 `lastError()`，便于区分空间、flash 或 Update 状态问题。
+- Web OTA 写入成功后会读取 `esp_ota_get_boot_partition()` 二次确认下一启动分区已经切到本次写入目标；确认失败时返回 OTA 失败，不进入自动重启。
+- `/esp32base/api/ota` 返回当前 running partition、configured boot partition、next update partition、app partition 列表、镜像 SHA256、版本、OTA state、本次上传目标、实际计算 SHA256 和最后错误，便于判断设备当前运行的是哪个槽位和哪个固件。
 
 ## 3. 状态机
 
@@ -173,7 +175,24 @@ finish receive -> finish SHA256 -> compare -> Update.end(true) -> restart
 Update.end(true) -> compare SHA256
 ```
 
-## 6. Watchdog
+## 6. 双 OTA 串口恢复
+
+双 OTA 设备通过 Web OTA 成功启动过 `ota_1` 后，`otadata` 可能仍指向 `ota_1`。此时串口 `pio run -t upload` 如果只写 `board_upload.offset_address` 指向的 `ota_0`，不会自动修改 `otadata`，设备仍可能继续从 `ota_1` 启动旧固件；串口日志中的 `ELF file SHA256` 也会继续显示旧固件值。
+
+推荐恢复方式是使用基础库脚本写入两个 OTA app 槽，并清除 `otadata`：
+
+```sh
+python path/to/Esp32Base/scripts/esp32base_serial_recover_ota.py \
+  -d path/to/business/project \
+  -e esp32dev \
+  --port /dev/ttyUSB0
+```
+
+脚本会先构建目标 PlatformIO env，读取 `board_build.partitions` 对应 CSV，定位 `data/ota`、`ota_0`、`ota_1`，写入 bootloader、partition table、boot_app0 和当前 `firmware.bin`，默认把同一固件写入所有 OTA app 槽并擦除 `otadata`。恢复前可先加 `--dry-run` 查看完整 `esptool.py` 命令；特殊板型可用 `--bootloader-offset`、`--partition-offset`、`--boot-app0-offset` 显式覆盖偏移。
+
+如果只想手动恢复，原则是写入当前启动槽或同时写入两个 OTA 槽，并清除 `otadata`。例如 ESP32_Faucet 的 4MB 双 OTA 分区表中 `otadata=0x19000`、`ota_0=0x20000`、`ota_1=0x180000`，恢复命令应至少覆盖当前实际启动槽；最稳妥是同一份 `firmware.bin` 同时写入 `0x20000` 和 `0x180000` 后 `erase_region 0x19000 0x2000`。
+
+## 7. Watchdog
 
 OTA 写 flash 期间：
 
@@ -194,7 +213,7 @@ Esp32BaseWatchdog::restoreCurrentTaskAfterLongOperation();
 - abort
 - client disconnect
 
-## 7. NVS deferred flush pause
+## 8. NVS deferred flush pause
 
 OTA 上传期间不执行普通 deferred flush。
 
@@ -209,7 +228,7 @@ OTA 上传期间不执行普通 deferred flush。
 - `SUCCESS / FAILED / IDLE` 时恢复。
 - 统一 restart 前仍执行 `flushAll()`。
 
-## 8. WiFi power save
+## 9. WiFi power save
 
 OTA 期间必须临时关闭 WiFi power save：
 
@@ -227,7 +246,7 @@ OTA 期间必须临时关闭 WiFi power save：
 - success、failed、abort、client disconnect 全路径恢复原状态。
 - 如果关闭或恢复失败，必须记录 warn，但不得破坏 OTA 状态机清理。
 
-## 9. Brownout
+## 10. Brownout
 
 默认不关闭 brownout detector。
 
@@ -246,7 +265,7 @@ ESP32BASE_OTA_DISABLE_BROWNOUT_DURING_WRITE=0
 
 具体实现受 Arduino Core / IDF 版本影响，兼容策略见 [Arduino Core 兼容性](08_arduino_core_compat.md)。
 
-## 10. 回滚
+## 11. 回滚
 
 公开 API 在 `Esp32BaseOta`：
 
@@ -276,13 +295,15 @@ ESP32BASE_OTA_MARK_VALID_TIMEOUT_MS=30000
 - rollback。
 - restart。
 
-## 11. 必测场景
+## 12. 必测场景
 
 - Web Auth 开启时，未授权上传不调用 `Update.begin()`。
 - Web Auth 关闭时，OTA route 仍可访问。
 - espota 正确 `--auth` 可上传，错误 `--auth` 失败且设备保持可访问。
 - `pio run -t webota` 可通过 IP 地址上传，错误 Web Auth 失败且设备保持可访问。
 - Web OTA 与 espota 不得同时写 flash。
+- Web OTA 成功后 `/esp32base/api/ota` 中 `bootPartition` 与 `lastTargetPartition` 一致。
+- 双 OTA 串口恢复脚本 dry-run 输出两个 OTA app 槽写入和 `otadata` 擦除命令。
 - SHA256 错误，上传失败且不切换分区。
 - OTA 中途断电 30% / 70% / 99%。
 - OTA 后未 mark valid，确认回滚。

@@ -29,6 +29,7 @@ public:
     static bool startUpload(size_t totalSize, const char* expectedSha256Hex = nullptr);
     static bool writeChunk(const uint8_t* data, size_t len);
     static bool finishUpload();
+    static void rejectUpload(const char* reason);
     static void abortUpload(const char* reason);
 
     static uint8_t progress();
@@ -37,6 +38,14 @@ public:
     static uint32_t elapsedMs();
     static uint32_t averageBytesPerSecond();
     static const char* lastError();
+    static const char* expectedSha256();
+    static const char* calculatedSha256();
+    static const char* lastTargetPartitionLabel();
+    static uint32_t lastTargetPartitionAddress();
+    static size_t lastTargetPartitionSize();
+    static const char* lastBootPartitionLabel();
+    static uint32_t lastBootPartitionAddress();
+    static size_t lastBootPartitionSize();
 
     static bool markCurrentValid();
     static bool isRollbackPossible();

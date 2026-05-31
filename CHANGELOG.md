@@ -4,6 +4,25 @@
 
 ## 2026-05-30
 
+### 双 OTA 串口恢复与 OTA 槽位诊断
+
+修复：
+
+- Web OTA 完成 `Update.end(true)` 后会读取 configured boot partition，确认下一启动槽已经切到本次写入目标；如果 boot partition 与目标槽不一致，OTA 返回失败并保留错误日志，不再给出含糊成功状态。
+- Web OTA 和 ArduinoOTA 上传开始日志会输出写入目标 OTA 槽与地址；上传成功日志会输出已设置的 boot partition 与地址。
+- OTA 启动诊断会输出当前 running partition、configured boot partition 和 running ELF SHA256，便于串口日志判断当前实际运行的是哪个固件。
+- `/esp32base/api/ota` 增加 `expectedSha256`、`calculatedSha256`、`lastTargetPartition`、`lastBootPartition`、`runningPartition`、`bootPartition`、`nextUpdatePartition` 和 `appPartitions`，每个 app 分区包含地址、大小、OTA state、镜像 SHA256 和版本信息。
+- Web OTA 对 `X-Firmware-Size` 做严格数字解析，非数字、空值或溢出值会在开始写 flash 前拒绝。
+
+新增：
+
+- 新增 `scripts/esp32base_serial_recover_ota.py`，可按 PlatformIO env 的 partition table 自动定位 `otadata`、`ota_0`、`ota_1`，默认写 bootloader、partition table、boot_app0，把当前 `firmware.bin` 写入所有 OTA app 槽，并擦除 `otadata`。
+- 新增 `scripts/check_ota_recovery_diagnostics.py`，检查 OTA 槽位诊断、SHA 暴露、恢复脚本和文档边界。
+
+业务侧影响：
+
+- 双 OTA 设备通过 Web OTA 切到 `ota_1` 后，普通串口上传只写 `ota_0` 不会自动改变 `otadata`，设备可能继续从旧槽启动。恢复时应写当前启动槽或两个 OTA 槽，并清除 `otadata`；推荐直接使用 `esp32base_serial_recover_ota.py --dry-run` 确认命令后执行。
+
 ### WiFi STA 安全启动保护
 
 新增：

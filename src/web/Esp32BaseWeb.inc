@@ -214,6 +214,8 @@ void sendChunk(const char* data, size_t len);
 void sendChunk(const char* text);
 void sendEscapedHtmlChunk(const char* text);
 void sendEscapedJsonChunk(const char* text);
+void sendIntChunk(int value);
+void sendBytesJsonChunk(uint32_t bytes);
 void formatReadableBytes(uint64_t bytes, char* out, size_t len);
 bool ensureAuth();
 
@@ -1508,12 +1510,156 @@ bool samePartition(const esp_partition_t* a, const esp_partition_t* b) {
            strncmp(a->label, b->label, sizeof(a->label)) == 0;
 }
 
-const char* partitionRole(const esp_partition_t* partition, const esp_partition_t* running, const esp_partition_t* nextOta) {
+void webBytesToHex(const uint8_t* bytes, size_t len, char* out, size_t outLen) {
+    static const char* hex = "0123456789abcdef";
+    if (!out || outLen < len * 2 + 1) {
+        return;
+    }
+    for (size_t i = 0; i < len; ++i) {
+        out[i * 2] = hex[(bytes[i] >> 4) & 0x0f];
+        out[i * 2 + 1] = hex[bytes[i] & 0x0f];
+    }
+    out[len * 2] = '\0';
+}
+
+const char* otaImageStateName(const esp_partition_t* partition) {
+    if (!partition || partition->type != ESP_PARTITION_TYPE_APP ||
+        partition->subtype < ESP_PARTITION_SUBTYPE_APP_OTA_MIN ||
+        partition->subtype > ESP_PARTITION_SUBTYPE_APP_OTA_MAX) {
+        return "n/a";
+    }
+    esp_ota_img_states_t state;
+    const esp_err_t err = esp_ota_get_state_partition(partition, &state);
+    if (err == ESP_ERR_NOT_FOUND) {
+        return "undefined";
+    }
+    if (err != ESP_OK) {
+        return "unknown";
+    }
+    switch (state) {
+        case ESP_OTA_IMG_NEW: return "new";
+        case ESP_OTA_IMG_PENDING_VERIFY: return "pending_verify";
+        case ESP_OTA_IMG_VALID: return "valid";
+        case ESP_OTA_IMG_INVALID: return "invalid";
+        case ESP_OTA_IMG_ABORTED: return "aborted";
+        case ESP_OTA_IMG_UNDEFINED: return "undefined";
+        default: return "unknown";
+    }
+}
+
+void partitionImageSha256(const esp_partition_t* partition, char* out, size_t len) {
+    if (!out || len == 0) {
+        return;
+    }
+    out[0] = '\0';
+    if (!partition || partition->type != ESP_PARTITION_TYPE_APP) {
+        return;
+    }
+    uint8_t digest[32];
+    if (esp_partition_get_sha256(partition, digest) == ESP_OK) {
+        webBytesToHex(digest, sizeof(digest), out, len);
+    }
+}
+
+void partitionAppVersion(const esp_partition_t* partition, char* out, size_t len) {
+    if (!out || len == 0) {
+        return;
+    }
+    out[0] = '\0';
+    if (!partition || partition->type != ESP_PARTITION_TYPE_APP) {
+        return;
+    }
+    esp_app_desc_t desc;
+    if (esp_ota_get_partition_description(partition, &desc) == ESP_OK) {
+        strlcpy(out, desc.version, len);
+    }
+}
+
+void sendPartitionJson(const char* key, const esp_partition_t* partition) {
+    char sha[65] = "";
+    char version[33] = "";
+    sendChunk("\"");
+    sendEscapedJsonChunk(key);
+    sendChunk("\":");
+    if (!partition) {
+        sendChunk("null");
+        return;
+    }
+    partitionImageSha256(partition, sha, sizeof(sha));
+    partitionAppVersion(partition, version, sizeof(version));
+    sendChunk("{\"label\":\"");
+    sendEscapedJsonChunk(partition->label);
+    sendChunk("\",\"address\":");
+    sendIntChunk(static_cast<int>(partition->address));
+    sendChunk(",\"size\":");
+    sendBytesJsonChunk(partition->size);
+    sendChunk(",\"state\":\"");
+    sendEscapedJsonChunk(otaImageStateName(partition));
+    sendChunk("\",\"sha256\":\"");
+    sendEscapedJsonChunk(sha);
+    sendChunk("\",\"version\":\"");
+    sendEscapedJsonChunk(version);
+    sendChunk("\"}");
+}
+
+void sendAppPartitionsJson() {
+    const esp_partition_t* running = esp_ota_get_running_partition();
+    const esp_partition_t* boot = esp_ota_get_boot_partition();
+    const esp_partition_t* nextOta = esp_ota_get_next_update_partition(nullptr);
+    bool first = true;
+    sendChunk("\"appPartitions\":[");
+    esp_partition_iterator_t it = esp_partition_find(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_ANY, nullptr);
+    while (it) {
+        const esp_partition_t* p = esp_partition_get(it);
+        if (p) {
+            char sha[65] = "";
+            char version[33] = "";
+            partitionImageSha256(p, sha, sizeof(sha));
+            partitionAppVersion(p, version, sizeof(version));
+            if (!first) {
+                sendChunk(",");
+            }
+            first = false;
+            sendChunk("{\"label\":\"");
+            sendEscapedJsonChunk(p->label);
+            sendChunk("\",\"subtype\":\"");
+            sendEscapedJsonChunk(partitionSubtypeName(p));
+            sendChunk("\",\"address\":");
+            sendIntChunk(static_cast<int>(p->address));
+            sendChunk(",\"size\":");
+            sendBytesJsonChunk(p->size);
+            sendChunk(",\"running\":");
+            sendChunk(samePartition(p, running) ? "true" : "false");
+            sendChunk(",\"boot\":");
+            sendChunk(samePartition(p, boot) ? "true" : "false");
+            sendChunk(",\"nextUpdate\":");
+            sendChunk(samePartition(p, nextOta) ? "true" : "false");
+            sendChunk(",\"state\":\"");
+            sendEscapedJsonChunk(otaImageStateName(p));
+            sendChunk("\",\"sha256\":\"");
+            sendEscapedJsonChunk(sha);
+            sendChunk("\",\"version\":\"");
+            sendEscapedJsonChunk(version);
+            sendChunk("\"}");
+        }
+        it = esp_partition_next(it);
+    }
+    esp_partition_iterator_release(it);
+    sendChunk("]");
+}
+
+const char* partitionRole(const esp_partition_t* partition, const esp_partition_t* running, const esp_partition_t* boot, const esp_partition_t* nextOta) {
     if (!partition) {
         return "-";
     }
+    if (samePartition(partition, running) && samePartition(partition, boot)) {
+        return "running app / boot";
+    }
     if (samePartition(partition, running)) {
         return "running app";
+    }
+    if (samePartition(partition, boot)) {
+        return "boot app";
     }
     if (samePartition(partition, nextOta)) {
         return "next OTA";
@@ -1535,6 +1681,7 @@ const char* partitionRole(const esp_partition_t* partition, const esp_partition_
 
 void sendPartitionTable() {
     const esp_partition_t* running = esp_ota_get_running_partition();
+    const esp_partition_t* boot = esp_ota_get_boot_partition();
     const esp_partition_t* nextOta = esp_ota_get_next_update_partition(nullptr);
     esp_partition_iterator_t it = esp_partition_find(ESP_PARTITION_TYPE_ANY, ESP_PARTITION_SUBTYPE_ANY, nullptr);
     sendChunk("<section class='panel statuspage'><h2>Partition Table</h2><div class='tablewrap'><table class='part'><tr><th>Name</th><th>Type</th><th>SubType</th><th>Offset</th><th>Size</th><th>Role</th></tr>");
@@ -1556,7 +1703,7 @@ void sendPartitionTable() {
             sendChunk("</td><td>");
             sendEscapedHtmlChunk(sizeBuf);
             sendChunk("</td><td>");
-            sendEscapedHtmlChunk(partitionRole(p, running, nextOta));
+            sendEscapedHtmlChunk(partitionRole(p, running, boot, nextOta));
             sendChunk("</td></tr>");
         }
         it = esp_partition_next(it);
@@ -3451,6 +3598,45 @@ void handleNotFound() {
 }
 
 #if ESP32BASE_ENABLE_OTA
+bool parseSizeHeader(const String& value, size_t& out, char* error, size_t errorLen) {
+    out = 0;
+    if (error && errorLen) {
+        error[0] = '\0';
+    }
+    const char* text = value.c_str();
+    if (!text || !*text) {
+        if (error && errorLen) {
+            strlcpy(error, "missing firmware size", errorLen);
+        }
+        return false;
+    }
+    for (const char* p = text; *p; ++p) {
+        if (!isdigit(static_cast<unsigned char>(*p))) {
+            if (error && errorLen) {
+                strlcpy(error, "invalid firmware size", errorLen);
+            }
+            return false;
+        }
+    }
+    errno = 0;
+    char* end = nullptr;
+    const unsigned long parsed = strtoul(text, &end, 10);
+    if (errno != 0 || !end || *end != '\0' || parsed == 0UL) {
+        if (error && errorLen) {
+            strlcpy(error, "invalid firmware size", errorLen);
+        }
+        return false;
+    }
+    out = static_cast<size_t>(parsed);
+    if (static_cast<unsigned long>(out) != parsed) {
+        if (error && errorLen) {
+            strlcpy(error, "firmware size overflow", errorLen);
+        }
+        return false;
+    }
+    return true;
+}
+
 void handleOtaPage() {
     markRequest();
     if (!ensureAuth()) {
@@ -3458,6 +3644,32 @@ void handleOtaPage() {
     }
     Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_OTA]);
     Esp32BaseWeb::sendPageTitle("OTA Update", "Upload a firmware binary through the authenticated Web OTA endpoint.");
+    const esp_partition_t* running = esp_ota_get_running_partition();
+    const esp_partition_t* boot = esp_ota_get_boot_partition();
+    const esp_partition_t* next = esp_ota_get_next_update_partition(nullptr);
+    char runningText[80] = "unknown";
+    char bootText[80] = "unknown";
+    char nextText[80] = "unavailable";
+    if (running) {
+        snprintf(runningText, sizeof(runningText), "%s / 0x%06lx", running->label, static_cast<unsigned long>(running->address));
+    }
+    if (boot) {
+        snprintf(bootText, sizeof(bootText), "%s / 0x%06lx", boot->label, static_cast<unsigned long>(boot->address));
+    }
+    if (next) {
+        snprintf(nextText, sizeof(nextText), "%s / 0x%06lx", next->label, static_cast<unsigned long>(next->address));
+    }
+    sendChunk("<section class='panel statuspage'><h2>OTA diagnostics</h2><div class='infotable'>");
+    sendInfoRow("Running slot", runningText);
+    sendInfoRow("Boot slot", bootText);
+    sendInfoRow("Next update slot", nextText);
+    sendInfoRow("Running ELF SHA256", []() -> const char* {
+        static char sha[65];
+        sha[0] = '\0';
+        esp_ota_get_app_elf_sha256(sha, sizeof(sha));
+        return sha[0] ? sha : "unavailable";
+    }());
+    sendChunk("</div></section>");
     sendChunk("<section class='panel formpanel uploadpanel'><h2>Firmware upload</h2><form id='f' class='editform'><div class='fieldgrid'><div class='field full'><label for='fw'>Firmware file</label><input id='fw' type='file' name='firmware' accept='.bin' required></div><div class='field long'><label for='sha'>SHA256</label><input id='sha' placeholder='Optional 64-character digest' maxlength='64'><small>Optional integrity check for the uploaded firmware.</small></div></div><div class='actions'><input type='submit' value='Upload Firmware'></div></form><progress id='p' value='0' max='100' style='width:100%;display:none'></progress><p id='s' class='statusline muted'></p></section>");
     sendChunk("<script>function h(n){var u=['B','KB','MB','GB'],i=0,x=n;while(x>=1024&&i<u.length-1){x/=1024;i++;}return (i?x.toFixed(2):Math.round(x))+' '+u[i];}document.getElementById('f').onsubmit=function(e){e.preventDefault();if(this.dataset.busy)return false;this.dataset.busy=1;var f=document.getElementById('fw').files[0],st=document.getElementById('s'),pg=document.getElementById('p'),b=this.querySelector('[type=submit]');if(!f){this.dataset.busy='';return false;}var d=new FormData();d.append('firmware',f,f.name);var x=new XMLHttpRequest();if(b)b.disabled=true;pg.style.display='block';st.textContent='Uploading 0%';x.upload.onprogress=function(ev){if(ev.lengthComputable){var p=Math.floor(ev.loaded*100/ev.total);pg.value=p;st.textContent='Uploading '+p+'% '+h(ev.loaded)+' / '+h(ev.total);}};x.onload=function(){var r={};try{r=JSON.parse(x.responseText||'{}');}catch(e){}if(x.status==200){st.textContent='Upload successful. Restarting...';setTimeout(function(){location.href=r.redirect||'/esp32base';},8000);return;}st.textContent='Upload failed: '+(r.error||('HTTP '+x.status));document.getElementById('f').dataset.busy='';if(b)b.disabled=false;};x.onerror=function(){st.textContent='Upload failed: network error';document.getElementById('f').dataset.busy='';if(b)b.disabled=false;};x.open('POST','/esp32base/ota');x.setRequestHeader('X-Firmware-Size',String(f.size));var s=document.getElementById('sha').value;if(s)x.setRequestHeader('X-Sha256',s);x.send(d);return false;};</script>");
     Esp32BaseWeb::sendFooter();
@@ -3489,6 +3701,13 @@ void handleOtaUploadDone() {
             sendIntChunk(Esp32BaseOta::elapsedMs());
             sendChunk(",\"averageBytesPerSecond\":");
             sendIntChunk(Esp32BaseOta::averageBytesPerSecond());
+            sendChunk(",\"calculatedSha256\":\"");
+            sendEscapedJsonChunk(Esp32BaseOta::calculatedSha256());
+            sendChunk("\",\"bootPartition\":\"");
+            sendEscapedJsonChunk(Esp32BaseOta::lastBootPartitionLabel());
+            sendChunk("\",\"targetPartition\":\"");
+            sendEscapedJsonChunk(Esp32BaseOta::lastTargetPartitionLabel());
+            sendChunk("\"");
             sendChunk("}");
             endResponse();
         }
@@ -3530,8 +3749,14 @@ void handleOtaUpload() {
         } else if (g_server.hasArg("sha256")) {
             strlcpy(sha256, g_server.arg("sha256").c_str(), sizeof(sha256));
         }
-        if (firmwareSize == 0 && g_server.hasHeader("X-Firmware-Size")) {
-            firmwareSize = static_cast<size_t>(strtoul(g_server.header("X-Firmware-Size").c_str(), nullptr, 10));
+        if (g_server.hasHeader("X-Firmware-Size")) {
+            char sizeError[48];
+            if (!parseSizeHeader(g_server.header("X-Firmware-Size"), firmwareSize, sizeError, sizeof(sizeError))) {
+                g_otaUploadStartFailed = true;
+                Esp32BaseOta::rejectUpload(sizeError);
+                ESP32BASE_LOG_W("web", "ota_upload_start_rejected error=%s", Esp32BaseOta::lastError());
+                return;
+            }
         }
         if (!Esp32BaseOta::startUpload(firmwareSize, sha256[0] ? sha256 : nullptr)) {
             g_otaUploadStartFailed = true;
@@ -3576,7 +3801,13 @@ void handleOtaRawUpload() {
             strlcpy(sha256, g_server.header("X-Sha256").c_str(), sizeof(sha256));
         }
         if (g_server.hasHeader("X-Firmware-Size")) {
-            firmwareSize = static_cast<size_t>(strtoul(g_server.header("X-Firmware-Size").c_str(), nullptr, 10));
+            char sizeError[48];
+            if (!parseSizeHeader(g_server.header("X-Firmware-Size"), firmwareSize, sizeError, sizeof(sizeError))) {
+                g_otaUploadStartFailed = true;
+                Esp32BaseOta::rejectUpload(sizeError);
+                ESP32BASE_LOG_W("web", "ota_raw_upload_start_rejected error=%s", Esp32BaseOta::lastError());
+                return;
+            }
         }
         if (!Esp32BaseOta::startUpload(firmwareSize, sha256[0] ? sha256 : nullptr)) {
             g_otaUploadStartFailed = true;
@@ -3620,7 +3851,31 @@ void handleOtaApi() {
     sendIntChunk(Esp32BaseOta::averageBytesPerSecond());
     sendChunk(",\"error\":\"");
     sendEscapedJsonChunk(Esp32BaseOta::lastError());
-    sendChunk("\"}");
+    sendChunk("\",\"expectedSha256\":\"");
+    sendEscapedJsonChunk(Esp32BaseOta::expectedSha256());
+    sendChunk("\",\"calculatedSha256\":\"");
+    sendEscapedJsonChunk(Esp32BaseOta::calculatedSha256());
+    sendChunk("\",\"lastTargetPartition\":{\"label\":\"");
+    sendEscapedJsonChunk(Esp32BaseOta::lastTargetPartitionLabel());
+    sendChunk("\",\"address\":");
+    sendIntChunk(static_cast<int>(Esp32BaseOta::lastTargetPartitionAddress()));
+    sendChunk(",\"size\":");
+    sendBytesJsonChunk(static_cast<uint32_t>(Esp32BaseOta::lastTargetPartitionSize()));
+    sendChunk("},\"lastBootPartition\":{\"label\":\"");
+    sendEscapedJsonChunk(Esp32BaseOta::lastBootPartitionLabel());
+    sendChunk("\",\"address\":");
+    sendIntChunk(static_cast<int>(Esp32BaseOta::lastBootPartitionAddress()));
+    sendChunk(",\"size\":");
+    sendBytesJsonChunk(static_cast<uint32_t>(Esp32BaseOta::lastBootPartitionSize()));
+    sendChunk("},");
+    sendPartitionJson("runningPartition", esp_ota_get_running_partition());
+    sendChunk(",");
+    sendPartitionJson("bootPartition", esp_ota_get_boot_partition());
+    sendChunk(",");
+    sendPartitionJson("nextUpdatePartition", esp_ota_get_next_update_partition(nullptr));
+    sendChunk(",");
+    sendAppPartitionsJson();
+    sendChunk("}");
     endResponse();
 }
 #endif
@@ -3647,6 +3902,8 @@ void handleRoot() {
     char otaTargetSize[48] = "unavailable";
     char otaHeadroom[48] = "unknown";
     char runningSlot[80] = "unknown";
+    char bootSlot[80] = "unknown";
+    char runningElfSha[65] = "";
     char otaTargetSlot[80] = "unavailable";
     char flash[48];
     Esp32BaseLog::formatUptime(Esp32BaseSystem::uptimeMs(), uptime, sizeof(uptime));
@@ -3657,11 +3914,18 @@ void handleRoot() {
     formatReadableBytes(ESP.getSketchSize(), sketch, sizeof(sketch));
     formatReadableBytes(Esp32BaseSystem::flashSize(), flash, sizeof(flash));
     const esp_partition_t* runningPartition = esp_ota_get_running_partition();
+    const esp_partition_t* bootPartition = esp_ota_get_boot_partition();
     const esp_partition_t* nextPartition = esp_ota_get_next_update_partition(nullptr);
+    esp_ota_get_app_elf_sha256(runningElfSha, sizeof(runningElfSha));
     if (runningPartition) {
         char runningSize[48];
         formatReadableBytes(runningPartition->size, runningSize, sizeof(runningSize));
         snprintf(runningSlot, sizeof(runningSlot), "%s / %s", runningPartition->label, runningSize);
+    }
+    if (bootPartition) {
+        char bootSize[48];
+        formatReadableBytes(bootPartition->size, bootSize, sizeof(bootSize));
+        snprintf(bootSlot, sizeof(bootSlot), "%s / %s", bootPartition->label, bootSize);
     }
     if (nextPartition) {
         formatReadableBytes(nextPartition->size, otaTargetSize, sizeof(otaTargetSize));
@@ -3821,7 +4085,9 @@ void handleRoot() {
     sendStatusSectionStart("Firmware & OTA");
     sendInfoRow("Current firmware", sketch);
     sendInfoRow("Running slot", runningSlot);
+    sendInfoRow("Boot slot", bootSlot);
     sendInfoRow("OTA target slot", otaTargetSlot);
+    sendInfoRow("Running ELF SHA256", runningElfSha[0] ? runningElfSha : "unavailable");
     sendInfoRow("Max OTA upload", otaTargetSize);
     sendInfoRowStart("OTA headroom");
     sendEscapedHtmlChunk(otaHeadroom);
