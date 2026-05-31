@@ -9,7 +9,29 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-WEB_INC = ROOT / "src" / "web" / "Esp32BaseWeb.inc"
+
+WEB_SOURCE_PATHS = [
+    "src/web/internal/WebResponse.cpp",
+    "src/web/internal/WebLogs.cpp",
+    "src/web/Esp32BaseWeb.cpp",
+    "src/web/internal/WebInternal.h",
+    "src/web/internal/WebContext.h",
+    "src/web/internal/WebContext.cpp",
+    "src/web/internal/WebAssets.cpp",
+    "src/web/internal/WebAuth.cpp",
+    "src/web/internal/WebFs.cpp",
+    "src/web/internal/WebLayout.cpp",
+    "src/web/internal/WebOta.cpp",
+    "src/web/internal/WebRouting.cpp",
+    "src/web/internal/WebStatus.cpp",
+    "src/web/internal/WebTools.cpp",
+    "src/web/internal/WebWifi.cpp",
+    "src/web/internal/WebAppConfig.cpp",
+]
+
+def read_web_source() -> str:
+    return "\n".join((ROOT / path).read_text(encoding="utf-8") for path in WEB_SOURCE_PATHS)
+
 
 
 def function_body(source: str, name: str) -> str:
@@ -31,7 +53,7 @@ def function_body(source: str, name: str) -> str:
 
 
 def main() -> int:
-    source = WEB_INC.read_text()
+    source = read_web_source()
     send_progmem = function_body(source, "sendProgmem")
     send_response_content = function_body(source, "sendResponseContent")
     send_raw_chunked_content = function_body(source, "sendRawChunkedContent")

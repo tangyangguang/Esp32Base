@@ -10,11 +10,34 @@ def read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
-source = read("src/web/Esp32BaseWeb.inc")
+
+WEB_SOURCE_PATHS = [
+    "src/web/Esp32BaseWeb.cpp",
+    "src/web/internal/WebInternal.h",
+    "src/web/internal/WebContext.h",
+    "src/web/internal/WebContext.cpp",
+    "src/web/internal/WebAssets.cpp",
+    "src/web/internal/WebAuth.cpp",
+    "src/web/internal/WebFs.cpp",
+    "src/web/internal/WebLayout.cpp",
+    "src/web/internal/WebLogs.cpp",
+    "src/web/internal/WebOta.cpp",
+    "src/web/internal/WebResponse.cpp",
+    "src/web/internal/WebRouting.cpp",
+    "src/web/internal/WebStatus.cpp",
+    "src/web/internal/WebTools.cpp",
+    "src/web/internal/WebWifi.cpp",
+    "src/web/internal/WebAppConfig.cpp",
+]
+
+def read_web_source() -> str:
+    return "\n".join((ROOT / path).read_text(encoding="utf-8") for path in WEB_SOURCE_PATHS)
+
+source = read_web_source()
 errors: list[str] = []
 
 checks = {
-    "src/web/Esp32BaseWeb.inc": [
+    "src/web/internal Web modules": [
         "g_server.on(\"/esp32base/fs/check\", HTTP_GET, handleFsCheckGet)",
         "g_server.on(\"/esp32base/fs/upload\", HTTP_POST, handleFsUploadDone, handleFsUpload)",
         "void handleFsCheckGet()",
@@ -56,13 +79,13 @@ checks = {
 }
 
 for path, needles in checks.items():
-    text = source if path == "src/web/Esp32BaseWeb.inc" else read(path)
+    text = source if path == "src/web/internal Web modules" else read(path)
     for needle in needles:
         if needle not in text:
             errors.append(f"{path}: missing {needle!r}")
 
 if "Esp32BaseFs::writeBytes(" in source:
-    errors.append("src/web/Esp32BaseWeb.inc: upload should stream through LittleFS File, not buffer full files")
+    errors.append("src/web/internal Web modules: upload should stream through LittleFS File, not buffer full files")
 
 for forbidden in [
     "fsUploadPathProtected",
@@ -70,7 +93,7 @@ for forbidden in [
     "Protected directories are shown but cannot be selected.",
 ]:
     if forbidden in source:
-        errors.append(f"src/web/Esp32BaseWeb.inc: forbidden upload restriction marker {forbidden!r}")
+        errors.append(f"src/web/internal Web modules: forbidden upload restriction marker {forbidden!r}")
 
 for path in ["README.md", "docs/03_api.md", "docs/04_web.md", "docs/11_web_ui_baseline.md"]:
     text = read(path)

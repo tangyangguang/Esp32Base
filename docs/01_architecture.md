@@ -102,11 +102,12 @@ Network 可使用 Bus，但不强依赖 Bus。
 
 内部模块：
 
-- status handler group。
-- WiFi handler group。
-- captive portal handler group。
-- JSON / HTML helper group。
-- OTA route hooks，如启用 Update。
+- `src/web/Esp32BaseWeb.cpp`：公开 facade、启动编排、内置路由注册。
+- `src/web/internal/WebContext.*`：WebServer、路由表、导航、Auth、上传、请求和响应运行态。
+- `src/web/internal/WebResponse.cpp`：HTTP header、chunked 输出、HTML/JSON/CSV escape、断连和 watchdog 喂狗。
+- `src/web/internal/WebLayout.cpp`：导航、header/footer、panel、metric、pagination 等 HTML 组件。
+- `src/web/internal/WebAssets.cpp`：`/esp32base/ui.css`、基础 head 片段和页面级 PROGMEM 资源。
+- `src/web/internal/WebStatus.cpp`、`WebWifi.cpp`、`WebAuth.cpp`、`WebTools.cpp`、`WebLogs.cpp`、`WebFs.cpp`、`WebOta.cpp`、`WebAppConfig.cpp`：按功能分组的 handler。
 
 职责：
 
@@ -118,6 +119,8 @@ Network 可使用 Bus，但不强依赖 Bus。
 - JSON helper。
 
 Web 依赖 WiFi。
+
+Web 是多编译单元实现，不再通过单个巨大 `.inc` 承载全部页面。`library.json` 必须显式编译 `src/web/*.cpp` 和 `src/web/internal/*.cpp`；每个 Web 源文件仍用 profile 宏保护，确保 CORE/RUNTIME/NET 等非 Web profile 不链接 WebServer、Update、LittleFS 等重依赖。
 
 Web 启动条件：
 

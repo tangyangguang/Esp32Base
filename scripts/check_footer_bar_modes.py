@@ -5,7 +5,31 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def read(path):
+    if path == "src/web/internal Web modules":
+        return read_web_source()
     return (ROOT / path).read_text(encoding="utf-8")
+
+WEB_SOURCE_PATHS = [
+    "src/web/Esp32BaseWeb.cpp",
+    "src/web/internal/WebInternal.h",
+    "src/web/internal/WebContext.h",
+    "src/web/internal/WebContext.cpp",
+    "src/web/internal/WebAssets.cpp",
+    "src/web/internal/WebAuth.cpp",
+    "src/web/internal/WebFs.cpp",
+    "src/web/internal/WebLayout.cpp",
+    "src/web/internal/WebLogs.cpp",
+    "src/web/internal/WebOta.cpp",
+    "src/web/internal/WebResponse.cpp",
+    "src/web/internal/WebRouting.cpp",
+    "src/web/internal/WebStatus.cpp",
+    "src/web/internal/WebTools.cpp",
+    "src/web/internal/WebWifi.cpp",
+    "src/web/internal/WebAppConfig.cpp",
+]
+
+def read_web_source() -> str:
+    return "\n".join((ROOT / path).read_text(encoding="utf-8") for path in WEB_SOURCE_PATHS)
 
 
 checks = [
@@ -30,37 +54,37 @@ checks = [
         "missing footerBarMode() public API",
     ),
     (
-        "src/web/Esp32BaseWeb.inc",
+        "src/web/internal Web modules",
         'Esp32BaseConfig::getInt("eb_ui", "footer_mode"',
         "footer mode is not loaded from eb_ui.footer_mode",
     ),
     (
-        "src/web/Esp32BaseWeb.inc",
+        "src/web/internal Web modules",
         'Esp32BaseConfig::setInt("eb_ui", "footer_mode"',
         "footer mode is not saved to eb_ui.footer_mode",
     ),
     (
-        "src/web/Esp32BaseWeb.inc",
+        "src/web/internal Web modules",
         'if (raw == "status")',
         "System page parser does not accept status-only mode",
     ),
     (
-        "src/web/Esp32BaseWeb.inc",
+        "src/web/internal Web modules",
         'sendFooterBarModeOption("status", "Status only", Esp32BaseWeb::FOOTER_BAR_STATUS_ONLY);',
         "System page does not show status-only option",
     ),
     (
-        "src/web/Esp32BaseWeb.inc",
+        "src/web/internal Web modules",
         'g_server.on("/esp32base/tools/footer-bar", HTTP_POST, handleToolsFooterBarPost);',
         "footer bar POST route is not registered",
     ),
     (
-        "src/web/Esp32BaseWeb.inc",
+        "src/web/internal Web modules",
         "case Esp32BaseWeb::FOOTER_BAR_OFF:",
         "sendFooter() does not handle OFF mode",
     ),
     (
-        "src/web/Esp32BaseWeb.inc",
+        "src/web/internal Web modules",
         "case Esp32BaseWeb::FOOTER_BAR_STATUS_ONLY:",
         "sendFooter() does not handle status-only mode",
     ),

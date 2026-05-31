@@ -5,7 +5,31 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def read(path):
+    if path == "src/web/internal Web modules":
+        return read_web_source()
     return (ROOT / path).read_text(encoding="utf-8")
+
+WEB_SOURCE_PATHS = [
+    "src/web/Esp32BaseWeb.cpp",
+    "src/web/internal/WebInternal.h",
+    "src/web/internal/WebContext.h",
+    "src/web/internal/WebContext.cpp",
+    "src/web/internal/WebAssets.cpp",
+    "src/web/internal/WebAuth.cpp",
+    "src/web/internal/WebFs.cpp",
+    "src/web/internal/WebLayout.cpp",
+    "src/web/internal/WebLogs.cpp",
+    "src/web/internal/WebOta.cpp",
+    "src/web/internal/WebResponse.cpp",
+    "src/web/internal/WebRouting.cpp",
+    "src/web/internal/WebStatus.cpp",
+    "src/web/internal/WebTools.cpp",
+    "src/web/internal/WebWifi.cpp",
+    "src/web/internal/WebAppConfig.cpp",
+]
+
+def read_web_source() -> str:
+    return "\n".join((ROOT / path).read_text(encoding="utf-8") for path in WEB_SOURCE_PATHS)
 
 
 checks = [
@@ -60,37 +84,37 @@ checks = [
         "missing FileLog faulted() implementation",
     ),
     (
-        "src/web/Esp32BaseWeb.inc",
+        "src/web/internal Web modules",
         'Esp32BaseFileLog::faulted() ? "write fault"',
         "Status/Logs pages must distinguish runtime write fault from disabled mode",
     ),
     (
-        "src/web/Esp32BaseWeb.inc",
+        "src/web/internal Web modules",
         "New FileLog writes are stopped after a FS write failure.",
         "Logs/System pages must explain that write fault does not mean old logs are unreadable",
     ),
     (
-        "src/web/Esp32BaseWeb.inc",
+        "src/web/internal Web modules",
         "FileLog mode is OFF. Existing log files are historical; new logs are not written.",
         "Logs/System pages must make disabled FileLog state visible",
     ),
     (
-        "src/web/Esp32BaseWeb.inc",
+        "src/web/internal Web modules",
         'sendFileLogRuntimeStateRow("Runtime state");',
         "Tools page must expose FileLog runtime state",
     ),
     (
-        "src/web/Esp32BaseWeb.inc",
+        "src/web/internal Web modules",
         'ESP32BASE_LOG_W("web", "filelog_mode_requested source=tools',
         "FileLog mode request should stay WARN because it is a system-level configuration change",
     ),
     (
-        "src/web/Esp32BaseWeb.inc",
+        "src/web/internal Web modules",
         'if (raw == "error")',
         "Web FileLog parser does not accept error",
     ),
     (
-        "src/web/Esp32BaseWeb.inc",
+        "src/web/internal Web modules",
         'sendFileLogModeOption("error", "ERROR", Esp32BaseFileLog::ERROR);',
         "Web FileLog form does not show ERROR",
     ),

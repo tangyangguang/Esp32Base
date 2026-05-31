@@ -20,7 +20,9 @@
     "includeDir": "src",
     "srcFilter": [
       "+<*.cpp>",
-      "+<core/*.cpp>"
+      "+<core/*.cpp>",
+      "+<web/*.cpp>",
+      "+<web/internal/*.cpp>"
     ]
   },
   "export": {

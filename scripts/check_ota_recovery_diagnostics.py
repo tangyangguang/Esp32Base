@@ -11,10 +11,32 @@ def require(text: str, needle: str, message: str, errors: list[str]) -> None:
         errors.append(message)
 
 
+WEB_SOURCE_PATHS = [
+    "src/web/Esp32BaseWeb.cpp",
+    "src/web/internal/WebInternal.h",
+    "src/web/internal/WebContext.h",
+    "src/web/internal/WebContext.cpp",
+    "src/web/internal/WebAssets.cpp",
+    "src/web/internal/WebAuth.cpp",
+    "src/web/internal/WebFs.cpp",
+    "src/web/internal/WebLayout.cpp",
+    "src/web/internal/WebLogs.cpp",
+    "src/web/internal/WebOta.cpp",
+    "src/web/internal/WebResponse.cpp",
+    "src/web/internal/WebRouting.cpp",
+    "src/web/internal/WebStatus.cpp",
+    "src/web/internal/WebTools.cpp",
+    "src/web/internal/WebWifi.cpp",
+    "src/web/internal/WebAppConfig.cpp",
+]
+
+def read_web_source() -> str:
+    return "\n".join((ROOT / path).read_text(encoding="utf-8") for path in WEB_SOURCE_PATHS)
+
 def main() -> int:
     ota = (ROOT / "src/update/Esp32BaseOta.inc").read_text()
     ota_h = (ROOT / "src/update/Esp32BaseOta.h").read_text()
-    web = (ROOT / "src/web/Esp32BaseWeb.inc").read_text()
+    web = read_web_source()
     docs = (ROOT / "docs/05_ota.md").read_text()
     readme = (ROOT / "README.md").read_text()
     changelog = (ROOT / "CHANGELOG.md").read_text()

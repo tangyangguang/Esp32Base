@@ -2,6 +2,22 @@
 
 本文从 2026-05-06 起记录 Esp32Base 新增和优化的能力，面向正在接入本库的业务项目。业务项目应优先查看本文，了解最近可用的新 API、行为变化和推荐接入方式。
 
+## 2026-05-31
+
+### Web 内部多编译单元重构
+
+优化：
+
+- Web 实现从单个巨型 `Esp32BaseWeb.inc` 拆为 `Esp32BaseWeb.cpp` facade、`WebContext`、`WebResponse`、`WebLayout`、`WebAssets` 和按功能分组的 Status/WiFi/Auth/Tools/Logs/FS/OTA/AppConfig 模块。
+- `library.json` 现在显式编译 `src/web/*.cpp` 与 `src/web/internal/*.cpp`；非 Web profile 仍由 profile 宏裁剪，不应链接 WebServer、Update、LittleFS 等重依赖。
+- 发送路径继续使用同一个 512 B chunk buffer、PROGMEM 资源和 raw chunked writer，不新增页面对象层级、动态分配或大 `String` 拼接。
+- Web/FS/OTA/FileLog 相关检查脚本改为检查新的 Web 模块集合，不再依赖旧 `.inc` 文件。
+
+业务侧影响：
+
+- 公开 API、HTTP 路由、页面行为、CSS 缓存、Auth、OTA、FS、Logs 和 App Config 语义不变；业务项目正常 include `Esp32Base.h` 即可。
+- 自定义 PlatformIO 发布或打包流程如果覆盖了本库 `library.json` 的 `srcFilter`，需要确认包含 `src/web/*.cpp` 和 `src/web/internal/*.cpp`。
+
 ## 2026-05-30
 
 ### FS 上传目录选择与写入校验收紧

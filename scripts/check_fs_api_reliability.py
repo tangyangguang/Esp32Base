@@ -10,7 +10,30 @@ def read(path):
 
 source = read("src/runtime/Esp32BaseFs.inc")
 filelog = read("src/runtime/Esp32BaseFileLog.inc")
-web = read("src/web/Esp32BaseWeb.inc")
+
+WEB_SOURCE_PATHS = [
+    "src/web/Esp32BaseWeb.cpp",
+    "src/web/internal/WebInternal.h",
+    "src/web/internal/WebContext.h",
+    "src/web/internal/WebContext.cpp",
+    "src/web/internal/WebAssets.cpp",
+    "src/web/internal/WebAuth.cpp",
+    "src/web/internal/WebFs.cpp",
+    "src/web/internal/WebLayout.cpp",
+    "src/web/internal/WebLogs.cpp",
+    "src/web/internal/WebOta.cpp",
+    "src/web/internal/WebResponse.cpp",
+    "src/web/internal/WebRouting.cpp",
+    "src/web/internal/WebStatus.cpp",
+    "src/web/internal/WebTools.cpp",
+    "src/web/internal/WebWifi.cpp",
+    "src/web/internal/WebAppConfig.cpp",
+]
+
+def read_web_source() -> str:
+    return "\n".join((ROOT / path).read_text(encoding="utf-8") for path in WEB_SOURCE_PATHS)
+
+web = read_web_source()
 docs = {
     "docs/03_api.md": "底层声明文件仍有剩余内容但读出 0 字节时，`readBytes()` / `readBytesAt()` 返回 false",
     "docs/10_known_limitations.md": "逻辑文件大小不等于内容一定可读",
@@ -33,7 +56,7 @@ for needle, message in checks:
         errors.append(f"src/runtime/Esp32BaseFs.inc: {message}")
 
 if "Esp32BaseFs::readBytesAt(path, 0, &value, 1, &readLen) && readLen == 1" not in web:
-    errors.append("src/web/Esp32BaseWeb.inc: FS tree readability check must use Esp32BaseFs failure semantics")
+    errors.append("src/web/internal Web modules: FS tree readability check must use Esp32BaseFs failure semantics")
 
 for needle, message in (
     ("void sendFsUnreadableActions(", "FS management must keep delete available for unreadable files"),
@@ -43,7 +66,7 @@ for needle, message in (
     ("Esp32BaseFileLog::begin();", "FS delete should let FileLog retry after maintenance frees space"),
 ):
     if needle not in web:
-        errors.append(f"src/web/Esp32BaseWeb.inc: {message}")
+        errors.append(f"src/web/internal Web modules: {message}")
 
 for needle, message in (
     ("bool appendCurrentChunk(", "FileLog append must isolate potentially slow FS writes"),

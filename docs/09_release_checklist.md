@@ -45,7 +45,7 @@
 必须通过：
 
 - `platformio pkg pack .` 成功。
-- 发布包包含可选模块 `.inc` 实现文件。
+- 发布包包含可选模块 `.inc` 实现文件，以及 `src/web/*.cpp`、`src/web/internal/*.h/.cpp` Web 多编译单元实现。
 - 发布包包含 `partitions/` 推荐分区表。
 - 推荐分区表的 `app0` 偏移必须和 PlatformIO / Arduino 上传地址一致；默认应为 `0x10000`。
 - 发布包包含示例依赖哨兵 `examples/basic/src/deps_*.cpp`。
@@ -54,6 +54,8 @@
 - 发布包不包含 `.pio/`、`.cache/`、`idf_component.yml` 等构建生成物。
 
 ## 5. 裁剪检查
+
+- CORE profile 不能因为 Web 多编译单元被 `srcFilter` 编译而链接 WebServer、WiFi、Update、LittleFS 等非目标符号；先跑 `examples/basic -e esp32_core`，再跑 `scripts/check_trim_symbols.py`。
 
 必须证明：
 

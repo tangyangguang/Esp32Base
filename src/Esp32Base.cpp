@@ -386,9 +386,6 @@ void Esp32Base::logResources() {
 #if ESP32BASE_ENABLE_MDNS
 #include "network/Esp32BaseMdns.inc"
 #endif
-#if ESP32BASE_ENABLE_WEB
-#include "web/Esp32BaseWeb.inc"
-#endif
 #if ESP32BASE_ENABLE_OTA
 #include "update/Esp32BaseOta.inc"
 #endif
