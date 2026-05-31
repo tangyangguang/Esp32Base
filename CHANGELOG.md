@@ -4,6 +4,41 @@
 
 ## 2026-05-31
 
+### Web UI 按钮视觉层级
+
+优化：
+
+- 基础 `/esp32base/ui.css` 增加 `--eb-primary-hover`、`--eb-button-soft`、`--eb-button-soft-hover` 和 `--eb-button-border` 变量，业务换肤时可同时覆盖主按钮 hover 和普通浅按钮，不再残留固定 hover 色。
+- 默认按钮高度从重色 32px 收敛到更轻的 30px；普通入口、紧凑行动作和分页按钮使用浅底描边，明确保存/执行类动作仍保留主按钮。
+- 危险动作按钮改为浅危险色和红色边框，继续配合 `dangerpanel`、确认文案和服务端 POST 校验表达风险，避免维护页出现大面积强警告色。
+- `sendInfoRowCompactForm()` 现在和 `sendInfoRowCompactLink()` 一样输出 `.btnlink` tone class，`UI_INFO`、`UI_OK`、`UI_WARN`、`UI_DANGER` 和 `UI_NEUTRAL` 的行内 POST 按钮视觉层级保持一致。
+- 修复 OTA diagnostics 面板使用 `<div>` 包裹 `<tr>` 的非法 HTML，改为 `tablewrap + kv` 表格结构。
+- 新增 `scripts/check_web_ui_baseline.py` 静态检查，覆盖按钮变量、form/link tone 一致性、OTA diagnostics 表格结构和文档变更标记。
+
+业务侧影响：
+
+- 业务页面继续使用 `sendHeader()`、helper 和基础 CSS 即可获得更克制的按钮外观；如果已有自定义主题，只需按需补充 `--eb-primary-hover`、`--eb-button-soft`、`--eb-button-soft-hover` 和 `--eb-button-border`。
+- 已经依赖 `sendInfoRowCompactForm()` 的页面会从主色 submit 按钮切换为轻量 tone 按钮；这符合低频行内动作的推荐语义。
+
+### 双 OTA 串口恢复脚本可靠性优化
+
+修复：
+
+- OTA boot 诊断和 rollback/mark-valid 状态现在在 `Esp32Base::begin()` 早期初始化，不再等待 Web ready；ArduinoOTA/espota 网络服务仍等 Web/Auth ready 后启动，避免新固件 WiFi/Web 未就绪时跳过 mark-valid timeout。
+- OTA 启动日志新增 INFO 级 `boot_summary`，一行输出当前运行槽、configured boot 槽、next update 槽、地址和 ELF SHA256；Web OTA/ArduinoOTA 上传日志新增 `stage=begin/write/verify/set_boot/boot_confirmed/done`，失败日志带当前阶段、目标槽和进度，便于定位是写入、校验还是启动槽切换问题。
+- `scripts/esp32base_serial_recover_ota.py` 不再在写完 bootloader、partition table、boot_app0 和两个 OTA app 槽后另起一条 `erase_region` 清理 `otadata`。
+- 脚本现在生成与 `data/ota` 分区等长的全 `0xFF` 临时镜像，并把它随其他镜像一起放进同一次 `write_flash`，避免第二次 esptool 连接失败导致“两个 app 槽已 Hash verified，但 `otadata` 未清理”的恢复假象。
+- 当 `boot_app0` 默认偏移与 `otadata` 分区重叠时，脚本会跳过 `boot_app0`，以本次恢复要求的 `otadata` 清理为准，避免同一条 `write_flash` 命令重复写同一地址。
+- 恢复脚本的分区解析支持 `K`/`M` size 和空 offset 自动计算，覆盖 Arduino/ESP-IDF 常见自定义分区表写法。
+- dry-run 输出会明确列出检测到的 OTA 槽、实际写入槽、`otadata` 清理方式和完整 flash plan；执行失败时提示 bootloader 可能仍按旧 `otadata` 选择先前槽位。
+- 脚本执行前会在 macOS/Linux 上尽量检测串口端口占用，避免 `pio device monitor` 未关闭时进入不稳定烧录；同时刷新 flash plan 输出，保证 esptool 日志不会排在恢复计划前面。
+- 新增 `scripts/check_ota_boot_safety.py` 和扩展 `scripts/check_serial_recover_ota.py`，覆盖 OTA early rollback 初始化、ESP32_Faucet 这类 `otadata=0x19000`、`ota_0=0x20000`、`ota_1=0x180000` 分区表、`boot_app0` 与 `otadata` 同为 `0xe000` 的常见分区表，以及 `K`/`M` 和空 offset 分区表。
+
+业务侧影响：
+
+- WebOTA 后再做串口恢复时，推荐继续使用恢复脚本；普通串口 upload 只写固定 app 槽，不一定覆盖当前启动槽，也不会自动改写 `otadata`。
+- 手写 esptool 恢复命令时，应优先在同一次 `write_flash` 中同时写两个 OTA 槽和全 `0xFF` 的 `otadata` 镜像；把 `erase_region` 放到第二条命令会重新依赖板子的下载模式进入时序。
+
 ### FS 定长文件初始化 API
 
 新增：

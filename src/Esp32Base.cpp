@@ -130,6 +130,15 @@ bool Esp32Base::begin() {
         return false;
     }
     ESP32BASE_LOG_D("base", "module_ready name=system");
+#if ESP32BASE_ENABLE_OTA
+    // Keep ESP32BASE_OTA_REQUIRE_MARK_VALID rollback timing independent from WiFi/Web readiness.
+    ESP32BASE_LOG_D("base", "module_begin name=ota_boot");
+    if (!Esp32BaseOta::begin()) {
+        esp32base_internal::copySafe(g_lastError, sizeof(g_lastError), "ota");
+        return false;
+    }
+    ESP32BASE_LOG_D("base", "module_ready name=ota_boot");
+#endif
 #if ESP32BASE_ENABLE_NTP
     Esp32BaseNtp::initBootSession();
 #endif
@@ -258,12 +267,12 @@ void Esp32Base::handle() {
     }
 #endif
 #if ESP32BASE_ENABLE_OTA
-    if (Esp32BaseWeb::isReady() && !Esp32BaseOta::isReady()) {
+    if (Esp32BaseWeb::isReady() && Esp32BaseOta::isReady()) {
         if (!g_otaStartDebugLogged) {
-            ESP32BASE_LOG_D("base", "deferred_start module=ota reason=web_ready");
+            ESP32BASE_LOG_D("base", "deferred_start module=ota_network reason=web_ready");
             g_otaStartDebugLogged = true;
         }
-        Esp32BaseOta::begin();
+        Esp32BaseOta::beginNetworkServices();
     }
 #endif
 #if ESP32BASE_ENABLE_WEB

@@ -21,6 +21,7 @@ public:
     };
 
     static bool begin();
+    static bool beginNetworkServices();
     static void handle();
     static bool isReady();
     static bool isUploading();

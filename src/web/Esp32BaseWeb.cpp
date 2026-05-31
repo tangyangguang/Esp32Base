@@ -566,10 +566,9 @@ void Esp32BaseWeb::sendInfoRowCompactForm(const char* title, const char* help, c
         sendEscapedHtmlChunk(hiddenValue ? hiddenValue : "");
         sendChunk("'>");
     }
-    sendChunk("<input type='submit'");
-    if (tone == UI_DANGER) {
-        sendChunk(" class='danger'");
-    }
+    sendChunk("<input type='submit' class='btnlink");
+    sendChunk(uiToneClass(tone));
+    sendChunk("'");
     sendChunk(" value='");
     sendEscapedHtmlChunk(label ? label : "");
     sendChunk("'></form>");

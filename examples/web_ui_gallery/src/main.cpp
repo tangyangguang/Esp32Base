@@ -155,8 +155,11 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".heap{flex:0 0 auto;margin-left:auto;white-space:nowrap;text-align:right;font-size:11px}");
     RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".toollinks .urow{grid-template-columns:minmax(0,1fr) auto;gap:8px}");
     RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".pagination .btnlink,.pagination button,.pagination select,.pagination input{font-size:12px;min-height:26px");
-    RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".uactions{display:grid;grid-template-columns:4em 96px;gap:16px");
-    RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".uactions .btnlink,.uactions input[type=submit]{width:96px");
+    RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, "--eb-primary-hover:#125965;--eb-primary-soft:#e8f3f5;--eb-button-soft:#f7fafb");
+    RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, "button,input[type=submit],input[type=button]{font-size:14px;background:var(--eb-primary);color:#fff;min-height:30px");
+    RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".uactions{display:grid;grid-template-columns:4em minmax(96px,max-content);gap:14px");
+    RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".uactions .btnlink,.uactions input[type=submit]{min-width:96px");
+    RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".btnlink,input.btnlink{display:inline-flex;align-items:center;justify-content:center;min-height:30px");
     RUN_SELFTEST("GET", "/ui-records?page=2", nullptr, true, 200, "aria-current='page'>2</span>", "当前第");
     RUN_SELFTEST("GET", "/ui-records?range=24h&type=all&per=20&page=2", nullptr, true, 200, "filterbar", "name='start'");
     RUN_SELFTEST("GET", "/ui-records?range=custom&type=all&start=2026-05-28T08:00&end=2026-05-28T09:00", nullptr, true, 200, "name='start'");
@@ -168,6 +171,7 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/ui-config?edit=name", nullptr, true, 200, "行内编辑");
     RUN_SELFTEST("POST", "/ui-config/name", "name=flower", true, 303, "Location: /ui-config?saved=1");
     RUN_SELFTEST("GET", "/ui-action", nullptr, true, 200, "操作命令");
+    RUN_SELFTEST("GET", "/ui-action", nullptr, true, 200, "<input type='submit' class='btnlink info' value='开始'>");
     RUN_SELFTEST("POST", "/ui-action/run", "run=1", true, 303, "Location: /ui-action?done=1");
     RUN_SELFTEST("GET", "/ui-config/flow?saved=1", nullptr, true, 200, "流程向导");
     RUN_SELFTEST("GET", "/ui-status/maintenance", nullptr, true, 200, "诊断维护");

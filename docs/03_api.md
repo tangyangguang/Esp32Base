@@ -803,7 +803,7 @@ Route 缓冲机制：
 - `FooterBarMode` 控制 `sendFooter()` 的底部横条输出：`FOOTER_BAR_OFF` 不显示，`FOOTER_BAR_STATUS_ONLY` 只显示运行摘要，`FOOTER_BAR_FULL` 显示系统入口和运行摘要。默认 `FOOTER_BAR_FULL`，System 页面保存后写入 `eb_ui.footer_mode` 并立即影响后续页面输出。
 - `setBuiltinLabel()` 覆盖内置导航标签，可用于中文本地化；系统工具页统一使用 `BUILTIN_TOOLS`，不提供旧 Reboot 历史别名。
 - `setHeadExtraCallback()` 设置额外 head 输出回调；`sendHeader()` 在默认 `WEB_HEAD` 后、`</head><body>` 和顶部导航前调用它，业务项目可在这里输出 `<style>`，避免页面刷新时先显示基础库默认导航样式。该回调不会注入 `/esp32base` 及其子路径的内置页面，避免业务 CSS 增加内置页体积。
-- Web UI helper 只负责轻量 HTML 结构和统一样式，不接管业务数据模型：`sendPageTitle()` 输出页面标题区，`beginPanel()` / `endPanel()` 输出内容分组，`sendNotice()` / `sendResultNotice()` 输出横向状态反馈，`beginMetricGrid()` / `sendMetric()` / `endMetricGrid()` 输出状态和统计摘要，`sendInfoRowCompact*()` 输出紧凑信息行和单动作，`sendPagination()` 输出页码型分页、每页条数和跳页表单。
+- Web UI helper 只负责轻量 HTML 结构和统一样式，不接管业务数据模型：`sendPageTitle()` 输出页面标题区，`beginPanel()` / `endPanel()` 输出内容分组，`sendNotice()` / `sendResultNotice()` 输出横向状态反馈，`beginMetricGrid()` / `sendMetric()` / `endMetricGrid()` 输出状态和统计摘要，`sendInfoRowCompact*()` 输出紧凑信息行和单动作，`sendPagination()` 输出页码型分页、每页条数和跳页表单。`sendInfoRowCompactLink()` 和 `sendInfoRowCompactForm()` 都会按 `UiTone` 输出轻量 `.btnlink` 动作按钮，适合低频行内动作；页面级明确保存/执行按钮仍可直接使用普通 submit 按钮。
 - `UiTone` 仅表达语义色：neutral、ok、warn、danger、info。业务项目不得把危险、警告、成功语义当作普通装饰色复用。
 - 导航会给当前匹配项输出 `active` class；匹配规则为 path 完全相等，或当前路径以 `path + "/"` 开头，多个匹配时选择最长 path。`SYSTEM_NAV_SECTION` 下 WiFi/Auth/OTA 二级页会把底部 System 入口标记为 active；App Config 页面在启用时使用自己的底部入口标记 active。
 - `/esp32base` Status 页是只读设备体检页，采用诊断优先结构：不额外显示和相邻详细区重复的 `System Overview` 预览块，而是按 Device、Network、Runtime Health、Storage & Logs、Firmware & OTA、Hardware、Partition Table 排序展示 hostname、固件/profile、uptime/boot count、WiFi/IP/RSSI、STA/AP/eFuse MAC、heap、max alloc、Watchdog lifetime/trip resets、NTP time、last reset/wake、FS/File inventory/FileLog/OTA headroom 和运行时分区表；File details 入口并入 FS 行，FileLog level/current/used/limit 合并为一行子指标，Top 文件列表只放在 `/esp32base/fs` 详情页，页面容量值只显示 KB/MB/B 人性化格式，`OTA headroom` 表示 `target slot - current sketch`，Max OTA upload 才是上传硬上限。
@@ -940,6 +940,7 @@ public:
     };
 
     static bool begin();
+    static bool beginNetworkServices();
     static void handle();
     static bool isReady();
     static bool isUploading();
@@ -960,6 +961,8 @@ public:
     static void rollbackAndRestart(const char* reason);
 };
 ```
+
+`begin()` 只初始化 OTA boot 诊断和 rollback/mark-valid 状态，应在系统启动早期执行；`beginNetworkServices()` 在 Web/Auth ready 后启动 ArduinoOTA/espota 网络入口。普通业务通常不需要直接调用这两个函数，由 `Esp32Base` 统一调度。
 
 `Update.end(true)` 必须在 SHA256 校验通过、且实际接收字节数等于声明总大小之后调用。
 

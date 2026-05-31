@@ -393,6 +393,7 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/auth", nullptr, true, 200, "Confirm new auth password");
     RUN_SELFTEST("GET", "/esp32base/auth", nullptr, true, 200, "New passwords do not match");
     RUN_SELFTEST("GET", "/esp32base/ota", nullptr, true, 200, "<title>OTA</title>");
+    RUN_SELFTEST("GET", "/esp32base/ota", nullptr, true, 200, "<section class='panel statuspage'><h2>OTA diagnostics</h2><div class='tablewrap'><table class='kv'>");
     RUN_SELFTEST("GET", "/esp32base/ota", nullptr, true, 200, "<section class='panel formpanel uploadpanel'><h2>Firmware upload</h2>");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "<title>System</title>");
     RUN_SELFTEST("GET", "/esp32base/tools", nullptr, true, 200, "<section class='panel actionpanel'><h2>System settings</h2>");

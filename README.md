@@ -21,7 +21,7 @@
 
 Web 页面结构、样式基线、业务页面模板和换肤策略详见 [Web UI 页面结构与样式基线](docs/11_web_ui_baseline.md)。
 业务项目接入前，建议先用 `examples/web_ui_gallery` 统一查看和验证状态、记录、配置、命令、流程、确认和空状态等页面样式；`examples/full_demo` 侧重完整功能集成。
-基础 Web CSS 由 `/esp32base/ui.css` 统一输出并允许浏览器缓存，业务页面通过 `sendHeader()` 自动引用，不需要复制样式。
+基础 Web CSS 由 `/esp32base/ui.css` 统一输出并允许浏览器缓存，业务页面通过 `sendHeader()` 自动引用，不需要复制样式；按钮默认按轻量设备控制台风格收敛，普通入口和分页使用浅底描边，明确保存/执行才使用主按钮。
 
 ## 快速开始
 
@@ -158,7 +158,7 @@ pio run -t webota
 
 `espota` 是 ArduinoOTA 标准协议；`webota` 是 Esp32Base 提供的 HTTP 上传方式，默认较大分块并在上传前预检认证，通常更适合反复快速烧录，但要求设备 Web OTA 可访问。
 
-双 OTA 设备如果已经通过 Web OTA 切换到另一个槽位，串口只写 `board_upload.offset_address` 对应的 `ota_0` 不一定会改变实际启动槽；`otadata` 仍可能指向旧的 `ota_1`。串口恢复优先使用基础库脚本，它会按分区表写入两个 OTA app 槽并清除 `otadata`：
+双 OTA 设备如果已经通过 Web OTA 切换到另一个槽位，普通串口 `pio run -t upload` 通常只写 `board_upload.offset_address` 对应的固定 app 槽，不会自动覆盖当前运行槽，也不会修改 `otadata`；设备仍可能继续从旧的 `ota_1` 启动。串口恢复优先使用基础库脚本，它会按分区表写入两个 OTA app 槽，并在同一次 `write_flash` 里写入全 `0xFF` 的 `otadata` 镜像完成清理；如果 `boot_app0` 默认偏移与 `otadata` 重叠，脚本会跳过 `boot_app0`，以清理 `otadata` 为准：
 
 ```sh
 python path/to/Esp32Base/scripts/esp32base_serial_recover_ota.py \
@@ -167,7 +167,7 @@ python path/to/Esp32Base/scripts/esp32base_serial_recover_ota.py \
   --port /dev/ttyUSB0
 ```
 
-可先加 `--dry-run` 查看将执行的 `esptool.py` 命令；特殊分区表或板型可显式覆盖 bootloader、partition table 和 boot_app0 偏移。
+可先加 `--dry-run` 查看将执行的 `esptool.py` 命令和 `otadata` 处理方式；特殊分区表或板型可显式覆盖 bootloader、partition table 和 boot_app0 偏移。执行恢复前先关闭 `pio device monitor`、串口调试器和其他占用同一端口的程序；如果 CH340/CP210x 转串口在高波特率下出现 `Serial data stream stopped` 或连接中断，可用 `--baud 115200` 降速重试。
 
 ## 文档入口
 

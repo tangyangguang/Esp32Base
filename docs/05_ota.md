@@ -83,6 +83,7 @@ pio run -t webota
 - `Update.begin()` 失败时会把底层 Update 错误字符串写入 `lastError()`，便于区分空间、flash 或 Update 状态问题。
 - Web OTA 写入成功后会读取 `esp_ota_get_boot_partition()` 二次确认下一启动分区已经切到本次写入目标；确认失败时返回 OTA 失败，不进入自动重启。
 - `/esp32base/api/ota` 返回当前 running partition、configured boot partition、next update partition、app partition 列表、镜像 SHA256、版本、OTA state、本次上传目标、实际计算 SHA256 和最后错误，便于判断设备当前运行的是哪个槽位和哪个固件。
+- OTA boot 诊断和 rollback/mark-valid 状态在 `Esp32Base::begin()` 早期初始化，不等待 WiFi/Web ready；ArduinoOTA/espota 网络服务仍在 Web/Auth ready 后启动，确保密码来源正确。
 
 ## 3. 状态机
 
@@ -177,7 +178,11 @@ Update.end(true) -> compare SHA256
 
 ## 6. 双 OTA 串口恢复
 
-双 OTA 设备通过 Web OTA 成功启动过 `ota_1` 后，`otadata` 可能仍指向 `ota_1`。此时串口 `pio run -t upload` 如果只写 `board_upload.offset_address` 指向的 `ota_0`，不会自动修改 `otadata`，设备仍可能继续从 `ota_1` 启动旧固件；串口日志中的 `ELF file SHA256` 也会继续显示旧固件值。
+双 OTA 设备通过 Web OTA 成功启动过 `ota_1` 后，`otadata` 可能仍指向 `ota_1`。此时普通串口 `pio run -t upload` 通常只写 `board_upload.offset_address` 指向的固定 app 槽，例如 `ota_0`；它不会自动覆盖当前运行槽，也不会修改 `otadata`，设备仍可能继续从 `ota_1` 启动旧固件。串口日志中的 `ELF file SHA256` 也会继续显示旧固件值。
+
+启用 OTA 的固件启动时会输出一条 INFO 级 `boot_summary`，包含 `running_partition`、`configured_boot_partition`、`next_update_partition`、分区地址和当前 ELF SHA256。排查“烧录后仍运行旧程序”时，先看 `running_partition` 是否仍是旧槽，再看 `configured_boot_partition` 是否指向预期槽；两者不一致时日志会额外输出 `boot_partition_mismatch` 警告。
+
+OTA 上传过程中会输出 INFO 级阶段日志：`upload_start stage=begin` 表示已选择目标槽并开始写入，`upload_progress stage=write` 按 10% 粒度输出写入进度，`upload_stage stage=verify` 表示开始校验 SHA/大小，`upload_stage stage=set_boot` 表示开始完成镜像并切换 boot 分区，`upload_stage stage=boot_confirmed` 表示已读取并确认 bootloader 下次启动槽。失败日志统一带 `stage`、`error`、`target`、`address` 和 `progress`，用于判断失败发生在写入、校验还是启动槽切换阶段。
 
 推荐恢复方式是使用基础库脚本写入两个 OTA app 槽，并清除 `otadata`：
 
@@ -188,9 +193,11 @@ python path/to/Esp32Base/scripts/esp32base_serial_recover_ota.py \
   --port /dev/ttyUSB0
 ```
 
-脚本会先构建目标 PlatformIO env，读取 `board_build.partitions` 对应 CSV，定位 `data/ota`、`ota_0`、`ota_1`，写入 bootloader、partition table、boot_app0 和当前 `firmware.bin`，默认把同一固件写入所有 OTA app 槽并擦除 `otadata`。恢复前可先加 `--dry-run` 查看完整 `esptool.py` 命令；特殊板型可用 `--bootloader-offset`、`--partition-offset`、`--boot-app0-offset` 显式覆盖偏移。
+脚本会先构建目标 PlatformIO env，读取 `board_build.partitions` 对应 CSV，定位 `data/ota`、`ota_0`、`ota_1`，写入 bootloader、partition table、boot_app0 和当前 `firmware.bin`，默认把同一固件写入所有 OTA app 槽。`otadata` 清理不会再作为第二条 `erase_region` 命令执行；脚本会生成一个与 `data/ota` 分区等长的全 `0xFF` 临时镜像，并随其他镜像一起放进同一次 `write_flash`，避免写完 app 槽后因板子未重新进入下载模式而清理失败。部分 Arduino/ESP32 分区表中 `boot_app0` 默认偏移与 `otadata` 相同；此时脚本会跳过 `boot_app0`，以清理 `otadata` 为准，避免同一条命令重复写同一地址。恢复前可先加 `--dry-run` 查看完整 `esptool.py` 命令、写入槽位和 `otadata` 处理方式；特殊板型可用 `--bootloader-offset`、`--partition-offset`、`--boot-app0-offset` 显式覆盖偏移。
 
-如果只想手动恢复，原则是写入当前启动槽或同时写入两个 OTA 槽，并清除 `otadata`。例如 ESP32_Faucet 的 4MB 双 OTA 分区表中 `otadata=0x19000`、`ota_0=0x20000`、`ota_1=0x180000`，恢复命令应至少覆盖当前实际启动槽；最稳妥是同一份 `firmware.bin` 同时写入 `0x20000` 和 `0x180000` 后 `erase_region 0x19000 0x2000`。
+恢复脚本独占串口。执行前先关闭 `pio device monitor`、IDE 串口监视器和其他占用同一 `/dev/cu.*` 或 `/dev/tty.*` 端口的程序；脚本在 macOS/Linux 上会尽量用 `lsof` 提前报告占用者。部分 CH340/CP210x 板子在 460800 下可能进入 stub 后传输中断，可用 `--baud 115200` 降速恢复；如果仍停在 `Connecting...`，需要按住 BOOT 并复位，让设备重新进入下载模式。
+
+如果只想手动恢复，原则是写入当前启动槽或同时写入两个 OTA 槽，并清除 `otadata`。例如 ESP32_Faucet 的 4MB 双 OTA 分区表中 `otadata=0x19000`、`ota_0=0x20000`、`ota_1=0x180000`，恢复命令应至少覆盖当前实际启动槽；最稳妥是同一份 `firmware.bin` 同时写入 `0x20000` 和 `0x180000`，并在同一次 `write_flash` 中把 0x2000 字节全 `0xFF` 镜像写到 `0x19000`。如果把 `erase_region 0x19000 0x2000` 放到第二条 esptool 命令执行，部分板子需要再次手工按 BOOT 进入下载模式，否则可能出现两个 OTA 槽都写入成功但 `otadata` 未清理的恢复假象。
 
 ## 7. Watchdog
 
@@ -279,7 +286,7 @@ void rollbackAndRestart(const char* reason);
 
 - 新固件启动后，应用自检通过再调用 `markCurrentValid()`。
 - 若启用自动 mark valid timeout，`Esp32BaseOta::handle()` 负责检查超时并 rollback。
-- timeout 从当前固件 boot 完成后开始计算。
+- timeout 从 OTA boot 状态初始化完成后开始计算，不依赖 WiFi 连接或 Web 服务启动。
 - timeout 状态绑定当前 running partition，避免 rollback 后再次误判形成循环。
 
 宏：
@@ -303,7 +310,10 @@ ESP32BASE_OTA_MARK_VALID_TIMEOUT_MS=30000
 - `pio run -t webota` 可通过 IP 地址上传，错误 Web Auth 失败且设备保持可访问。
 - Web OTA 与 espota 不得同时写 flash。
 - Web OTA 成功后 `/esp32base/api/ota` 中 `bootPartition` 与 `lastTargetPartition` 一致。
-- 双 OTA 串口恢复脚本 dry-run 输出两个 OTA app 槽写入和 `otadata` 擦除命令。
+- 启用 `ESP32BASE_OTA_REQUIRE_MARK_VALID=1` 时，即使 WiFi/Web 未 ready，OTA boot/rollback 状态也已初始化，`handle()` 能执行 mark-valid timeout 检查。
+- 双 OTA 串口恢复脚本 dry-run 输出两个 OTA app 槽写入，并显示 `otadata` 会在同一次 `write_flash` 中写入全 `0xFF` 镜像完成清理。
+- 双 OTA 串口恢复脚本 dry-run 覆盖 hex、K/M 和空 offset 分区表，确认能解析 `otadata`、`ota_0`、`ota_1`。
+- 双 OTA 串口恢复前关闭串口 monitor；测试覆盖端口占用诊断，实机恢复失败时优先排查 monitor 占用、下载模式进入和高波特率链路稳定性。
 - SHA256 错误，上传失败且不切换分区。
 - OTA 中途断电 30% / 70% / 99%。
 - OTA 后未 mark valid，确认回滚。

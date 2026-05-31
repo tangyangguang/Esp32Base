@@ -438,7 +438,7 @@ Web UI baseline 支持 CSS 变量级换肤。业务项目可通过 `setHeadExtra
 
 ```cpp
 void handleHeadExtra() {
-    Esp32BaseWeb::sendChunk("<style>:root{--eb-primary:#245f9e;--eb-primary-soft:#e8f0f8}</style>");
+    Esp32BaseWeb::sendChunk("<style>:root{--eb-primary:#245f9e;--eb-primary-hover:#1f4f83;--eb-primary-soft:#e8f0f8;--eb-button-soft:#f7fafb;--eb-button-border:#d9e5ea}</style>");
 }
 ```
 
@@ -449,6 +449,7 @@ void handleHeadExtra() {
 - PC 宽屏下控件不无意义拉满。
 - 手机端导航、行、分页自然堆叠或横向滚动，不出现文字重叠。
 - 按钮文字居中，动态内容不改变整体布局。
+- 主按钮只用于明确提交/执行；普通入口、分页和低频工具动作使用浅底描边按钮，整体高度不要显得过高或过胖。
 - 紧凑行动作和分页跳转使用按钮型链接，不使用小尺寸状态标签代替可点击控件。
 - 紧凑行同时包含状态值和动作时，状态值与按钮之间必须有清晰间距。
 - 紧凑行右侧使用固定值列和动作列；同一组内的状态值、数量和按钮应竖向对齐。
@@ -462,7 +463,7 @@ void handleHeadExtra() {
 - 重定向后的成功、失败、拒绝状态清楚可见。
 - 登录、权限不足和只读受限状态可理解。
 - 诊断维护页中的原始片段有长度边界，不成为主页面体验。
-- 覆盖 `--eb-primary` 和 `--eb-bg` 后页面仍保持语义清楚。
+- 覆盖 `--eb-primary`、`--eb-primary-hover`、`--eb-button-soft` 和 `--eb-bg` 后页面仍保持语义清楚。
 
 ## 9. JSON 输出
 

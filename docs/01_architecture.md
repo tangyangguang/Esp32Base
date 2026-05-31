@@ -226,7 +226,7 @@ ESP32BASE_STRICT_OPTIONAL_BEGIN=0
 6. 条件启动 Web。
 7. 条件启动 NTP。
 8. 条件启动 mDNS。
-9. 条件启动 OTA。
+9. 条件启动 OTA 网络服务（ArduinoOTA/espota）。
 10. Web handle。
 11. OTA handle，包含 mark-valid timeout 检查。
 12. Health handle。
@@ -234,6 +234,8 @@ ESP32BASE_STRICT_OPTIONAL_BEGIN=0
 14. 一次性启动诊断日志。
 
 LittleFS 当前没有 maintenance 任务，不在 handle 中做额外维护。
+
+OTA boot 诊断和 rollback/mark-valid 状态不属于条件网络服务；它在 `Esp32Base::begin()` 的 system 模块之后立即初始化，避免 WiFi/Web 未就绪时跳过 rollback timeout。
 
 ## 11. 生命周期
 

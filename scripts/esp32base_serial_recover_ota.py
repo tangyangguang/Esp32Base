@@ -11,9 +11,10 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import os
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -21,14 +22,47 @@ def parse_int(value: str) -> int:
     return int(str(value).strip(), 0)
 
 
+def parse_size(value: str) -> int:
+    text = str(value).strip()
+    if not text:
+        raise ValueError("empty size")
+    suffix = text[-1].upper()
+    if suffix in ("K", "M"):
+        number = text[:-1].strip()
+        if not number:
+            raise ValueError(f"invalid size: {value}")
+        multiplier = 1024 if suffix == "K" else 1024 * 1024
+        return int(number, 0) * multiplier
+    return parse_int(text)
+
+
+def align_up(value: int, alignment: int) -> int:
+    return (value + alignment - 1) // alignment * alignment
+
+
 def fmt(value: int) -> str:
     return f"0x{value:x}"
 
 
 def run(cmd: list[str], cwd: Path, dry_run: bool = False) -> None:
-    print("+ " + " ".join(str(part) for part in cmd))
+    print("+ " + " ".join(str(part) for part in cmd), flush=True)
     if not dry_run:
         subprocess.run(cmd, cwd=str(cwd), check=True)
+
+
+def serial_port_busy_report(port: str) -> str | None:
+    if not port.startswith("/dev/"):
+        return None
+    lsof = shutil.which("lsof")
+    if not lsof:
+        return None
+    proc = subprocess.run([lsof, port], text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    if proc.returncode != 0:
+        return None
+    lines = [line for line in proc.stdout.splitlines() if line.strip()]
+    if len(lines) <= 1:
+        return None
+    return "\n".join(lines[:8])
 
 
 def project_config(project_dir: Path) -> dict[str, dict[str, object]]:
@@ -74,20 +108,27 @@ def partition_csv_path(project_dir: Path, config: dict[str, dict[str, object]], 
 
 def parse_partitions(path: Path) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
+    next_offset = 0x9000
     with path.open(newline="") as fh:
         for raw in csv.reader(line for line in fh if line.strip() and not line.lstrip().startswith("#")):
             if len(raw) < 5:
                 continue
             name, ptype, subtype, offset, size = [item.strip() for item in raw[:5]]
+            parsed_size = parse_size(size)
+            if offset:
+                parsed_offset = parse_int(offset)
+            else:
+                parsed_offset = align_up(next_offset, 0x10000 if ptype == "app" else 0x1000)
             rows.append(
                 {
                     "name": name,
                     "type": ptype,
                     "subtype": subtype,
-                    "offset": parse_int(offset),
-                    "size": parse_int(size),
+                    "offset": parsed_offset,
+                    "size": parsed_size,
                 }
             )
+            next_offset = max(next_offset, parsed_offset + parsed_size)
     return rows
 
 
@@ -123,6 +164,16 @@ def find_esptool() -> Path:
 def find_boot_app0() -> Path | None:
     candidate = Path.home() / ".platformio" / "packages" / "framework-arduinoespressif32" / "tools" / "partitions" / "boot_app0.bin"
     return candidate if candidate.exists() else None
+
+
+def write_erased_image(path: Path, size: int) -> None:
+    if size <= 0:
+        raise SystemExit(f"Invalid otadata size: {fmt(size)}")
+    path.write_bytes(b"\xff" * size)
+
+
+def ranges_overlap(a_offset: int, a_size: int, b_offset: int, b_size: int) -> bool:
+    return max(a_offset, b_offset) < min(a_offset + a_size, b_offset + b_size)
 
 
 def main() -> int:
@@ -180,31 +231,80 @@ def main() -> int:
     port = args.port or (str(upload_port) if upload_port and str(upload_port).startswith(("/dev/", "COM", "com")) else None)
     if not port:
         raise SystemExit("Missing serial port; pass --port /dev/ttyUSB0")
+    if not args.dry_run:
+        busy = serial_port_busy_report(port)
+        if busy:
+            raise SystemExit(
+                "Serial port appears busy; close pio device monitor or any other serial monitor before recovery.\n"
+                + busy
+            )
 
     esptool = find_esptool()
-    write_args: list[str] = []
-    if not args.no_bootloader:
-        write_args += [args.bootloader_offset, str(bootloader)]
-    if not args.no_partitions:
-        write_args += [args.partition_offset, str(partitions_bin)]
-    if not args.no_boot_app0 and boot_app0:
-        boot_app0_offset = parse_int(args.boot_app0_offset) if args.boot_app0_offset else int(ota_slots[0]["offset"]) - 0x2000
-        write_args += [fmt(boot_app0_offset), str(boot_app0)]
-
-    selected_ota_slots = ota_slots if args.write_both_ota else [ota_slots[0]]
-    for slot in selected_ota_slots:
-        write_args += [fmt(int(slot["offset"])), str(firmware)]
-
-    print(f"esp32base_serial_recover_ota environment={env_name} partition_csv={csv_path}")
-    print("OTA slots: " + ", ".join(f"{slot['subtype']}@{fmt(int(slot['offset']))}" for slot in ota_slots))
-    if args.clear_otadata and otadata:
-        print(f"otadata: {fmt(int(otadata['offset']))} size={fmt(int(otadata['size']))}")
-
     base_cmd = [sys.executable, str(esptool), "--chip", args.chip, "--port", port, "--baud", str(args.baud)]
-    run(base_cmd + ["write_flash", "-z"] + write_args, project_dir, args.dry_run)
+    selected_ota_slots = ota_slots if args.write_both_ota else [ota_slots[0]]
+
+    with tempfile.TemporaryDirectory(prefix="esp32base-ota-recover-") as tmp:
+        write_args: list[str] = []
+        flash_summary: list[str] = []
+        flash_notes: list[str] = []
+
+        def add_flash_item(offset: str | int, image: Path, label: str) -> None:
+            offset_text = fmt(offset) if isinstance(offset, int) else offset
+            write_args.extend([offset_text, str(image)])
+            flash_summary.append(f"{label}@{offset_text} <= {image}")
+
+        if not args.no_bootloader:
+            add_flash_item(args.bootloader_offset, bootloader, "bootloader")
+        if not args.no_partitions:
+            add_flash_item(args.partition_offset, partitions_bin, "partition_table")
+        if not args.no_boot_app0 and boot_app0:
+            boot_app0_offset = parse_int(args.boot_app0_offset) if args.boot_app0_offset else int(ota_slots[0]["offset"]) - 0x2000
+            if args.clear_otadata and otadata and ranges_overlap(
+                boot_app0_offset,
+                boot_app0.stat().st_size,
+                int(otadata["offset"]),
+                int(otadata["size"]),
+            ):
+                flash_notes.append("boot_app0: skipped because it overlaps otadata being cleared")
+            else:
+                add_flash_item(boot_app0_offset, boot_app0, "boot_app0")
+        if args.clear_otadata and otadata:
+            erased_otadata = Path(tmp) / "otadata-erased-0xff.bin"
+            write_erased_image(erased_otadata, int(otadata["size"]))
+            add_flash_item(int(otadata["offset"]), erased_otadata, "otadata_erased")
+        for slot in selected_ota_slots:
+            add_flash_item(int(slot["offset"]), firmware, str(slot["subtype"]))
+
+        print(f"esp32base_serial_recover_ota environment={env_name} partition_csv={csv_path}")
+        print("OTA slots detected: " + ", ".join(f"{slot['subtype']}@{fmt(int(slot['offset']))}" for slot in ota_slots))
+        print("OTA slots written: " + ", ".join(f"{slot['subtype']}@{fmt(int(slot['offset']))}" for slot in selected_ota_slots))
+        if args.clear_otadata and otadata:
+            print(f"otadata: {fmt(int(otadata['offset']))} size={fmt(int(otadata['size']))} clear=write 0xff image in write_flash")
+        else:
+            print("otadata: clear=skipped; bootloader may still follow the previously selected OTA slot")
+        for note in flash_notes:
+            print(note)
+        print("Flash plan:")
+        for item in flash_summary:
+            print(f"  - {item}")
+        sys.stdout.flush()
+
+        try:
+            run(base_cmd + ["write_flash", "-z"] + write_args, project_dir, args.dry_run)
+        except subprocess.CalledProcessError as exc:
+            print(
+                "Recovery write_flash failed; do not trust the device boot result. "
+                "If otadata was not cleared, the bootloader may still select the previous OTA slot "
+                "(often ota_1 after WebOTA). Close any serial monitor, try --baud 115200 if the serial link is unstable, "
+                "and re-run the recovery command from download mode.",
+                file=sys.stderr,
+            )
+            raise exc
+
     if args.clear_otadata and otadata:
-        run(base_cmd + ["erase_region", fmt(int(otadata["offset"])), fmt(int(otadata["size"]))], project_dir, args.dry_run)
-    print("Recovery flash commands completed")
+        print("Recovery flash command completed; otadata was cleared in the same write_flash command")
+    else:
+        print("Recovery flash command completed; otadata was not cleared")
     return 0
 
 
