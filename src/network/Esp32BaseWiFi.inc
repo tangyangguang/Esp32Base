@@ -6,6 +6,7 @@
 #include "../Esp32Base.h"
 #include "../core/Esp32BaseConfig.h"
 #include "../core/Esp32BaseLog.h"
+#include "../core/Esp32BaseResetReason.h"
 
 #if ESP32BASE_ENABLE_BUS
 #include "../runtime/Esp32BaseBus.h"
@@ -64,7 +65,6 @@ bool credentialsValid(const char* ssidValue, const char* passwordValue) {
 }
 
 const char* wlStatusName(wl_status_t status);
-const char* resetReasonName(esp_reset_reason_t reason);
 
 uint16_t readableMacSuffix(uint64_t mac) {
     const uint8_t penultimate = static_cast<uint8_t>((mac >> 32) & 0xff);
@@ -201,7 +201,7 @@ bool evaluateStaSafeBootBeforeSta() {
     const esp_reset_reason_t reason = esp_reset_reason();
     if (!guardedResetReason(reason)) {
         ESP32BASE_LOG_I("wifi", "sta_safe_boot_previous_guard_ignored reset_reason=%s action=retry_sta",
-                        resetReasonName(reason));
+                        esp32base_internal::resetReasonName(reason));
         clearStaSafeBootState("normal_reset");
         return true;
     }
@@ -209,14 +209,14 @@ bool evaluateStaSafeBootBeforeSta() {
         ++g_staGuardedResetCount;
     }
     if (g_staGuardedResetCount >= ESP32BASE_WIFI_SAFE_BOOT_MAX_RESETS) {
-        pauseStaCredentialsForSafeBoot(resetReasonName(reason), g_staGuardedResetCount);
+        pauseStaCredentialsForSafeBoot(esp32base_internal::resetReasonName(reason), g_staGuardedResetCount);
         return false;
     }
     persistStaSafeBootState();
     ESP32BASE_LOG_W("wifi",
                     "sta_safe_boot_guarded_reset ssid=%s reset_reason=%s guarded_resets=%u max=%u action=retry_sta",
                     g_wifiSsid,
-                    resetReasonName(reason),
+                    esp32base_internal::resetReasonName(reason),
                     static_cast<unsigned>(g_staGuardedResetCount),
                     static_cast<unsigned>(ESP32BASE_WIFI_SAFE_BOOT_MAX_RESETS));
     return true;
@@ -289,23 +289,6 @@ const char* wlStatusName(wl_status_t status) {
         case WL_CONNECTION_LOST: return "WL_CONNECTION_LOST";
         case WL_DISCONNECTED: return "WL_DISCONNECTED";
         default: return "WL_UNKNOWN";
-    }
-}
-
-const char* resetReasonName(esp_reset_reason_t reason) {
-    switch (reason) {
-        case ESP_RST_POWERON: return "poweron";
-        case ESP_RST_EXT: return "external";
-        case ESP_RST_SW: return "software";
-        case ESP_RST_PANIC: return "panic";
-        case ESP_RST_INT_WDT: return "int_wdt";
-        case ESP_RST_TASK_WDT: return "task_wdt";
-        case ESP_RST_WDT: return "wdt";
-        case ESP_RST_DEEPSLEEP: return "deep_sleep";
-        case ESP_RST_BROWNOUT: return "brownout";
-        case ESP_RST_SDIO: return "sdio";
-        case ESP_RST_UNKNOWN:
-        default: return "unknown";
     }
 }
 }
