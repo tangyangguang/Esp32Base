@@ -166,10 +166,10 @@ System:
 
 - `GET /esp32base/tools`
 - `GET /esp32base/fs`，仅 `ESP32BASE_ENABLE_FS=1`，LittleFS 文件占用诊断；默认只读，文件树提供单文件下载，`?manage=1` 进入单文件删除管理模式
-- `GET /esp32base/fs/check?dir=/data&name=file.bin`，仅 `ESP32BASE_ENABLE_FS=1`，上传前检查目标路径；上传保留本地文件名，只能选择已有目录，不创建目录
+- `GET /esp32base/fs/check?dir=/data&name=file.bin`，仅 `ESP32BASE_ENABLE_FS=1`，上传前检查目标路径；上传保留本地文件名，可选择任何已有目录，不创建目录
 - `GET /esp32base/fs/download?path=/file`，仅 `ESP32BASE_ENABLE_FS=1`，下载一个 LittleFS 文件；需要认证，目录和非法路径不会下载
 - `POST /esp32base/fs/delete`，仅 `ESP32BASE_ENABLE_FS=1`，删除一个 LittleFS 文件；需要认证和同源 POST，成功或失败后 303 回到管理模式
-- `POST /esp32base/fs/upload`，仅 `ESP32BASE_ENABLE_FS=1`，上传一个 LittleFS 文件；需要认证和同源 POST，目标存在时必须显式覆盖，`/logs` 受保护
+- `POST /esp32base/fs/upload`，仅 `ESP32BASE_ENABLE_FS=1`，上传一个 LittleFS 文件；需要认证和同源 POST，目标存在时必须显式覆盖，可写入任何已有目录
 - `GET /esp32base/app-config`，仅 `ESP32BASE_ENABLE_APP_CONFIG=1`
 - `POST /esp32base/app-config`，仅 `ESP32BASE_ENABLE_APP_CONFIG=1`
 - `POST /esp32base/tools/hostname`
@@ -279,7 +279,7 @@ Logs 页面：
 - Runtime Health 显示 heap free/min/max alloc/total、Watchdog、NTP time、last reset 和 last wake；heap 与 Watchdog 的多值信息使用紧凑子指标展示，避免逗号串联造成阅读困难。
 - Storage & Logs 显示 FS used/free/total、Details 入口、文件/目录数量、已统计文件大小、other/overhead、FileLog enabled/disabled/write fault、日志级别、当前文件大小、日志总占用/上限和路径；File details 入口并入 FS 行，FileLog level/current/used/limit 合并为一行子指标，避免右侧卡片明显高于 Runtime Health；Top 文件列表只放在 `/esp32base/fs` 详情页，避免状态页被低频诊断明细撑高；Hardware 显示芯片型号、revision、CPU、SDK、Flash、PSRAM 和 eFuse MAC。
 - `/esp32base/fs` 默认是只读 LittleFS 详情页，显示 Summary、Top 10 最大文件和最多 128 项文件树；文件树提供单文件下载；当文件声明有大小但首块无法读取时，Action 显示 `unreadable`，下载路由返回 `500 File read failed`，避免浏览器保存 0 字节伪成功文件；当 FS used 明显大于可见文件合计时显示内部/历史占用告警，提示删除可见文件不一定释放全部空间。业务侧如果使用 `Esp32BaseFs` 读写文件，也必须检查返回值；逻辑大小存在不代表内容块一定可读。
-- `/esp32base/fs?manage=1` 增加单文件删除和受限上传，不提供目录删除、批量删除、编辑、重命名、移动或任意路径输入；删除必须通过 `POST /esp32base/fs/delete -> 303 -> GET`，格式化仍只在 System 页危险操作区。上传流程是“选择已有设备目录 + 选择本地文件”，上传保留本地文件名，不创建目录；同名文件由 `/esp32base/fs/check` 触发浏览器确认后再带 `overwrite=1` 上传。不可读文件在管理模式仍显示删除入口，因为删除只依赖路径存在且是文件，不要求内容块可读。底层删除失败后会尝试截断文件为 0；删除或清理成功后若 FileLog 之前处于 `write fault`，会重新加载当前 FileLog 模式以便恢复写入。
+- `/esp32base/fs?manage=1` 增加单文件删除和受限上传，不提供目录删除、批量删除、编辑、重命名、移动或任意路径输入；删除必须通过 `POST /esp32base/fs/delete -> 303 -> GET`，格式化仍只在 System 页危险操作区。上传流程是“选择已有设备目录 + 选择本地文件”，上传保留本地文件名，不创建目录，可选择任何已有目录；同名文件由 `/esp32base/fs/check` 触发浏览器确认后再带 `overwrite=1` 上传；路径过长会拒绝，不截断。上传完成会校验最终文件大小和末端可读性；上传到 FileLog 路径前会先 flush，上传结束后重新加载 FileLog 运行态。不可读文件在管理模式仍显示删除入口，因为删除只依赖路径存在且是文件，不要求内容块可读。底层删除失败后会尝试截断文件为 0；删除或清理成功后若 FileLog 之前处于 `write fault`，会重新加载当前 FileLog 模式以便恢复写入。
 - Firmware & OTA 显示当前固件大小、运行 app slot、下一 OTA slot、Max OTA upload、OTA headroom、rollback 状态，以及仅在存在错误时显示的 Last OTA error；`OTA headroom` 表示 `target slot - current sketch`，Max OTA upload 才是上传硬上限。
 - 启用 Watchdog 时显示 `enabled, lifetime resets N, trip resets M` 或 invalid baseline 和 trip reset time；Reset Trip 保存时间使用和页面 NTP time 行一致的可信 epoch 判断，无可用时间则显示 `unknown (time unavailable)`。
 - Partition Table 使用运行时分区表展示 Name、Type、SubType、Offset、Size、Role；Role 用于标识 running app、next OTA、app data、NVS config、OTA state、coredump 等。

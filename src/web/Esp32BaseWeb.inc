@@ -1141,10 +1141,6 @@ bool validFsDirectoryPath(const char* path) {
     return path && ((strcmp(path, "/") == 0) || validFsFilePath(path));
 }
 
-bool fsUploadPathProtected(const char* path) {
-    return path && (strcmp(path, "/logs") == 0 || strncmp(path, "/logs/", 6) == 0);
-}
-
 bool fsUploadFilenameValid(const char* name) {
     if (!name || !name[0] || strlen(name) > 63 || strcmp(name, ".") == 0 || strcmp(name, "..") == 0) {
         return false;
@@ -1159,7 +1155,7 @@ bool fsUploadFilenameValid(const char* name) {
 }
 
 bool fsUploadDirectoryExists(const char* dir) {
-    if (!validFsDirectoryPath(dir) || fsUploadPathProtected(dir)) {
+    if (!validFsDirectoryPath(dir)) {
         return false;
     }
     if (strcmp(dir, "/") == 0) {
@@ -1172,12 +1168,17 @@ bool fsBuildUploadPath(const char* dir, const char* name, char* out, size_t len)
     if (!out || len == 0 || !validFsDirectoryPath(dir) || !fsUploadFilenameValid(name)) {
         return false;
     }
+    int written = 0;
     if (strcmp(dir, "/") == 0) {
-        snprintf(out, len, "/%s", name);
+        written = snprintf(out, len, "/%s", name);
     } else {
-        snprintf(out, len, "%s/%s", dir, name);
+        written = snprintf(out, len, "%s/%s", dir, name);
     }
-    return validFsFilePath(out) && !fsUploadPathProtected(out);
+    if (written <= 0 || static_cast<size_t>(written) >= len) {
+        out[0] = '\0';
+        return false;
+    }
+    return validFsFilePath(out);
 }
 
 void fsSetUploadError(const char* message) {
@@ -1194,6 +1195,23 @@ void fsCloseUploadFile() {
 
 bool fsUploadTargetIsDirectory(const char* path) {
     return validFsFilePath(path) && Esp32BaseFs::listDir(path, fsNoopListCallback, nullptr);
+}
+
+bool fsUploadFileReadableEnd(const char* path, uint64_t size) {
+    if (size == 0) {
+        return true;
+    }
+    if (size > UINT32_MAX) {
+        return false;
+    }
+    uint8_t value = 0;
+    size_t readLen = 0;
+    return Esp32BaseFs::readBytesAt(path,
+                                    static_cast<uint32_t>(size - 1U),
+                                    &value,
+                                    1,
+                                    &readLen) &&
+           readLen == 1;
 }
 
 void fsSendJsonBool(const char* name, bool value, bool comma = true) {
@@ -1248,7 +1266,7 @@ void fsUploadDirOptionCallback(const char* name, size_t, bool isDir, void* user)
     }
     char path[96];
     fsJoinPath(frame->dir, name, path, sizeof(path));
-    if (!validFsDirectoryPath(path) || fsUploadPathProtected(path)) {
+    if (!validFsDirectoryPath(path)) {
         return;
     }
     sendChunk("<option value='");
@@ -4301,7 +4319,7 @@ void handleFsCheckGet() {
     strlcpy(dir, g_server.hasArg("dir") ? g_server.arg("dir").c_str() : "", sizeof(dir));
     strlcpy(name, g_server.hasArg("name") ? g_server.arg("name").c_str() : "", sizeof(name));
     if (!fsUploadDirectoryExists(dir)) {
-        fsSendUploadJson(400, false, "Target directory missing or protected", nullptr);
+        fsSendUploadJson(400, false, "Target directory missing", nullptr);
         return;
     }
     if (!fsBuildUploadPath(dir, name, path, sizeof(path))) {
@@ -4333,12 +4351,20 @@ void handleFsUploadDone() {
     const bool startFailed = g_fsUploadStartFailed;
     g_fsUploadStartFailed = false;
     fsCloseUploadFile();
+#if ESP32BASE_ENABLE_FILELOG
+    if (g_fsUploadPath[0] && (fileLogOwnsPath(g_fsUploadPath) || Esp32BaseFileLog::faulted())) {
+        Esp32BaseFileLog::begin();
+    }
+#endif
     if (startFailed || g_fsUploadError[0]) {
         ESP32BASE_LOG_W("web", "fs_upload_rejected path=%s error=%s", g_fsUploadPath[0] ? g_fsUploadPath : "-", g_fsUploadError[0] ? g_fsUploadError : "upload rejected");
         fsSendUploadJson(400, false, g_fsUploadError[0] ? g_fsUploadError : "upload rejected", g_fsUploadPath);
         return;
     }
-    if (g_fsUploadPath[0] && Esp32BaseFs::fileSize(g_fsUploadPath) >= 0) {
+    const int64_t actualSize = g_fsUploadPath[0] ? Esp32BaseFs::fileSize(g_fsUploadPath) : -1;
+    if (actualSize >= 0 &&
+        static_cast<uint64_t>(actualSize) == g_fsUploadBytes &&
+        fsUploadFileReadableEnd(g_fsUploadPath, static_cast<uint64_t>(actualSize))) {
         ESP32BASE_LOG_W("web", "fs_upload_completed path=%s bytes=%lu overwrite=%s",
                         g_fsUploadPath,
                         static_cast<unsigned long>(g_fsUploadBytes),
@@ -4387,7 +4413,7 @@ void handleFsUpload() {
         strlcpy(dir, g_server.hasArg("dir") ? g_server.arg("dir").c_str() : "", sizeof(dir));
         if (!fsUploadDirectoryExists(dir)) {
             g_fsUploadStartFailed = true;
-            fsSetUploadError("Target directory missing or protected");
+            fsSetUploadError("Target directory missing");
             return;
         }
         if (!fsBuildUploadPath(dir, upload.filename.c_str(), g_fsUploadPath, sizeof(g_fsUploadPath))) {
@@ -4400,6 +4426,11 @@ void handleFsUpload() {
             fsSetUploadError("Target is a directory");
             return;
         }
+#if ESP32BASE_ENABLE_FILELOG
+        if (fileLogOwnsPath(g_fsUploadPath) && Esp32BaseFileLog::isEnabled()) {
+            Esp32BaseFileLog::flush();
+        }
+#endif
         const bool exists = Esp32BaseFs::fileSize(g_fsUploadPath) >= 0;
         if (exists && !g_fsUploadOverwrite) {
             g_fsUploadStartFailed = true;

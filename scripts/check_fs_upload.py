@@ -20,12 +20,14 @@ checks = {
         "void handleFsCheckGet()",
         "void handleFsUploadDone()",
         "void handleFsUpload()",
-        "fsUploadPathProtected",
         "fsUploadDirectoryExists",
         "fsUploadFilenameValid",
+        "fsUploadFileReadableEnd",
         "fs_upload_rejected",
         "fs_upload_completed",
         "Upload file",
+        "static_cast<size_t>(written) >= len",
+        "static_cast<uint64_t>(actualSize) == g_fsUploadBytes",
         "overwrite=1",
         "confirm(",
     ],
@@ -44,7 +46,7 @@ checks = {
     "docs/11_web_ui_baseline.md": [
         "上传保留本地文件名",
         "不创建目录",
-        "/logs",
+        "任何已有目录",
     ],
     "README.md": [
         "/esp32base/fs",
@@ -61,6 +63,20 @@ for path, needles in checks.items():
 
 if "Esp32BaseFs::writeBytes(" in source:
     errors.append("src/web/Esp32BaseWeb.inc: upload should stream through LittleFS File, not buffer full files")
+
+for forbidden in [
+    "fsUploadPathProtected",
+    "disabled>protected",
+    "Protected directories are shown but cannot be selected.",
+]:
+    if forbidden in source:
+        errors.append(f"src/web/Esp32BaseWeb.inc: forbidden upload restriction marker {forbidden!r}")
+
+for path in ["README.md", "docs/03_api.md", "docs/04_web.md", "docs/11_web_ui_baseline.md"]:
+    text = read(path)
+    for forbidden in ["受保护", "不能作为上传目标", "不能选择"]:
+        if forbidden in text and "/esp32base/fs" in text:
+            errors.append(f"{path}: upload docs still contain restriction marker {forbidden!r}")
 
 if errors:
     for error in errors:

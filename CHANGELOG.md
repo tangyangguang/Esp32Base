@@ -4,6 +4,20 @@
 
 ## 2026-05-30
 
+### FS 上传目录选择与写入校验收紧
+
+修复：
+
+- `/esp32base/fs?manage=1` 的上传目录下拉框现在会列出任何已有目录，包括 `/logs` 等 FileLog 目录，便于维护和实验场景导入旧日志文件。
+- 上传目标路径拼接如果超过内部路径上限会直接拒绝，不再接受被截断后的路径。
+- 上传到 FileLog 路径前会先 flush，上传结束后重新加载 FileLog 运行态。
+- 上传完成后会校验最终文件大小和末端可读性，避免只看文件存在就返回成功。
+- `scripts/check_fs_upload.py` 补充任意已有目录上传、路径截断拒绝和完成校验检查。
+
+业务侧影响：
+
+- 管理模式面向维护/实验人员，不做普通用户级目录屏蔽。上传到业务运行中会读取的路径后，业务侧仍需自行处理格式校验、索引重建或重启提示。
+
 ### 双 OTA 串口恢复与 OTA 槽位诊断
 
 修复：
@@ -43,8 +57,8 @@
 
 - `/esp32base/fs?manage=1` 增加单文件上传，用于测试环境导入真实场景下载下来的业务数据文件。
 - 上传保留本地文件名，只能选择已有 LittleFS 目录，不创建目录；目标文件存在时，前端先调用 `/esp32base/fs/check` 检查并弹确认框，确认后才带 `overwrite=1` 上传。
-- 新增 `GET /esp32base/fs/check?dir=/data&name=file.bin` 和 `POST /esp32base/fs/upload`，复用 Web Auth、同源 POST 和服务器端路径校验；`/logs` 等基础库 FileLog 路径受保护，不能通过上传覆盖。
-- 新增 `scripts/check_fs_upload.py`，检查上传路由、冲突确认、日志目录保护和文档边界说明。
+- 新增 `GET /esp32base/fs/check?dir=/data&name=file.bin` 和 `POST /esp32base/fs/upload`，复用 Web Auth、同源 POST 和服务器端路径校验。
+- 新增 `scripts/check_fs_upload.py`，检查上传路由、冲突确认、目录选择和文档边界说明。
 
 业务侧影响：
 
