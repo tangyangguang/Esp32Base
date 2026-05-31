@@ -167,6 +167,7 @@ void handleHostnameApiGet();
 void handleHostnameSubmit();
 void handleWifiPage();
 void handleWifiSubmit();
+void handleWifiRetry();
 void handleWifiClear();
 #if ESP32BASE_ENABLE_FILELOG
 void sendFileLogModeOption(const char* value, const char* label, Esp32BaseFileLog::Mode mode);

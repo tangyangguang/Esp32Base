@@ -14,7 +14,7 @@
 - 常见量产设备通过 profile 选择能力组合。
 - 未启用模块不编译、不链接、不初始化。
 - WiFi、Web、OTA 等重能力全部非阻塞启动。
-- WiFi STA 启动带安全保护：连续 STA guarded brownout/panic/watchdog 复位后暂停已保存凭据并回退 AP 配网，避免坏 STA 状态造成永久重启循环。
+- WiFi STA 启动带安全保护：连续 STA guarded brownout/panic/watchdog 复位后暂停已保存凭据并回退 AP 配网；后续正常上电会自动恢复一次，Web 也可直接重试已保存凭据，避免坏 STA 状态造成永久重启循环。
 - OTA、NVS、Watchdog、LittleFS、Captive Portal 等关键路径按量产可靠性设计。
 
 已知限制、明确不支持能力和风险边界详见 [已知限制](docs/10_known_limitations.md)。

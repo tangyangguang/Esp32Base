@@ -4,6 +4,20 @@
 
 ## 2026-05-31
 
+### WiFi STA 安全启动恢复体验优化
+
+优化：
+
+- `ESP32BASE_WIFI_SAFE_BOOT_MAX_RESETS` 默认值从 2 调整为 3，降低偶发 guarded brownout/panic/watchdog 复位导致 WiFi 凭据暂停的概率。
+- 已进入 `sta_pause=true` 后，如果后续启动 reset reason 是 `poweron`、外部复位或其他非危险复位，库会自动清除 pause/guard/count 并用已保存凭据恢复一次 STA 尝试，不再要求用户把正确密码重新保存一遍。
+- 新增 `Esp32BaseWiFi::retrySavedCredentials()`、`safeBootPaused()` 和 `safeBootGuardedResetCount()`；WiFi 页面在 safe boot paused 时显示恢复说明和 guarded reset 计数，并提供“Retry Saved WiFi”按钮。
+- 新增 `/esp32base/api/wifi/retry` 表单端点，用于恢复并重试已保存 WiFi 凭据，不修改 `ssid/pass`。
+
+业务侧影响：
+
+- 已保存 WiFi 密码正确但曾因安全启动保护进入 AP 配网页的设备，正常重新上电后会自动尝试恢复；如果仍停留在 AP 页面，可点击 Retry Saved WiFi，不需要重新输入或保存同一组密码。
+- 如果一恢复 STA 就再次发生 brownout、panic 或 watchdog 复位，保护仍会重新累计并回退 AP，业务侧仍应排查供电余量、射频启动路径和启动期 watchdog。
+
 ### Web 内部多编译单元重构
 
 优化：
@@ -59,8 +73,8 @@
 新增：
 
 - 有已保存 WiFi 凭据时，STA 启动前会写入 `eb_wifi.sta_guard` guarded 标记；成功连接后清除 guard、计数和 pause。
-- 如果设备在 guarded STA 启动后连续以 brownout、panic 或 watchdog 类 reset reason 重启，达到 `ESP32BASE_WIFI_SAFE_BOOT_MAX_RESETS`（默认 2）后会设置 `eb_wifi.sta_pause=true`，保留原 `ssid/pass`，暂停 STA 并自动进入 AP config portal。
-- 重新提交 WiFi 凭据会清除 pause/guard/count 并恢复 STA 尝试；普通连接超时仍按原有 backoff 重试，不因路由器临时离线直接开放 AP。
+- 如果设备在 guarded STA 启动后连续以 brownout、panic 或 watchdog 类 reset reason 重启，达到 `ESP32BASE_WIFI_SAFE_BOOT_MAX_RESETS` 后会设置 `eb_wifi.sta_pause=true`，保留原 `ssid/pass`，暂停 STA 并自动进入 AP config portal。
+- 重新提交 WiFi 凭据、点击 Retry Saved WiFi 或后续非危险复位自动恢复，都会清除 pause/guard/count 并恢复 STA 尝试；普通连接超时仍按原有 backoff 重试，不因路由器临时离线直接开放 AP。
 - 新增 `scripts/check_wifi_safe_boot.py`，检查 STA 安全启动保护代码标记、日志标记和文档边界。
 
 业务侧影响：

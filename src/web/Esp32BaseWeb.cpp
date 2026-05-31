@@ -12,7 +12,7 @@ bool Esp32BaseWeb::begin() {
     }
     const uint8_t appRoutes = routeCount(false);
     const uint8_t appPages = routeCount(true);
-    uint8_t builtinRoutes = 25;
+    uint8_t builtinRoutes = 26;
 #if ESP32BASE_ENABLE_FS
     builtinRoutes += 3;
 #endif
@@ -39,6 +39,7 @@ bool Esp32BaseWeb::begin() {
     g_server.on("/esp32base/wifi", HTTP_GET, handleWifiPage);
     g_server.on("/esp32base/wifi", HTTP_POST, handleWifiSubmit);
     g_server.on("/esp32base/api/wifi", HTTP_POST, handleWifiSubmit);
+    g_server.on("/esp32base/api/wifi/retry", HTTP_POST, handleWifiRetry);
     g_server.on("/esp32base/api/wifi/clear", HTTP_POST, handleWifiClear);
     g_server.on("/esp32base/logs", HTTP_GET, handleLogsPage);
     g_server.on("/esp32base/logs/raw", HTTP_GET, handleLogsRaw);

@@ -145,6 +145,7 @@ Web:
 - `GET /esp32base/wifi`
 - `POST /esp32base/wifi`
 - `POST /esp32base/api/wifi`
+- `POST /esp32base/api/wifi/retry`
 - `POST /esp32base/api/wifi/clear`
 - `GET /esp32base/auth`
 - `POST /esp32base/auth`
@@ -195,6 +196,7 @@ WiFi 配置页：
 - 空 SSID 返回错误，不保存凭证。
 - SSID 超过 32 字节或密码超过 64 字节时返回错误，不静默截断。
 - `/esp32base/wifi` 和 `/esp32base/api/wifi` 都是表单提交端点，成功/失败使用 303 跳转到 HTML 页面；它们不是 JSON API。
+- 当已保存凭据因 STA 安全启动保护暂停时，页面显示恢复说明和 guarded reset 计数，并提供“恢复并重试已保存 WiFi”操作；该操作调用 `/esp32base/api/wifi/retry`，不要求用户重新保存同一组密码。
 
 System 维护页：
 
@@ -501,7 +503,7 @@ Esp32BaseWeb::endJson();
 - 没有已保存 WiFi 凭证。
 - 应用显式调用 `startConfigPortal()`。
 - 用户显式清除凭证并在应用策略中选择进入 portal。
-- STA 安全启动保护触发：有保存凭据的 STA 启动连续发生 guarded brownout/panic/watchdog 复位，达到 `ESP32BASE_WIFI_SAFE_BOOT_MAX_RESETS` 后暂停凭据并自动回退 portal。
+- STA 安全启动保护触发：有保存凭据的 STA 启动连续发生 guarded brownout/panic/watchdog 复位，达到 `ESP32BASE_WIFI_SAFE_BOOT_MAX_RESETS` 后暂停凭据并自动回退 portal；后续正常 `poweron`、外部复位或其他非危险复位会自动恢复一次已保存 STA 尝试。
 
 默认 config portal AP SSID 为 `ESP32-Config-XXXX`，其中 `XXXX` 取 eFuse MAC 按常见网络 MAC 顺序显示时的最后两个字节，便于和 Status 页 MAC 信息对照。
 
@@ -520,6 +522,13 @@ Esp32BaseWeb::endJson();
 - 清除 STA 安全启动保护的 pause、guard 和计数。
 - 停止 config portal。
 - 切换到 STA 连接流程。
+
+恢复并重试已保存 WiFi 时：
+
+- 不修改 `ssid/pass`。
+- 清除 STA 安全启动保护的 pause、guard 和计数。
+- 停止 config portal。
+- 用已保存凭据切换到 STA 连接流程。
 
 进入 deep sleep 后：
 

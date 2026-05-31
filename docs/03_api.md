@@ -517,6 +517,7 @@ public:
 
     static bool connect(const char* ssid, const char* password, bool persist = true);
     static bool clearCredentials();
+    static bool retrySavedCredentials();
     static bool startConfigPortal();
     static bool stopConfigPortal();
 
@@ -524,6 +525,8 @@ public:
     static const char* stateName();
     static bool isConnected();
     static const char* ssid();
+    static bool safeBootPaused();
+    static uint8_t safeBootGuardedResetCount();
     static bool ip(char* out, size_t len);
     static int32_t rssi();
 
@@ -540,8 +543,9 @@ WiFi 凭证和重连策略：
 - 有已保存凭证但连接失败时，不自动进入 AP/config portal，而是持续重连。
 - 单次 STA 连接尝试有非阻塞超时，默认 `ESP32BASE_WIFI_CONNECT_TIMEOUT_MS=15000`。
 - 前几次重连使用短间隔，连续失败后进入长间隔 backoff；backoff 必须非阻塞，不影响 `handle()`、Watchdog feed 和必要休眠。
-- STA 安全启动保护：有已保存凭证并准备进入 STA 时，库会在 `eb_wifi.sta_guard` 写入 guarded 启动标记；成功连接后清除 `sta_guard`、`sta_rst` 和 `sta_pause`。如果下一次启动发现 guarded 标记仍存在，且本次 reset reason 是 `brownout`、`panic` 或 watchdog 类复位，则累计 `eb_wifi.sta_rst`；连续达到 `ESP32BASE_WIFI_SAFE_BOOT_MAX_RESETS`（默认 2）后设置 `eb_wifi.sta_pause=true`，保留 `ssid/pass`，暂停 STA 并进入 AP/config portal。
-- `sta_pause=true` 时，`begin()` 会把保存凭据视为暂不可用并进入 `CONFIG_PORTAL`；用户通过 WiFi 页面或 `connect()` 重新提交凭据后清除 pause 和计数并重新尝试 STA。普通连接超时、AP 不在线或密码错误仍按 backoff 重试，不单独触发安全启动 AP 回退。
+- STA 安全启动保护：有已保存凭证并准备进入 STA 时，库会在 `eb_wifi.sta_guard` 写入 guarded 启动标记；成功连接后清除 `sta_guard`、`sta_rst` 和 `sta_pause`。如果下一次启动发现 guarded 标记仍存在，且本次 reset reason 是 `brownout`、`panic` 或 watchdog 类复位，则累计 `eb_wifi.sta_rst`；连续达到 `ESP32BASE_WIFI_SAFE_BOOT_MAX_RESETS`（默认 3）后设置 `eb_wifi.sta_pause=true`，保留 `ssid/pass`，暂停 STA 并进入 AP/config portal。
+- `sta_pause=true` 时，如果本次 reset reason 仍是 brownout、panic 或 watchdog 类危险复位，`begin()` 会把保存凭据视为暂不可用并进入 `CONFIG_PORTAL`；如果本次是 `poweron`、外部复位或其他非危险复位，库会自动清除 pause/guard/count 并用已保存凭据恢复一次 STA 尝试。
+- `retrySavedCredentials()` 会重新读取已保存凭据，清除 safe boot pause/guard/count，停止 config portal，并用原凭据进入 STA 连接流程；它不要求业务或用户重新保存同一组 SSID/password。WiFi 页面在 safe boot paused 时提供“恢复并重试已保存 WiFi”入口调用该行为。
 - 只有显式 `clearCredentials()`、`startConfigPortal()` 或应用自定义策略，才能进入 AP/config portal。
 - `clearCredentials()` 只清空库管理的 WiFi 凭证，不立即触发重连、断线或 portal；NVS 清理失败时返回 false。
 - `connect(..., persist=true)` 必须先同步写入 NVS 保存凭证，写入失败时返回 false 且不切换连接；这是显式配置提交的可靠性取舍，避免页面提交后立即重启导致新凭证丢失。
