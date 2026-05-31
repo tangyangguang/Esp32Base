@@ -136,7 +136,17 @@ public:
                                        const char* action, const char* label,
                                        const char* hiddenName = nullptr, const char* hiddenValue = nullptr,
                                        UiTone tone = UI_INFO);
+    static void sendInfoRowInlineEdit(const char* id, const char* title, const char* help, const char* value,
+                                      const char* action, const char* inputName, const char* inputValue,
+                                      const char* label = "Edit", UiTone tone = UI_INFO);
+    static void sendInfoRowDialogForm(const char* dialogId, const char* targetId, const char* title,
+                                      const char* help, const char* value, const char* action,
+                                      const char* fieldsHtml, const char* label = "Edit", UiTone tone = UI_INFO);
     static void sendPagination(const Pagination& pagination);
+    static bool isAjaxRequest();
+    static void sendAjaxReplace(const char* targetId, const char* html, const char* noticeTitle = nullptr,
+                                UiTone tone = UI_OK, bool close = true);
+    static void sendAjaxError(int code, const char* error);
     static bool sendResponseHeader(const char* name, const char* value);
     static bool beginResponse(int code, const char* contentType, const char* filename = nullptr);
     static bool beginText(int code);

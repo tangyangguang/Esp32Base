@@ -38,7 +38,7 @@ size_t advanceMatch(const char* pattern, size_t patternLen, size_t matched, char
 }
 
 bool selfTestRequest(const char* method, const char* path, const char* body, bool auth, int expectedCode,
-                     const char* mustContain, const char* mustNotContain = nullptr) {
+                     const char* mustContain, const char* mustNotContain = nullptr, bool ajax = false) {
     WiFiClient client;
     const IPAddress targetIp = Esp32BaseWiFi::state() == Esp32BaseWiFi::CONFIG_PORTAL ? WiFi.softAPIP() : WiFi.localIP();
     if (!client.connect(targetIp, 80)) {
@@ -53,6 +53,9 @@ bool selfTestRequest(const char* method, const char* path, const char* body, boo
     client.print("\r\nConnection: close\r\n");
     if (auth) {
         client.print("Authorization: Basic YWRtaW46YWRtaW4=\r\n");
+    }
+    if (ajax) {
+        client.print("X-Esp32Base-Ajax: 1\r\nAccept: application/json\r\n");
     }
     const size_t bodyLen = body ? strlen(body) : 0;
     if (bodyLen > 0) {
@@ -135,7 +138,10 @@ void runSelfTest() {
     uint8_t total = 0;
 #define RUN_SELFTEST(method, path, body, auth, code, contains, ...) \
     do { ++total; if (selfTestRequest(method, path, body, auth, code, contains, ##__VA_ARGS__)) ++pass; } while (0)
-    RUN_SELFTEST("GET", "/", nullptr, true, 302, "Location: /ui-status");
+#define RUN_AJAX_SELFTEST(method, path, body, auth, code, contains) \
+    do { ++total; if (selfTestRequest(method, path, body, auth, code, contains, nullptr, true)) ++pass; } while (0)
+    RUN_SELFTEST("GET", "/", nullptr, true, 302, "Location: /index");
+    RUN_SELFTEST("GET", "/index", nullptr, true, 200, "状态概览");
     RUN_SELFTEST("GET", "/ui-status", nullptr, true, 200, "状态概览");
     RUN_SELFTEST("GET", "/ui-status/stats", nullptr, true, 200, "统计摘要");
     RUN_SELFTEST("GET", "/ui-records?page=2", nullptr, true, 200, "共 128 条 / 7 页");
@@ -154,22 +160,28 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".syslinks a{display:inline-flex;align-items:center;min-height:24px;font-size:12px");
     RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".heap{flex:0 0 auto;margin-left:auto;white-space:nowrap;text-align:right;font-size:11px}");
     RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".toollinks .urow{grid-template-columns:minmax(0,1fr) auto;gap:8px}");
+    RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".toollinks .uactions .btnlink{min-width:72px;width:72px;min-height:30px}");
     RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".pagination .btnlink,.pagination button,.pagination select,.pagination input{font-size:12px;min-height:26px");
     RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, "--eb-primary-hover:#125965;--eb-primary-soft:#e8f3f5;--eb-button-soft:#f7fafb");
     RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, "button,input[type=submit],input[type=button]{font-size:14px;background:var(--eb-primary);color:#fff;min-height:30px");
     RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".uactions{display:grid;grid-template-columns:4em minmax(96px,max-content);gap:14px");
     RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".uactions .btnlink,.uactions input[type=submit]{min-width:96px");
     RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".btnlink,input.btnlink{display:inline-flex;align-items:center;justify-content:center;min-height:30px");
+    RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".eb-dialog{");
+    RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".eb-inline-edit{");
     RUN_SELFTEST("GET", "/ui-records?page=2", nullptr, true, 200, "aria-current='page'>2</span>", "当前第");
     RUN_SELFTEST("GET", "/ui-records?range=24h&type=all&per=20&page=2", nullptr, true, 200, "filterbar", "name='start'");
     RUN_SELFTEST("GET", "/ui-records?range=custom&type=all&start=2026-05-28T08:00&end=2026-05-28T09:00", nullptr, true, 200, "name='start'");
     RUN_SELFTEST("GET", "/ui-records?range=30d&type=guard&page=4", nullptr, true, 200, "aria-current='page'>4</span>");
     RUN_SELFTEST("GET", "/ui-records?range=30d&type=guard&page=4", nullptr, true, 200, "filterbar", "每页 20 条");
     RUN_SELFTEST("GET", "/ui-config?saved=1", nullptr, true, 200, "保存成功");
-    RUN_SELFTEST("GET", "/ui-config", nullptr, true, 200, "class='uactions'><span class='uvalue'>花坛</span><a class='btnlink info' href='/ui-config?edit=name'>展开修改</a>");
-    RUN_SELFTEST("GET", "/ui-config", nullptr, true, 200, "href='/ui-form'>进入编辑页</a>");
-    RUN_SELFTEST("GET", "/ui-config?edit=name", nullptr, true, 200, "行内编辑");
+    RUN_SELFTEST("GET", "/ui-config", nullptr, true, 200, "data-eb-inline-edit");
+    RUN_SELFTEST("GET", "/ui-config", nullptr, true, 200, "data-eb-dialog");
+    RUN_SELFTEST("GET", "/ui-config", nullptr, true, 200, "id='row-plan'");
     RUN_SELFTEST("POST", "/ui-config/name", "name=flower", true, 303, "Location: /ui-config?saved=1");
+    RUN_AJAX_SELFTEST("POST", "/ui-config/name", "name=flower", true, 200, "\"ok\":true");
+    RUN_AJAX_SELFTEST("POST", "/ui-config/name", "name=", true, 400, "\"ok\":false");
+    RUN_AJAX_SELFTEST("POST", "/ui-config/dialog", "limit=42&mode=manual", true, 200, "\"ok\":true");
     RUN_SELFTEST("GET", "/ui-action", nullptr, true, 200, "操作命令");
     RUN_SELFTEST("GET", "/ui-action", nullptr, true, 200, "<input type='submit' class='btnlink info' value='开始'>");
     RUN_SELFTEST("POST", "/ui-action/run", "run=1", true, 303, "Location: /ui-action?done=1");
@@ -189,6 +201,7 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/logs?error=unavailable", nullptr, true, 200, "Logs action failed");
     RUN_SELFTEST("GET", "/ui-status", nullptr, true, 200, "<footer class='footerbar'><span class='syslinks'><a href='/esp32base'>Status</a><a href='/esp32base/logs'>Logs</a><a href='/esp32base/app-config'>App Config</a>");
 #undef RUN_SELFTEST
+#undef RUN_AJAX_SELFTEST
     ESP32BASE_LOG_I("selftest", "summary pass=%u total=%u", static_cast<unsigned>(pass), static_cast<unsigned>(total));
 }
 #endif
@@ -220,8 +233,113 @@ void handleFormSave() {
     handlePostRedirect("/ui-form?saved=1");
 }
 
+void htmlEscapeTo(const char* in, char* out, size_t len) {
+    if (!out || len == 0) {
+        return;
+    }
+    size_t used = 0;
+    out[0] = '\0';
+    const char* text = in ? in : "";
+    for (const char* p = text; *p && used + 1 < len; ++p) {
+        const char* repl = nullptr;
+        switch (*p) {
+            case '&': repl = "&amp;"; break;
+            case '<': repl = "&lt;"; break;
+            case '>': repl = "&gt;"; break;
+            case '"': repl = "&quot;"; break;
+            case '\'': repl = "&#39;"; break;
+            default: break;
+        }
+        if (repl) {
+            const size_t replLen = strlen(repl);
+            if (used + replLen >= len) {
+                break;
+            }
+            memcpy(out + used, repl, replLen);
+            used += replLen;
+        } else {
+            out[used++] = *p;
+        }
+    }
+    out[used] = '\0';
+}
+
+void buildChannelNameRowHtml(const char* value, char* out, size_t len) {
+    char escaped[64];
+    htmlEscapeTo(value && value[0] ? value : "花坛", escaped, sizeof(escaped));
+    snprintf(out, len,
+             "<div id='row-channel-name'><div class='urow' data-eb-inline-edit><div><b>第 1 路名称</b><small>用于页面和记录展示，不影响实际控制。</small></div><div class='uactions'><span class='uvalue'>%s</span><button type='button' class='btnlink info' data-eb-inline-toggle='row-channel-name-edit'>编辑</button></div></div><div id='row-channel-name-edit' class='eb-inline-edit'><form method='post' data-eb-ajax action='/ui-config/name'><label>第 1 路名称</label><input name='name' value='%s' autocomplete='off'><div data-eb-error class='eb-inline-error'></div><div class='actions'><button type='button' class='secondary' data-eb-inline-close='row-channel-name-edit'>Cancel</button><input type='submit' value='Save'></div></form></div></div>",
+             escaped,
+             escaped);
+}
+
+void buildPlanRowHtml(const char* mode, const char* limit, char* out, size_t len) {
+    char modeEsc[24];
+    char limitEsc[16];
+    htmlEscapeTo(mode && mode[0] ? mode : "auto", modeEsc, sizeof(modeEsc));
+    htmlEscapeTo(limit && limit[0] ? limit : "30", limitEsc, sizeof(limitEsc));
+    snprintf(out, len,
+             "<div id='row-plan'><div class='urow'><div><b>默认计划</b><small>包含时间、通道、执行天数和目标量。</small></div><div class='uactions'><span class='uvalue'>%s / %s</span><button type='button' class='btnlink info' data-eb-dialog-open='dlg-plan'>快速编辑</button></div></div></div>",
+             modeEsc,
+             limitEsc);
+}
+
 void handleConfigNameSave() {
-    handlePostRedirect("/ui-config?saved=1");
+    if (!Esp32BaseWeb::checkAuth()) {
+        return;
+    }
+    if (!Esp32BaseWeb::isMethod(Esp32BaseWeb::METHOD_POST)) {
+        Esp32BaseWeb::sendText(405, "method not allowed");
+        return;
+    }
+    char name[32] = "";
+    Esp32BaseWeb::getParam("name", name, sizeof(name));
+    if (!name[0]) {
+        if (Esp32BaseWeb::isAjaxRequest()) {
+            Esp32BaseWeb::sendAjaxError(400, "Name is required.");
+        } else {
+            Esp32BaseWeb::redirectSeeOther("/ui-config?blocked=1");
+        }
+        return;
+    }
+    if (Esp32BaseWeb::isAjaxRequest()) {
+        char html[920];
+        buildChannelNameRowHtml(name, html, sizeof(html));
+        Esp32BaseWeb::sendAjaxReplace("row-channel-name", html, "保存成功");
+        return;
+    }
+    Esp32BaseWeb::redirectSeeOther("/ui-config?saved=1");
+}
+
+void handleConfigDialogSave() {
+    if (!Esp32BaseWeb::checkAuth()) {
+        return;
+    }
+    if (!Esp32BaseWeb::isMethod(Esp32BaseWeb::METHOD_POST)) {
+        Esp32BaseWeb::sendText(405, "method not allowed");
+        return;
+    }
+    char limit[16] = "";
+    char mode[16] = "";
+    Esp32BaseWeb::getParam("limit", limit, sizeof(limit));
+    Esp32BaseWeb::getParam("mode", mode, sizeof(mode));
+    const int value = atoi(limit);
+    const bool validMode = strcmp(mode, "auto") == 0 || strcmp(mode, "manual") == 0;
+    if (value < 1 || value > 120 || !validMode) {
+        if (Esp32BaseWeb::isAjaxRequest()) {
+            Esp32BaseWeb::sendAjaxError(400, "Plan values are invalid.");
+        } else {
+            Esp32BaseWeb::redirectSeeOther("/ui-config?blocked=1");
+        }
+        return;
+    }
+    if (Esp32BaseWeb::isAjaxRequest()) {
+        char html[420];
+        buildPlanRowHtml(mode, limit, html, sizeof(html));
+        Esp32BaseWeb::sendAjaxReplace("row-plan", html, "保存成功");
+        return;
+    }
+    Esp32BaseWeb::redirectSeeOther("/ui-config?saved=1");
 }
 
 void sendGalleryResults() {
@@ -371,15 +489,14 @@ void handleConfigPage() {
     Esp32BaseWeb::sendPageTitle("配置编辑", "简单字段行内改，多字段对象进入独立编辑页。");
     sendGalleryResults();
     Esp32BaseWeb::beginPanel("紧凑配置列表");
-    char editMode[12] = "";
-    const bool editingName = Esp32BaseWeb::getParam("edit", editMode, sizeof(editMode)) && strcmp(editMode, "name") == 0;
-    Esp32BaseWeb::sendInfoRowCompactLink("第 1 路名称", "用于页面和记录展示，不影响实际控制。", "花坛",
-                                         editingName ? "/ui-config" : "/ui-config?edit=name",
-                                         editingName ? "取消" : "展开修改");
-    if (editingName) {
-        Esp32BaseWeb::sendChunk("<div class='inlineedit'><b>行内编辑</b><form method='post' action='/ui-config/name' onsubmit='return once(this)'><p><label>名称</label><input name='name' maxlength='12' value='花坛'><small class='muted'>最多 12 个中文字符；只影响页面和记录中的显示名称。</small></p><input type='button' value='取消' onclick=\"location.href='/ui-config'\"><input type='submit' value='保存'></form></div>");
-    }
-    Esp32BaseWeb::sendInfoRowCompactLink("默认计划", "包含时间、通道、执行天数和目标量。", "3 条", "/ui-form", "进入编辑页");
+    Esp32BaseWeb::sendInfoRowInlineEdit("row-channel-name", "第 1 路名称",
+                                        "用于页面和记录展示，不影响实际控制。", "花坛",
+                                        "/ui-config/name", "name", "花坛", "编辑");
+    Esp32BaseWeb::sendInfoRowDialogForm("dlg-plan", "row-plan", "默认计划",
+                                        "包含时间、通道、执行天数和目标量。", "3 条",
+                                        "/ui-config/dialog",
+                                        "<p><label>目标量</label><input type='number' name='limit' min='1' max='120' value='30'></p><p><label>模式</label><select name='mode'><option value='auto'>auto</option><option value='manual'>manual</option></select></p>",
+                                        "快速编辑");
     Esp32BaseWeb::sendInfoRowCompactLink("恢复出厂", "高风险操作必须进入确认保护页。", nullptr, "/ui-config/confirm", "确认页", Esp32BaseWeb::UI_DANGER);
     Esp32BaseWeb::endPanel();
     Esp32BaseWeb::sendFooter();
@@ -484,7 +601,6 @@ void setup() {
     Esp32Base::setFirmwareInfo("web-ui-gallery", "1.0.0");
     Esp32BaseWeb::setDefaultAuth("admin", "admin");
     Esp32BaseWeb::setDeviceName("UI 样式");
-    Esp32BaseWeb::setHomePath("/ui-status");
     Esp32BaseWeb::setHomeMode(Esp32BaseWeb::HOME_APP);
     Esp32BaseWeb::setSystemNavMode(Esp32BaseWeb::SYSTEM_NAV_SECTION);
     Esp32BaseWeb::setHeadExtraCallback(handleHeadExtra);
@@ -496,7 +612,8 @@ void setup() {
                                 "Example numeric system setting.", false, nullptr});
     Esp32BaseAppConfig::addBool({"display", GALLERY_NS, GALLERY_KEY_READONLY, "Read-only mode", false,
                                  "Example boolean switch for App Config visibility.", false, nullptr});
-    Esp32BaseWeb::addPage("/ui-status", "总览", handleStatusPage);
+    Esp32BaseWeb::addPage("/index", "总览", handleStatusPage);
+    Esp32BaseWeb::addRoute("/ui-status", Esp32BaseWeb::METHOD_GET, handleStatusPage);
     Esp32BaseWeb::addPage("/ui-records", "记录", handleRecordsPage);
     Esp32BaseWeb::addPage("/ui-config", "配置", handleConfigPage);
     Esp32BaseWeb::addPage("/ui-action", "命令", handleActionPage);
@@ -511,6 +628,7 @@ void setup() {
     Esp32BaseWeb::addRoute("/ui-confirm/run", Esp32BaseWeb::METHOD_POST, handleConfirmRun);
     Esp32BaseWeb::addRoute("/ui-form/save", Esp32BaseWeb::METHOD_POST, handleFormSave);
     Esp32BaseWeb::addRoute("/ui-config/name", Esp32BaseWeb::METHOD_POST, handleConfigNameSave);
+    Esp32BaseWeb::addRoute("/ui-config/dialog", Esp32BaseWeb::METHOD_POST, handleConfigDialogSave);
     Esp32Base::begin();
     ESP32BASE_LOG_I("example", "web ui gallery ready");
 }

@@ -27,6 +27,7 @@
 ## 3. 网络边界
 
 - 有已保存 WiFi 凭证但普通连接失败时，库不会自动进入 AP/config portal，而是持续 STA 重连。
+- WiFi 初始化安全启动保护是更早的保护层：如果设备连续在 Arduino WiFi 初始化最早期发生 guarded brownout、panic、watchdog 或 software reset，达到阈值后会暂停 WiFi 初始化并进入无 WiFi 诊断状态，而不是继续尝试 AP/config portal。日志会用中文提示疑似 WiFi/RF 启动瞬时电流导致供电跌落，建议检查供电链路并考虑在板端 VIN/5V 与 GND 间增加低 ESR 储能电容。该提示不是对“电容不足”的唯一归因，仍需排查电源限流、USB 线压降、稳压器余量和接线接触电阻。
 - STA 安全启动保护是例外：如果上一次已进入 guarded STA 启动阶段，随后连续发生 brownout、panic 或 watchdog 类复位，达到阈值后会暂停 `eb_wifi` 凭据并回退 AP/config portal。后续正常 `poweron`、外部复位或其他非危险复位会自动恢复一次已保存 STA 尝试；Web WiFi 页面也提供重试已保存凭据入口，不要求重新保存同一组密码。该机制用于跳出坏 STA 状态造成的永久重启循环，不用于处理路由器临时离线。
 - 进入 AP/config portal 只发生在无凭证、显式 `startConfigPortal()`、STA 安全启动保护触发或应用自定义策略下。
 - Config portal AP 默认不设置密码，SSID 为可预测的 `ESP32-Config-XXXX`，其中后缀来自 eFuse MAC 的最后两个字节；应用应只在预期配网窗口进入 portal。

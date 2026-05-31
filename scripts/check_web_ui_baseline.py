@@ -62,6 +62,51 @@ for text, needle, message in checks:
     if needle not in text:
         errors.append(message)
 
+enhancement_checks = [
+    (
+        assets,
+        "function ebAjaxSubmit",
+        "WEB_HEAD must include the AJAX submit runtime.",
+    ),
+    (
+        assets,
+        ".eb-dialog{",
+        "CSS must include dialog shell styles.",
+    ),
+    (
+        assets,
+        ".eb-inline-edit{",
+        "CSS must include inline edit styles.",
+    ),
+    (
+        web,
+        "sendInfoRowInlineEdit",
+        "Esp32BaseWeb must expose inline edit helper implementation.",
+    ),
+    (
+        web,
+        "sendInfoRowDialogForm",
+        "Esp32BaseWeb must expose dialog form helper implementation.",
+    ),
+    (
+        web,
+        "sendAjaxReplace",
+        "Esp32BaseWeb must expose AJAX replace JSON helper.",
+    ),
+]
+for text, needle, message in enhancement_checks:
+    if needle not in text:
+        errors.append(message)
+
+general_uactions = ".uactions .btnlink,.uactions input[type=submit]{min-width:96px"
+toollinks_override = ".toollinks .uactions .btnlink{min-width:72px;width:72px"
+general_pos = assets.find(general_uactions)
+override_pos = assets.find(toollinks_override)
+if general_pos < 0:
+    errors.append("General compact action buttons must keep a stable minimum width.")
+if override_pos < 0:
+    errors.append("Tool link action buttons must reset min-width to fit their compact action column.")
+
 if errors:
     for error in errors:
         print(error)

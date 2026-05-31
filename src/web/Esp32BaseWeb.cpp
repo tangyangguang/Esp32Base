@@ -575,6 +575,114 @@ void Esp32BaseWeb::sendInfoRowCompactForm(const char* title, const char* help, c
     sendInfoRowCompactEnd();
 }
 
+void Esp32BaseWeb::sendInfoRowInlineEdit(const char* id, const char* title, const char* help, const char* value,
+                                         const char* action, const char* inputName, const char* inputValue,
+                                         const char* label, UiTone tone) {
+    const char* rowId = id && id[0] ? id : "eb-inline-row";
+    sendChunk("<div id='");
+    sendEscapedHtmlChunk(rowId);
+    sendChunk("'>");
+    sendInfoRowCompactStart(title, help, value, true);
+    sendChunk("<button type='button' class='btnlink");
+    sendChunk(uiToneClass(tone));
+    sendChunk("' data-eb-inline-toggle='");
+    sendEscapedHtmlChunk(rowId);
+    sendChunk("-edit'>");
+    sendEscapedHtmlChunk(label ? label : "Edit");
+    sendChunk("</button>");
+    sendInfoRowCompactEnd();
+    sendChunk("<div id='");
+    sendEscapedHtmlChunk(rowId);
+    sendChunk("-edit' class='eb-inline-edit'><form method='post' data-eb-ajax action='");
+    sendEscapedHtmlChunk(action ? action : "");
+    sendChunk("'><label>");
+    sendEscapedHtmlChunk(title ? title : "");
+    sendChunk("</label><input name='");
+    sendEscapedHtmlChunk(inputName ? inputName : "value");
+    sendChunk("' value='");
+    sendEscapedHtmlChunk(inputValue ? inputValue : "");
+    sendChunk("' autocomplete='off'><div data-eb-error class='eb-inline-error'></div><div class='actions'><button type='button' class='secondary' data-eb-inline-close='");
+    sendEscapedHtmlChunk(rowId);
+    sendChunk("-edit'>Cancel</button><input type='submit' value='Save'></div></form></div></div>");
+}
+
+void Esp32BaseWeb::sendInfoRowDialogForm(const char* dialogId, const char* targetId, const char* title,
+                                         const char* help, const char* value, const char* action,
+                                         const char* fieldsHtml, const char* label, UiTone tone) {
+    const char* id = dialogId && dialogId[0] ? dialogId : "eb-dialog";
+    sendChunk("<div id='");
+    sendEscapedHtmlChunk(targetId && targetId[0] ? targetId : id);
+    sendChunk("'>");
+    sendInfoRowCompactStart(title, help, value, true);
+    sendChunk("<button type='button' class='btnlink");
+    sendChunk(uiToneClass(tone));
+    sendChunk("' data-eb-dialog-open='");
+    sendEscapedHtmlChunk(id);
+    sendChunk("'>");
+    sendEscapedHtmlChunk(label ? label : "Edit");
+    sendChunk("</button>");
+    sendInfoRowCompactEnd();
+    sendChunk("</div><div id='");
+    sendEscapedHtmlChunk(id);
+    sendChunk("' class='eb-dialog-backdrop'><div class='eb-dialog'><button type='button' class='eb-dialog-close' data-eb-dialog-close>Close</button><h2>");
+    sendEscapedHtmlChunk(title ? title : "");
+    sendChunk("</h2><form method='post' data-eb-ajax action='");
+    sendEscapedHtmlChunk(action ? action : "");
+    sendChunk("'>");
+    if (fieldsHtml && fieldsHtml[0]) {
+        sendChunk(fieldsHtml);
+    }
+    sendChunk("<div data-eb-error class='eb-dialog-error'></div><div class='actions'><button type='button' class='secondary' data-eb-dialog-close>Cancel</button><input type='submit' value='Save'></div></form></div></div>");
+}
+
+bool Esp32BaseWeb::isAjaxRequest() {
+    return g_server.header("X-Esp32Base-Ajax") == "1";
+}
+
+static const char* ajaxToneName(Esp32BaseWeb::UiTone tone) {
+    switch (tone) {
+        case Esp32BaseWeb::UI_OK: return "ok";
+        case Esp32BaseWeb::UI_WARN: return "warn";
+        case Esp32BaseWeb::UI_DANGER: return "danger";
+        case Esp32BaseWeb::UI_INFO: return "info";
+        case Esp32BaseWeb::UI_NEUTRAL:
+        default: return "neutral";
+    }
+}
+
+void Esp32BaseWeb::sendAjaxReplace(const char* targetId, const char* html, const char* noticeTitle,
+                                   UiTone tone, bool close) {
+    if (!beginResponse(200, "application/json", nullptr)) {
+        return;
+    }
+    sendChunk("{\"ok\":true,\"target\":\"");
+    sendEscapedJsonChunk(targetId ? targetId : "");
+    sendChunk("\",\"html\":\"");
+    sendEscapedJsonChunk(html ? html : "");
+    sendChunk("\"");
+    if (noticeTitle && noticeTitle[0]) {
+        sendChunk(",\"notice\":{\"tone\":\"");
+        sendChunk(ajaxToneName(tone));
+        sendChunk("\",\"title\":\"");
+        sendEscapedJsonChunk(noticeTitle);
+        sendChunk("\"}");
+    }
+    sendChunk(",\"close\":");
+    sendChunk(close ? "true" : "false");
+    sendChunk("}");
+    endResponse();
+}
+
+void Esp32BaseWeb::sendAjaxError(int code, const char* error) {
+    if (!beginResponse(code, "application/json", nullptr)) {
+        return;
+    }
+    sendChunk("{\"ok\":false,\"error\":\"");
+    sendEscapedJsonChunk(error ? error : "Action failed");
+    sendChunk("\"}");
+    endResponse();
+}
+
 void Esp32BaseWeb::sendPagination(const Pagination& pagination) {
     const uint32_t perPage = pagination.perPage == 0 ? 20 : pagination.perPage;
     const uint32_t totalPages = pagination.total == 0 ? 1 : ((pagination.total + perPage - 1) / perPage);

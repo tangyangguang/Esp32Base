@@ -4,16 +4,58 @@
 
 ## 2026-05-31
 
+### 根路径业务首页
+
+新增：
+
+- `HOME_APP` 和 `HOME_COMBINED` 下，业务模式默认优先把已注册的 `/index` 页面作为业务首页；未显式调用 `setHomePath()` 时，`/` 会跳转到 `/index`。
+- 应用显式 `setHomePath("/")` 并注册根路径 GET 业务页面时，`/` 直接调用业务 handler，不再对 `configuredHomePath()` 产生自跳转。
+- `/esp32base` 保持系统入口行为：`HOME_COMBINED` 下继续展示融合系统首页，业务根首页不会覆盖系统直达入口。
+
+业务侧影响：
+
+- 新业务建议把业务首页注册为 `/index`，让裸 `/` 只做稳定跳转；确实需要裸根路径渲染时，再显式使用 `setHomePath("/")`。
+
+### Web UI 局部交互与小表单弹层
+
+新增：
+
+- 新增 `sendInfoRowInlineEdit()`，用于单字段行内编辑；支持当前行展开、AJAX 局部保存、成功后替换目标片段，禁用 JavaScript 时保留普通 POST fallback。
+- 新增 `sendInfoRowDialogForm()`，用于 1-3 个字段的小表单弹层；桌面端居中小弹窗，手机端贴底/近全宽，保存成功后关闭弹层并局部更新目标行。
+- 新增 `isAjaxRequest()`、`sendAjaxReplace()` 和 `sendAjaxError()`，统一 `X-Esp32Base-Ajax: 1` 请求的 JSON 成功/失败返回。
+- 基础 `WEB_HEAD` 增加轻量运行时，只接管带 `data-eb-ajax`、`data-eb-inline-toggle` 和 `data-eb-dialog-open` 标记的元素，不影响普通表单。
+- `examples/web_ui_gallery` 增加行内编辑和小表单弹层示例，并覆盖 JSON 成功、JSON 错误和普通 fallback 行为。
+
+业务侧影响：
+
+- 简单配置项可以不再跳转新页面或整页刷新，页面滚动位置不会因为保存而丢失。
+- 重启、格式化、清日志、OTA、文件上传/下载/删除和 Auth 修改不默认局部刷新，仍建议保留明确确认、进度或整页结果。
+
+### WiFi 初始化期安全启动保护
+
+新增：
+
+- `Esp32BaseWiFi::begin()` 现在会在任何 Arduino `WiFi.*` 初始化/模式调用前写入 `eb_wifi.init_guard`。如果设备连续在 WiFi 初始化最早期以 brownout、panic、watchdog 或 `software` reset 重启，达到 `ESP32BASE_WIFI_SAFE_BOOT_MAX_RESETS` 后会设置 `eb_wifi.init_pause=true`，本轮跳过所有 WiFi 初始化调用，让系统至少进入无 WiFi 的安全运行/串口诊断状态。
+- 触发暂停时新增醒目中文日志：提示“疑似 WiFi/RF 启动瞬时电流导致供电跌落”，建议检查电源、USB 线、稳压器余量和接线，并考虑在板端 VIN/5V 与 GND 间增加低 ESR 储能电容；日志同时明确不会关闭 brownout detector。
+- WiFi 初始化 guard 与既有 STA guard 分离：前者覆盖 `WiFi.persistent()`、`WiFi.setSleep()`、`WiFi.mode()`、`WiFi.begin()` 和 AP 初始化之前的最早期启动风险；后者继续覆盖已保存 STA 凭据进入连接阶段后的异常复位。
+- 新增检查项到 `scripts/check_wifi_safe_boot.py`，覆盖 init guard NVS key、`ESP_RST_SW` 分类、中文供电提示和诊断文档。
+
+业务侧影响：
+
+- 对 Esp32_Irrigation 这类弱供电实机，连续停在 `module_begin name=wifi` 后 brownout/SW reset 的场景不再永久重启；达到阈值后会跳过 WiFi，让应用至少完成基础启动并通过串口给出明确供电诊断建议。
+- 该机制不把电容不足作为唯一原因，不关闭 brownout detector，也不替代硬件排查；业务侧仍应检查电源限流、USB 线压降、稳压器余量、接线接触电阻，并按需要补充板端储能电容。
+
 ### Web UI 按钮视觉层级
 
 优化：
 
 - 基础 `/esp32base/ui.css` 增加 `--eb-primary-hover`、`--eb-button-soft`、`--eb-button-soft-hover` 和 `--eb-button-border` 变量，业务换肤时可同时覆盖主按钮 hover 和普通浅按钮，不再残留固定 hover 色。
 - 默认按钮高度从重色 32px 收敛到更轻的 30px；普通入口、紧凑行动作和分页按钮使用浅底描边，明确保存/执行类动作仍保留主按钮。
+- 修复 System 页面低频入口的 Open 按钮继承通用行内动作最小宽度后跨出 72px 动作列的问题，入口按钮现在保持紧凑右对齐，不再遮挡左右两列内容。
 - 危险动作按钮改为浅危险色和红色边框，继续配合 `dangerpanel`、确认文案和服务端 POST 校验表达风险，避免维护页出现大面积强警告色。
 - `sendInfoRowCompactForm()` 现在和 `sendInfoRowCompactLink()` 一样输出 `.btnlink` tone class，`UI_INFO`、`UI_OK`、`UI_WARN`、`UI_DANGER` 和 `UI_NEUTRAL` 的行内 POST 按钮视觉层级保持一致。
 - 修复 OTA diagnostics 面板使用 `<div>` 包裹 `<tr>` 的非法 HTML，改为 `tablewrap + kv` 表格结构。
-- 新增 `scripts/check_web_ui_baseline.py` 静态检查，覆盖按钮变量、form/link tone 一致性、OTA diagnostics 表格结构和文档变更标记。
+- 新增 `scripts/check_web_ui_baseline.py` 静态检查，覆盖按钮变量、工具入口按钮列宽、form/link tone 一致性、OTA diagnostics 表格结构和文档变更标记。
 
 业务侧影响：
 

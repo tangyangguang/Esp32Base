@@ -45,6 +45,22 @@ uint8_t routeCount(bool appPageOnly) {
     return count;
 }
 
+bool routeMatchesMethod(const Route& route, Esp32BaseWeb::Method method) {
+    return route.method == Esp32BaseWeb::METHOD_ANY || route.method == method;
+}
+
+Route* findRoute(const char* path, Esp32BaseWeb::Method method) {
+    if (!path || !path[0]) {
+        return nullptr;
+    }
+    for (uint8_t i = 0; i < ESP32BASE_WEB_MAX_ROUTES; ++i) {
+        if (g_routes[i].handler && strcmp(g_routes[i].path, path) == 0 && routeMatchesMethod(g_routes[i], method)) {
+            return &g_routes[i];
+        }
+    }
+    return nullptr;
+}
+
 bool validAuthUser(const char* value) {
     if (!value) {
         return false;
@@ -443,6 +459,16 @@ const char* configuredHomePath() {
         return g_homePath;
     }
     for (uint8_t i = 0; i < ESP32BASE_WEB_MAX_NAV_ITEMS; ++i) {
+        if (strcmp(g_navItems[i].path, "/index") == 0) {
+            return g_navItems[i].path;
+        }
+    }
+    for (uint8_t i = 0; i < ESP32BASE_WEB_MAX_ROUTES; ++i) {
+        if (g_routes[i].handler && g_routes[i].appPage && strcmp(g_routes[i].path, "/index") == 0) {
+            return g_routes[i].path;
+        }
+    }
+    for (uint8_t i = 0; i < ESP32BASE_WEB_MAX_NAV_ITEMS; ++i) {
         if (g_navItems[i].path[0]) {
             return g_navItems[i].path;
         }
@@ -556,17 +582,25 @@ bool isAuthenticated() {
     return parseAndCheckAuth("verify");
 }
 
+void dispatchRoute(Route& route) {
+    g_requestContextActive = true;
+    markRequest();
+    if (route.handler) {
+        route.handler();
+    }
+    g_responseActive = false;
+    g_requestContextActive = false;
+    g_currentMethod = Esp32BaseWeb::METHOD_UNKNOWN;
+}
+
 void registerRoute(Route& route) {
+    if (strcmp(route.path, "/") == 0 && routeMatchesMethod(route, Esp32BaseWeb::METHOD_GET)) {
+        route.registered = true;
+        return;
+    }
     Route* routePtr = &route;
     g_server.on(route.path, toHttpMethod(route.method), [routePtr]() {
-        g_requestContextActive = true;
-        markRequest();
-        if (routePtr->handler) {
-            routePtr->handler();
-        }
-        g_responseActive = false;
-        g_requestContextActive = false;
-        g_currentMethod = Esp32BaseWeb::METHOD_UNKNOWN;
+        dispatchRoute(*routePtr);
     });
     route.registered = true;
 }
@@ -577,7 +611,16 @@ void handleCaptiveProbe() {
 }
 
 void handleRootRedirect() {
+    markRequest();
     const char* location = g_homeMode == Esp32BaseWeb::HOME_ESP32BASE ? "/esp32base" : configuredHomePath();
+    if (g_homeMode != Esp32BaseWeb::HOME_ESP32BASE && strcmp(configuredHomePath(), "/") == 0) {
+        Route* route = findRoute("/", Esp32BaseWeb::METHOD_GET);
+        if (route && route->handler) {
+            dispatchRoute(*route);
+            return;
+        }
+        location = "/esp32base";
+    }
     g_server.sendHeader("Location", location, true);
     g_server.send(302, "text/plain", "");
 }

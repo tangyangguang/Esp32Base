@@ -16,11 +16,17 @@ source_checks = [
     ('"sta_guard"', "missing STA boot guard NVS marker"),
     ('"sta_rst"', "missing guarded reset counter"),
     ('"sta_pause"', "missing paused credential marker"),
+    ('"init_guard"', "missing WiFi init guard NVS marker"),
+    ('"init_rst"', "missing WiFi init guarded reset counter"),
+    ('"init_pause"', "missing WiFi init paused marker"),
     ("esp_reset_reason()", "missing reset reason inspection before STA retry"),
     ("ESP_RST_BROWNOUT", "missing brownout reset classification"),
     ("ESP_RST_PANIC", "missing panic reset classification"),
     ("ESP_RST_TASK_WDT", "missing watchdog reset classification"),
+    ("ESP_RST_SW", "missing software reset classification for guarded WiFi init failures"),
     ("sta_safe_boot_pause", "missing explicit safe boot pause log"),
+    ("wifi_init_safe_boot_pause", "missing explicit WiFi init safe boot pause log"),
+    ("疑似 WiFi/RF 启动瞬时电流导致供电跌落", "missing Chinese WiFi init power sag diagnostic"),
     ("sta_safe_boot_resume", "missing explicit safe boot resume log"),
     ("sta_safe_boot_auto_resume", "missing safe boot auto resume log"),
     ("sta_safe_boot_cleared", "missing explicit guard clear log"),
@@ -35,8 +41,9 @@ for needle, message in source_checks:
 docs = {
     "docs/03_api.md": "STA 安全启动保护",
     "docs/04_web.md": "恢复并重试已保存 WiFi",
-    "docs/07_diagnostics.md": "sta_safe_boot_auto_resume",
+    "docs/07_diagnostics.md": "wifi_init_safe_boot_pause",
     "docs/10_known_limitations.md": "STA 安全启动保护",
+    "README.md": "WiFi 初始化阶段连续复位",
 }
 
 for path, needle in docs.items():

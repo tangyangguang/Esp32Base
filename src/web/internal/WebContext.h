@@ -153,7 +153,7 @@ struct WebContext {
     WebServer server;
     Route routes[ESP32BASE_WEB_MAX_ROUTES];
     NavItem navItems[ESP32BASE_WEB_MAX_NAV_ITEMS];
-    const char* headerKeys[6];
+    const char* headerKeys[7];
     bool webReady;
     bool authEnabled;
     bool defaultAuthSet;
@@ -213,7 +213,7 @@ WebContext& ctx();
 extern WebServer& g_server;
 extern Route (&g_routes)[ESP32BASE_WEB_MAX_ROUTES];
 extern NavItem (&g_navItems)[ESP32BASE_WEB_MAX_NAV_ITEMS];
-extern const char* (&g_headerKeys)[6];
+extern const char* (&g_headerKeys)[7];
 extern bool& g_webReady;
 extern bool& g_authEnabled;
 extern bool& g_defaultAuthSet;

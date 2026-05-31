@@ -201,7 +201,7 @@ WiFi 配置页：
 System 维护页：
 
 - 默认底部系统导航展示 Status、Logs、System；启用 App Config 时额外展示 App Config 直达入口。WiFi、Auth、OTA 是低频配置/维护入口，收在 System 页面中并显示为 WiFi Setup、Web Auth、Firmware OTA，但保留原直达 URL。
-- System 页面使用 baseline 分块：低频入口使用两列入口网格，手机端保持“说明 + Open”左右结构；设置项和维护项在 PC 上用两列 `toolgrid` 收敛高度，手机端自然单列；可编辑基础参数使用 `formpanel`，普通维护项使用 `actionpanel`，重启、格式化、清日志等危险操作使用 `dangerpanel`。
+- System 页面使用 baseline 分块：低频入口使用两列入口网格，Open 按钮固定为紧凑浅按钮并贴齐右侧列，不能跨列或遮挡说明；手机端保持“说明 + Open”左右结构；设置项和维护项在 PC 上用两列 `toolgrid` 收敛高度，手机端自然单列；可编辑基础参数使用 `formpanel`，普通维护项使用 `actionpanel`，重启、格式化、清日志等危险操作使用 `dangerpanel`。
 - 启用 App Config 时，System 页面首位仍显示 App Config 入口；App Config 是业务持久化参数配置页，不和基础库维护参数混在 System 长页面中。
 - Hostname 设置区显示当前 hostname、构建默认 hostname、已保存 hostname 和是否需要重启；保存只写入 `eb_sys.hostname`，不热切换当前 DHCP hostname、mDNS、OTA 或 Web 身份，页面必须提示重启后生效。
 - Footer bar 模式设置只接受 Off、Status only、Links + status，保存后立即生效并写入 `eb_ui.footer_mode`；该设置只控制底部横条，不关闭直达 URL 或顶部业务导航。
@@ -361,8 +361,10 @@ Esp32BaseWeb::addPage("/config", "配置", handleConfigPage);
 ```
 
 - `HOME_ESP32BASE`：默认模式，`/` 跳转 `/esp32base`，基础库首页可列出业务入口。
-- `HOME_APP`：`/` 和 `/esp32base` 优先跳转业务首页，基础功能通过系统导航入口访问。
-- `HOME_COMBINED`：`/` 跳转业务首页，`/esp32base` 使用同一套导航框架展示设备融合首页。
+- `HOME_APP`：`/` 进入业务首页，基础功能通过系统导航入口访问；`/esp32base` 保持系统入口可访问。
+- `HOME_COMBINED`：`/` 进入业务首页，`/esp32base` 使用同一套导航框架展示设备融合首页。
+- 业务模式默认优先使用 `/index` 作为业务首页；未显式调用 `setHomePath()` 且已注册 `/index` 页面时，`/` 会跳转 `/index`。
+- 如果应用显式 `setHomePath("/")` 并注册根路径 GET 业务页面，`/` 会直接调用该业务 handler，不再产生自跳转；`/esp32base` 的系统入口行为不变。
 - 配置业务首页后，导航品牌链接指向业务首页，业务主导航不会重复显示同一个首页入口。
 - `SYSTEM_NAV_SECTION` 会在页面底部以小字系统入口与 `Free heap`、`Up`、`RSSI` 同行展示；窄屏下系统入口和状态摘要可自然换行，避免遮挡和横向滚动。
 - Footer bar 可在 System 页面运行时切换 Off、Status only、Links + status；关闭底部横条时系统页面仍可通过直达 URL 访问。
@@ -407,6 +409,9 @@ Esp32BaseWeb::addRoute("/api/faucet/config", Esp32BaseWeb::METHOD_ANY, handleCon
 - `sendInfoRowCompact(title, help, value)`：只读配置、操作、向导和诊断行。
 - `sendInfoRowCompactLink(title, help, value, href, label, tone)`：带按钮型链接动作的紧凑行。
 - `sendInfoRowCompactForm(title, help, value, action, label, hiddenName, hiddenValue, tone)`：带单按钮 POST 动作的紧凑行，默认包含 `once()` 防重复点击。
+- `sendInfoRowInlineEdit(id, title, help, value, action, inputName, inputValue, label, tone)`：单字段行内编辑，支持 AJAX 局部保存和普通 POST fallback。
+- `sendInfoRowDialogForm(dialogId, targetId, title, help, value, action, fieldsHtml, label, tone)`：小表单弹层入口，适合 1-3 个字段；`fieldsHtml` 只传业务侧可信的静态表单片段，动态内容必须先 escape。
+- `isAjaxRequest()`、`sendAjaxReplace()`、`sendAjaxError()`：配合 `X-Esp32Base-Ajax: 1` 处理局部提交结果。
 - `sendPagination(pagination)`：页码型列表分页，包含总条数、总页数、首页、上一页、下一页、尾页、当前页附近页码、每页条数和跳页提交。
 
 示例：
@@ -428,9 +433,11 @@ void handleBusinessPage() {
 
 样式和页面能力优先在 `examples/web_ui_gallery` 中验证；`examples/full_demo` 用于验证 Web、App Config、OTA、日志等能力在完整示例中的集成效果。
 
-需要行内动作时优先使用 `sendInfoRowCompactLink()` 或 `sendInfoRowCompactForm()`。如果业务确实需要自定义 HTML，使用底层 `sendChunk()` 手动输出，并对来自配置、URL 参数、设备名、日志、用户输入或远端数据的内容使用 `writeHtmlEscaped()`。
+需要行内动作时优先使用 `sendInfoRowCompactLink()` 或 `sendInfoRowCompactForm()`；需要修改单个字段时使用 `sendInfoRowInlineEdit()`；需要 1-3 个字段的小表单时使用 `sendInfoRowDialogForm()`。如果业务确实需要自定义 HTML，使用底层 `sendChunk()` 手动输出，并对来自配置、URL 参数、设备名、日志、用户输入或远端数据的内容使用 `writeHtmlEscaped()`。
 
-表单和命令提交应使用 `POST -> 303 -> GET`。前端按钮禁用只能防连点，服务端仍必须重新校验参数、状态和权限。
+表单和命令提交默认仍应保留 `POST -> 303 -> GET`。行内编辑和小表单弹层可以在同一个 endpoint 中通过 `isAjaxRequest()` 返回 JSON 局部结果：成功用 `sendAjaxReplace()` 替换目标片段，失败用 `sendAjaxError()` 在当前行或弹层内显示错误。前端局部刷新只改善体验，服务端仍必须重新校验认证、同源、参数、状态和权限。
+
+不默认局部刷新的操作包括重启、格式化、清日志、OTA、文件上传/下载/删除和 Auth 修改；这些操作应保留明确确认、进度页或整页结果，避免用户误判设备状态。
 
 ### 8.1 Skinning
 
@@ -505,6 +512,10 @@ Esp32BaseWeb::endJson();
 - 应用显式调用 `startConfigPortal()`。
 - 用户显式清除凭证并在应用策略中选择进入 portal。
 - STA 安全启动保护触发：有保存凭据的 STA 启动连续发生 guarded brownout/panic/watchdog 复位，达到 `ESP32BASE_WIFI_SAFE_BOOT_MAX_RESETS` 后暂停凭据并自动回退 portal；后续正常 `poweron`、外部复位或其他非危险复位会自动恢复一次已保存 STA 尝试。
+
+不进入 AP/config portal、而是保持无 WiFi 诊断状态的条件：
+
+- WiFi 初始化安全启动保护触发：设备连续在 Arduino WiFi 初始化最早期发生 guarded brownout/panic/watchdog/software reset，达到阈值后本轮跳过所有 WiFi 初始化调用。此时串口日志会输出 `wifi_init_safe_boot_pause` 和中文供电风险提示；因为 WiFi 被跳过，Web 配网页不会启动，需要通过正常上电恢复重试或修复供电后重启。
 
 默认 config portal AP SSID 为 `ESP32-Config-XXXX`，其中 `XXXX` 取 eFuse MAC 按常见网络 MAC 顺序显示时的最后两个字节，便于和 Status 页 MAC 信息对照。
 

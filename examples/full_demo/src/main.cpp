@@ -305,7 +305,7 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/api/chip", nullptr, true, 200, "\"efuseMac\"");
     RUN_SELFTEST("GET", "/esp32base/api/firmware", nullptr, true, 200, "\"full-demo\"");
     RUN_SELFTEST("GET", "/esp32base/api/ota", nullptr, true, 200, "\"progress\"");
-    RUN_SELFTEST("GET", "/", nullptr, true, 302, "Location: /dashboard");
+    RUN_SELFTEST("GET", "/", nullptr, true, 200, "<title>Dashboard</title>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "<title>Status</title>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "panel statuspage");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "<div class='tablewrap'><table class='kv'>");
@@ -733,7 +733,7 @@ void setup() {
     Esp32Base::setFirmwareInfo("full-demo", "1.0.0");
     Esp32BaseWeb::setDefaultAuth("admin", "admin");
     Esp32BaseWeb::setDeviceName("Full Demo");
-    Esp32BaseWeb::setHomePath("/dashboard");
+    Esp32BaseWeb::setHomePath("/");
     Esp32BaseWeb::setHomeMode(Esp32BaseWeb::HOME_COMBINED);
     Esp32BaseWeb::setSystemNavMode(Esp32BaseWeb::SYSTEM_NAV_SECTION);
     Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_HOME, "Status");
@@ -796,7 +796,8 @@ void setup() {
                         static_cast<unsigned long>(pendingMeta.boot),
                         static_cast<unsigned long>(pendingMeta.nextId));
     }
-    Esp32BaseWeb::addPage("/dashboard", "Dashboard", handleDashboard);
+    Esp32BaseWeb::addPage("/", "Dashboard", handleDashboard);
+    Esp32BaseWeb::addRoute("/dashboard", Esp32BaseWeb::METHOD_GET, handleDashboard);
     Esp32BaseWeb::addPage("/control", "Control", handleControl);
     Esp32BaseWeb::addPage("/ui-status", "UI Status", handleUiStatusDemo);
     Esp32BaseWeb::addPage("/ui-stats", "UI Stats", handleUiStatsDemo);

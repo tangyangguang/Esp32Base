@@ -543,6 +543,8 @@ WiFi 凭证和重连策略：
 - 有已保存凭证但连接失败时，不自动进入 AP/config portal，而是持续重连。
 - 单次 STA 连接尝试有非阻塞超时，默认 `ESP32BASE_WIFI_CONNECT_TIMEOUT_MS=15000`。
 - 前几次重连使用短间隔，连续失败后进入长间隔 backoff；backoff 必须非阻塞，不影响 `handle()`、Watchdog feed 和必要休眠。
+- WiFi 初始化安全启动保护：`begin()` 在任何 Arduino `WiFi.*` 初始化/模式调用前写入 `eb_wifi.init_guard`。如果下一次启动发现该标记仍存在，且 reset reason 是 `brownout`、`panic`、watchdog 类复位或 WiFi 初始化期常见的 `software` 复位，则累计 `eb_wifi.init_rst`；连续达到 `ESP32BASE_WIFI_SAFE_BOOT_MAX_RESETS` 后设置 `eb_wifi.init_pause=true`，本轮跳过 `WiFi.persistent()`、`WiFi.setSleep()`、`WiFi.mode()`、`WiFi.begin()` 和 AP 初始化，让系统至少进入无 WiFi 诊断状态。
+- `init_pause=true` 时，如果后续启动 reset reason 仍属危险复位，`begin()` 继续跳过 WiFi，并输出中文醒目提醒：疑似 WiFi/RF 启动瞬时电流导致供电跌落，应检查电源、USB 线、稳压器余量和接线，并考虑在板端 VIN/5V 与 GND 间增加低 ESR 储能电容。该日志是供电风险诊断建议，不把电容不足判定为唯一原因，也不会关闭 brownout detector。
 - STA 安全启动保护：有已保存凭证并准备进入 STA 时，库会在 `eb_wifi.sta_guard` 写入 guarded 启动标记；成功连接后清除 `sta_guard`、`sta_rst` 和 `sta_pause`。如果下一次启动发现 guarded 标记仍存在，且本次 reset reason 是 `brownout`、`panic` 或 watchdog 类复位，则累计 `eb_wifi.sta_rst`；连续达到 `ESP32BASE_WIFI_SAFE_BOOT_MAX_RESETS`（默认 3）后设置 `eb_wifi.sta_pause=true`，保留 `ssid/pass`，暂停 STA 并进入 AP/config portal。
 - `sta_pause=true` 时，如果本次 reset reason 仍是 brownout、panic 或 watchdog 类危险复位，`begin()` 会把保存凭据视为暂不可用并进入 `CONFIG_PORTAL`；如果本次是 `poweron`、外部复位或其他非危险复位，库会自动清除 pause/guard/count 并用已保存凭据恢复一次 STA 尝试。
 - `retrySavedCredentials()` 会重新读取已保存凭据，清除 safe boot pause/guard/count，停止 config portal，并用原凭据进入 STA 连接流程；它不要求业务或用户重新保存同一组 SSID/password。WiFi 页面在 safe boot paused 时提供“恢复并重试已保存 WiFi”入口调用该行为。
@@ -765,7 +767,17 @@ public:
                                        const char* action, const char* label,
                                        const char* hiddenName = nullptr, const char* hiddenValue = nullptr,
                                        UiTone tone = UI_INFO);
+    static void sendInfoRowInlineEdit(const char* id, const char* title, const char* help, const char* value,
+                                      const char* action, const char* inputName, const char* inputValue,
+                                      const char* label = "Edit", UiTone tone = UI_INFO);
+    static void sendInfoRowDialogForm(const char* dialogId, const char* targetId, const char* title,
+                                      const char* help, const char* value, const char* action,
+                                      const char* fieldsHtml, const char* label = "Edit", UiTone tone = UI_INFO);
     static void sendPagination(const Pagination& pagination);
+    static bool isAjaxRequest();
+    static void sendAjaxReplace(const char* targetId, const char* html, const char* noticeTitle = nullptr,
+                                UiTone tone = UI_OK, bool close = true);
+    static void sendAjaxError(int code, const char* error);
     static bool sendResponseHeader(const char* name, const char* value);
     static bool beginResponse(int code, const char* contentType, const char* filename = nullptr);
     static bool beginText(int code);
@@ -798,12 +810,13 @@ Route 缓冲机制：
 - title 最大可见长度为 23 字节；空 title 返回 false。
 - `addRoute()` 和 `addApi()` 不进入业务入口列表，避免 API 或隐藏路由污染导航。
 - `setDeviceName()` 设置导航品牌和默认标题；`setHomePath()` 设置业务首页路径。
-- `setHomeMode(HOME_ESP32BASE)` 保持基础库首页默认行为；`HOME_APP` 让 `/` 和 `/esp32base` 优先进入业务首页；`HOME_COMBINED` 让 `/` 进入业务首页，并保留 `/esp32base` 为融合首页。
+- `setHomeMode(HOME_ESP32BASE)` 保持基础库首页默认行为，`/` 跳转 `/esp32base`；`HOME_APP` 和 `HOME_COMBINED` 让 `/` 进入业务首页，并保留 `/esp32base` 系统入口。未显式 `setHomePath()` 时优先使用已注册的 `/index` 业务页作为首页；显式 `setHomePath("/")` 且注册 GET `/` 业务页时，裸 `/` 直接调用业务 handler，不产生自跳转。
 - `setSystemNavMode()` 控制系统入口位置：顶部、底部或底部紧凑系统工具区；默认使用 `SYSTEM_NAV_SECTION`，把 Status、Logs、System 作为小字链接与 `Free heap`、`Up`、`RSSI` 放在同一 footer 区域，窄屏可自然换行；启用 App Config 时系统入口同时显示 App Config 直达链接。
 - `FooterBarMode` 控制 `sendFooter()` 的底部横条输出：`FOOTER_BAR_OFF` 不显示，`FOOTER_BAR_STATUS_ONLY` 只显示运行摘要，`FOOTER_BAR_FULL` 显示系统入口和运行摘要。默认 `FOOTER_BAR_FULL`，System 页面保存后写入 `eb_ui.footer_mode` 并立即影响后续页面输出。
 - `setBuiltinLabel()` 覆盖内置导航标签，可用于中文本地化；系统工具页统一使用 `BUILTIN_TOOLS`，不提供旧 Reboot 历史别名。
 - `setHeadExtraCallback()` 设置额外 head 输出回调；`sendHeader()` 在默认 `WEB_HEAD` 后、`</head><body>` 和顶部导航前调用它，业务项目可在这里输出 `<style>`，避免页面刷新时先显示基础库默认导航样式。该回调不会注入 `/esp32base` 及其子路径的内置页面，避免业务 CSS 增加内置页体积。
-- Web UI helper 只负责轻量 HTML 结构和统一样式，不接管业务数据模型：`sendPageTitle()` 输出页面标题区，`beginPanel()` / `endPanel()` 输出内容分组，`sendNotice()` / `sendResultNotice()` 输出横向状态反馈，`beginMetricGrid()` / `sendMetric()` / `endMetricGrid()` 输出状态和统计摘要，`sendInfoRowCompact*()` 输出紧凑信息行和单动作，`sendPagination()` 输出页码型分页、每页条数和跳页表单。`sendInfoRowCompactLink()` 和 `sendInfoRowCompactForm()` 都会按 `UiTone` 输出轻量 `.btnlink` 动作按钮，适合低频行内动作；页面级明确保存/执行按钮仍可直接使用普通 submit 按钮。
+- Web UI helper 只负责轻量 HTML 结构和统一样式，不接管业务数据模型：`sendPageTitle()` 输出页面标题区，`beginPanel()` / `endPanel()` 输出内容分组，`sendNotice()` / `sendResultNotice()` 输出横向状态反馈，`beginMetricGrid()` / `sendMetric()` / `endMetricGrid()` 输出状态和统计摘要，`sendInfoRowCompact*()` 输出紧凑信息行和单动作，`sendInfoRowInlineEdit()` 输出单字段行内编辑，`sendInfoRowDialogForm()` 输出 1-3 字段小表单弹层，`sendPagination()` 输出页码型分页、每页条数和跳页表单。`sendInfoRowCompactLink()`、`sendInfoRowCompactForm()`、行内编辑和弹层入口都会按 `UiTone` 输出轻量按钮；页面级明确保存/执行按钮仍可直接使用普通 submit 按钮。
+- 带 `data-eb-ajax` 的 helper 表单会在浏览器支持 `fetch` 时携带 `X-Esp32Base-Ajax: 1` 和 `Accept: application/json` 局部提交；服务端用 `isAjaxRequest()` 判断后返回 `sendAjaxReplace(targetId, html, noticeTitle)` 或 `sendAjaxError(code, error)`。未携带 AJAX header 时，同一 POST endpoint 仍应保留 `POST -> 303 -> GET` fallback。
 - `UiTone` 仅表达语义色：neutral、ok、warn、danger、info。业务项目不得把危险、警告、成功语义当作普通装饰色复用。
 - 导航会给当前匹配项输出 `active` class；匹配规则为 path 完全相等，或当前路径以 `path + "/"` 开头，多个匹配时选择最长 path。`SYSTEM_NAV_SECTION` 下 WiFi/Auth/OTA 二级页会把底部 System 入口标记为 active；App Config 页面在启用时使用自己的底部入口标记 active。
 - `/esp32base` Status 页是只读设备体检页，采用诊断优先结构：不额外显示和相邻详细区重复的 `System Overview` 预览块，而是按 Device、Network、Runtime Health、Storage & Logs、Firmware & OTA、Hardware、Partition Table 排序展示 hostname、固件/profile、uptime/boot count、WiFi/IP/RSSI、STA/AP/eFuse MAC、heap、max alloc、Watchdog lifetime/trip resets、NTP time、last reset/wake、FS/File inventory/FileLog/OTA headroom 和运行时分区表；File details 入口并入 FS 行，FileLog level/current/used/limit 合并为一行子指标，Top 文件列表只放在 `/esp32base/fs` 详情页，页面容量值只显示 KB/MB/B 人性化格式，`OTA headroom` 表示 `target slot - current sketch`，Max OTA upload 才是上传硬上限。

@@ -269,7 +269,7 @@
 
 - 高风险动作进入独立确认页。
 - 内置 System 页内的重启、格式化、清日志、清 WiFi 等低频维护动作使用 `dangerpanel`，在视觉上与普通设置区分，但不使用大面积警告色。
-- 低频工具入口页可使用两列 `toolgrid` 收敛 PC 端高度；手机端必须回到单列，不能牺牲可读性。
+- 低频工具入口页可使用两列 `toolgrid` 或入口网格收敛 PC 端高度；入口按钮应固定为紧凑列宽并右对齐，不能因为通用行内动作宽度而跨列、遮挡说明或撑高行高；手机端必须回到单列，不能牺牲可读性。
 - 危险操作仍必须使用 POST、`confirm()`、`once(form)` 和 `POST -> 303 -> GET`，避免刷新重复提交。
 - 不只依赖浏览器 `confirm()`。
 - 确认页展示对象、当前状态、影响范围和返回位置。
@@ -365,6 +365,14 @@
 - 按钮高度默认约 30px，分页和紧凑小按钮可降到 26px；手机端可局部回到 32px 以保证可点性。
 - 按钮文字保持居中，字重中等，不使用过高、过胖或强装饰的按钮外观。
 
+局部交互：
+
+- 单字段编辑默认使用行内展开，不跳转新页面；保存成功后只替换当前行，编辑框消失，不改变滚动位置。
+- 1-3 个字段的小表单默认使用当前页弹层。桌面端为居中小弹窗，手机端贴底或近全宽；弹层不使用厚重阴影、大面积主色或复杂动画。
+- 局部提交失败时不关闭编辑区或弹层，不清空输入，只在当前区域显示错误。
+- 无 JavaScript、`fetch` 不可用或未带 AJAX header 时，页面必须仍可通过普通表单 fallback 完成操作。
+- 重启、格式化、清日志、OTA、文件上传/下载/删除、Auth 修改等高风险或长任务不默认局部刷新。
+
 ## 8. 皮肤策略
 
 首版支持 CSS 变量级皮肤。
@@ -425,9 +433,11 @@ void handleHeadExtra() {
 - `sendInfoRowCompact()`：只读紧凑行。
 - `sendInfoRowCompactLink()`：带按钮型链接动作的紧凑行。
 - `sendInfoRowCompactForm()`：带单按钮 POST 动作的紧凑行。
+- `sendInfoRowInlineEdit()`：单字段行内编辑。
+- `sendInfoRowDialogForm()`：1-3 字段小表单弹层入口。
 - `sendPagination()`：页码型分页，包含每页条数和跳页提交。
 
-行内动作优先使用 `sendInfoRowCompactLink()` 或 `sendInfoRowCompactForm()`。如果业务确实需要自定义 HTML，使用底层 `sendChunk()` 手动输出；来自配置、URL、日志、设备名、用户输入或远端数据的内容不得直接拼接，必须使用 `writeHtmlEscaped()`。
+行内动作优先使用 `sendInfoRowCompactLink()` 或 `sendInfoRowCompactForm()`；单字段修改优先使用 `sendInfoRowInlineEdit()`；小表单优先使用 `sendInfoRowDialogForm()`。如果业务确实需要自定义 HTML，使用底层 `sendChunk()` 手动输出；来自配置、URL、日志、设备名、用户输入或远端数据的内容不得直接拼接，必须使用 `writeHtmlEscaped()`。
 
 业务项目仍负责：
 

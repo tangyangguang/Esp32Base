@@ -10,7 +10,7 @@ WebContext::WebContext()
     : server(80),
       routes{},
       navItems{},
-      headerKeys{"Authorization", "X-Sha256", "X-Firmware-Size", "Host", "Origin", "Referer"},
+      headerKeys{"Authorization", "X-Sha256", "X-Firmware-Size", "Host", "Origin", "Referer", "X-Esp32Base-Ajax"},
       webReady(false),
       authEnabled(true),
       defaultAuthSet(false),
@@ -73,7 +73,7 @@ WebContext& ctx() {
 WebServer& g_server = ctx().server;
 Route (&g_routes)[ESP32BASE_WEB_MAX_ROUTES] = ctx().routes;
 NavItem (&g_navItems)[ESP32BASE_WEB_MAX_NAV_ITEMS] = ctx().navItems;
-const char* (&g_headerKeys)[6] = ctx().headerKeys;
+const char* (&g_headerKeys)[7] = ctx().headerKeys;
 bool& g_webReady = ctx().webReady;
 bool& g_authEnabled = ctx().authEnabled;
 bool& g_defaultAuthSet = ctx().defaultAuthSet;
