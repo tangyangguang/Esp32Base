@@ -160,7 +160,7 @@ Esp32BaseFileLog::setMode(Esp32BaseFileLog::WARN);
 
 ### 3.4 Esp32BaseFileLog
 
-`Esp32BaseFileLog` 是系统诊断日志的实现/API 名称，面向开发、维护和运维排障，不是应用业务事件接口。仅在 `ESP32BASE_ENABLE_FILELOG=1` 时可用，依赖 `Esp32BaseFs`。默认文件为 `/logs/eb_app.log`，默认 Web 标签为 `System Logs`，`4 × 32KB` 轮转，默认模式 WARN。运行时系统诊断日志模式只支持 OFF、ERROR、WARN、INFO；DEBUG/VERBOSE 不作为文件日志模式。INFO 模式使用 1KB / 2s 缓存，不做节流。
+`Esp32BaseFileLog` 是系统诊断日志的实现/API 名称，面向开发、维护和运维排障，不是应用业务事件接口。仅在 `ESP32BASE_ENABLE_FILELOG=1` 时可用，依赖 `Esp32BaseFs`。默认文件为 `/esp32base/logs/system.log`，默认 Web 标签为 `System Logs`，`4 × 32KB` 轮转，默认模式 WARN。运行时系统诊断日志模式只支持 OFF、ERROR、WARN、INFO；DEBUG/VERBOSE 不作为文件日志模式。INFO 模式使用 1KB / 2s 缓存，不做节流。
 
 ```cpp
 class Esp32BaseFileLog {
@@ -220,7 +220,9 @@ void loop() {
 #define ESP32BASE_APP_EVENT_LOG_CAPACITY 1024
 ```
 
-单条 `Esp32BaseAppEventRecord` 固定 188 bytes，默认约 188 KiB，容量允许范围为 `64..2048`。文件路径固定为 `/app/events.bin`。基础库只理解通用结构，不理解业务语义；应用负责决定事件何时写入、类型如何命名和页面文案如何解释。
+单条 `Esp32BaseAppEventRecord` 固定 188 bytes，默认约 188 KiB，容量允许范围为 `64..2048`。文件路径固定为 `/esp32base/app-events/events.bin`。基础库只理解通用结构，不理解业务语义；应用负责决定事件何时写入、类型如何命名和页面文案如何解释。
+
+LittleFS 中的 `/esp32base/**` 是基础库管理命名空间。系统诊断日志默认在 `/esp32base/logs/system.log`，App Events store 默认在 `/esp32base/app-events/events.bin`；业务持久化文件应使用 `/app/**`、`/data/**` 或项目自定义目录。
 
 ```cpp
 struct Esp32BaseAppEventRecord {
@@ -289,6 +291,7 @@ public:
     using StoreRecordCallback = void (*)(const StoreRecord& item, void* user);
 
     static bool begin();
+    static bool reload();
     static bool append(const Event& event);
     static bool readLatest(uint16_t offset, uint16_t limit, ReadCallback cb, void* user = nullptr);
     static bool readStoreInfo(StoreInfo& info);
@@ -317,6 +320,7 @@ public:
 - NTP 可用且可信时写入 `epochSec` 并设置 `FLAG_TIME_SYNCED`；否则保存 `bootId + uptimeSec`。Web/API 展示会额外给出派生的 `uptimeMs = uptimeSec * 1000`，用于避免把相对运行时间误读成真实日期。
 - 当前 boot 后续完成 NTP 同步时，Web/API 会通过 `Esp32BaseNtp::resolveCurrentBootEvent()` 把同一 boot 的未同步事件解析为 `resolvedEpochSec`；历史 boot 或无法确认的事件仍显示相对 uptime。
 - `Esp32BaseAppEventLog` 不是跨任务并发 API；建议只在 loop/system task、Web handler 或同一业务执行上下文中调用。其他 FreeRTOS task 需要写业务事件时，应通过业务 queue 投递回 loop/system task，避免 append/read/clear 并发修改同一文件和全局状态。
+- `reload()` 面向维护入口或测试导入场景：当 `/esp32base/app-events/events.bin` 被 FS 管理页上传、覆盖或删除后，先清理运行态 `ready/fault/head/count/nextId`，再按当前 store 重新加载；普通业务写入不需要调用它。
 
 术语和适用边界：
 
@@ -337,7 +341,7 @@ public:
 - 固定文件双 header，记录带 `crc16`，header 带 `crc32`。
 - append 先写记录槽，再写 inactive header；未满时断电最多丢失未提交的新记录，不破坏上一版 header。
 - 满环覆盖最老槽时，如果断电发生在 record 写入后、header 提交前，恢复时会识别该未提交槽并从可见范围移除；结果可能丢失被覆盖的最老记录和未提交的新记录，但不会把整个日志打入 fault。
-- 首次没有 `/app/events.bin` 时，`begin()` 会创建固定容量事件文件；如果路径已存在但文件尺寸不匹配或不可读，则视为结构性故障进入 `faulted()`，不会自动删除或重建，避免升级或损坏场景静默丢失事件。
+- 首次没有 `/esp32base/app-events/events.bin` 时，`begin()` 会创建固定容量事件文件；如果路径已存在但文件尺寸不匹配或不可读，则视为结构性故障进入 `faulted()`，不会自动删除或重建，避免升级或损坏场景静默丢失事件。
 - 双 header 都无效、文件尺寸不匹配、创建/删除/写 header 失败或写后校验失败属于结构性故障，会进入 `faulted()`。
 - 单条 record CRC 损坏或未提交 future record 不会进入全局 fault；业务读取 `readLatest()` 会跳过该槽，`begin()` 和完整 `readLatest(0, count(), ...)` 扫描会把 `count()` 收敛到可读取的有效记录数，append 仍可继续覆盖后续槽。
 - `readLatest()`、`readStoreInfo()` 和 `readStoreRecords()` 是只读路径，不会隐式调用 `begin()`、创建文件或重建 store；未 ready 时返回失败并暴露 `not_ready` 或当前 fault。
@@ -985,10 +989,10 @@ Route 缓冲机制：
 - `/esp32base/logs` 和 `/esp32base/logs/raw` 是只读系统诊断日志查看入口，只读取已经落盘的 FileLog segment 快照；GET 读取不得主动 `flush()`、创建、清空、重建文件或改变 FileLog fault 状态。INFO 缓存中的新日志按常规 flush interval 落盘，清空/格式化/重启等维护副作用必须通过 POST 路径。
 - `/esp32base/fs` 是启用 FS profile 时注册的 LittleFS 诊断页，默认只读，显示 Summary、Top 10 最大文件和最多 128 项文件树；文件树提供单文件下载；当文件声明有大小但首块无法读取时，Action 显示 `unreadable`，不再给出会生成空文件的下载按钮；当 `FS used` 明显大于可见文件合计时提示内部/历史占用异常。
 - `/esp32base/fs/download?path=/file` 下载一个已存在且可读取的文件，复用 Basic Auth 和路径校验，目录、缺失文件和非法路径不会下载；如果文件声明有大小但无法读取首块，返回 `500 File read failed`。
-- `/esp32base/fs?manage=1` 进入单文件删除和受限上传管理模式；`POST /esp32base/fs/delete` 只接受一个已存在文件路径，复用 Basic Auth、同源检查和 `POST -> 303 -> GET`，不提供目录删除、批量删除、编辑或任意路径输入。不可读文件仍允许删除，便于清理损坏文件；删除不以文件内容可读为前提。App Events 启用时，`/app/events.bin` 是基础库内部 store，FS 管理页会拒绝普通上传、覆盖和删除，应使用 System 页 `Clear App Events`。
+- `/esp32base/fs?manage=1` 进入单文件删除和受限上传管理模式；`POST /esp32base/fs/delete` 只接受一个已存在文件路径，复用 Basic Auth、同源检查和 `POST -> 303 -> GET`，不提供目录删除、批量删除、编辑或任意路径输入。不可读文件仍允许删除，便于清理损坏文件；删除不以文件内容可读为前提。App Events 启用时，`/esp32base/app-events/events.bin` 是基础库内部 store，FS 管理页会显示 `app events store` 作为提醒；普通上传或删除仍允许用于测试和维护实验，上传或删除后会重新加载 App Events 运行态。
 - `/esp32base/fs/check?dir=/data&name=records.bin` 是上传前检查接口，复用 Basic Auth，按“已有目录 + 本地文件名”计算目标路径，返回目标是否存在、是否是目录以及是否允许上传；路径拼接如果超过内部路径上限会直接拒绝，不截断成另一个目标。
-- `POST /esp32base/fs/upload` 是 multipart 上传接口，复用 Basic Auth 和同源检查；上传保留本地文件名，可以写入任何已有目录，不创建目录。目标文件存在时必须传 `overwrite=1` 才会覆盖；上传到 FileLog 路径前会先 flush，上传结束后重新加载 FileLog 运行态；目标为 `/app/events.bin` 时返回 `Target is reserved for App Events`。上传完成后会校验最终文件大小和末端可读性；上传只负责写入 LittleFS，不校验业务数据语义、索引、NVS 状态或运行时缓存。
-- `/esp32base/tools` System 页承载低频维护入口和操作，App Config 启用时作为首个入口显示，后面是 WiFi Setup、Web Auth、Firmware OTA、File system 直达入口、hostname 保存、Watchdog trip reset、重启设备；启用 FS 的 profile 还提供手动格式化 LittleFS 操作，会清除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth 或 NVS 配置。格式化后会重新 mount FS、reload FileLog，并在 App Events 启用时重新创建 `/app/events.bin`。
+- `POST /esp32base/fs/upload` 是 multipart 上传接口，复用 Basic Auth 和同源检查；上传保留本地文件名，可以写入任何已有目录，不创建目录。目标文件存在时必须传 `overwrite=1` 才会覆盖；上传到 FileLog 路径前会先 flush，上传结束后重新加载 FileLog 运行态；上传到 `/esp32base/app-events/events.bin` 后会重新加载 App Events 运行态。其他 `/esp32base/**` 路径只在文件树中标记为 `esp32base managed` 作为提醒，不作为通用上传或删除禁区，便于测试和维护实验。上传完成后会校验最终文件大小和末端可读性；上传只负责写入 LittleFS，不校验业务数据语义、索引、NVS 状态或运行时缓存。
+- `/esp32base/tools` System 页承载低频维护入口和操作，App Config 启用时作为首个入口显示，后面是 WiFi Setup、Web Auth、Firmware OTA、File system 直达入口、hostname 保存、Watchdog trip reset、重启设备；启用 FS 的 profile 还提供手动格式化 LittleFS 操作，会清除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth 或 NVS 配置。格式化后会重新 mount FS、reload FileLog，并在 App Events 启用时重新创建 `/esp32base/app-events/events.bin`。
 - `/esp32base/auth` 是内置认证管理页面，受当前 Basic Auth 保护，提交成功后新账号密码立即生效。
 - Web Auth 认证优先级为：已保存认证 > 应用默认认证 > 库默认 `admin/admin`。
 - 内置 Web 不提供首次登录强制改密；量产或可被他人访问的设备应在业务启动时调用 `setDefaultAuth()` 或引导用户尽快保存新认证。

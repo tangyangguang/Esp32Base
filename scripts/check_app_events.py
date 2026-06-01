@@ -72,7 +72,7 @@ require(
 )
 require(
     "src/runtime/Esp32BaseAppEventLog.inc",
-    "removeCurrentTaskForLongOperation",
+    "Esp32BaseLongOperation::LongOperationScope",
     "app event FS operations must protect loopTask watchdog",
 )
 require(
@@ -152,8 +152,12 @@ require("src/web/internal/WebLogs.cpp", "Esp32BaseFileLog", "System Logs page mu
 if (ROOT / "src/web/internal/WebLogs.cpp").exists() and "Esp32BaseAppEventLog" in read("src/web/internal/WebLogs.cpp"):
     errors.append("src/web/internal/WebLogs.cpp: System Logs page must not mix in App Events")
 require("src/web/internal/WebFs.cpp", "appEventsOwnsPath", "FS management must recognize App Events store as an internal path")
-require("src/web/internal/WebFs.cpp", "Target is reserved for App Events", "FS upload must reject overwriting the App Events store")
-require("src/web/internal/WebFs.cpp", "reason=app_events_store", "FS delete/upload must log reserved App Events store attempts")
+require("src/web/internal/WebFs.cpp", "targetIsAppEvents", "FS upload/delete must detect App Events store for runtime reload")
+require("src/runtime/Esp32BaseAppEventLog.h", "static bool reload();", "App Events must expose an explicit runtime reload API")
+require("src/runtime/Esp32BaseAppEventLog.inc", "bool Esp32BaseAppEventLog::reload()", "App Events reload implementation is required")
+require("src/web/internal/WebFs.cpp", "Esp32BaseAppEventLog::reload();", "FS upload/delete of App Events store must reload runtime state")
+if "Target is reserved for App Events" in read("src/web/internal/WebFs.cpp"):
+    errors.append("src/web/internal/WebFs.cpp: FS upload must not reject App Events store during test/maintenance imports")
 web_logs_source = read("src/web/internal/WebLogs.cpp")
 for signature in ("void handleLogsPage", "void handleLogsRaw"):
     body = function_body(web_logs_source, signature)
@@ -178,7 +182,7 @@ require("docs/04_web.md", "/esp32base/app-events", "Web docs must include App Ev
 require("docs/04_web.md", "事件日志", "Web docs must name App Events as event log, not diagnostic page")
 require("docs/04_web.md", "System Logs", "Web docs must expose the user-facing system logs label")
 require("docs/04_web.md", "不应把 boot/reset", "Web docs must prevent duplicating system events in App Events")
-require("docs/04_web.md", "Target is reserved for App Events", "Web docs must document FS upload guard for the App Events store")
+require("docs/04_web.md", "上传或删除后会重新加载 App Events 运行态", "Web docs must document App Events store maintenance reload")
 require("docs/03_api.md", "loop/system task", "API docs must document App Events task ownership boundary")
 require("docs/03_api.md", "checkPostAllowed", "API docs must document POST same-origin helper")
 require("docs/06_memory_budget.md", "188 KiB", "memory budget must include default app event storage")

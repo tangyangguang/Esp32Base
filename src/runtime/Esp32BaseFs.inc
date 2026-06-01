@@ -128,6 +128,29 @@ bool writeOpenFileChunked(File& file, const uint8_t* data, size_t len, size_t* w
     return written == len;
 }
 
+bool ensureDirPath(const char* filePath) {
+    if (!filePath || filePath[0] != '/') {
+        return false;
+    }
+    char dir[96];
+    for (const char* p = filePath + 1; *p; ++p) {
+        if (*p != '/') {
+            continue;
+        }
+        const size_t dirLen = static_cast<size_t>(p - filePath);
+        if (dirLen == 0 || dirLen >= sizeof(dir)) {
+            return false;
+        }
+        memcpy(dir, filePath, dirLen);
+        dir[dirLen] = '\0';
+        if (!Esp32BaseFs::mkdir(dir) && !Esp32BaseFs::exists(dir)) {
+            return false;
+        }
+        Esp32BaseLongOperation::service();
+    }
+    return true;
+}
+
 bool readOpenFileChunked(File& file, uint8_t* out, size_t maxLen, size_t* readLen) {
     return readFromOpenFile(file, out, maxLen, readLen);
 }

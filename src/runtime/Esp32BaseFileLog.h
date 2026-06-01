@@ -7,7 +7,7 @@
 #include "../core/Esp32BaseLog.h"
 
 #ifndef ESP32BASE_EB_FILELOG_PATH
-#define ESP32BASE_EB_FILELOG_PATH "/logs/eb_app.log"
+#define ESP32BASE_EB_FILELOG_PATH "/esp32base/logs/system.log"
 #endif
 
 #ifndef ESP32BASE_EB_FILELOG_MAX_BYTES
@@ -49,6 +49,9 @@
 
 class Esp32BaseFileLog {
 public:
+    static constexpr size_t PATH_BUFFER_SIZE = 96;
+    static constexpr size_t SEGMENT_PATH_BUFFER_SIZE = PATH_BUFFER_SIZE + 4;
+
     enum Mode : uint8_t {
         OFF = ESP32BASE_FILELOG_MODE_OFF,
         ERROR = ESP32BASE_FILELOG_MODE_ERROR,

@@ -115,6 +115,7 @@ public:
     using StoreRecordCallback = void (*)(const StoreRecord& item, void* user);
 
     static bool begin();
+    static bool reload();
     static bool append(const Event& event);
     static bool readLatest(uint16_t offset, uint16_t limit, ReadCallback cb, void* user = nullptr);
     static bool readStoreInfo(StoreInfo& info);

@@ -68,7 +68,7 @@ ESP32 full_demo 对照构建中，24 route 相比 16 route 让 `g_routes` 增加
 
 ### 3.4 FileLog
 
-系统诊断日志仅在 FS profile 中启用，底层实现/API 名称是 `Esp32BaseFileLog`。默认 `4 × 32KB = 128KB`，低优先级缓存 1KB，flush interval 2s。量产推荐 WARN 模式；示例使用 INFO 默认模式方便观察。Core 和默认 NET 不链接 LittleFS，也不产生 FileLog 静态状态。
+系统诊断日志仅在 FS profile 中启用，底层实现/API 名称是 `Esp32BaseFileLog`。默认路径为 `/esp32base/logs/system.log`，默认 `4 × 32KB = 128KB`，低优先级缓存 1KB，flush interval 2s。量产推荐 WARN 模式；示例使用 INFO 默认模式方便观察。Core 和默认 NET 不链接 LittleFS，也不产生 FileLog 静态状态。
 
 ### 3.5 App Events
 
@@ -78,7 +78,7 @@ ESP32 full_demo 对照构建中，24 route 相比 16 route 让 `g_routes` 增加
 #define ESP32BASE_APP_EVENT_LOG_CAPACITY 1024
 ```
 
-单条记录固定 188 bytes，默认数据区约 188 KiB；加上两个 64-byte header 后文件大小约 188.1 KiB，路径为 `/app/events.bin`。该容量面向长期运行设备保留约千条可解释业务事件，定位是“近期关键事件窗口”，比 16KB/32KB 小环更适合排查低频业务决策，同时仍明显小于常见 1MB+ LittleFS 分区。
+单条记录固定 188 bytes，默认数据区约 188 KiB；加上两个 64-byte header 后文件大小约 188.1 KiB，路径为 `/esp32base/app-events/events.bin`。该容量面向长期运行设备保留约千条可解释业务事件，定位是“近期关键事件窗口”，比 16KB/32KB 小环更适合排查低频业务决策，同时仍明显小于常见 1MB+ LittleFS 分区。
 
 可按项目调整为 `64..2048` 条。若业务事件频率高于“用户可解释的关键事件”，应降低写入频率或把高频明细放到业务自己的数据文件；App Events 不替代调试日志、传感器采样、大 payload、用水量长期统计、报表、累计量、完整执行历史或不允许覆盖的业务数据。
 

@@ -653,7 +653,7 @@ void sendAppEventDetailDialog(const Esp32BaseAppEventLog::StoreRecord& item, uin
     sendDetailRowText("status", Esp32BaseAppEventLog::storeRecordStatusName(item.status), "Overall record state derived from read, magic, level, crc and commit checks.");
     sendDetailRowUint("slot", item.slot, "Physical ring-buffer slot.");
     sendDetailRowUint("index", item.index, "Newest-first index in the current header range.");
-    sendDetailRowUint("recordOffset", item.offset, "Byte offset inside /app/events.bin.");
+    sendDetailRowUint("recordOffset", item.offset, "Byte offset inside the App Events store file.");
     sendDetailGroupEnd();
     sendDetailGroupStart("Validation", "Internal checks used to decide whether the record is a valid business event.");
     sendDetailRowBool("readOk", item.readOk, "Record bytes were read from the file.");

@@ -49,7 +49,8 @@ checks = {
         "fs_upload_rejected",
         "fs_upload_completed",
         "appEventsOwnsPath",
-        "Target is reserved for App Events",
+        "targetIsAppEvents",
+        "Esp32BaseAppEventLog::reload();",
         "Upload file",
         "static_cast<size_t>(written) >= len",
         "static_cast<uint64_t>(actualSize) == g_fsUploadBytes",
@@ -86,8 +87,12 @@ for path, needles in checks.items():
         if needle not in text:
             errors.append(f"{path}: missing {needle!r}")
 
-if "Esp32BaseFs::writeBytes(" in source:
-    errors.append("src/web/internal Web modules: upload should stream through LittleFS File, not buffer full files")
+if "Esp32BaseFs::appendBytes(g_fsUploadPath, upload.buf, upload.currentSize)" not in source:
+    errors.append("src/web/internal Web modules: upload chunks must stream through Esp32BaseFs appendBytes")
+if "Esp32BaseFs::writeBytes(g_fsUploadPath, nullptr, 0)" not in source:
+    errors.append("src/web/internal Web modules: upload must create or truncate the target before streaming chunks")
+if "Target is reserved for App Events" in source:
+    errors.append("src/web/internal Web modules: App Events store upload should warn/reload, not reject")
 
 for forbidden in [
     "fsUploadPathProtected",

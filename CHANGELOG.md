@@ -4,6 +4,13 @@
 
 ## 2026-06-01
 
+### LittleFS 基础库命名空间隔离
+
+- 基础库管理的 LittleFS 文件统一迁入 `/esp32base/**`：系统诊断日志默认路径改为 `/esp32base/logs/system.log`，App Events store 默认路径改为 `/esp32base/app-events/events.bin`，和业务项目的 `/app/**`、`/data/**` 文件分开。
+- FileLog 和 App Events 初始化会按层级创建 `/esp32base/logs`、`/esp32base/app-events`，不依赖 LittleFS 递归 mkdir 行为。
+- FS 管理页会把 `/esp32base/app-events/events.bin` 标记为 `app events store`，把其他 `/esp32base/**` 文件标记为 `esp32base managed`；这些标签是命名空间提醒，不作为通用上传或删除禁区，便于测试和维护实验。上传、覆盖或删除 App Events store 后会通过 `Esp32BaseAppEventLog::reload()` 清理并重新加载 App Events 运行态。
+- 本次不自动删除旧 `/logs/eb_app.log*` 或 `/app/events.bin` 文件；需要保留旧诊断/事件数据时，升级前后都可通过 FS 页面下载旧文件，之后再由维护人员确认清理。
+
 ### App Config 保存前核对区交互优化
 
 - `/esp32base/app-config` 首次点击 `Save App Config` 时不再主动 `scrollIntoView()`，确认区改为居中 review 浮层，避免保存前 review 区出现闪烁、页面跳动、滚动条位置突变，以及确认按钮落到视口外。

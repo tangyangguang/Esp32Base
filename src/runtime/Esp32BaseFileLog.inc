@@ -16,11 +16,12 @@ namespace {
 bool g_fileLogEnabled = false;
 bool g_fileLogDirReady = false;
 bool g_fileLogFault = false;
+constexpr size_t kFileLogSegmentPathMax = Esp32BaseFileLog::SEGMENT_PATH_BUFFER_SIZE;
 uint32_t g_fileLogMaxBytes = ESP32BASE_EB_FILELOG_MAX_BYTES;
 uint32_t g_fileLogCurrentBytes = 0;
 uint8_t g_fileLogRotateFiles = ESP32BASE_EB_FILELOG_ROTATE_FILES;
 Esp32BaseFileLog::Mode g_fileLogMode = static_cast<Esp32BaseFileLog::Mode>(ESP32BASE_EB_FILELOG_DEFAULT_MODE);
-char g_fileLogPath[48] = ESP32BASE_EB_FILELOG_PATH;
+char g_fileLogPath[Esp32BaseFileLog::PATH_BUFFER_SIZE] = "";
 
 #if ESP32BASE_EB_FILELOG_BUFFER_SIZE > 0
 char g_fileLogBuffer[ESP32BASE_EB_FILELOG_BUFFER_SIZE];
@@ -73,7 +74,7 @@ void markFileLogFault() {
 }
 
 bool truncateSegment(uint8_t index) {
-    char seg[64];
+    char seg[kFileLogSegmentPathMax];
     if (!Esp32BaseFileLog::segmentPath(index, seg, sizeof(seg))) {
         return false;
     }
@@ -87,7 +88,7 @@ bool ensureSegmentFiles() {
     Esp32BaseLongOperation::LongOperationScope scope;
     bool ok = true;
     for (uint8_t i = 0; i < g_fileLogRotateFiles; ++i) {
-        char seg[64];
+        char seg[kFileLogSegmentPathMax];
         if (!Esp32BaseFileLog::segmentPath(i, seg, sizeof(seg))) {
             ok = false;
             break;
@@ -111,23 +112,11 @@ bool ensureDirReady() {
     if (!Esp32BaseFs::isReady() || !g_fileLogPath[0]) {
         return false;
     }
-    const char* slash = strrchr(g_fileLogPath, '/');
-    if (slash && slash != g_fileLogPath) {
-        char dir[48];
-        const size_t len = static_cast<size_t>(slash - g_fileLogPath);
-        if (len >= sizeof(dir)) {
-            return false;
-        }
-        memcpy(dir, g_fileLogPath, len);
-        dir[len] = '\0';
-        Esp32BaseLongOperation::LongOperationScope scope;
-        const bool dirReady = Esp32BaseFs::mkdir(dir) || Esp32BaseFs::exists(dir);
-        Esp32BaseLongOperation::service();
-        if (!dirReady) {
-            markFileLogFault();
-            ESP32BASE_LOG_W("filelog", "dir_create_failed path=%s", dir);
-            return false;
-        }
+    Esp32BaseLongOperation::LongOperationScope scope;
+    if (!ensureDirPath(g_fileLogPath)) {
+        markFileLogFault();
+        ESP32BASE_LOG_W("filelog", "dir_create_failed path=%s", g_fileLogPath);
+        return false;
     }
     if (!ensureSegmentFiles()) {
         markFileLogFault();
@@ -173,7 +162,7 @@ bool rotateFile() {
         return ok;
     }
 
-    char oldest[64];
+    char oldest[kFileLogSegmentPathMax];
     if (Esp32BaseFileLog::segmentPath(g_fileLogRotateFiles - 1, oldest, sizeof(oldest)) && Esp32BaseFs::exists(oldest)) {
         if (!Esp32BaseFs::removeFile(oldest)) {
             ok = false;
@@ -183,8 +172,8 @@ bool rotateFile() {
     }
 
     for (int8_t i = static_cast<int8_t>(g_fileLogRotateFiles) - 2; ok && i >= 0; --i) {
-        char from[64];
-        char to[64];
+        char from[kFileLogSegmentPathMax];
+        char to[kFileLogSegmentPathMax];
         if (!Esp32BaseFileLog::segmentPath(static_cast<uint8_t>(i), from, sizeof(from))) {
             continue;
         }
@@ -421,6 +410,20 @@ bool applyMode(Esp32BaseFileLog::Mode mode, bool persist, bool logChange) {
 
 bool Esp32BaseFileLog::begin() {
     Esp32BaseLog::setInternalLineSink(logLineSink);
+    if (strlen(ESP32BASE_EB_FILELOG_PATH) >= sizeof(g_fileLogPath)) {
+        g_fileLogPath[0] = '\0';
+        g_fileLogEnabled = false;
+        g_fileLogDirReady = false;
+        g_fileLogFault = false;
+#if ESP32BASE_EB_FILELOG_BUFFER_SIZE > 0
+        g_fileLogBufferUsed = 0;
+        g_fileLogLastFlushMs = 0;
+#endif
+        g_fileLogMaxBytes = ESP32BASE_EB_FILELOG_MAX_BYTES;
+        g_fileLogRotateFiles = ESP32BASE_EB_FILELOG_ROTATE_FILES;
+        ESP32BASE_LOG_W("filelog", "path_too_long max=%u", static_cast<unsigned>(sizeof(g_fileLogPath) - 1));
+        return applyMode(readMode(), false, false);
+    }
     strlcpy(g_fileLogPath, ESP32BASE_EB_FILELOG_PATH, sizeof(g_fileLogPath));
     g_fileLogMaxBytes = ESP32BASE_EB_FILELOG_MAX_BYTES;
     g_fileLogRotateFiles = ESP32BASE_EB_FILELOG_ROTATE_FILES;
@@ -490,7 +493,7 @@ uint8_t Esp32BaseFileLog::rotateFiles() { return g_fileLogRotateFiles; }
 uint32_t Esp32BaseFileLog::size() { return segmentSize(0); }
 
 uint32_t Esp32BaseFileLog::segmentSize(uint8_t index) {
-    char seg[64];
+    char seg[kFileLogSegmentPathMax];
     if (!segmentPath(index, seg, sizeof(seg))) {
         return 0;
     }
@@ -544,7 +547,7 @@ bool Esp32BaseFileLog::streamSegment(uint8_t index, SegmentChunkFn cb, void* use
     if (!cb || !Esp32BaseFs::isReady()) {
         return false;
     }
-    char seg[64];
+    char seg[kFileLogSegmentPathMax];
     if (!segmentPath(index, seg, sizeof(seg)) || !Esp32BaseFs::exists(seg)) {
         return false;
     }

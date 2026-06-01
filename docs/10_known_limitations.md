@@ -62,12 +62,13 @@ App Events 边界：
 
 - App Events 是固定容量环形事件日志，适合低频关键业务事件，不是业务长期数据模型。
 - 用水量统计、报表数据、累计量、传感器采样历史、完整执行历史、大 payload、高频明细和不允许覆盖的业务数据，应由业务自己的数据文件或存储结构负责。
-- `/app/events.bin` 是基础库内部 store；普通 FS 管理页不允许上传、覆盖或删除它，维护时使用 System 页的 App Events 清空或 LittleFS 格式化动作。
+- `/esp32base/app-events/events.bin` 是基础库内部 store；普通 FS 管理页会显示 `app events store` 提醒，但仍允许测试和维护时上传、覆盖或删除，操作后会重新加载 App Events 运行态。常规清空事件仍建议使用 System 页的 App Events 清空动作。
 - App Events 也不是第二套系统诊断日志。boot/reset/restart reason、WiFi、NTP、OTA、LittleFS、FileLog fault、基础库健康状态等 Esp32Base 系统事件仍归 Status、System diagnostics 和 FileLog；App Events 只记录应用业务决策或业务可解释事件。同一故障可同时有系统诊断日志和 App Event，但前者写技术事实和内部错误链路，后者写业务影响、保护动作、跳过原因、用户维护结果或外部决策结果。
 
 ## 6. 文件系统边界
 
 - LittleFS 用于小型配置文件、诊断文件和 Web 静态小资源。
+- 系统诊断日志默认位于 `/esp32base/logs/system.log`，App Events store 默认位于 `/esp32base/app-events/events.bin`；业务文件应放在 `/app/**`、`/data/**` 或项目自定义目录。
 - 业务需要二进制定长日志时，应通过 `Esp32BaseFs::readBytesAt()` / `writeBytesAt()` 做分页读取和固定位置覆盖，不直接依赖 LittleFS 或 Arduino `File`。
 - `writeBytesAt()` 只覆盖已有文件内容，不创建、不扩展文件；环形文件容量应由 `createFixedFile()` 初始化或校验。
 - `createFixedFile()` 会在文件不存在、大小不匹配或同尺寸但末端不可读时重建固定大小文件；同尺寸且可读时保留原内容，避免启动期清空持久环形记录。`appendBytes()` 适合低频追加，不适合循环零填充大文件。

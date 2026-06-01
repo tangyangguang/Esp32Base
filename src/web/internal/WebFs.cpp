@@ -23,23 +23,25 @@ void fsFormatCount(uint32_t count, char* out, size_t len) {
     snprintf(out, len, "%lu", static_cast<unsigned long>(count));
 }
 
-void fsJoinPath(const char* dir, const char* name, char* out, size_t len) {
+bool fsJoinPath(const char* dir, const char* name, char* out, size_t len) {
     if (!out || len == 0) {
-        return;
+        return false;
     }
+    int written = 0;
     if (!name || !name[0]) {
-        strlcpy(out, dir && dir[0] ? dir : "/", len);
-        return;
+        written = snprintf(out, len, "%s", dir && dir[0] ? dir : "/");
+    } else if (name[0] == '/') {
+        written = snprintf(out, len, "%s", name);
+    } else if (!dir || !dir[0] || strcmp(dir, "/") == 0) {
+        written = snprintf(out, len, "/%s", name);
+    } else {
+        written = snprintf(out, len, "%s/%s", dir, name);
     }
-    if (name[0] == '/') {
-        strlcpy(out, name, len);
-        return;
+    if (written <= 0 || static_cast<size_t>(written) >= len) {
+        out[0] = '\0';
+        return false;
     }
-    if (!dir || !dir[0] || strcmp(dir, "/") == 0) {
-        snprintf(out, len, "/%s", name);
-        return;
-    }
-    snprintf(out, len, "%s/%s", dir, name);
+    return true;
 }
 
 void fsAddTopFile(FsScan& scan, const char* path, uint64_t size) {
@@ -73,26 +75,46 @@ void sendFsDownloadForm(const char* path) {
     sendChunk("<input class='secondary fsaction' type='submit' value='Download'></form>");
 }
 
+void sendFsPathTooLongRow(const char* dir, const char* name, bool isDir) {
+    sendChunk("<tr><td>");
+    sendEscapedHtmlChunk(dir && dir[0] ? dir : "/");
+    sendChunk("/");
+    sendEscapedHtmlChunk(name && name[0] ? name : "-");
+    sendChunk("</td><td>");
+    sendEscapedHtmlChunk(isDir ? "dir" : "file");
+    sendChunk("</td><td>-</td><td>");
+    sendStatusTag(Esp32BaseWeb::UI_WARN, "path too long");
+    sendChunk("</td></tr>");
+}
+
 #if ESP32BASE_ENABLE_APP_EVENTS
 bool appEventsOwnsPath(const char* path) {
     return path && strcmp(path, Esp32BaseAppEventLog::path()) == 0;
 }
 
-void sendFsReservedAppEventsAction() {
-    sendChunk("<div class='fsactions'>");
+void sendFsAppEventsTag() {
     sendStatusTag(Esp32BaseWeb::UI_INFO, "app events store");
-    sendChunk("</div>");
 }
 #endif
 
+bool esp32BaseOwnsPath(const char* path) {
+    return path && (strcmp(path, "/esp32base") == 0 || strncmp(path, "/esp32base/", 11) == 0);
+}
+
+void sendFsEsp32BaseTag() {
+    sendStatusTag(Esp32BaseWeb::UI_INFO, "esp32base managed");
+}
+
 void sendFsFileActions(const char* path, bool manage) {
+    sendChunk("<div class='fsactions'>");
 #if ESP32BASE_ENABLE_APP_EVENTS
     if (appEventsOwnsPath(path)) {
-        sendFsReservedAppEventsAction();
-        return;
-    }
+        sendFsAppEventsTag();
+    } else
 #endif
-    sendChunk("<div class='fsactions'>");
+    if (esp32BaseOwnsPath(path)) {
+        sendFsEsp32BaseTag();
+    }
     sendFsDownloadForm(path);
     if (manage) {
         sendFsDeleteForm(path);
@@ -101,13 +123,15 @@ void sendFsFileActions(const char* path, bool manage) {
 }
 
 void sendFsUnreadableActions(const char* path, bool manage) {
+    sendChunk("<div class='fsactions'>");
 #if ESP32BASE_ENABLE_APP_EVENTS
     if (appEventsOwnsPath(path)) {
-        sendFsReservedAppEventsAction();
-        return;
-    }
+        sendFsAppEventsTag();
+    } else
 #endif
-    sendChunk("<div class='fsactions'>");
+    if (esp32BaseOwnsPath(path)) {
+        sendFsEsp32BaseTag();
+    }
     sendStatusTag(Esp32BaseWeb::UI_WARN, "unreadable");
     if (manage) {
         sendFsDeleteForm(path);
@@ -162,8 +186,22 @@ void fsWalkCallback(const char* name, size_t size, bool isDir, void* user) {
         return;
     }
     char path[96];
-    fsJoinPath(frame->dir, name, path, sizeof(path));
+    const bool pathOk = fsJoinPath(frame->dir, name, path, sizeof(path));
     frame->scan->entries++;
+    if (!pathOk) {
+        if (isDir) {
+            frame->scan->dirs++;
+        } else {
+            frame->scan->files++;
+            frame->scan->listedSize += size;
+        }
+        if (frame->emitRows && frame->emittedRows && *frame->emittedRows < frame->emitLimit) {
+            sendFsPathTooLongRow(frame->dir, name, isDir);
+            (*frame->emittedRows)++;
+        }
+        fsScanYield();
+        return;
+    }
     if (isDir) {
         frame->scan->dirs++;
     } else {
@@ -202,6 +240,23 @@ bool fsInternalUsageHigh(const FsScan& scan) {
 bool validFsFilePath(const char* path) {
     return path && path[0] == '/' && path[1] != '\0' && strlen(path) < 96 &&
            !strstr(path, "..") && !strstr(path, "//");
+}
+
+bool fsReadArg(const char* name, char* out, size_t len) {
+    if (!out || len == 0 || !name || !g_server.hasArg(name)) {
+        return false;
+    }
+    const String value = g_server.arg(name);
+    if (value.length() >= len) {
+        out[0] = '\0';
+        return false;
+    }
+    strlcpy(out, value.c_str(), len);
+    return true;
+}
+
+bool fsReadPathArg(const char* name, char* out, size_t len) {
+    return fsReadArg(name, out, len) && validFsFilePath(out);
 }
 
 bool validFsDeletePath(const char* path) {
@@ -333,7 +388,9 @@ void fsUploadDirOptionCallback(const char* name, size_t, bool isDir, void* user)
         return;
     }
     char path[96];
-    fsJoinPath(frame->dir, name, path, sizeof(path));
+    if (!fsJoinPath(frame->dir, name, path, sizeof(path))) {
+        return;
+    }
     if (!validFsDirectoryPath(path)) {
         return;
     }
@@ -385,7 +442,7 @@ bool fileLogOwnsPath(const char* path) {
     if (strcmp(path, Esp32BaseFileLog::path()) == 0) {
         return true;
     }
-    char segment[64];
+    char segment[Esp32BaseFileLog::SEGMENT_PATH_BUFFER_SIZE];
     for (uint8_t i = 0; i < Esp32BaseFileLog::rotateFiles(); ++i) {
         if (Esp32BaseFileLog::segmentPath(i, segment, sizeof(segment)) && strcmp(path, segment) == 0) {
             return true;
@@ -568,8 +625,7 @@ void handleFsDownloadGet() {
         return;
     }
     char path[96];
-    strlcpy(path, g_server.hasArg("path") ? g_server.arg("path").c_str() : "", sizeof(path));
-    if (!validFsFilePath(path)) {
+    if (!fsReadPathArg("path", path, sizeof(path))) {
         g_server.send(400, "text/plain", "Invalid path");
         return;
     }
@@ -638,8 +694,10 @@ void handleFsCheckGet() {
     char dir[96];
     char name[64];
     char path[96];
-    strlcpy(dir, g_server.hasArg("dir") ? g_server.arg("dir").c_str() : "", sizeof(dir));
-    strlcpy(name, g_server.hasArg("name") ? g_server.arg("name").c_str() : "", sizeof(name));
+    if (!fsReadArg("dir", dir, sizeof(dir)) || !fsReadArg("name", name, sizeof(name))) {
+        fsSendUploadJson(400, false, "Invalid filename or target path", nullptr);
+        return;
+    }
     if (!fsUploadDirectoryExists(dir)) {
         fsSendUploadJson(400, false, "Target directory missing", nullptr);
         return;
@@ -652,12 +710,6 @@ void handleFsCheckGet() {
         fsSendUploadJson(400, false, "Target is a directory", path, false, true);
         return;
     }
-#if ESP32BASE_ENABLE_APP_EVENTS
-    if (appEventsOwnsPath(path)) {
-        fsSendUploadJson(400, false, "Target is reserved for App Events", path, true, false);
-        return;
-    }
-#endif
     const bool exists = Esp32BaseFs::fileSize(path) >= 0;
     fsSendUploadJson(200, true, nullptr, path, exists, false);
 }
@@ -679,6 +731,12 @@ void handleFsUploadDone() {
     const bool startFailed = g_fsUploadStartFailed;
     g_fsUploadStartFailed = false;
     fsCloseUploadFile();
+#if ESP32BASE_ENABLE_APP_EVENTS
+    const bool targetIsAppEvents = g_fsUploadPath[0] && appEventsOwnsPath(g_fsUploadPath);
+    if (targetIsAppEvents) {
+        Esp32BaseAppEventLog::reload();
+    }
+#endif
 #if ESP32BASE_ENABLE_FILELOG
     if (g_fsUploadPath[0] && (fileLogOwnsPath(g_fsUploadPath) || Esp32BaseFileLog::faulted())) {
         Esp32BaseFileLog::begin();
@@ -738,7 +796,11 @@ void handleFsUpload() {
             return;
         }
         char dir[96];
-        strlcpy(dir, g_server.hasArg("dir") ? g_server.arg("dir").c_str() : "", sizeof(dir));
+        if (!fsReadArg("dir", dir, sizeof(dir))) {
+            g_fsUploadStartFailed = true;
+            fsSetUploadError("Invalid filename or target path");
+            return;
+        }
         if (!fsUploadDirectoryExists(dir)) {
             g_fsUploadStartFailed = true;
             fsSetUploadError("Target directory missing");
@@ -754,14 +816,6 @@ void handleFsUpload() {
             fsSetUploadError("Target is a directory");
             return;
         }
-#if ESP32BASE_ENABLE_APP_EVENTS
-        if (appEventsOwnsPath(g_fsUploadPath)) {
-            g_fsUploadStartFailed = true;
-            fsSetUploadError("Target is reserved for App Events");
-            ESP32BASE_LOG_W("web", "fs_upload_rejected path=%s reason=app_events_store", g_fsUploadPath);
-            return;
-        }
-#endif
 #if ESP32BASE_ENABLE_FILELOG
         if (fileLogOwnsPath(g_fsUploadPath) && Esp32BaseFileLog::isEnabled()) {
             Esp32BaseFileLog::flush();
@@ -818,8 +872,7 @@ void handleFsDeletePost() {
         return;
     }
     char path[96];
-    strlcpy(path, g_server.hasArg("path") ? g_server.arg("path").c_str() : "", sizeof(path));
-    if (!validFsDeletePath(path)) {
+    if (!fsReadPathArg("path", path, sizeof(path))) {
         ESP32BASE_LOG_W("web", "fs_delete_rejected reason=invalid_path");
         redirectSeeOther("/esp32base/fs?manage=1&error=delete_invalid");
         return;
@@ -835,11 +888,7 @@ void handleFsDeletePost() {
         return;
     }
 #if ESP32BASE_ENABLE_APP_EVENTS
-    if (appEventsOwnsPath(path)) {
-        ESP32BASE_LOG_W("web", "fs_delete_rejected path=%s reason=app_events_store", path);
-        redirectSeeOther("/esp32base/fs?manage=1&error=reserved_path");
-        return;
-    }
+    const bool targetIsAppEvents = appEventsOwnsPath(path);
 #endif
 #if ESP32BASE_ENABLE_FILELOG
     const bool targetIsFileLog = fileLogOwnsPath(path);
@@ -859,6 +908,11 @@ void handleFsDeletePost() {
     }
 #else
     ESP32BASE_LOG_W("web", "fs_delete_requested path=%s result=%s", path, ok ? "success" : "failed");
+#endif
+#if ESP32BASE_ENABLE_APP_EVENTS
+    if (ok && targetIsAppEvents) {
+        Esp32BaseAppEventLog::reload();
+    }
 #endif
     redirectSeeOther(ok ? "/esp32base/fs?manage=1&deleted=1" : "/esp32base/fs?manage=1&error=delete_failed");
 }

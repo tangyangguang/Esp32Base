@@ -13,8 +13,8 @@
 #include <string.h>
 
 namespace {
-constexpr const char* kAppEventDir = "/app";
-constexpr const char* kAppEventPath = "/app/events.bin";
+constexpr const char* kAppEventDir = "/esp32base/app-events";
+constexpr const char* kAppEventPath = "/esp32base/app-events/events.bin";
 constexpr uint32_t kAppEventHeaderMagic = 0x41504548UL; // APEH
 constexpr uint32_t kAppEventRecordMagic = 0x41504552UL; // APER
 constexpr uint16_t kAppEventVersion = 1;
@@ -48,6 +48,18 @@ uint32_t g_appEventSequence = 0;
 uint8_t g_appEventActiveHeader = 0;
 char g_appEventLastError[48] = "";
 Esp32BaseAppEventLog::TimeProvider g_appEventTimeProvider = nullptr;
+
+void appEventResetRuntime() {
+    g_appEventReady = false;
+    g_appEventFault = false;
+    g_appEventHead = 0;
+    g_appEventCount = 0;
+    g_appEventValidCount = 0;
+    g_appEventNextId = 1;
+    g_appEventSequence = 0;
+    g_appEventActiveHeader = 0;
+    g_appEventLastError[0] = '\0';
+}
 
 uint32_t appEventStoreSize() {
     return static_cast<uint32_t>(kAppEventHeaderCopies * sizeof(Esp32BaseAppEventHeader)) +
@@ -151,9 +163,7 @@ bool appEventEnsureDir() {
         appEventSetError("fs_not_ready");
         return false;
     }
-    if (!Esp32BaseFs::exists(kAppEventDir) &&
-        !Esp32BaseFs::mkdir(kAppEventDir) &&
-        !Esp32BaseFs::exists(kAppEventDir)) {
+    if (!ensureDirPath(kAppEventPath) || !Esp32BaseFs::exists(kAppEventDir)) {
         appEventMarkFault("dir_create_failed");
         return false;
     }
@@ -622,6 +632,11 @@ bool Esp32BaseAppEventLog::begin() {
                     static_cast<unsigned>(g_appEventCount),
                     static_cast<unsigned long>(g_appEventNextId));
     return true;
+}
+
+bool Esp32BaseAppEventLog::reload() {
+    appEventResetRuntime();
+    return begin();
 }
 
 bool Esp32BaseAppEventLog::append(const Event& event) {

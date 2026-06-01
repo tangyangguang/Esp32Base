@@ -136,7 +136,7 @@
 
 - FS profile 默认启用 WARN 系统诊断日志（实现/API 名称 `Esp32BaseFileLog`）。
 - 非 FS profile 不强行启用 FileLog。
-- 默认路径为 `/logs/eb_app.log`。
+- 默认路径为 `/esp32base/logs/system.log`。
 - 默认轮转为 `4 × 32KB`。
 - ERROR 仅在 FileLog 模式为 ERROR/WARN/INFO 后写文件；WARN 仅在 WARN/INFO 后写文件；INFO 仅在 INFO 后写文件；DEBUG/VERBOSE 不能配置为系统诊断日志模式。
 - INFO 使用 `1KB / 2s` 缓存。
@@ -147,7 +147,7 @@
 - FileLog 模式为 OFF 时，System Logs 和 System 页必须醒目显示 `disabled`，并说明新日志不会写入。
 - FileLog OFF 后 System Logs 页面仍能查看已有历史 segment。
 - `GET /esp32base/logs` 和 `GET /esp32base/logs/raw` 必须只读，不得主动 `flush()`、创建、清空、重建或改变 FileLog fault 状态；需要写入/清理/格式化的维护动作必须走 POST。
-- System 页格式化 LittleFS 成功并重新 mount 后，启用 App Events 时必须重新创建 `/app/events.bin`，后续 append/read 不得沿用旧 head/count。
+- System 页格式化 LittleFS 成功并重新 mount 后，启用 App Events 时必须重新创建 `/esp32base/app-events/events.bin`，后续 append/read 不得沿用旧 head/count。
 - `setSerialLevel(NONE)` 后 Serial 不输出，但 FileLog 仍按当前模式写入。
 - `setRuntimeLevel(NONE)` 后 Serial 和 FileLog 都停止。
 - WARN/ERROR 立即写入。
@@ -172,13 +172,13 @@
 - `createFixedFile()` 初始化大文件时不得用 `appendBytes()` 做分块循环；必须避免大 heap 分配，并避免触发 task watchdog。
 - `writeBytesAt()` 支持已有文件固定位置覆盖，文件不存在和写越界返回失败，不隐式扩展文件；覆盖后文件大小不变且覆盖范围可读。
 - FS 已满或存在不可读文件时，Web 诊断返回错误不应触发 task WDT 重启。
-- 启用 `ESP32BASE_ENABLE_APP_EVENTS=1` 时，`/app/events.bin` 固定容量创建成功；默认 1024 条、单条 188 bytes、约 188 KiB；重复写入后环形覆盖，重启后仍可分页读取。
-- 已存在 `/app/events.bin` 但文件尺寸不匹配或不可读时必须进入 fault，不得自动删除或重建；只有文件缺失时 `begin()` 才可创建空 store。
+- 启用 `ESP32BASE_ENABLE_APP_EVENTS=1` 时，`/esp32base/app-events/events.bin` 固定容量创建成功；默认 1024 条、单条 188 bytes、约 188 KiB；重复写入后环形覆盖，重启后仍可分页读取。
+- 已存在 `/esp32base/app-events/events.bin` 但文件尺寸不匹配或不可读时必须进入 fault，不得自动删除或重建；只有文件缺失时 `begin()` 才可创建空 store。
 - App Events 双 header 损坏进入 fault，不自动扫描或清空；单条 record CRC 错误应跳过并暴露 `record_skipped`，完整扫描后 `count()` 收敛到可读记录数，I/O 读取失败才使 `readLatest()` 返回 false。
 - `readLatest()`、`readStoreInfo()` 和 `readStoreRecords()` 不得从只读路径隐式调用 `begin()` 或创建 store。
 - `Esp32BaseAppEventLog::clear()` 幂等，清空后保留递增 id 并可继续写入。
 - App Events 成功 `begin/append/read/clear` 后不得保留旧 `lastError()`；`record_skipped` 只在本次读取确实跳过损坏记录时出现。
-- FS 管理页不得允许普通上传、覆盖或删除 `/app/events.bin`；应提示 `Target is reserved for App Events` 或 `reserved_path`。
+- FS 管理页上传、覆盖或删除 `/esp32base/app-events/events.bin` 后必须重新加载 App Events 运行态；文件树应显示 `app events store` 提醒。
 - CSV 文本字段必须防护 spreadsheet formula 前缀，不能只做 CSV 引号转义。
 - `/esp32base/fs?manage=1` 对 `unreadable` 文件仍必须提供单文件删除入口，但不能提供下载入口。
 - 单文件删除失败后应尝试截断为 0；如果因此释放可见文件占用，页面不能只显示 `delete_failed`。
