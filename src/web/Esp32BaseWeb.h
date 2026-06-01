@@ -1,7 +1,24 @@
 #pragma once
 
+#ifndef ESP32BASE_WEB_NATIVE_TEST
+#define ESP32BASE_WEB_NATIVE_TEST 0
+#endif
+
+#if ESP32BASE_WEB_NATIVE_TEST
+#if defined(ARDUINO_ARCH_ESP32)
+#error "ESP32BASE_WEB_NATIVE_TEST is only supported by native test builds"
+#endif
+#include <stddef.h>
+#include <stdint.h>
+#include <string>
+#include <vector>
+#ifndef PROGMEM
+#define PROGMEM
+#endif
+#else
 #include <Arduino.h>
 #include <stdint.h>
+#endif
 
 #ifndef ESP32BASE_WEB_MAX_ROUTES
 #define ESP32BASE_WEB_MAX_ROUTES 24
@@ -79,6 +96,22 @@ public:
         uint32_t perPage;
         uint32_t total;
     };
+
+#if ESP32BASE_WEB_NATIVE_TEST
+    struct NativeTestHeader {
+        std::string name;
+        std::string value;
+    };
+
+    struct NativeTestResponse {
+        int code;
+        std::string contentType;
+        std::string body;
+        std::vector<NativeTestHeader> headers;
+        bool started;
+        bool ended;
+    };
+#endif
 
     using Handler = void (*)();
 
@@ -167,4 +200,17 @@ public:
     static void beginJson(int code);
     static void writeJsonEscaped(const char* text);
     static void endJson();
+
+#if ESP32BASE_WEB_NATIVE_TEST
+    static void nativeTestReset();
+    static void nativeTestBeginRequest(Method method, const char* path);
+    static void nativeTestSetParam(const char* name, const char* value);
+    static void nativeTestSetBody(const char* body);
+    static void nativeTestSetAuthenticated(bool authenticated);
+    static void nativeTestSetSameOrigin(bool sameOrigin);
+    static bool nativeTestRun(Handler handler);
+    static bool nativeTestDispatch(const char* path, Method method);
+    static const NativeTestResponse& nativeTestResponse();
+    static const char* nativeTestResponseHeader(const char* name);
+#endif
 };

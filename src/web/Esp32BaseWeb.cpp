@@ -1,6 +1,774 @@
 #include "../Esp32BaseProfile.h"
 
-#if ESP32BASE_ENABLE_WEB
+#ifndef ESP32BASE_WEB_NATIVE_TEST
+#define ESP32BASE_WEB_NATIVE_TEST 0
+#endif
+
+#if ESP32BASE_WEB_NATIVE_TEST
+
+#include "Esp32BaseWeb.h"
+
+#include <algorithm>
+#include <cctype>
+#include <cstdio>
+#include <cstring>
+
+namespace {
+
+struct NativeTestParam {
+    std::string name;
+    std::string value;
+};
+
+struct NativeTestRoute {
+    std::string path;
+    std::string title;
+    Esp32BaseWeb::Method method;
+    Esp32BaseWeb::Handler handler;
+    bool appPage;
+};
+
+struct NativeTestState {
+    Esp32BaseWeb::Method method = Esp32BaseWeb::METHOD_UNKNOWN;
+    std::string path;
+    std::vector<NativeTestParam> params;
+    std::string body;
+    bool requestActive = false;
+    bool authenticated = true;
+    bool sameOrigin = true;
+    bool authEnabled = true;
+    std::string authUser = "admin";
+    std::string authPass = "admin";
+    std::string deviceName = "Esp32Base";
+    std::string homePath;
+    Esp32BaseWeb::HomeMode homeMode = Esp32BaseWeb::HOME_ESP32BASE;
+    Esp32BaseWeb::SystemNavMode systemNavMode = Esp32BaseWeb::SYSTEM_NAV_SECTION;
+    Esp32BaseWeb::FooterBarMode footerBarMode = Esp32BaseWeb::FOOTER_BAR_FULL;
+    std::vector<NativeTestRoute> routes;
+    std::vector<Esp32BaseWeb::NativeTestHeader> navItems;
+    Esp32BaseWeb::NativeTestResponse response{0, "", "", {}, false, false};
+};
+
+NativeTestState& nativeState() {
+    static NativeTestState state;
+    return state;
+}
+
+const char* nativeMethodName(Esp32BaseWeb::Method method) {
+    switch (method) {
+        case Esp32BaseWeb::METHOD_GET: return "GET";
+        case Esp32BaseWeb::METHOD_POST: return "POST";
+        case Esp32BaseWeb::METHOD_ANY: return "ANY";
+        case Esp32BaseWeb::METHOD_UNKNOWN:
+        default: return "UNKNOWN";
+    }
+}
+
+bool headerNameEquals(const std::string& a, const char* b) {
+    if (!b || a.size() != std::strlen(b)) {
+        return false;
+    }
+    for (size_t i = 0; i < a.size(); ++i) {
+        if (std::tolower(static_cast<unsigned char>(a[i])) !=
+            std::tolower(static_cast<unsigned char>(b[i]))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void copyTo(const std::string& value, char* out, size_t len) {
+    if (!out || len == 0) {
+        return;
+    }
+    const size_t take = std::min(len - 1U, value.size());
+    std::memcpy(out, value.data(), take);
+    out[take] = '\0';
+}
+
+NativeTestParam* findParam(const char* name) {
+    if (!name) {
+        return nullptr;
+    }
+    NativeTestState& state = nativeState();
+    for (NativeTestParam& param : state.params) {
+        if (param.name == name) {
+            return &param;
+        }
+    }
+    return nullptr;
+}
+
+void clearResponse() {
+    NativeTestState& state = nativeState();
+    state.response.code = 0;
+    state.response.contentType.clear();
+    state.response.body.clear();
+    state.response.headers.clear();
+    state.response.started = false;
+    state.response.ended = false;
+}
+
+void setResponse(int code, const char* contentType, const char* body, bool ended) {
+    NativeTestState& state = nativeState();
+    state.response.code = code;
+    state.response.contentType = contentType ? contentType : "";
+    state.response.body = body ? body : "";
+    state.response.started = true;
+    state.response.ended = ended;
+}
+
+void setResponseHeader(const char* name, const char* value) {
+    if (!name || !name[0]) {
+        return;
+    }
+    NativeTestState& state = nativeState();
+    for (Esp32BaseWeb::NativeTestHeader& header : state.response.headers) {
+        if (headerNameEquals(header.name, name)) {
+            header.value = value ? value : "";
+            return;
+        }
+    }
+    state.response.headers.push_back({name, value ? value : ""});
+}
+
+bool validRoutePath(const char* path) {
+    return path && path[0] == '/' && std::strlen(path) < 48;
+}
+
+bool routeMatches(Esp32BaseWeb::Method routeMethod, Esp32BaseWeb::Method requestMethod) {
+    return routeMethod == Esp32BaseWeb::METHOD_ANY || routeMethod == requestMethod;
+}
+
+bool addNativeRoute(const char* path, const char* title, Esp32BaseWeb::Method method,
+                    Esp32BaseWeb::Handler handler, bool appPage) {
+    if (!validRoutePath(path) || !handler ||
+        (method != Esp32BaseWeb::METHOD_GET && method != Esp32BaseWeb::METHOD_POST &&
+         method != Esp32BaseWeb::METHOD_ANY)) {
+        return false;
+    }
+    nativeState().routes.push_back({path, title ? title : "", method, handler, appPage});
+    return true;
+}
+
+void sendEscapedHtmlNative(const char* text);
+void sendEscapedJsonNative(const char* text);
+
+void sendSimpleWrappedText(const char* before, const char* text, const char* after) {
+    Esp32BaseWeb::sendChunk(before);
+    sendEscapedHtmlNative(text ? text : "");
+    Esp32BaseWeb::sendChunk(after);
+}
+
+void sendEscapedHtmlNative(const char* text) {
+    if (!text) {
+        return;
+    }
+    for (const char* p = text; *p; ++p) {
+        switch (*p) {
+            case '&': Esp32BaseWeb::sendChunk("&amp;"); break;
+            case '<': Esp32BaseWeb::sendChunk("&lt;"); break;
+            case '>': Esp32BaseWeb::sendChunk("&gt;"); break;
+            case '"': Esp32BaseWeb::sendChunk("&quot;"); break;
+            case '\'': Esp32BaseWeb::sendChunk("&#39;"); break;
+            default: {
+                char one[2] = {*p, '\0'};
+                Esp32BaseWeb::sendChunk(one);
+                break;
+            }
+        }
+    }
+}
+
+void sendEscapedJsonNative(const char* text) {
+    if (!text) {
+        return;
+    }
+    for (const char* p = text; *p; ++p) {
+        switch (*p) {
+            case '"': Esp32BaseWeb::sendChunk("\\\""); break;
+            case '\\': Esp32BaseWeb::sendChunk("\\\\"); break;
+            case '\n': Esp32BaseWeb::sendChunk("\\n"); break;
+            case '\r': Esp32BaseWeb::sendChunk("\\r"); break;
+            case '\t': Esp32BaseWeb::sendChunk("\\t"); break;
+            default:
+                if (static_cast<unsigned char>(*p) < 0x20) {
+                    char buf[7];
+                    std::snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned char>(*p));
+                    Esp32BaseWeb::sendChunk(buf);
+                } else {
+                    char one[2] = {*p, '\0'};
+                    Esp32BaseWeb::sendChunk(one);
+                }
+                break;
+        }
+    }
+}
+
+} // namespace
+
+bool Esp32BaseWeb::begin() {
+    return true;
+}
+
+void Esp32BaseWeb::handle() {
+}
+
+bool Esp32BaseWeb::isReady() {
+    return true;
+}
+
+bool Esp32BaseWeb::startLocked() {
+    return false;
+}
+
+void Esp32BaseWeb::setDefaultAuth(const char* user, const char* pass) {
+    if (user && user[0]) {
+        nativeState().authUser = user;
+    }
+    if (pass && pass[0]) {
+        nativeState().authPass = pass;
+    }
+}
+
+const char* Esp32BaseWeb::authUser() {
+    return nativeState().authUser.c_str();
+}
+
+const char* Esp32BaseWeb::authPassword() {
+    return nativeState().authPass.c_str();
+}
+
+bool Esp32BaseWeb::isAuthEnabled() {
+    return nativeState().authEnabled;
+}
+
+void Esp32BaseWeb::setAuthEnabled(bool enabled) {
+    nativeState().authEnabled = enabled;
+}
+
+bool Esp32BaseWeb::checkAuth() {
+    NativeTestState& state = nativeState();
+    if (!state.authEnabled || state.authenticated) {
+        return true;
+    }
+    setResponseHeader("WWW-Authenticate", "Basic realm=\"Esp32Base\"");
+    sendText(401, "Authentication Required");
+    return false;
+}
+
+bool Esp32BaseWeb::checkPostAllowed(const char*) {
+    NativeTestState& state = nativeState();
+    if (state.method != METHOD_POST) {
+        sendText(405, "Method Not Allowed");
+        return false;
+    }
+    if (!checkAuth()) {
+        return false;
+    }
+    if (!state.sameOrigin) {
+        sendText(403, "Forbidden");
+        return false;
+    }
+    return true;
+}
+
+bool Esp32BaseWeb::verifyAuth() {
+    return !nativeState().authEnabled || nativeState().authenticated;
+}
+
+bool Esp32BaseWeb::verifyAuth(const char* user, const char* pass) {
+    NativeTestState& state = nativeState();
+    return user && pass && state.authUser == user && state.authPass == pass;
+}
+
+bool Esp32BaseWeb::saveAuth(const char* user, const char* pass) {
+    if (!user || !user[0] || !pass || !pass[0]) {
+        return false;
+    }
+    nativeState().authUser = user;
+    nativeState().authPass = pass;
+    return true;
+}
+
+bool Esp32BaseWeb::resetAuth() {
+    nativeState().authUser = "admin";
+    nativeState().authPass = "admin";
+    nativeState().authenticated = true;
+    return true;
+}
+
+bool Esp32BaseWeb::addRoute(const char* path, Method method, Handler handler) {
+    return addNativeRoute(path, nullptr, method, handler, false);
+}
+
+bool Esp32BaseWeb::addPage(const char* path, const char* title, Handler handler) {
+    return addNativeRoute(path, title, METHOD_GET, handler, true);
+}
+
+bool Esp32BaseWeb::addApi(const char* path, Handler handler) {
+    return addRoute(path, METHOD_ANY, handler);
+}
+
+bool Esp32BaseWeb::addNavItem(const char* path, const char* title) {
+    if (!validRoutePath(path) || !title || !title[0]) {
+        return false;
+    }
+    nativeState().navItems.push_back({path, title});
+    return true;
+}
+
+bool Esp32BaseWeb::setDeviceName(const char* name) {
+    if (!name || !name[0]) {
+        return false;
+    }
+    nativeState().deviceName = name;
+    return true;
+}
+
+bool Esp32BaseWeb::setHomePath(const char* path) {
+    if (!validRoutePath(path)) {
+        return false;
+    }
+    nativeState().homePath = path;
+    return true;
+}
+
+void Esp32BaseWeb::setHomeMode(HomeMode mode) {
+    nativeState().homeMode = mode;
+}
+
+void Esp32BaseWeb::setSystemNavMode(SystemNavMode mode) {
+    nativeState().systemNavMode = mode;
+}
+
+bool Esp32BaseWeb::setFooterBarMode(FooterBarMode mode) {
+    nativeState().footerBarMode = mode;
+    return true;
+}
+
+Esp32BaseWeb::FooterBarMode Esp32BaseWeb::footerBarMode() {
+    return nativeState().footerBarMode;
+}
+
+const char* Esp32BaseWeb::footerBarModeName() {
+    switch (nativeState().footerBarMode) {
+        case FOOTER_BAR_OFF: return "Off";
+        case FOOTER_BAR_STATUS_ONLY: return "Status only";
+        case FOOTER_BAR_FULL:
+        default: return "Links + status";
+    }
+}
+
+bool Esp32BaseWeb::setBuiltinLabel(BuiltinPage, const char*) {
+    return true;
+}
+
+void Esp32BaseWeb::setHeadExtraCallback(Handler) {
+}
+
+Esp32BaseWeb::Method Esp32BaseWeb::currentMethod() {
+    return nativeState().requestActive ? nativeState().method : METHOD_UNKNOWN;
+}
+
+bool Esp32BaseWeb::isMethod(Method method) {
+    const Method current = currentMethod();
+    return method == METHOD_ANY ? current != METHOD_UNKNOWN : current == method;
+}
+
+const char* Esp32BaseWeb::currentMethodName() {
+    return nativeMethodName(currentMethod());
+}
+
+bool Esp32BaseWeb::hasParam(const char* name) {
+    return findParam(name) != nullptr;
+}
+
+bool Esp32BaseWeb::getParam(const char* name, char* out, size_t len) {
+    NativeTestParam* param = findParam(name);
+    if (!param || !out || len == 0) {
+        return false;
+    }
+    copyTo(param->value, out, len);
+    return true;
+}
+
+bool Esp32BaseWeb::getRequestBody(char* out, size_t len) {
+    if (!out || len == 0) {
+        return false;
+    }
+    copyTo(nativeState().body, out, len);
+    return true;
+}
+
+void Esp32BaseWeb::sendHeader(const char* title) {
+    if (!beginResponse(200, "text/html; charset=utf-8", nullptr)) {
+        return;
+    }
+    sendChunk("<!doctype html><html><head><title>");
+    writeHtmlEscaped(title ? title : nativeState().deviceName.c_str());
+    sendChunk("</title></head><body><main class='page'>");
+}
+
+void Esp32BaseWeb::sendFooter() {
+    sendChunk("</main></body></html>");
+    endResponse();
+}
+
+void Esp32BaseWeb::sendPageTitle(const char* title, const char* subtitle) {
+    sendSimpleWrappedText("<header class='pagehead'><h1>", title, "</h1>");
+    if (subtitle && subtitle[0]) {
+        sendSimpleWrappedText("<p>", subtitle, "</p>");
+    }
+    sendChunk("</header>");
+}
+
+void Esp32BaseWeb::beginPanel(const char* title) {
+    sendChunk("<section class='panel'>");
+    if (title && title[0]) {
+        sendSimpleWrappedText("<h2>", title, "</h2>");
+    }
+}
+
+void Esp32BaseWeb::endPanel() {
+    sendChunk("</section>");
+}
+
+void Esp32BaseWeb::sendNotice(UiTone, const char* title, const char* message) {
+    sendSimpleWrappedText("<div class='notice'><b>", title, "</b>");
+    if (message && message[0]) {
+        sendSimpleWrappedText("<br>", message, "");
+    }
+    sendChunk("</div>");
+}
+
+void Esp32BaseWeb::sendResultNotice(const ResultNotice* notices, uint8_t count) {
+    if (!notices) {
+        return;
+    }
+    char value[32];
+    for (uint8_t i = 0; i < count; ++i) {
+        const ResultNotice& notice = notices[i];
+        if (!notice.param || !hasParam(notice.param)) {
+            continue;
+        }
+        if (notice.value && notice.value[0]) {
+            if (!getParam(notice.param, value, sizeof(value)) || std::strcmp(value, notice.value) != 0) {
+                continue;
+            }
+        }
+        sendNotice(notice.tone, notice.title, notice.message);
+        return;
+    }
+}
+
+void Esp32BaseWeb::beginMetricGrid() {
+    sendChunk("<div class='metrics'>");
+}
+
+void Esp32BaseWeb::sendMetric(const char* label, const char* value, const char* help) {
+    sendSimpleWrappedText("<div class='metric'><b>", value, "</b><span>");
+    writeHtmlEscaped(label ? label : "");
+    if (help && help[0]) {
+        sendChunk(" ");
+        writeHtmlEscaped(help);
+    }
+    sendChunk("</span></div>");
+}
+
+void Esp32BaseWeb::endMetricGrid() {
+    sendChunk("</div>");
+}
+
+void Esp32BaseWeb::sendInfoRowCompact(const char* title, const char* help, const char* value) {
+    sendSimpleWrappedText("<div class='urow'><b>", title, "</b>");
+    if (help && help[0]) {
+        sendSimpleWrappedText("<small>", help, "</small>");
+    }
+    if (value && value[0]) {
+        sendSimpleWrappedText("<span>", value, "</span>");
+    }
+    sendChunk("</div>");
+}
+
+void Esp32BaseWeb::sendInfoRowCompactLink(const char* title, const char* help, const char* value,
+                                          const char* href, const char* label, UiTone) {
+    sendInfoRowCompact(title, help, value);
+    sendChunk("<a href='");
+    writeHtmlEscaped(href ? href : "#");
+    sendChunk("'>");
+    writeHtmlEscaped(label ? label : "");
+    sendChunk("</a>");
+}
+
+void Esp32BaseWeb::sendInfoRowCompactForm(const char* title, const char* help, const char* value,
+                                          const char* action, const char* label,
+                                          const char*, const char*, UiTone) {
+    sendInfoRowCompact(title, help, value);
+    sendChunk("<form method='post' action='");
+    writeHtmlEscaped(action ? action : "");
+    sendChunk("'><input type='submit' value='");
+    writeHtmlEscaped(label ? label : "");
+    sendChunk("'></form>");
+}
+
+void Esp32BaseWeb::sendInfoRowInlineEdit(const char*, const char* title, const char* help, const char* value,
+                                         const char* action, const char* inputName, const char* inputValue,
+                                         const char* label, UiTone tone) {
+    sendInfoRowCompactForm(title, help, value, action, label, inputName, inputValue, tone);
+}
+
+void Esp32BaseWeb::sendInfoRowDialogForm(const char*, const char*, const char* title,
+                                         const char* help, const char* value, const char* action,
+                                         const char*, const char* label, UiTone tone) {
+    sendInfoRowCompactForm(title, help, value, action, label, nullptr, nullptr, tone);
+}
+
+void Esp32BaseWeb::sendPagination(const Pagination&) {
+    sendChunk("<div class='pagination'></div>");
+}
+
+bool Esp32BaseWeb::isAjaxRequest() {
+    NativeTestParam* param = findParam("_ajax");
+    return param && param->value == "1";
+}
+
+void Esp32BaseWeb::sendAjaxReplace(const char* targetId, const char* html, const char* noticeTitle,
+                                   UiTone, bool close) {
+    if (!beginResponse(200, "application/json", nullptr)) {
+        return;
+    }
+    sendChunk("{\"ok\":true,\"target\":\"");
+    writeJsonEscaped(targetId ? targetId : "");
+    sendChunk("\",\"html\":\"");
+    writeJsonEscaped(html ? html : "");
+    sendChunk("\",\"close\":");
+    sendChunk(close ? "true" : "false");
+    if (noticeTitle && noticeTitle[0]) {
+        sendChunk(",\"notice\":{\"title\":\"");
+        writeJsonEscaped(noticeTitle);
+        sendChunk("\"}");
+    }
+    sendChunk("}");
+    endResponse();
+}
+
+void Esp32BaseWeb::sendAjaxError(int code, const char* error) {
+    if (!beginResponse(code, "application/json", nullptr)) {
+        return;
+    }
+    sendChunk("{\"ok\":false,\"error\":\"");
+    writeJsonEscaped(error ? error : "Action failed");
+    sendChunk("\"}");
+    endResponse();
+}
+
+bool Esp32BaseWeb::sendResponseHeader(const char* name, const char* value) {
+    if (!nativeState().requestActive || nativeState().response.started || !name || !name[0] || !value) {
+        return false;
+    }
+    setResponseHeader(name, value);
+    return true;
+}
+
+bool Esp32BaseWeb::beginResponse(int code, const char* contentType, const char* filename) {
+    if (!nativeState().requestActive || !contentType || !contentType[0]) {
+        return false;
+    }
+    setResponse(code, contentType, "", false);
+    if (filename && filename[0]) {
+        std::string disposition = "attachment; filename=\"";
+        disposition += filename;
+        disposition += "\"";
+        setResponseHeader("Content-Disposition", disposition.c_str());
+    }
+    return true;
+}
+
+bool Esp32BaseWeb::beginText(int code) {
+    return beginResponse(code, "text/plain; charset=utf-8", nullptr);
+}
+
+bool Esp32BaseWeb::beginCsv(int code, const char* filename) {
+    return beginResponse(code, "text/csv; charset=utf-8", filename);
+}
+
+void Esp32BaseWeb::endResponse() {
+    nativeState().response.ended = true;
+}
+
+void Esp32BaseWeb::sendChunk(const char* text) {
+    if (!text || !nativeState().response.started) {
+        return;
+    }
+    nativeState().response.body += text;
+}
+
+void Esp32BaseWeb::sendBytes(const uint8_t* data, size_t len) {
+    if ((!data && len > 0) || !nativeState().response.started) {
+        return;
+    }
+    nativeState().response.body.append(reinterpret_cast<const char*>(data), len);
+}
+
+void Esp32BaseWeb::writeHtmlEscaped(const char* text) {
+    sendEscapedHtmlNative(text);
+}
+
+void Esp32BaseWeb::writeCsvEscaped(const char* text) {
+    sendChunk("\"");
+    if (text) {
+        for (const char* p = text; *p; ++p) {
+            if (*p == '"') {
+                sendChunk("\"\"");
+            } else {
+                char one[2] = {*p, '\0'};
+                sendChunk(one);
+            }
+        }
+    }
+    sendChunk("\"");
+}
+
+void Esp32BaseWeb::sendText(int code, const char* text) {
+    setResponse(code, "text/plain", text ? text : "", true);
+}
+
+void Esp32BaseWeb::sendHtml(int code, const char* html) {
+    setResponse(code, "text/html", html ? html : "", true);
+}
+
+void Esp32BaseWeb::sendJson(int code, const char* json) {
+    setResponse(code, "application/json", json ? json : "{}", true);
+}
+
+void Esp32BaseWeb::redirectSeeOther(const char* url) {
+    setResponseHeader("Location", url ? url : "/esp32base");
+    setResponseHeader("Cache-Control", "no-store");
+    setResponse(303, "text/plain", "", true);
+}
+
+void Esp32BaseWeb::beginJson(int code) {
+    if (beginResponse(code, "application/json", nullptr)) {
+        sendChunk("{");
+    }
+}
+
+void Esp32BaseWeb::writeJsonEscaped(const char* text) {
+    sendEscapedJsonNative(text);
+}
+
+void Esp32BaseWeb::endJson() {
+    sendChunk("}");
+    endResponse();
+}
+
+void Esp32BaseWeb::nativeTestReset() {
+    NativeTestState& state = nativeState();
+    state.method = METHOD_UNKNOWN;
+    state.path.clear();
+    state.params.clear();
+    state.body.clear();
+    state.requestActive = false;
+    state.authenticated = true;
+    state.sameOrigin = true;
+    state.authEnabled = true;
+    state.authUser = "admin";
+    state.authPass = "admin";
+    state.deviceName = "Esp32Base";
+    state.homePath.clear();
+    state.homeMode = HOME_ESP32BASE;
+    state.systemNavMode = SYSTEM_NAV_SECTION;
+    state.footerBarMode = FOOTER_BAR_FULL;
+    state.routes.clear();
+    state.navItems.clear();
+    clearResponse();
+}
+
+void Esp32BaseWeb::nativeTestBeginRequest(Method method, const char* path) {
+    NativeTestState& state = nativeState();
+    state.method = method;
+    state.path = path && path[0] ? path : "/";
+    state.params.clear();
+    state.body.clear();
+    state.requestActive = true;
+    clearResponse();
+}
+
+void Esp32BaseWeb::nativeTestSetParam(const char* name, const char* value) {
+    if (!name || !name[0]) {
+        return;
+    }
+    NativeTestParam* existing = findParam(name);
+    if (existing) {
+        existing->value = value ? value : "";
+        return;
+    }
+    nativeState().params.push_back({name, value ? value : ""});
+}
+
+void Esp32BaseWeb::nativeTestSetBody(const char* body) {
+    nativeState().body = body ? body : "";
+}
+
+void Esp32BaseWeb::nativeTestSetAuthenticated(bool authenticated) {
+    nativeState().authenticated = authenticated;
+}
+
+void Esp32BaseWeb::nativeTestSetSameOrigin(bool sameOrigin) {
+    nativeState().sameOrigin = sameOrigin;
+}
+
+bool Esp32BaseWeb::nativeTestRun(Handler handler) {
+    if (!handler) {
+        return false;
+    }
+    NativeTestState& state = nativeState();
+    if (!state.requestActive) {
+        nativeTestBeginRequest(METHOD_GET, "/");
+    }
+    handler();
+    return true;
+}
+
+bool Esp32BaseWeb::nativeTestDispatch(const char* path, Method method) {
+    NativeTestState& state = nativeState();
+    for (const NativeTestRoute& route : state.routes) {
+        if (route.path == (path ? path : "") && routeMatches(route.method, method)) {
+            state.method = method;
+            state.path = path && path[0] ? path : "/";
+            state.requestActive = true;
+            clearResponse();
+            route.handler();
+            return true;
+        }
+    }
+    state.method = method;
+    state.path = path && path[0] ? path : "/";
+    state.requestActive = true;
+    clearResponse();
+    sendText(404, "Not found");
+    return false;
+}
+
+const Esp32BaseWeb::NativeTestResponse& Esp32BaseWeb::nativeTestResponse() {
+    return nativeState().response;
+}
+
+const char* Esp32BaseWeb::nativeTestResponseHeader(const char* name) {
+    static const char empty[] = "";
+    if (!name) {
+        return empty;
+    }
+    for (const NativeTestHeader& header : nativeState().response.headers) {
+        if (headerNameEquals(header.name, name)) {
+            return header.value.c_str();
+        }
+    }
+    return empty;
+}
+
+#elif ESP32BASE_ENABLE_WEB
 
 #include "internal/WebInternal.h"
 

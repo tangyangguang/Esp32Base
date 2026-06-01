@@ -875,6 +875,21 @@ public:
         uint32_t total;
     };
 
+    // Only available when ESP32BASE_WEB_NATIVE_TEST=1 in a non-ESP32 native test build.
+    struct NativeTestHeader {
+        std::string name;
+        std::string value;
+    };
+
+    struct NativeTestResponse {
+        int code;
+        std::string contentType;
+        std::string body;
+        std::vector<NativeTestHeader> headers;
+        bool started;
+        bool ended;
+    };
+
     using Handler = void (*)();
 
     static bool begin();
@@ -961,6 +976,18 @@ public:
     static void beginJson(int code);
     static void writeJsonEscaped(const char* text);
     static void endJson();
+
+    // Only available when ESP32BASE_WEB_NATIVE_TEST=1 in a non-ESP32 native test build.
+    static void nativeTestReset();
+    static void nativeTestBeginRequest(Method method, const char* path);
+    static void nativeTestSetParam(const char* name, const char* value);
+    static void nativeTestSetBody(const char* body);
+    static void nativeTestSetAuthenticated(bool authenticated);
+    static void nativeTestSetSameOrigin(bool sameOrigin);
+    static bool nativeTestRun(Handler handler);
+    static bool nativeTestDispatch(const char* path, Method method);
+    static const NativeTestResponse& nativeTestResponse();
+    static const char* nativeTestResponseHeader(const char* name);
 };
 ```
 
@@ -1019,6 +1046,15 @@ Route 缓冲机制：
 - CSV 字段必须用 `writeCsvEscaped()` 输出，避免逗号、换行或双引号破坏导出格式。
 - `redirectSeeOther(location)` 发送 `303 See Other`，用于 POST 成功后跳转到 GET 页面，避免浏览器刷新重复提交。
 - `beginJson(code)` 的状态码必须在 `endJson()` 发送时保留。
+
+Native Web handler 测试：
+
+- `ESP32BASE_WEB_NATIVE_TEST=1` 只用于非 ESP32 的 native 单元测试构建；如果在 ESP32/Arduino 目标上启用会编译失败，避免测试 harness 进入固件运行时代码体积。
+- native harness 不启动 Arduino `WebServer`，而是在 `Esp32BaseWeb` helper 层模拟当前请求并捕获响应。业务 handler 仍按真实代码写法调用 `currentMethod()`、`hasParam()`、`getParam()`、`getRequestBody()`、`checkAuth()`、`checkPostAllowed()`、`sendJson()`、`redirectSeeOther()`、`beginResponse()`、`sendChunk()`、`sendBytes()` 和 `endResponse()`。
+- `nativeTestBeginRequest(method, path)` 设置当前请求 method/path 并清空本次参数、body 和响应；随后用 `nativeTestSetParam()`、`nativeTestSetBody()`、`nativeTestSetAuthenticated()`、`nativeTestSetSameOrigin()` 设置请求输入和安全检查结果。
+- `nativeTestRun(handler)` 直接执行一个 handler；`nativeTestDispatch(path, method)` 会从 native harness 内的 `addRoute()` / `addPage()` / `addApi()` 注册表查找并执行匹配 handler，未匹配时捕获 `404 Not found`。
+- `nativeTestResponse()` 返回最近一次响应的状态码、content type、body、headers 和 started/ended 状态；`nativeTestResponseHeader(name)` 按大小写不敏感方式读取捕获的响应头。
+- native harness 只验证 handler 在 Esp32Base Web helper 层的行为，不模拟浏览器、TCP、chunked wire framing、multipart 上传、ESP32 WiFi、NVS、LittleFS 或 OTA 副作用；这些仍需要 ESP32 示例构建、集成测试或实机验证。
 
 内置页面交互要求：
 

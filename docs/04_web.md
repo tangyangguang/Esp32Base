@@ -364,6 +364,37 @@ void handleCsvApi() {
 - 长响应发送会在每次实际写入客户端后主动 `yield()`；客户端已断开时停止继续输出，避免大 HTML/CSS 页面长期占住 Web 处理。
 - JSON 可继续使用 `sendJson()` 一次性输出，或使用 `beginJson()` / `sendChunk()` / `writeJsonEscaped()` / `endJson()` 分块输出。
 
+native handler 测试：
+
+```cpp
+void handleConfigApi() {
+    if (!Esp32BaseWeb::checkPostAllowed("config")) {
+        return;
+    }
+    char mode[16];
+    Esp32BaseWeb::getParam("mode", mode, sizeof(mode));
+    Esp32BaseWeb::sendJson(200, "{\"ok\":true}");
+}
+
+void test_config_api_post() {
+    Esp32BaseWeb::nativeTestReset();
+    Esp32BaseWeb::nativeTestBeginRequest(Esp32BaseWeb::METHOD_POST, "/api/config");
+    Esp32BaseWeb::nativeTestSetParam("mode", "auto");
+    Esp32BaseWeb::nativeTestSetAuthenticated(true);
+    Esp32BaseWeb::nativeTestSetSameOrigin(true);
+
+    Esp32BaseWeb::nativeTestRun(handleConfigApi);
+
+    const auto& response = Esp32BaseWeb::nativeTestResponse();
+    TEST_ASSERT_EQUAL(200, response.code);
+    TEST_ASSERT_EQUAL_STRING("{\"ok\":true}", response.body.c_str());
+}
+```
+
+- native harness 只在 `ESP32BASE_WEB_NATIVE_TEST=1` 且非 ESP32 目标中可用；固件构建不会暴露这些接口。
+- 测试可设置 method、path、参数、body、认证结果和同源结果，并捕获 `sendText()`、`sendHtml()`、`sendJson()`、`redirectSeeOther()`、`beginResponse()`、`sendResponseHeader()`、`sendChunk()`、`sendBytes()`、`endResponse()` 的状态码、content type、headers 和响应体。
+- 它适合应用项目直接行为级测试 handler 的 method 分流、Auth/POST/同源保护、参数读取、重定向和响应内容；不替代真实 ESP32 WebServer、multipart 上传、文件系统、OTA 或浏览器集成验证。
+
 业务入口：
 
 ```cpp
