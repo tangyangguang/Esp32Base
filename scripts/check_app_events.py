@@ -148,6 +148,11 @@ if "15, 20, 30, 50, 100" in read("src/web/Esp32BaseWeb.cpp"):
 require("src/web/internal/WebLogs.cpp", "Esp32BaseFileLog", "System Logs page must remain FileLog-oriented")
 if (ROOT / "src/web/internal/WebLogs.cpp").exists() and "Esp32BaseAppEventLog" in read("src/web/internal/WebLogs.cpp"):
     errors.append("src/web/internal/WebLogs.cpp: System Logs page must not mix in App Events")
+web_logs_source = read("src/web/internal/WebLogs.cpp")
+for signature in ("void handleLogsPage", "void handleLogsRaw"):
+    body = function_body(web_logs_source, signature)
+    if "Esp32BaseFileLog::flush()" in body:
+        errors.append(f"src/web/internal/WebLogs.cpp: {signature} must not flush or write from GET/read-only paths")
 require("README.md", "ESP32BASE_ENABLE_APP_EVENTS", "README must document enabling app events")
 require("README.md", "不是业务长期数据模型", "README must clearly distinguish App Events from long-term business data")
 require("README.md", "System Diagnostic Logs（系统诊断日志", "README must name FileLog as system diagnostic logs")
@@ -183,6 +188,20 @@ require_absent("examples/app_events_demo/src/main.cpp", '"boot"', "sample App Ev
 require_absent("examples/app_events_demo/src/main.cpp", "bootCount", "sample App Events must not copy system boot counters into business events")
 require("examples/app_events_demo/README.md", "/esp32base/app-events", "sample README must explain viewing page")
 require("examples/app_events_demo/README.md", "business event list", "sample README must explain app-owned business event pages")
+full_demo_source = read("examples/full_demo/src/main.cpp")
+if "checkPostAllowed(\"full_demo_control\")" not in function_body(full_demo_source, "void handleControlApi"):
+    errors.append("examples/full_demo/src/main.cpp: /api/control POST branch must use checkPostAllowed()")
+if "checkPostAllowed(\"full_demo_ui_action\")" not in function_body(full_demo_source, "void handleUiActionRun"):
+    errors.append("examples/full_demo/src/main.cpp: /ui-action/run must use checkPostAllowed()")
+require("examples/full_demo/src/main.cpp", "RUN_CROSS_ORIGIN_SELFTEST", "full_demo selftest must cover hostile Origin POST rejection")
+gallery_source = read("examples/web_ui_gallery/src/main.cpp")
+if "checkPostAllowed(\"gallery_post\")" not in function_body(gallery_source, "void handlePostRedirect"):
+    errors.append("examples/web_ui_gallery/src/main.cpp: gallery redirect POST helper must use checkPostAllowed()")
+if "checkPostAllowed(\"gallery_config_name\")" not in function_body(gallery_source, "void handleConfigNameSave"):
+    errors.append("examples/web_ui_gallery/src/main.cpp: gallery name save must use checkPostAllowed()")
+if "checkPostAllowed(\"gallery_config_dialog\")" not in function_body(gallery_source, "void handleConfigDialogSave"):
+    errors.append("examples/web_ui_gallery/src/main.cpp: gallery dialog save must use checkPostAllowed()")
+require("examples/web_ui_gallery/src/main.cpp", "RUN_CROSS_ORIGIN_SELFTEST", "web_ui_gallery selftest must cover hostile Origin POST rejection")
 
 if errors:
     for error in errors:

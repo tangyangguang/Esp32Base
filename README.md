@@ -63,7 +63,7 @@ Web 应用路由默认容量统一为 24。该上限只覆盖业务 `addRoute()`
 
 业务首页推荐注册为 `/index`。在 `HOME_APP` 或 `HOME_COMBINED` 下，如果没有显式 `setHomePath()` 且存在 `/index` 业务页，裸 `/` 会跳转到 `/index`；如果应用确实需要直接渲染裸根路径，可显式 `setHomePath("/")` 并注册 GET `/` 业务页。`/esp32base` 始终保留为基础库系统入口。
 
-启用 FS 的 profile 会默认启用系统诊断日志。它的实现/API 名称仍是 `Esp32BaseFileLog`，默认写入 `/logs/eb_app.log`，Web 默认入口显示为 `System Logs`，URL 仍是 `/esp32base/logs`。系统诊断日志面向开发、维护和运维排障，记录设备运行过程中的技术事实和内部链路，例如启动、reset reason、WiFi、NTP、OTA、LittleFS、FileLog 写入保护和基础库健康状态。默认容量 `4 × 32KB`，模式 WARN；运行时可配置为 OFF、ERROR、WARN、INFO。如果 FS 满或文件损坏导致写入失败，Web 会显示 FileLog 运行态为 `write fault`，表示配置仍开启、已有日志可能仍可读取，但新日志写入已被保护停写。`disabled` 表示模式为 OFF，新日志不会写入。示例通过构建参数把默认模式改为 INFO：
+启用 FS 的 profile 会默认启用系统诊断日志。它的实现/API 名称仍是 `Esp32BaseFileLog`，默认写入 `/logs/eb_app.log`，Web 默认入口显示为 `System Logs`，URL 仍是 `/esp32base/logs`。系统诊断日志面向开发、维护和运维排障，记录设备运行过程中的技术事实和内部链路，例如启动、reset reason、WiFi、NTP、OTA、LittleFS、FileLog 写入保护和基础库健康状态。默认容量 `4 × 32KB`，模式 WARN；运行时可配置为 OFF、ERROR、WARN、INFO。System Logs 的 GET 页面只读取已落盘快照，不主动 flush 或写 LittleFS；缓存中的低优先级日志会按常规 flush interval 落盘。如果 FS 满或文件损坏导致写入失败，Web 会显示 FileLog 运行态为 `write fault`，表示配置仍开启、已有日志可能仍可读取，但新日志写入已被保护停写。`disabled` 表示模式为 OFF，新日志不会写入。示例通过构建参数把默认模式改为 INFO：
 
 ```ini
 build_flags =

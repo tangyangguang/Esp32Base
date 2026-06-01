@@ -145,6 +145,7 @@
 - FileLog 配置模式开启但运行期因 FS 写入故障停写时，Status、System Logs、System 页必须显示 `write fault`，并说明已有日志可能仍可读取，不能显示成 `disabled`。
 - FileLog 模式为 OFF 时，System Logs 和 System 页必须醒目显示 `disabled`，并说明新日志不会写入。
 - FileLog OFF 后 System Logs 页面仍能查看已有历史 segment。
+- `GET /esp32base/logs` 和 `GET /esp32base/logs/raw` 必须只读，不得主动 `flush()`、创建、清空、重建或改变 FileLog fault 状态；需要写入/清理/格式化的维护动作必须走 POST。
 - `setSerialLevel(NONE)` 后 Serial 不输出，但 FileLog 仍按当前模式写入。
 - `setRuntimeLevel(NONE)` 后 Serial 和 FileLog 都停止。
 - WARN/ERROR 立即写入。
@@ -204,6 +205,7 @@
 - System Logs clear POST + confirm + once + 303。
 - System Logs clear 回到页面后显示成功/失败提示。
 - FS/FileLog 不可用时 System Logs 页面显示 `System logs unavailable`。
+- 业务示例中的副作用 POST 必须调用 `Esp32BaseWeb::checkPostAllowed(context)`；带跨站 `Origin` 的 POST selftest 应返回 403。
 - 日志内容 HTML escape。
 - 默认 Web 首页和导航开箱可用。
 - 业务优先导航可设置 device name、home path、home mode、system nav mode。

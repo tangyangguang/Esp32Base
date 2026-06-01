@@ -38,7 +38,8 @@ size_t advanceMatch(const char* pattern, size_t patternLen, size_t matched, char
 }
 
 bool selfTestRequest(const char* method, const char* path, const char* body, bool auth, int expectedCode,
-                     const char* mustContain, const char* mustNotContain = nullptr, bool ajax = false) {
+                     const char* mustContain, const char* mustNotContain = nullptr, bool ajax = false,
+                     const char* origin = nullptr) {
     WiFiClient client;
     const IPAddress targetIp = Esp32BaseWiFi::state() == Esp32BaseWiFi::CONFIG_PORTAL ? WiFi.softAPIP() : WiFi.localIP();
     if (!client.connect(targetIp, 80)) {
@@ -53,6 +54,11 @@ bool selfTestRequest(const char* method, const char* path, const char* body, boo
     client.print("\r\nConnection: close\r\n");
     if (auth) {
         client.print("Authorization: Basic YWRtaW46YWRtaW4=\r\n");
+    }
+    if (origin) {
+        client.print("Origin: ");
+        client.print(origin);
+        client.print("\r\n");
     }
     if (ajax) {
         client.print("X-Esp32Base-Ajax: 1\r\nAccept: application/json\r\n");
@@ -140,6 +146,8 @@ void runSelfTest() {
     do { ++total; if (selfTestRequest(method, path, body, auth, code, contains, ##__VA_ARGS__)) ++pass; } while (0)
 #define RUN_AJAX_SELFTEST(method, path, body, auth, code, contains) \
     do { ++total; if (selfTestRequest(method, path, body, auth, code, contains, nullptr, true)) ++pass; } while (0)
+#define RUN_CROSS_ORIGIN_SELFTEST(method, path, body, auth, code, contains) \
+    do { ++total; if (selfTestRequest(method, path, body, auth, code, contains, nullptr, false, "http://evil.example")) ++pass; } while (0)
     RUN_SELFTEST("GET", "/", nullptr, true, 302, "Location: /index");
     RUN_SELFTEST("GET", "/index", nullptr, true, 200, "状态概览");
     RUN_SELFTEST("GET", "/ui-status", nullptr, true, 200, "状态概览");
@@ -182,12 +190,14 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/ui-config", nullptr, true, 200, "data-eb-dialog");
     RUN_SELFTEST("GET", "/ui-config", nullptr, true, 200, "<dialog id='native-confirm' class='panel eb-modal'>");
     RUN_SELFTEST("GET", "/ui-config", nullptr, true, 200, "id='row-plan'");
+    RUN_CROSS_ORIGIN_SELFTEST("POST", "/ui-config/name", "name=blocked", true, 403, "Forbidden");
     RUN_SELFTEST("POST", "/ui-config/name", "name=flower", true, 303, "Location: /ui-config?saved=1");
     RUN_AJAX_SELFTEST("POST", "/ui-config/name", "name=flower", true, 200, "\"ok\":true");
     RUN_AJAX_SELFTEST("POST", "/ui-config/name", "name=", true, 400, "\"ok\":false");
     RUN_AJAX_SELFTEST("POST", "/ui-config/dialog", "limit=42&mode=manual", true, 200, "\"ok\":true");
     RUN_SELFTEST("GET", "/ui-action", nullptr, true, 200, "操作命令");
     RUN_SELFTEST("GET", "/ui-action", nullptr, true, 200, "<input type='submit' class='btnlink info' value='开始'>");
+    RUN_CROSS_ORIGIN_SELFTEST("POST", "/ui-action/run", "run=1", true, 403, "Forbidden");
     RUN_SELFTEST("POST", "/ui-action/run", "run=1", true, 303, "Location: /ui-action?done=1");
     RUN_SELFTEST("GET", "/ui-config/flow?saved=1", nullptr, true, 200, "流程向导");
     RUN_SELFTEST("GET", "/ui-status/maintenance", nullptr, true, 200, "诊断维护");
@@ -206,6 +216,7 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/ui-status", nullptr, true, 200, "<footer class='footerbar'><span class='syslinks'><a href='/esp32base'>Status</a><a href='/esp32base/logs'>System Logs</a><a href='/esp32base/app-config'>App Config</a>");
 #undef RUN_SELFTEST
 #undef RUN_AJAX_SELFTEST
+#undef RUN_CROSS_ORIGIN_SELFTEST
     ESP32BASE_LOG_I("selftest", "summary pass=%u total=%u", static_cast<unsigned>(pass), static_cast<unsigned>(total));
 }
 #endif
@@ -215,11 +226,7 @@ void handleHeadExtra() {
 }
 
 void handlePostRedirect(const char* location) {
-    if (!Esp32BaseWeb::checkAuth()) {
-        return;
-    }
-    if (!Esp32BaseWeb::isMethod(Esp32BaseWeb::METHOD_POST)) {
-        Esp32BaseWeb::sendText(405, "method not allowed");
+    if (!Esp32BaseWeb::checkPostAllowed("gallery_post")) {
         return;
     }
     Esp32BaseWeb::redirectSeeOther(location);
@@ -289,11 +296,7 @@ void buildPlanRowHtml(const char* mode, const char* limit, char* out, size_t len
 }
 
 void handleConfigNameSave() {
-    if (!Esp32BaseWeb::checkAuth()) {
-        return;
-    }
-    if (!Esp32BaseWeb::isMethod(Esp32BaseWeb::METHOD_POST)) {
-        Esp32BaseWeb::sendText(405, "method not allowed");
+    if (!Esp32BaseWeb::checkPostAllowed("gallery_config_name")) {
         return;
     }
     char name[32] = "";
@@ -316,11 +319,7 @@ void handleConfigNameSave() {
 }
 
 void handleConfigDialogSave() {
-    if (!Esp32BaseWeb::checkAuth()) {
-        return;
-    }
-    if (!Esp32BaseWeb::isMethod(Esp32BaseWeb::METHOD_POST)) {
-        Esp32BaseWeb::sendText(405, "method not allowed");
+    if (!Esp32BaseWeb::checkPostAllowed("gallery_config_dialog")) {
         return;
     }
     char limit[16] = "";

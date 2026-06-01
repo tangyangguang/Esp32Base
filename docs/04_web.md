@@ -266,7 +266,7 @@ System Logs 页面：
 - FS/FileLog 不可用时显示轻量不可用面板，标题为 `System logs unavailable`。
 - Clear system logs POST 后通过 303 回到 System Logs 页，并在页面顶部显示成功或失败提示；刷新页面不重复提交。
 - FileLog 模式为 OFF 时，System Logs 页面仍展示已有历史日志；OFF 只表示停止后续写入。
-- 读取日志内容前必须调用 `Esp32BaseFileLog::flush()`。
+- `GET /esp32base/logs` 和 `GET /esp32base/logs/raw` 必须保持只读，只读取已经落盘的系统诊断日志快照，不主动 `flush()`、创建、清空或重建文件。页面会展示当前 buffer used/total，尚在缓存中的 INFO 日志可等待常规 flush interval；清空、格式化、重启等维护副作用仍必须通过 POST，不通过 GET 触发。
 - System Logs 页面只面向 Esp32Base 系统诊断日志，不读取 `Esp32BaseAppEventLog`，也不展示业务事件。页面命名面向用户，`Esp32BaseFileLog` 是底层实现/API 名称。
 - 显示 enabled、path、mode、rotate files、buffer used/total、flush interval、max per file、max total、每段大小。
 - 系统诊断日志状态信息使用 panel 内紧凑小字号表格展示，label/value 纵向对齐；其中的容量值只显示 KB/MB/B 人性化值，不重复 raw bytes。

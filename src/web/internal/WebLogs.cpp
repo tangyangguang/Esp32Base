@@ -84,7 +84,6 @@ void handleLogsPage() {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_DANGER, "System logs action failed", g_server.arg("error").c_str());
     }
 #if ESP32BASE_ENABLE_FILELOG
-    Esp32BaseFileLog::flush();
     char maxBuf[48];
     char totalBuf[48];
     char bufferUsed[48];
@@ -134,7 +133,6 @@ void handleLogsRaw() {
         return;
     }
 #if ESP32BASE_ENABLE_FILELOG
-    Esp32BaseFileLog::flush();
     const uint8_t selectedSegment = selectedLogSegment();
     g_server.sendHeader("X-Content-Type-Options", "nosniff");
     if (!beginResponse(200, "text/plain; charset=utf-8", nullptr)) {

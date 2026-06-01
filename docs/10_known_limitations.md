@@ -21,6 +21,7 @@
 - Web 基于 Arduino `WebServer` 同步模型。
 - 长时间 handler 会阻塞其他请求，建议单次 handler < 200ms。
 - 不支持 WebSocket、SPA、大型前端资源管理器、多用户权限和会话系统。
+- System Logs 的 GET 页面只读取已落盘的系统诊断日志快照，不为了“立即看到缓存中日志”主动 flush；低优先级缓存日志按常规 flush interval 落盘，清空、格式化、重启等维护动作仍必须走 POST。
 - OTA 上传页只复用 Web Basic Auth，不提供第二套认证。
 - ArduinoOTA/espota 不提供用户名，认证只使用当前 Web Auth 密码。
 

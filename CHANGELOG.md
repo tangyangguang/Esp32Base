@@ -4,6 +4,12 @@
 
 ## 2026-05-31
 
+### Web 安全和系统日志只读边界
+
+- `GET /esp32base/logs` 和 `GET /esp32base/logs/raw` 现在只读取已经落盘的系统诊断日志快照，不再为了查看页面主动调用 `Esp32BaseFileLog::flush()`；需要写入、清空、格式化或重启的维护动作继续走 POST，避免认证后的页面查看、iframe 加载或监控抓取产生 LittleFS 写入副作用。
+- `examples/full_demo` 和 `examples/web_ui_gallery` 的业务示例 POST 已统一改用 `Esp32BaseWeb::checkPostAllowed(context)`，并在 selftest 中覆盖跨站 `Origin` 返回 403，避免业务项目照抄旧的 `checkAuth() + isMethod(POST)` 模式。
+- 静态检查脚本补充 System Logs GET 不 flush、示例 POST 必须使用 `checkPostAllowed()`、示例 selftest 必须覆盖 hostile Origin 的回归检查。
+
 ### 应用事件日志
 
 新增：

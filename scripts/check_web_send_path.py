@@ -75,6 +75,10 @@ def main() -> int:
         errors.append("Logs must not keep the old HTML-escaped inline segment path")
     if "sendLogSegment(" in handle_logs_page or "<pre>" in handle_logs_page:
         errors.append("handleLogsPage() must not inline full log contents into HTML")
+    if "Esp32BaseFileLog::flush()" in handle_logs_page:
+        errors.append("handleLogsPage() must not flush or write from a GET/read-only path")
+    if "Esp32BaseFileLog::flush()" in handle_logs_raw:
+        errors.append("handleLogsRaw() must not flush or write from a GET/read-only path")
     if "g_server.sendContent(data, len);" in send_response_content:
         after_send = send_response_content.split("g_server.sendContent(data, len);", 1)[1]
         if "responseClientConnected()" in after_send:

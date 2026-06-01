@@ -97,6 +97,7 @@ struct SelfTestRequestJob {
     const char* body;
     bool auth;
     const char* mustContain;
+    const char* origin;
     IPAddress targetIp;
     volatile bool done;
     bool connected;
@@ -141,6 +142,11 @@ void selfTestRequestTask(void* arg) {
     client.print("\r\nConnection: close\r\n");
     if (job->auth) {
         client.print("Authorization: Basic YWRtaW46YWRtaW4=\r\n");
+    }
+    if (job->origin) {
+        client.print("Origin: ");
+        client.print(job->origin);
+        client.print("\r\n");
     }
     const size_t bodyLen = job->body ? strlen(job->body) : 0;
     if (bodyLen > 0) {
@@ -235,13 +241,15 @@ bool runFixedFileSelfTest() {
     return ok;
 }
 
-bool selfTestRequest(const char* method, const char* path, const char* body, bool auth, int expectedCode, const char* mustContain) {
+bool selfTestRequest(const char* method, const char* path, const char* body, bool auth, int expectedCode,
+                     const char* mustContain, const char* origin = nullptr) {
     SelfTestRequestJob job = {
         method,
         path,
         body,
         auth,
         mustContain,
+        origin,
         Esp32BaseWiFi::state() == Esp32BaseWiFi::CONFIG_PORTAL ? WiFi.softAPIP() : WiFi.localIP(),
         false,
         false,
@@ -296,6 +304,7 @@ void runSelfTest() {
     uint8_t pass = 0;
     uint8_t total = 0;
 #define RUN_SELFTEST(method, path, body, auth, code, contains) do { ++total; if (selfTestRequest(method, path, body, auth, code, contains)) ++pass; } while (0)
+#define RUN_CROSS_ORIGIN_SELFTEST(method, path, body, auth, code, contains) do { ++total; if (selfTestRequest(method, path, body, auth, code, contains, "http://evil.example")) ++pass; } while (0)
 #define RUN_BOOL(expr) do { ++total; if (expr) ++pass; } while (0)
     RUN_BOOL(runFixedFileSelfTest());
     RUN_SELFTEST("GET", "/esp32base/api/status", nullptr, false, 401, "Unauthorized");
@@ -458,6 +467,7 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/ui-records?page=2", nullptr, true, 200, "page=1'>上一页");
     RUN_SELFTEST("GET", "/ui-config?saved=1", nullptr, true, 200, "保存成功");
     RUN_SELFTEST("GET", "/ui-action", nullptr, true, 200, "操作命令模板");
+    RUN_CROSS_ORIGIN_SELFTEST("POST", "/ui-action/run", "run=1", true, 403, "Forbidden");
     RUN_SELFTEST("POST", "/ui-action/run", "run=1", true, 303, "Location: /ui-action?saved=1");
     RUN_SELFTEST("GET", "/ui-flow?saved=1", nullptr, true, 200, "流程向导模板");
     RUN_SELFTEST("GET", "/ui-maintenance", nullptr, true, 200, "诊断维护模板");
@@ -465,6 +475,7 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/api/control", nullptr, true, 200, "\"method\":\"GET\"");
     RUN_SELFTEST("GET", "/api/csv", nullptr, true, 200, "Content-Type: text/csv");
     RUN_SELFTEST("GET", "/api/csv", nullptr, true, 200, "Content-Disposition: attachment");
+    RUN_CROSS_ORIGIN_SELFTEST("POST", "/api/control", "value=blocked", true, 403, "Forbidden");
     RUN_SELFTEST("POST", "/api/control", "value=selftest", true, 303, "Location: /control?saved=1");
     RUN_SELFTEST("GET", "/dashboard", nullptr, true, 200, "Stored value: selftest");
     RUN_SELFTEST("POST", "/esp32base/logs/clear", nullptr, true, 303, "Location: /esp32base/logs?cleared=1");
@@ -478,6 +489,7 @@ void runSelfTest() {
     RUN_BOOL(Esp32BaseWeb::resetAuth());
     RUN_BOOL(Esp32BaseWeb::verifyAuth("admin", "admin"));
 #undef RUN_BOOL
+#undef RUN_CROSS_ORIGIN_SELFTEST
 #undef RUN_SELFTEST
     if (wdtRemoved) {
         Esp32BaseWatchdog::restoreCurrentTaskAfterLongOperation();
@@ -520,10 +532,10 @@ void handleControl() {
 }
 
 void handleControlApi() {
-    if (!Esp32BaseWeb::checkAuth()) {
-        return;
-    }
     if (Esp32BaseWeb::isMethod(Esp32BaseWeb::METHOD_GET)) {
+        if (!Esp32BaseWeb::checkAuth()) {
+            return;
+        }
         char value[64] = "";
         Esp32BaseConfig::getStr(APP_NS, APP_KEY_VALUE, value, sizeof(value), "");
         Esp32BaseWeb::beginJson(200);
@@ -535,8 +547,7 @@ void handleControlApi() {
         Esp32BaseWeb::endJson();
         return;
     }
-    if (!Esp32BaseWeb::isMethod(Esp32BaseWeb::METHOD_POST)) {
-        Esp32BaseWeb::sendText(405, "method not allowed");
+    if (!Esp32BaseWeb::checkPostAllowed("full_demo_control")) {
         return;
     }
     if (Esp32BaseWeb::hasParam("sleep")) {
@@ -557,11 +568,7 @@ void handleControlApi() {
 }
 
 void handleUiActionRun() {
-    if (!Esp32BaseWeb::checkAuth()) {
-        return;
-    }
-    if (!Esp32BaseWeb::isMethod(Esp32BaseWeb::METHOD_POST)) {
-        Esp32BaseWeb::sendText(405, "method not allowed");
+    if (!Esp32BaseWeb::checkPostAllowed("full_demo_ui_action")) {
         return;
     }
     Esp32BaseWeb::redirectSeeOther("/ui-action?saved=1");

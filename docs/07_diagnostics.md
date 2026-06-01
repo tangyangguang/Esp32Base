@@ -201,6 +201,7 @@ CI 应覆盖核心矩阵，release 前执行完整矩阵。
 - FS 满或损坏时触发 Web WARN 诊断，不应因为 FileLog 写入失败导致 task WDT 重启。
 - FileLog 默认 `4 × 32KB` 轮转。
 - System Logs 页面可读取 history/current。
+- System Logs 页面和 raw endpoint 的 GET 读取必须是只读快照，不主动 `flush()` 或改变 FileLog 运行态；清空、格式化、重启等维护副作用必须走 POST。
 - System Logs 页面清空后可继续写 current。
 - App Events 启用后默认约 188 KiB 存储、分页读取、常用筛选、真实时间/uptime fallback、CSV 导出、POST 清空和环形覆盖正常；未启用时无 App Events 路由和符号依赖。
 - JSON escape。
