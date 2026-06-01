@@ -13,6 +13,8 @@ enum AppEventTimeMode : uint8_t {
     APP_EVENT_TIME_UPTIME
 };
 
+constexpr const char* kAppEventSummaryCountId = "appev-count";
+
 struct AppEventFilter {
     uint8_t level;
     AppEventTimeMode timeMode;
@@ -419,11 +421,23 @@ void sendAppEventsSummary(const AppEventFilter& filter) {
     snprintf(count, sizeof(count), "%u", static_cast<unsigned>(Esp32BaseAppEventLog::count()));
     snprintf(capacity, sizeof(capacity), "%u", static_cast<unsigned>(Esp32BaseAppEventLog::capacity()));
     Esp32BaseWeb::beginMetricGrid();
-    Esp32BaseWeb::sendMetric("Events", count);
+    sendChunk("<div class='metric'><b id='");
+    sendChunk(kAppEventSummaryCountId);
+    sendChunk("'>");
+    sendEscapedHtmlChunk(count);
+    sendChunk("</b><span>Events</span></div>");
     Esp32BaseWeb::sendMetric("Capacity", capacity);
     Esp32BaseWeb::sendMetric("Path", Esp32BaseAppEventLog::path());
     Esp32BaseWeb::sendMetric("Filter", filterActive(filter) ? "Active" : "All");
     Esp32BaseWeb::endMetricGrid();
+}
+
+void syncAppEventsSummaryCount() {
+    sendChunk("<script>(function(){var e=document.getElementById('");
+    sendChunk(kAppEventSummaryCountId);
+    sendChunk("');if(e)e.textContent='");
+    sendUintChunk(Esp32BaseAppEventLog::count());
+    sendChunk("';})();</script>");
 }
 
 void sendCsvNumber(uint64_t value) {
@@ -690,6 +704,7 @@ void handleAppEventsPage() {
         sendChunk("<tr><td colspan='6'>No App Events</td></tr>");
     }
     sendChunk("</table></div></section>");
+    syncAppEventsSummaryCount();
     Esp32BaseWeb::Pagination pagination = {"/esp32base/app-events", filter.query, page, per, state.matched};
     Esp32BaseWeb::sendPagination(pagination);
     Esp32BaseWeb::sendFooter();

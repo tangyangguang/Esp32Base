@@ -72,6 +72,8 @@ require("src/web/internal/WebAppEvents.cpp", "struct AppEventScanState", "App Ev
 require("src/web/internal/WebAppEvents.cpp", "resolveAppEventEpoch", "App Events must resolve/display real time when possible")
 require("src/web/internal/WebAppEvents.cpp", "uptimeMs", "App Events must expose uptime in milliseconds")
 require("src/web/internal/WebAppEvents.cpp", "uptimeSec", "App Events API/CSV must retain stable uptimeSec")
+require("src/web/internal/WebAppEvents.cpp", "kAppEventSummaryCountId", "App Events page summary count must be updated after read reconciliation")
+require("src/web/internal/WebAppEvents.cpp", "syncAppEventsSummaryCount", "App Events page must sync summary count after the table scan")
 require("src/web/internal/WebAppEvents.cpp", "sendFilterTimeOption(\"real\"", "App Events filters must include real-time events")
 require("src/web/internal/WebAssets.cpp", ".evtable", "App Events table must have dedicated readable styling")
 if "countFilteredEvents" in read("src/web/internal/WebAppEvents.cpp"):
