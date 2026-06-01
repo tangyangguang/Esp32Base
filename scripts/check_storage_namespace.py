@@ -193,6 +193,8 @@ if "const bool pathOk = fsJoinPath(" not in walk:
     errors.append("src/web/internal/WebFs.cpp: file tree walk must branch on fsJoinPath return value")
 if "if (!fsJoinPath(" not in upload_dirs:
     errors.append("src/web/internal/WebFs.cpp: upload directory options must skip overlong joined paths")
+if "Some directories are hidden because their paths are too long." not in web_fs and "disabled>path too long" not in upload_dirs:
+    errors.append("src/web/internal/WebFs.cpp: upload directory picker must show when overlong directories are hidden")
 if 'strlcpy(path, g_server.hasArg("path")' in download + delete:
     errors.append("src/web/internal/WebFs.cpp: download/delete still copy possibly overlong path before validation")
 if "char segment[64]" in filelog_owns:

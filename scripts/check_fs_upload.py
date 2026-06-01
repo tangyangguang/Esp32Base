@@ -113,6 +113,8 @@ if "Target is reserved for App Events" in source:
     errors.append("src/web/internal Web modules: App Events store upload should warn/reload, not reject")
 if "fsResetUploadState()" not in source:
     errors.append("src/web/internal Web modules: upload request state must be reset after each completed upload request")
+if "fsReloadUploadRuntime(" not in source:
+    errors.append("src/web/internal Web modules: upload must use one runtime reload helper for modified App Events/FileLog targets")
 
 web_fs = read("src/web/internal/WebFs.cpp")
 upload_done = function_body(web_fs, "void handleFsUploadDone()")
@@ -127,10 +129,22 @@ if "Esp32BaseAppEventLog::reload()" in upload_done and "App Events store reload 
     errors.append("src/web/internal/WebFs.cpp: App Events store upload reload failure must be returned to the client")
 if "Esp32BaseFileLog::begin()" in upload_done and "FileLog reload failed" not in upload_done:
     errors.append("src/web/internal/WebFs.cpp: FileLog upload reload failure must be returned to the client")
+if "uploadModified" not in upload_done or "uploadAppEventsTarget" not in upload_done or "uploadFileLogTarget" not in upload_done:
+    errors.append("src/web/internal/WebFs.cpp: upload completion must snapshot modified sensitive target state")
+if upload_done.find("fsRecoverModifiedUploadRuntime(") > upload_done.find("fsSendUploadJson(400"):
+    errors.append("src/web/internal/WebFs.cpp: failed uploads that modified sensitive targets must reload runtime before returning upload errors")
+if upload_done.find("fsRecoverModifiedUploadRuntime(") > upload_done.find('"Upload verification failed"'):
+    errors.append("src/web/internal/WebFs.cpp: verification failures after modifying sensitive targets must reload runtime before returning")
+if "g_fsUploadModified = true;" not in upload_write:
+    errors.append("src/web/internal/WebFs.cpp: upload start must mark the target modified after truncating/opening it")
+if "g_fsUploadAppEventsTarget" not in upload_write or "g_fsUploadFileLogTarget" not in upload_write:
+    errors.append("src/web/internal/WebFs.cpp: upload start must classify App Events/FileLog targets before writes can fail")
 if 'strlcpy(path, g_server.arg' in upload_done + upload_write or 'strlcpy(dir, g_server.arg' in upload_done + upload_write:
     errors.append("src/web/internal/WebFs.cpp: upload path args must not be copied from g_server.arg before length checks")
 if "fsUploadReceived(false)" not in read("src/web/internal/WebContext.cpp"):
     errors.append("src/web/internal/WebContext.cpp: fsUploadReceived must be explicitly initialized with the upload state")
+if "fsUploadModified(false)" not in read("src/web/internal/WebContext.cpp"):
+    errors.append("src/web/internal/WebContext.cpp: fsUploadModified must be explicitly initialized with the upload state")
 
 for forbidden in [
     "fsUploadPathProtected",

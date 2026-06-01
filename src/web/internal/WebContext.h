@@ -92,6 +92,7 @@ struct FsUploadDirFrame {
     const char* dir;
     uint8_t depth;
     uint16_t* emitted;
+    bool* pathTooLong;
 };
 #endif
 
@@ -187,6 +188,9 @@ struct WebContext {
     bool fsUploadForbidden;
     bool fsUploadStartFailed;
     bool fsUploadReceived;
+    bool fsUploadModified;
+    bool fsUploadAppEventsTarget;
+    bool fsUploadFileLogTarget;
     bool fsUploadActive;
     bool fsUploadOverwrite;
     size_t fsUploadBytes;
@@ -248,6 +252,9 @@ extern bool& g_otaUploadStartFailed;
 extern bool& g_fsUploadForbidden;
 extern bool& g_fsUploadStartFailed;
 extern bool& g_fsUploadReceived;
+extern bool& g_fsUploadModified;
+extern bool& g_fsUploadAppEventsTarget;
+extern bool& g_fsUploadFileLogTarget;
 extern bool& g_fsUploadActive;
 extern bool& g_fsUploadOverwrite;
 extern size_t& g_fsUploadBytes;
