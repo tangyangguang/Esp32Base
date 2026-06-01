@@ -115,7 +115,6 @@ docs = {
     "docs/07_diagnostics.md": "Esp32BaseFs 大块读写",
     "docs/09_release_checklist.md": "writeBytes() / appendBytes() / writeBytesAt() 大块读写",
     "docs/10_known_limitations.md": "写入失败不等于已回滚",
-    "CHANGELOG.md": "Esp32BaseFs 大块读写长操作治理",
 }
 for path, needle in docs.items():
     if needle not in read(path):

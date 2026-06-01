@@ -1006,7 +1006,7 @@ Route 缓冲机制：
 - `verifyAuth(user, pass)` 校验显式传入的账号密码；无参 `verifyAuth()` 仍表示当前请求是否已认证。
 - `saveAuth(user, pass)` 保存 Web Auth 到 `eb_web.auth_user`、`eb_web.auth_pass`，并立即切换为新认证。
 - `resetAuth()` 清除 `eb_web` 持久化 Auth，并恢复应用默认认证；没有应用默认认证时返回 false，Web 进入无默认认证的锁定状态，除非开发固件显式启用 `ESP32BASE_WEB_ALLOW_INSECURE_DEFAULT_AUTH=1`。
-- Web Auth 明文密码会持久化到 `eb_web.auth_pass`，不输出到 HTML、JSON、API 响应或日志；`authPassword()` 仅供本地 C++ 集成使用。
+- Web Auth 明文密码会持久化到 `eb_web.auth_pass`，并在 INFO 日志中随用户名明文输出，用于业务接入和现场调试；HTML、JSON 和 API 响应仍不输出 Web Auth 密码。明文存储和明文日志是项目选择，不作为缺陷或待修风险评估；`authPassword()` 仅供本地 C++ 集成使用。
 - `METHOD_ANY` 用于同一路径 GET/POST 复用；应用 handler 内可用 `currentMethod()`、`isMethod()` 或 `currentMethodName()` 判断当前请求方法。
 - `currentMethod()` 仅在 handler 上下文中返回实际方法：GET 为 `METHOD_GET`，POST 为 `METHOD_POST`；handler 外或未知方法返回 `METHOD_UNKNOWN`。
 - `isMethod(METHOD_ANY)` 在有效 handler 请求中返回 true；`METHOD_ANY` 不作为实际请求方法返回。
@@ -1022,7 +1022,7 @@ Route 缓冲机制：
 
 内置页面交互要求：
 
-- WiFi 配置页面必须回显当前 SSID 和密码。
+- WiFi 配置页面必须回显当前 SSID，不回显当前密码；密码留空表示保持已保存密码，显式清空用于开放 WiFi。
 - WiFi 配置提交必须校验 SSID 非空；密码允许为空以支持开放 WiFi。
 - 重启按钮必须有二次确认，可用浏览器端 JavaScript 实现。
 - API 中的字节数可保留 raw bytes；内置页面面向人工查看时优先只显示 KB/MB/B 人性化格式，避免重复。

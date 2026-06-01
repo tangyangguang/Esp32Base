@@ -61,7 +61,7 @@ Web/API 保存的 hostname 存储在 `eb_sys.hostname`，重启后覆盖构建�
 
 Web 应用路由默认容量统一为 24。该上限只覆盖业务 `addRoute()` / `addPage()` / `addApi()` 注册的静态路由表；内置 Web 路由不占用此表。route 较少且需要节省静态 RAM 的应用，可在完成 route 数量核算后通过构建参数显式调小 `ESP32BASE_WEB_MAX_ROUTES`。
 
-Web/Auth 不再内置启用 admin/admin。启用 Web 的业务必须在 `Esp32Base::begin()` 前调用 `Esp32BaseWeb::setDefaultAuth(user, pass)`，或先通过已保存的 `eb_web` 认证启动；两者都不存在时 Web 服务 fail-closed，不注册 HTTP server。仅受控开发固件可显式打开 `ESP32BASE_WEB_ALLOW_INSECURE_DEFAULT_AUTH=1` 使用内置 `admin/admin` 兜底，并会输出 WARN 审计日志。示例中的固定账号仅用于本地 demo，业务项目不要照抄。
+Web/Auth 不再内置启用 admin/admin。启用 Web 的业务必须在 `Esp32Base::begin()` 前调用 `Esp32BaseWeb::setDefaultAuth(user, pass)`，或先通过已保存的 `eb_web` 认证启动；两者都不存在时 Web 服务 fail-closed，不注册 HTTP server。仅受控开发固件可显式打开 `ESP32BASE_WEB_ALLOW_INSECURE_DEFAULT_AUTH=1` 使用内置 `admin/admin` 兜底，并会输出 WARN 审计日志。示例中的固定账号仅用于本地 demo，业务项目不要照抄。WiFi 密码和 Web Auth 密码按项目选择明文保存到普通 NVS，并在 INFO 日志中明文输出；明文凭据日志是本库面向业务接入和现场调试的明确选择，不作为缺陷或待修风险评估。HTML、JSON 和 API 响应仍不输出 Web Auth 密码。
 
 业务首页推荐注册为 `/index`。在 `HOME_APP` 或 `HOME_COMBINED` 下，如果没有显式 `setHomePath()` 且存在 `/index` 业务页，裸 `/` 会跳转到 `/index`；如果应用确实需要直接渲染裸根路径，可显式 `setHomePath("/")` 并注册 GET `/` 业务页。`/esp32base` 始终保留为基础库系统入口。
 
@@ -201,7 +201,6 @@ python path/to/Esp32Base/scripts/esp32base_serial_recover_ota.py \
 
 建议按顺序阅读：
 
-0. [能力变更记录](CHANGELOG.md)
 1. [设计说明](docs/00_design.md)
 2. [架构说明](docs/01_architecture.md)
 3. [Profile 与裁剪](docs/02_profiles.md)

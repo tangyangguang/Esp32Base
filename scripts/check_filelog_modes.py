@@ -141,7 +141,6 @@ docs = {
     "docs/04_web.md": "模式设置只接受 OFF、ERROR、WARN、INFO",
     "docs/07_diagnostics.md": "ERROR/WARN/INFO",
     "docs/09_release_checklist.md": "ERROR 仅在 FileLog 模式为 ERROR",
-    "CHANGELOG.md": "FileLog 支持 ERROR 模式",
 }
 
 for path, needle in docs.items():

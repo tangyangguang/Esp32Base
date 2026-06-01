@@ -40,7 +40,6 @@ if "Esp32BaseWatchdog::enterLongOperation()" not in long_operation:
 docs = {
     "docs/07_diagnostics.md": "长操作不再从 task WDT 注销当前任务",
     "docs/10_known_limitations.md": "不可细分的底层调用仍可能触发 WDT",
-    "CHANGELOG.md": "Watchdog 长操作策略改为保留 WDT 注册",
 }
 for path, needle in docs.items():
     if needle not in read(path):

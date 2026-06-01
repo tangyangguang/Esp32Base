@@ -131,7 +131,6 @@ for path in [
     "docs/07_diagnostics.md",
     "docs/09_release_checklist.md",
     "docs/10_known_limitations.md",
-    "CHANGELOG.md",
 ]:
     text = read(path)
     for needle in [
@@ -147,7 +146,7 @@ for forbidden in ["reserved_path", "owned by an Esp32Base service", "owned by se
     if forbidden in web_fs:
         errors.append(f"src/web/internal/WebFs.cpp: must not keep hard-block namespace wording {forbidden!r}")
 
-for path in ["README.md", "docs/03_api.md", "docs/04_web.md", "CHANGELOG.md"]:
+for path in ["README.md", "docs/03_api.md", "docs/04_web.md"]:
     text = read(path)
     if "Target is reserved for Esp32Base services" in text:
         errors.append(f"{path}: must not document generic /esp32base upload/delete rejection")

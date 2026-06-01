@@ -4,7 +4,7 @@
 
 `Esp32Base` 是 ESP32 系列应用项目的基础运行底座，目标是一次构建出成熟、稳定、资源可控的基础库。
 
-本轮重构不考虑历史兼容性。旧代码、旧示例、旧文档和临时评估文件不再保留为实现约束；当前实现以 `docs/`、`README.md`、`CHANGELOG.md` 和现有代码为准。
+本轮重构不考虑历史兼容性。旧代码、旧示例、旧文档、变更流水和临时评估文件不再保留为实现约束；当前实现以 `docs/`、`README.md` 和现有代码为准。
 
 最终目标：
 
@@ -68,7 +68,7 @@ Core 不包含：
 - restart / sleep 前 `flushAll()`
 - OTA SHA256
 - OTA rollback
-- OTA Watchdog remove / restore
+- OTA 长操作期间保留 WDT 注册，通过长操作作用域、yield 和 reset/feed 降低误触发
 - OTA 期间暂停 NVS deferred flush
 - Captive Portal DNS
 - LittleFS 挂载失败不 halt

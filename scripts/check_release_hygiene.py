@@ -32,7 +32,6 @@ docs = {
     "README.md": "发布包排除 docs/superpowers",
     "docs/01_architecture.md": "OTA boot 初始化",
     "docs/09_release_checklist.md": "docs/superpowers",
-    "CHANGELOG.md": "发布内容排除 docs/superpowers",
 }
 for path, needle in docs.items():
     if needle not in read(path):

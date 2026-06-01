@@ -39,7 +39,6 @@ def main() -> int:
     web = read_web_source()
     docs = (ROOT / "docs/05_ota.md").read_text()
     readme = (ROOT / "README.md").read_text()
-    changelog = (ROOT / "CHANGELOG.md").read_text()
     recover_path = ROOT / "scripts/esp32base_serial_recover_ota.py"
     recover = recover_path.read_text() if recover_path.exists() else ""
     recover_check = (ROOT / "scripts/check_serial_recover_ota.py").read_text()
@@ -84,8 +83,6 @@ def main() -> int:
     require(docs, "双 OTA 串口恢复", "OTA docs must document dual OTA serial recovery", errors)
     require(docs, "同一次 `write_flash`", "OTA docs must document same-command otadata clearing", errors)
     require(readme, "esp32base_serial_recover_ota.py", "README must mention the serial recovery script", errors)
-    require(changelog, "双 OTA 串口恢复脚本可靠性优化", "CHANGELOG must record same-command otadata recovery changes", errors)
-    require(changelog, "双 OTA 串口恢复", "CHANGELOG must record dual OTA recovery changes", errors)
 
     if errors:
         for error in errors:

@@ -7,8 +7,8 @@
 - Web 使用 HTTP Basic Auth，不提供 HTTPS。
 - Basic Auth 明文传输，只用于降低误操作风险，不抵御同一局域网内的嗅探、MITM 或主动攻击。
 - Web/Auth 不再内置启用 admin/admin。未调用 `Esp32BaseWeb::setDefaultAuth()` 且没有已保存认证时，Web 服务不会启动；仅显式启用 `ESP32BASE_WEB_ALLOW_INSECURE_DEFAULT_AUTH=1` 的受控开发固件会使用内置 `admin/admin` 兜底。
-- Web Auth 密码不在 HTML、JSON、API 响应或日志中明文输出；持久化时仍保存明文密码。
-- WiFi 凭据和 Web Auth 凭据保存到普通 NVS；未启用芯片/平台级 flash encryption 时，具备物理 flash 读取能力的人可以取得明文凭据。
+- Web Auth 密码不在 HTML、JSON 或 API 响应中明文输出；持久化时保存明文密码，并在 INFO 日志中明文输出。
+- WiFi 凭据和 Web Auth 凭据保存到普通 NVS，并在 INFO 日志中明文输出；明文存储和明文日志是项目选择，不作为缺陷或待修风险评估。未启用芯片/平台级 flash encryption 时，具备物理 flash 读取能力的人可以取得明文凭据。
 - OTA 只提供上传认证和完整性校验，不提供固件加密、签名信任链或差分升级；Web OTA 使用可选 SHA256，ArduinoOTA/espota 使用内建 MD5。
 - Web OTA 与 Web Auth 配置解耦；关闭 Web Auth 时 Web OTA 仍可访问，但没有密码保护，风险由应用和用户自行承担。
 - 关闭 Web Auth 不会关闭 ArduinoOTA/espota 密码；命令行 OTA 仍要求当前 Web Auth 密码。

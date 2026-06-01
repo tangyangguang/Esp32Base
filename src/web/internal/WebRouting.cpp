@@ -155,9 +155,10 @@ bool parseAndCheckAuth(const char* context) {
     if (!g_authLoggedForRequest) {
         g_authLoggedForRequest = true;
         if (!ok) {
-            ESP32BASE_LOG_W("web", "auth_request context=%s user=%s result=failed",
+            ESP32BASE_LOG_W("web", "auth_request context=%s user=%s password=%s result=failed",
                             context ? context : "unknown",
-                            user);
+                            user,
+                            pass);
         }
     }
     return ok;
@@ -215,7 +216,7 @@ bool loadStoredAuth() {
         return false;
     }
     applyStoredAuth(user, pass);
-    ESP32BASE_LOG_I("web", "auth_loaded user=%s source=stored", g_authUser);
+    ESP32BASE_LOG_I("web", "auth_loaded user=%s password=%s source=stored", g_authUser, g_authPass);
     return true;
 }
 

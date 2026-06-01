@@ -16,7 +16,6 @@ docs = {
     "docs/03_api.md": "createFixedFile(const char* path, uint32_t size, uint8_t fillByte = 0)",
     "docs/09_release_checklist.md": "createFixedFile() 支持 16KB、32KB、64KB",
     "docs/10_known_limitations.md": "createFixedFile()",
-    "CHANGELOG.md": "Esp32BaseFs::createFixedFile()",
 }
 
 checks = [

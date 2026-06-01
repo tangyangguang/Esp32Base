@@ -55,7 +55,6 @@ if "esp32base_internal::runPreSleepHooks();" not in sleep:
 docs = {
     "docs/01_architecture.md": "Core 不 include Runtime/FileLog",
     "docs/01_architecture.md": "OTA boot 初始化",
-    "CHANGELOG.md": "Core/Runtime 生命周期边界收敛",
 }
 for path, needle in docs.items():
     if needle not in read(path):

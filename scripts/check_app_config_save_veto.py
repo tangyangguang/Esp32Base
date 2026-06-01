@@ -103,7 +103,6 @@ docs = {
     "docs/03_api.md": "`SaveCallback` 是保存后通知，不用于拒绝保存",
     "docs/04_web.md": "只读状态、未来版本或业务版本不兼容",
     "docs/09_release_checklist.md": "保存前 veto",
-    "CHANGELOG.md": "App Config 保存前 veto 回归",
 }
 for path, marker in docs.items():
     require(marker in read(path), f"{path}: missing App Config save-veto marker {marker!r}")

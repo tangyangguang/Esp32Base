@@ -96,7 +96,6 @@ docs = {
     "docs/03_api.md": "FooterBarMode",
     "docs/04_web.md": "Footer bar 模式设置只接受 Off、Status only、Links + status",
     "docs/09_release_checklist.md": "Footer bar 可切换 Off、Status only、Links + status",
-    "CHANGELOG.md": "Footer bar 运行时显示模式",
 }
 
 

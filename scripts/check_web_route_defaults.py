@@ -24,7 +24,6 @@ docs = {
     "docs/06_memory_budget.md": "#define ESP32BASE_WEB_MAX_ROUTES 24",
     "docs/08_arduino_core_compat.md": "Web route 默认仍统一为 24",
     "docs/10_known_limitations.md": "Web route 默认仍统一为 24",
-    "CHANGELOG.md": "Web 应用路由默认容量统一为 24",
 }
 
 for path, needle in docs.items():

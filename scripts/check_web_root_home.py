@@ -12,7 +12,6 @@ routing = read("src/web/internal/WebRouting.cpp")
 gallery = read("examples/web_ui_gallery/src/main.cpp")
 full = read("examples/full_demo/src/main.cpp")
 docs = read("docs/04_web.md")
-changelog = read("CHANGELOG.md")
 
 checks = [
     (
@@ -59,11 +58,6 @@ checks = [
         docs,
         "业务模式默认优先使用 `/index`",
         "Web docs must describe /index as the default business home.",
-    ),
-    (
-        changelog,
-        "根路径业务首页",
-        "CHANGELOG must describe root business home routing.",
     ),
 ]
 

@@ -81,7 +81,7 @@
 - SHA256 正确路径成功。
 - SHA256 错误路径失败。
 - `Update.end(true)` 只在 SHA256 通过后调用。
-- Watchdog remove/restore。
+- Watchdog 长操作作用域保持当前 task WDT 注册，通过 yield 和 reset/feed 降低误触发。
 - Config deferred flush pause/resume。
 - WiFi power save off/restore。
 - 中途断电不变砖。
@@ -102,7 +102,7 @@
 - iOS / Android / macOS / Windows 可进入配网页。
 - WiFi 配置页拒绝空 SSID，允许空密码用于开放 WiFi。
 - WiFi 配置页拒绝超长 SSID / 密码。
-- WiFi 配置页回显 SSID / 密码。
+- WiFi 配置页回显 SSID，不回显密码；空密码字段保留已保存密码，显式清空用于开放 WiFi。
 - 提交凭证后切换 STA。
 - 错误密码进入 backoff。
 - 路由器恢复后重连。

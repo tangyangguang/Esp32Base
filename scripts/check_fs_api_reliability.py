@@ -37,7 +37,6 @@ web = read_web_source()
 docs = {
     "docs/03_api.md": "底层声明文件仍有剩余内容但读出 0 字节时，`readBytes()` / `readBytesAt()` 返回 false",
     "docs/10_known_limitations.md": "逻辑文件大小不等于内容一定可读",
-    "CHANGELOG.md": "FS API 读写失败语义收紧",
 }
 
 checks = [

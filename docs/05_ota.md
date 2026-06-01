@@ -119,7 +119,7 @@ pio run -t webota
 2. 读取总大小和可选 SHA256。
 3. 进入 `UPLOADING`。
 4. 暂停 Config deferred flush。
-5. 如 Watchdog 启用，remove current task。
+5. 如 Watchdog 启用，进入长操作作用域，保持当前 task WDT 注册。
 6. 关闭 WiFi power save 并记录原状态。
 7. `Update.begin(...)`。
 8. 写入 chunk。
@@ -127,7 +127,7 @@ pio run -t webota
 10. 接收完成后计算 SHA256。
 11. SHA256 通过后调用 `Update.end(true)`。
 12. 进入 `SUCCESS`。
-13. 恢复 Watchdog。
+13. 退出长操作作用域，恢复常规 Watchdog feed 节奏。
 14. 恢复 WiFi power save。
 15. 恢复 Config deferred flush。
 16. Web 上传页收到成功响应后提示重启，并在短暂等待后跳转到当前配置的首页。
