@@ -21,7 +21,7 @@ OTA 依赖：
 - WiFi connected。
 - Web ready。
 
-OTA route 按 profile/OTA 编译条件注册，不依赖应用是否设置默认认证，也不依赖 Web Auth 是否开启。
+OTA route 按 profile/OTA 编译条件注册；Web OTA 认证来自当前 Web Auth。未设置应用默认认证且没有已保存认证时，Web 服务不会启动，OTA HTTP 路由也不会开放。
 
 - Web Auth 开启时，OTA 页面和上传接口复用 Web Basic Auth。
 - Web Auth 关闭时，OTA 页面和上传接口不要求认证，风险由应用和用户自行承担。
@@ -62,7 +62,7 @@ pio run -t webota
 - `esp32base_webota_host`：设备 IP 或 hostname；未设置 URL 时使用。
 - `esp32base_webota_port`：默认 `80`。
 - `esp32base_webota_path`：默认 `/esp32base/ota/raw`；显式设为 `/esp32base/ota` 时走旧 multipart 兼容路径。
-- `esp32base_webota_user` / `esp32base_webota_password`：默认 `admin` / `admin`。
+- `esp32base_webota_user` / `esp32base_webota_password`：当前 Web Auth 用户名和密码；未配置时脚本仍可从环境变量读取，但不再假设设备内置 `admin/admin`。
 - `esp32base_webota_auth`：可用 `user:password` 一次性设置 Basic Auth。
 - `esp32base_webota_sha256`：默认 `auto`，可设为 `off` 或 64 字符 SHA256。
 - `esp32base_webota_timeout`：默认 `120` 秒，用于预检和普通请求。

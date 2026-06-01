@@ -2,7 +2,7 @@
 
 `Esp32Base` 是面向 ESP32 / ESP32-S3 / ESP32-C3、基于 Arduino ESP32 Core 的轻量基础库设计。
 
-本仓库当前按 `docs/` 中的新架构实施。历史设计方案、评审记录和临时评估文件已从发布分支清理，不参与编译，也不作为实现依据。
+本仓库当前按 `docs/` 中的新架构实施。历史设计方案、评审记录和临时评估文件已从发布分支清理，不参与编译，也不作为实现依据；发布包排除 docs/superpowers 这类过程文档目录。
 
 ## 定位
 
@@ -60,6 +60,8 @@ Web/API 保存的 hostname 存储在 `eb_sys.hostname`，重启后覆盖构建�
 底部横条可在 System 页面配置为 Off、Status only 或 Links + status。该设置保存到 `eb_ui.footer_mode`，用于控制 `sendFooter()` 输出的紧凑系统入口和运行摘要。
 
 Web 应用路由默认容量统一为 24。该上限只覆盖业务 `addRoute()` / `addPage()` / `addApi()` 注册的静态路由表；内置 Web 路由不占用此表。route 较少且需要节省静态 RAM 的应用，可在完成 route 数量核算后通过构建参数显式调小 `ESP32BASE_WEB_MAX_ROUTES`。
+
+Web/Auth 不再内置启用 admin/admin。启用 Web 的业务必须在 `Esp32Base::begin()` 前调用 `Esp32BaseWeb::setDefaultAuth(user, pass)`，或先通过已保存的 `eb_web` 认证启动；两者都不存在时 Web 服务 fail-closed，不注册 HTTP server。仅受控开发固件可显式打开 `ESP32BASE_WEB_ALLOW_INSECURE_DEFAULT_AUTH=1` 使用内置 `admin/admin` 兜底，并会输出 WARN 审计日志。示例中的固定账号仅用于本地 demo，业务项目不要照抄。
 
 业务首页推荐注册为 `/index`。在 `HOME_APP` 或 `HOME_COMBINED` 下，如果没有显式 `setHomePath()` 且存在 `/index` 业务页，裸 `/` 会跳转到 `/index`；如果应用确实需要直接渲染裸根路径，可显式 `setHomePath("/")` 并注册 GET `/` 业务页。`/esp32base` 始终保留为基础库系统入口。
 
@@ -162,7 +164,7 @@ LittleFS 中的 `/esp32base/**` 是基础库管理命名空间。系统诊断日
 upload_protocol = espota
 upload_port = esp32-demo.local
 upload_flags =
-  --auth=admin
+  --auth=<current-web-auth-password>
 ```
 
 不需要命令行 OTA 的业务可显式设置 `ESP32BASE_ENABLE_ARDUINO_OTA=0`，现有 Web OTA 不受影响。
@@ -174,8 +176,8 @@ extra_scripts =
   post:path/to/Esp32Base/scripts/esp32base_webota.py
 
 custom_esp32base_webota_host = 192.168.2.112
-custom_esp32base_webota_user = admin
-custom_esp32base_webota_password = admin
+custom_esp32base_webota_user = <current-web-auth-user>
+custom_esp32base_webota_password = <current-web-auth-password>
 ```
 
 ```sh

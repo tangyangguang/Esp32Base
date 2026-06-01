@@ -114,6 +114,12 @@ Esp32BaseAppEventLog::TimeSnapshot appEventLogTimeFromNtp() {
     return value;
 }
 #endif
+
+void flushRuntimeBeforeLifecycleStop() {
+#if ESP32BASE_ENABLE_FILELOG
+    Esp32BaseFileLog::flush();
+#endif
+}
 }
 
 bool Esp32Base::begin() {
@@ -141,6 +147,8 @@ bool Esp32Base::begin() {
         esp32base_internal::copySafe(g_lastError, sizeof(g_lastError), "system");
         return false;
     }
+    Esp32BaseSystem::setPreRestartHook(flushRuntimeBeforeLifecycleStop);
+    Esp32BaseSystem::setPreSleepHook(flushRuntimeBeforeLifecycleStop);
     ESP32BASE_LOG_D("base", "module_ready name=system");
 #if ESP32BASE_ENABLE_OTA
     // Keep ESP32BASE_OTA_REQUIRE_MARK_VALID rollback timing independent from WiFi/Web readiness.

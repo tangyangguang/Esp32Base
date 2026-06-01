@@ -4,6 +4,27 @@
 
 ## 2026-06-01
 
+### Web/WiFi/Auth 凭据泄露面收敛
+
+- Web/Auth 不再内置启用 admin/admin。未调用 `Esp32BaseWeb::setDefaultAuth()` 且没有已保存认证时，Web 服务不会启动；仅显式启用 `ESP32BASE_WEB_ALLOW_INSECURE_DEFAULT_AUTH=1` 的受控开发固件会使用内置 `admin/admin` 兜底并输出 WARN。
+- Web Auth、WiFi 连接和 WiFi 表单提交日志不再输出明文密码；认证失败日志只记录 context 和用户名，保存/加载日志只记录用户名和来源。
+- WiFi 配置页不再回显已保存密码；留空表示保持已保存密码，显式勾选清除密码才会切换为开放网络。
+
+### Core/Runtime 生命周期边界收敛
+
+- Core/Runtime 生命周期边界收敛：`Esp32BaseSystem` 不再 include Runtime/FileLog；restart/deep sleep 前的 Runtime flush 改由 `Esp32Base` facade 通过生命周期 hook 编排。
+- `docs/01_architecture.md` 的 begin 顺序补充 OTA boot 初始化、NTP boot session 和 App Events time provider。
+
+### Watchdog 与 FS 维护语义收敛
+
+- Watchdog 长操作策略改为保留 WDT 注册，不再从 task WDT 注销当前任务；分块读写继续 feed/yield，不可细分底层调用卡死时仍保留 WDT 兜底。
+- `Esp32BaseFs` 新增 `removeFileWithRecovery()`，用 `REMOVE_FILE_DELETED`、`REMOVE_FILE_CLEARED`、`REMOVE_FILE_FAILED` 明确区分硬删除、仅截断清空和失败；`removeFile()` 只在硬删除成功时返回 true。
+- Web chunk 输出会重试 `WiFiClient.write()` 的部分写入进度，弱网下不再只按一次 write 的返回长度判断失败。
+
+### 发布内容排除 docs/superpowers
+
+- 发布内容排除 docs/superpowers，并删除仓库中旧的过程规格和执行计划，避免历史设计文档与当前实现边界混用。
+
 ### LittleFS 基础库命名空间隔离
 
 - 基础库管理的 LittleFS 文件统一迁入 `/esp32base/**`：系统诊断日志默认路径改为 `/esp32base/logs/system.log`，App Events store 默认路径改为 `/esp32base/app-events/events.bin`，和业务项目的 `/app/**`、`/data/**` 文件分开。

@@ -6,6 +6,12 @@
 
 class Esp32BaseFs {
 public:
+    enum RemoveFileResult : uint8_t {
+        REMOVE_FILE_FAILED,
+        REMOVE_FILE_DELETED,
+        REMOVE_FILE_CLEARED
+    };
+
     static bool begin();
     static bool isReady();
     static bool format();
@@ -21,6 +27,7 @@ public:
     static bool readBytesAt(const char* path, uint32_t offset, uint8_t* out, size_t maxLen, size_t* readLen);
     static bool writeBytesAt(const char* path, uint32_t offset, const uint8_t* data, size_t len);
 
+    static RemoveFileResult removeFileWithRecovery(const char* path);
     static bool removeFile(const char* path);
     static bool rename(const char* from, const char* to);
     static bool exists(const char* path);

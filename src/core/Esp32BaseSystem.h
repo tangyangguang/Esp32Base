@@ -5,6 +5,8 @@
 
 class Esp32BaseSystem {
 public:
+    using PreLifecycleHook = void (*)();
+
     static bool begin();
     static bool isReady();
 
@@ -21,6 +23,9 @@ public:
     static const char* wakeReasonText();
 
     static void restart(const char* reason);
+    static void setPreRestartHook(PreLifecycleHook hook);
+    static void setPreSleepHook(PreLifecycleHook hook);
+    static void runPreSleepHook();
 
     static bool appendRestartLog(const char* reason);
     static uint8_t restartLogCount();

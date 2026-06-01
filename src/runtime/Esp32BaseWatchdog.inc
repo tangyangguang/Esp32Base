@@ -12,8 +12,8 @@
 
 namespace {
 bool g_enabled = false;
-TaskHandle_t g_removedTask = nullptr;
-uint8_t g_removedDepth = 0;
+TaskHandle_t g_longOperationTask = nullptr;
+uint8_t g_longOperationDepth = 0;
 
 uint32_t loadLifetimeResetCount() {
     const int32_t stored = Esp32BaseConfig::getInt("eb_sys", "wdt_cnt", -1);
@@ -70,12 +70,7 @@ void Esp32BaseWatchdog::feed() {
     if (!g_enabled) {
         return;
     }
-    if (g_removedTask && xTaskGetCurrentTaskHandle() == g_removedTask) {
-        return;
-    }
-    {
-        esp_task_wdt_reset();
-    }
+    esp_task_wdt_reset();
 }
 
 bool Esp32BaseWatchdog::removeCurrentTaskForLongOperation() {
@@ -83,20 +78,18 @@ bool Esp32BaseWatchdog::removeCurrentTaskForLongOperation() {
         return true;
     }
     TaskHandle_t current = xTaskGetCurrentTaskHandle();
-    if (g_removedTask == current) {
-        if (g_removedDepth < UINT8_MAX) {
-            ++g_removedDepth;
+    if (g_longOperationTask == current) {
+        if (g_longOperationDepth < UINT8_MAX) {
+            ++g_longOperationDepth;
         }
         return true;
     }
-    if (g_removedTask) {
+    if (g_longOperationTask) {
         return false;
     }
-    if (esp_task_wdt_delete(nullptr) != ESP_OK) {
-        return false;
-    }
-    g_removedTask = current;
-    g_removedDepth = 1;
+    g_longOperationTask = current;
+    g_longOperationDepth = 1;
+    esp_task_wdt_reset();
     return true;
 }
 
@@ -105,26 +98,28 @@ bool Esp32BaseWatchdog::restoreCurrentTaskAfterLongOperation() {
         return true;
     }
     TaskHandle_t current = xTaskGetCurrentTaskHandle();
-    if (!g_removedTask) {
+    if (!g_longOperationTask) {
         return true;
     }
-    if (g_removedTask != current) {
+    if (g_longOperationTask != current) {
         return false;
     }
-    if (g_removedDepth > 1) {
-        --g_removedDepth;
+    if (g_longOperationDepth > 1) {
+        --g_longOperationDepth;
         return true;
     }
-    if (esp_task_wdt_add(nullptr) != ESP_OK) {
-        return false;
-    }
-    g_removedTask = nullptr;
-    g_removedDepth = 0;
+    esp_task_wdt_reset();
+    g_longOperationTask = nullptr;
+    g_longOperationDepth = 0;
     return true;
 }
 
 bool Esp32BaseWatchdog::currentTaskRemovedForLongOperation() {
-    return g_removedTask && xTaskGetCurrentTaskHandle() == g_removedTask;
+    return currentTaskInLongOperation();
+}
+
+bool Esp32BaseWatchdog::currentTaskInLongOperation() {
+    return g_longOperationTask && xTaskGetCurrentTaskHandle() == g_longOperationTask;
 }
 
 bool Esp32BaseWatchdog::isEnabled() {

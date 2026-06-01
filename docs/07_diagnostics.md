@@ -62,7 +62,7 @@
 验证：
 
 - 大固件上传。
-- Watchdog remove/restore。
+- Watchdog 长操作策略：长操作不再从 task WDT 注销当前任务，分块 FS/OTA/日志路径必须定期 feed/yield；不可细分的底层调用如果卡死，仍应由 WDT 兜底复位。
 - OTA 期间 1Hz NVS 写入。
 - SHA256 正确。
 - SHA256 错误。

@@ -987,11 +987,16 @@ void handleFsDeletePost() {
         Esp32BaseFileLog::flush();
     }
 #endif
-    bool ok = Esp32BaseFs::removeFile(path);
+    const Esp32BaseFs::RemoveFileResult removeResult = Esp32BaseFs::removeFileWithRecovery(path);
+    bool ok = removeResult == Esp32BaseFs::REMOVE_FILE_DELETED ||
+              removeResult == Esp32BaseFs::REMOVE_FILE_CLEARED;
     const bool deleteOk = ok;
+    const bool fileClearedOnly = removeResult == Esp32BaseFs::REMOVE_FILE_CLEARED;
 #if ESP32BASE_ENABLE_FILELOG
     if (!targetIsFileLog) {
-        ESP32BASE_LOG_W("web", "fs_delete_requested path=%s result=%s", path, ok ? "success" : "failed");
+        ESP32BASE_LOG_W("web", "fs_delete_requested path=%s result=%s", path,
+                        removeResult == Esp32BaseFs::REMOVE_FILE_DELETED ? "deleted" :
+                        (fileClearedOnly ? "cleared" : "failed"));
     }
     if (deleteOk && (targetIsFileLog || retryFileLogAfterDelete)) {
         const bool reloadOk = Esp32BaseFileLog::begin();
@@ -1005,7 +1010,7 @@ void handleFsDeletePost() {
 #endif
 #if ESP32BASE_ENABLE_APP_EVENTS
     if (deleteOk && targetIsAppEvents) {
-        const bool reloadOk = Esp32BaseFs::fileSize(path) == 0
+        const bool reloadOk = fileClearedOnly
             ? Esp32BaseAppEventLog::clear()
             : Esp32BaseAppEventLog::reload();
         if (!reloadOk) {
@@ -1013,7 +1018,8 @@ void handleFsDeletePost() {
         }
     }
 #endif
-    redirectSeeOther(ok ? "/esp32base/fs?manage=1&deleted=1" : "/esp32base/fs?manage=1&error=delete_failed");
+    redirectSeeOther(ok ? (fileClearedOnly ? "/esp32base/fs?manage=1&deleted=cleared" : "/esp32base/fs?manage=1&deleted=1")
+                        : "/esp32base/fs?manage=1&error=delete_failed");
 }
 #endif
 

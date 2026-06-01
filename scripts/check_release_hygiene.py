@@ -1,0 +1,46 @@
+#!/usr/bin/env python3
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def read(path: str) -> str:
+    return (ROOT / path).read_text(encoding="utf-8")
+
+
+errors = []
+
+library = read("library.json")
+libraryignore = read(".libraryignore")
+piopmignore = read(".piopmignore")
+profiles = read("docs/02_profiles.md")
+
+for path, text in (
+    ("library.json", library),
+    (".libraryignore", libraryignore),
+    (".piopmignore", piopmignore),
+):
+    if "docs/superpowers" not in text:
+        errors.append(f"{path}: release/export filters must exclude docs/superpowers")
+
+if "#if ESP32BASE_PROFILE == ESP32BASE_PROFILE_NET" not in profiles:
+    errors.append("docs/02_profiles.md: profile example must use numeric ESP32BASE_PROFILE comparison")
+if "#if defined(ESP32BASE_PROFILE_NET)" in profiles:
+    errors.append("docs/02_profiles.md: profile example must not use defined(ESP32BASE_PROFILE_NET)")
+
+docs = {
+    "README.md": "发布包排除 docs/superpowers",
+    "docs/01_architecture.md": "OTA boot 初始化",
+    "docs/09_release_checklist.md": "docs/superpowers",
+    "CHANGELOG.md": "发布内容排除 docs/superpowers",
+}
+for path, needle in docs.items():
+    if needle not in read(path):
+        errors.append(f"{path}: missing release hygiene marker {needle!r}")
+
+if errors:
+    for error in errors:
+        print(error)
+    raise SystemExit(1)
+
+print("Release hygiene checks passed")

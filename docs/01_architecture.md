@@ -175,6 +175,8 @@ Update 依赖 WiFi + Web。
 - Watchdog 配置细节。
 - Sleep wake source 细节。
 
+Core 不 include Runtime/FileLog、Web、Network 或 OTA。重启和休眠前需要落盘的 Runtime 资源通过 `Esp32BaseSystem` 的轻量生命周期 hook 由 `Esp32Base` facade 编排，Core 只负责记录 restart reason、flush Config 和执行底层 restart。
+
 ## 8. begin 顺序
 
 `Esp32Base::begin()` 固定顺序：
@@ -182,15 +184,17 @@ Update 依赖 WiFi + Web。
 1. Log
 2. Config
 3. System
-4. Bus，如启用
-5. Fs，如启用
-6. AppEvents，如启用
-7. FileLog，如启用
-8. Watchdog，如启用
-9. Sleep，如启用
-10. Health，如启用
-11. WiFi，如启用
-12. 标记 ready
+4. OTA boot 初始化，如启用 OTA；该步骤只处理 rollback/mark-valid 相关启动状态，不启动网络 OTA 服务
+5. NTP boot session / AppEvents time provider，如启用
+6. Bus，如启用
+7. Fs，如启用
+8. AppEvents，如启用
+9. FileLog，如启用
+10. Watchdog，如启用
+11. Sleep，如启用
+12. Health，如启用
+13. WiFi，如启用
+14. 标记 ready
 
 `begin()` 不等待网络相关状态。
 

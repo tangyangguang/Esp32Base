@@ -155,10 +155,9 @@ bool parseAndCheckAuth(const char* context) {
     if (!g_authLoggedForRequest) {
         g_authLoggedForRequest = true;
         if (!ok) {
-            ESP32BASE_LOG_W("web", "auth_request context=%s user=%s password=%s result=failed",
+            ESP32BASE_LOG_W("web", "auth_request context=%s user=%s result=failed",
                             context ? context : "unknown",
-                            user,
-                            pass);
+                            user);
         }
     }
     return ok;
@@ -170,9 +169,20 @@ void applyPlainAuth(const char* user, const char* pass) {
     g_authLoadedFromStorage = false;
 }
 
-void applyDefaultAuth() {
-    applyPlainAuth(g_defaultAuthSet ? g_defaultAuthUser : "admin",
-                   g_defaultAuthSet ? g_defaultAuthPass : "admin");
+bool applyDefaultAuth() {
+    if (g_defaultAuthSet) {
+        applyPlainAuth(g_defaultAuthUser, g_defaultAuthPass);
+        return true;
+    }
+#if ESP32BASE_WEB_ALLOW_INSECURE_DEFAULT_AUTH
+    applyPlainAuth("admin", "admin");
+    return true;
+#else
+    g_authUser[0] = '\0';
+    g_authPass[0] = '\0';
+    g_authLoadedFromStorage = false;
+    return false;
+#endif
 }
 
 void applyStoredAuth(const char* user, const char* pass) {
@@ -205,7 +215,7 @@ bool loadStoredAuth() {
         return false;
     }
     applyStoredAuth(user, pass);
-    ESP32BASE_LOG_I("web", "auth_loaded user=%s password=%s source=stored", g_authUser, g_authPass);
+    ESP32BASE_LOG_I("web", "auth_loaded user=%s source=stored", g_authUser);
     return true;
 }
 

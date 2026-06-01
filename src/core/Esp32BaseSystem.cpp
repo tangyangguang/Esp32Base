@@ -5,11 +5,6 @@
 #include "Esp32BaseResetReason.h"
 #include "Esp32BaseUtil.h"
 
-#include "../Esp32BaseProfile.h"
-#if ESP32BASE_ENABLE_FILELOG
-#include "../runtime/Esp32BaseFileLog.h"
-#endif
-
 #include <Preferences.h>
 #include <esp_system.h>
 #include <esp_sleep.h>
@@ -18,8 +13,16 @@ namespace {
 bool g_ready = false;
 uint32_t g_bootCount = 0;
 uint8_t g_restartLogCount = 0;
+Esp32BaseSystem::PreLifecycleHook g_preRestartHook = nullptr;
+Esp32BaseSystem::PreLifecycleHook g_preSleepHook = nullptr;
 
 constexpr uint8_t RESTART_LOG_CAPACITY = 4;
+
+void runPreRestartHook() {
+    if (g_preRestartHook) {
+        g_preRestartHook();
+    }
+}
 }
 
 bool Esp32BaseSystem::begin() {
@@ -96,11 +99,23 @@ void Esp32BaseSystem::restart(const char* reason) {
     appendRestartLog(reason ? reason : "restart");
     Esp32BaseConfig::flushAll();
     ESP32BASE_LOG_W("system", "restart: %s", reason ? reason : "");
-#if ESP32BASE_ENABLE_FILELOG
-    Esp32BaseFileLog::flush();
-#endif
+    runPreRestartHook();
     delay(50);
     ESP.restart();
+}
+
+void Esp32BaseSystem::setPreRestartHook(PreLifecycleHook hook) {
+    g_preRestartHook = hook;
+}
+
+void Esp32BaseSystem::setPreSleepHook(PreLifecycleHook hook) {
+    g_preSleepHook = hook;
+}
+
+void Esp32BaseSystem::runPreSleepHook() {
+    if (g_preSleepHook) {
+        g_preSleepHook();
+    }
 }
 
 bool Esp32BaseSystem::appendRestartLog(const char* reason) {

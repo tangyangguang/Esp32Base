@@ -403,9 +403,9 @@ bool beginSta() {
     }
     g_wifiAttemptStartMs = millis();
     g_wifiState = Esp32BaseWiFi::CONNECTING;
-    ESP32BASE_LOG_I("wifi", "station_connecting ssid=%s password=%s status=%s status_code=%u",
+    ESP32BASE_LOG_I("wifi", "station_connecting ssid=%s password_set=%s status=%s status_code=%u",
                     g_wifiSsid,
-                    g_wifiPassword,
+                    g_wifiPassword[0] ? "yes" : "no",
                     wlStatusName(WiFi.status()),
                     static_cast<unsigned>(WiFi.status()));
     return true;
@@ -532,9 +532,9 @@ bool Esp32BaseWiFi::connect(const char* ssidValue, const char* passwordValue, bo
     }
     strlcpy(g_wifiSsid, ssidValue, sizeof(g_wifiSsid));
     strlcpy(g_wifiPassword, passwordValue, sizeof(g_wifiPassword));
-    ESP32BASE_LOG_I("wifi", "credentials_set ssid=%s password=%s persist=%s",
+    ESP32BASE_LOG_I("wifi", "credentials_set ssid=%s password_set=%s persist=%s",
                     g_wifiSsid,
-                    g_wifiPassword,
+                    g_wifiPassword[0] ? "yes" : "no",
                     persist ? "yes" : "no");
     g_wifiRetryCount = 0;
     resumeStaCredentials("credentials_set");

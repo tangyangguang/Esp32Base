@@ -994,8 +994,9 @@ Route 缓冲机制：
 - `POST /esp32base/fs/upload` 是 multipart 上传接口，复用 Basic Auth 和同源检查；上传保留本地文件名，可以写入任何已有目录，不创建目录。目标文件存在时必须传 `overwrite=1` 才会覆盖；上传到 FileLog 路径前会先 flush，上传结束后重新加载 FileLog 运行态；上传到 `/esp32base/app-events/events.bin` 后会重新加载 App Events 运行态。没有 multipart 文件的 POST 会返回 `No upload received`，不会复用上一笔上传状态；FileLog 或 App Events reload 失败会返回上传错误；如果上传已经截断/修改这些运行态敏感文件但随后失败或中止，也会先刷新对应运行态。其他 `/esp32base/**` 路径只在文件树中标记为 `esp32base managed` 作为提醒，不作为通用上传或删除禁区，便于测试和维护实验。上传完成后会校验最终文件大小和末端可读性；上传只负责写入 LittleFS，不校验业务数据语义、索引、NVS 状态或运行时缓存。
 - `/esp32base/tools` System 页承载低频维护入口和操作，App Config 启用时作为首个入口显示，后面是 WiFi Setup、Web Auth、Firmware OTA、File system 直达入口、hostname 保存、Watchdog trip reset、重启设备；启用 FS 的 profile 还提供手动格式化 LittleFS 操作，会清除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth 或 NVS 配置。格式化后会重新 mount FS、reload FileLog，并在 App Events 启用时重新创建 `/esp32base/app-events/events.bin`。
 - `/esp32base/auth` 是内置认证管理页面，受当前 Basic Auth 保护，提交成功后新账号密码立即生效。
-- Web Auth 认证优先级为：已保存认证 > 应用默认认证 > 库默认 `admin/admin`。
-- 内置 Web 不提供首次登录强制改密；量产或可被他人访问的设备应在业务启动时调用 `setDefaultAuth()` 或引导用户尽快保存新认证。
+- Web Auth 认证优先级为：已保存认证 > 应用默认认证。未设置应用默认认证且没有已保存认证时，Web 服务不会启动。
+- 内置 Web 不提供首次登录强制改密；量产或可被他人访问的设备必须在业务启动时调用 `setDefaultAuth()`，或通过业务流程先保存认证。
+- 仅显式启用 `ESP32BASE_WEB_ALLOW_INSECURE_DEFAULT_AUTH=1` 的受控开发固件会使用库内置 `admin/admin` 兜底，并输出 WARN 审计日志。
 - `setDefaultAuth(user, pass)` 设置应用默认认证；如果用户已保存认证，不会覆盖已保存认证。
 - `authUser()` 返回当前用户名；`authPassword()` 返回当前生效密码，仅供本地 C++ 认证集成使用，例如 ArduinoOTA/espota，禁止输出到 HTML、JSON 或 API 响应。
 - Basic Auth `Authorization` header 有内部长度上限；超长 header 会被拒绝并输出 WARN，不会静默截断后继续认证。
@@ -1004,8 +1005,8 @@ Route 缓冲机制：
 - `checkPostAllowed(context)` 用于业务 POST/危险操作复用基础库 Web Auth、POST method 和 Origin/Referer 同源检查；非 POST 返回 `405 Method Not Allowed`，认证失败发送认证挑战，同源失败返回 `403 Forbidden`。返回 `false` 时业务 handler 应直接 return。`context` 只用于安全审计日志。
 - `verifyAuth(user, pass)` 校验显式传入的账号密码；无参 `verifyAuth()` 仍表示当前请求是否已认证。
 - `saveAuth(user, pass)` 保存 Web Auth 到 `eb_web.auth_user`、`eb_web.auth_pass`，并立即切换为新认证。
-- `resetAuth()` 清除 `eb_web` 持久化 Auth，并恢复应用默认认证；没有应用默认认证时恢复库默认 `admin/admin`。
-- Web Auth 明文密码会持久化到 `eb_web.auth_pass`，不输出到 HTML、JSON 或 API 响应；`INFO` 日志明文输出 Web 用户名和密码，便于业务接入和现场调试。
+- `resetAuth()` 清除 `eb_web` 持久化 Auth，并恢复应用默认认证；没有应用默认认证时返回 false，Web 进入无默认认证的锁定状态，除非开发固件显式启用 `ESP32BASE_WEB_ALLOW_INSECURE_DEFAULT_AUTH=1`。
+- Web Auth 明文密码会持久化到 `eb_web.auth_pass`，不输出到 HTML、JSON、API 响应或日志；`authPassword()` 仅供本地 C++ 集成使用。
 - `METHOD_ANY` 用于同一路径 GET/POST 复用；应用 handler 内可用 `currentMethod()`、`isMethod()` 或 `currentMethodName()` 判断当前请求方法。
 - `currentMethod()` 仅在 handler 上下文中返回实际方法：GET 为 `METHOD_GET`，POST 为 `METHOD_POST`；handler 外或未知方法返回 `METHOD_UNKNOWN`。
 - `isMethod(METHOD_ANY)` 在有效 handler 请求中返回 true；`METHOD_ANY` 不作为实际请求方法返回。
@@ -1220,6 +1221,12 @@ public:
     static bool writeBytesAt(const char* path, uint32_t offset, const uint8_t* data, size_t len);
 
     // metadata
+    enum RemoveFileResult : uint8_t {
+        REMOVE_FILE_FAILED,
+        REMOVE_FILE_DELETED,
+        REMOVE_FILE_CLEARED
+    };
+    static RemoveFileResult removeFileWithRecovery(const char* path);
     static bool removeFile(const char* path);
     static bool rename(const char* from, const char* to);
     static bool exists(const char* path);
@@ -1262,7 +1269,7 @@ Offset binary API 用于业务二进制定长记录、分页读取和环形覆�
 - `writeFile()` / `writeBytes()` / `appendFile()` / `appendBytes()` 会在写入后 flush 并校验最终大小；非空写入还会确认写入后文件末端可读。`appendBytes()` 面向低频追加，不适合用循环追加来初始化大容量定长文件。写入失败不等于已回滚，调用方必须按返回值处理可能的部分写入或文件不可读状态。
 - `createFixedFile(const char* path, uint32_t size, uint8_t fillByte = 0)` 用于固定容量二进制文件初始化。FS 未 ready、path 非绝对路径或底层创建/写入/校验失败时返回 false；`size == 0` 会创建或截断为空文件。文件不存在、大小不匹配，或同尺寸但末端不可读时会用 `fillByte` 分块重建；已存在且大小一致、末端可读时返回 true 并保留原内容，避免业务每次启动清空持久环形记录。重建过程使用固定小块写入，避免一次性占用大 heap，并按长 FS 操作处理 watchdog；完成后校验最终大小并抽样校验首字节、中间字节和末尾字节。
 - `writeBytesAt()` 只覆盖已存在文件中的现有字节，不隐式创建文件、不扩展文件、不填洞；FS 未 ready、path 非绝对路径、文件不存在、data 为空但 len 非 0、`offset + len > fileSize`、底层写失败、写后大小不符或写入范围不可读时返回 false。
-- `removeFile()` 在 `LittleFS.remove()` 失败后会尝试把目标文件截断为 0；如果删除失败但成功清空文件内容，也返回 true，用于 FS 满或坏文件场景下优先释放可见文件占用。
+- `removeFileWithRecovery()` 在 `LittleFS.remove()` 失败后会尝试把目标文件截断为 0，并用 `REMOVE_FILE_DELETED`、`REMOVE_FILE_CLEARED`、`REMOVE_FILE_FAILED` 明确区分硬删除、仅清空和失败。`removeFile()` 只在硬删除成功时返回 true；维护页面使用恢复型枚举显示 `File deleted or cleared`，业务代码不应把“清空成功”误判为“文件已不存在”。
 - 需要固定容量环形文件时，应用应优先用 `createFixedFile()` 初始化或校验文件容量，再用 `writeBytesAt()` 覆盖记录槽位。
 - 业务代码必须检查所有 FS API 返回值；如果连续返回 false，不能继续假设记录已写入，应进入降级、清理或提示维护流程。
 - 系统诊断日志的实现/API 名称是 `Esp32BaseFileLog`。FileLog 会把追加、清空和轮转截断视为可能较慢的 FS 操作处理；即使 FS 已满或损坏，系统级 WARN 日志写入失败也不应导致 task WDT 重启。检测到 FileLog 写入故障后，会先在运行时停止继续写 FileLog，避免后续 WARN 重复冲击异常文件系统；Web Status/System Logs/System 页显示为 `write fault` 而不是 `disabled`，表示配置仍开启但运行保护停写。配置开启但 FS/init 前置条件不满足时显示 `unavailable`；只有模式 OFF 才显示 `disabled`。Web 清理、格式化或重新保存模式后可重新启用模式。

@@ -27,8 +27,18 @@ bool Esp32BaseWeb::begin() {
                     static_cast<unsigned>(appRoutes),
                     static_cast<unsigned>(appPages));
     if (!loadStoredAuth()) {
-        applyDefaultAuth();
-        ESP32BASE_LOG_I("web", "auth_loaded user=%s password=%s source=default", g_authUser, g_authPass);
+        if (!applyDefaultAuth()) {
+            ESP32BASE_LOG_E("web", "auth_default_missing action=server_not_started");
+            return false;
+        }
+#if ESP32BASE_WEB_ALLOW_INSECURE_DEFAULT_AUTH
+        if (!g_defaultAuthSet) {
+            ESP32BASE_LOG_W("web", "auth_loaded user=%s source=insecure_builtin", g_authUser);
+        } else
+#endif
+        {
+            ESP32BASE_LOG_I("web", "auth_loaded user=%s source=default", g_authUser);
+        }
     }
     g_footerBarMode = readFooterBarMode();
     g_server.collectHeaders(g_headerKeys, sizeof(g_headerKeys) / sizeof(g_headerKeys[0]));
@@ -150,9 +160,8 @@ void Esp32BaseWeb::setDefaultAuth(const char* user, const char* pass) {
     if (!g_authLoadedFromStorage) {
         applyDefaultAuth();
     }
-    ESP32BASE_LOG_I("web", "default_auth_set user=%s password=%s applied=%s",
+    ESP32BASE_LOG_I("web", "default_auth_set user=%s applied=%s",
                     g_defaultAuthUser,
-                    g_defaultAuthPass,
                     g_authLoadedFromStorage ? "no" : "yes");
 }
 
@@ -205,17 +214,20 @@ bool Esp32BaseWeb::saveAuth(const char* user, const char* pass) {
         return false;
     }
     applyStoredAuth(user, pass);
-    ESP32BASE_LOG_I("web", "auth_saved_plain user=%s password=%s", user, pass);
     ESP32BASE_LOG_I("web", "auth_saved user=%s", g_authUser);
     return true;
 }
 
 bool Esp32BaseWeb::resetAuth() {
     const bool ok = Esp32BaseConfig::clearNamespace("eb_web");
-    applyDefaultAuth();
-    ESP32BASE_LOG_I("web", "auth_loaded user=%s password=%s source=default", g_authUser, g_authPass);
+    const bool hasDefault = applyDefaultAuth();
+    if (hasDefault) {
+        ESP32BASE_LOG_I("web", "auth_loaded user=%s source=default", g_authUser);
+    } else {
+        ESP32BASE_LOG_W("web", "auth_default_missing action=auth_reset_locked");
+    }
     ESP32BASE_LOG_I("web", "auth_reset");
-    return ok;
+    return ok && hasDefault;
 }
 
 bool Esp32BaseWeb::addRoute(const char* path, Method method, Handler handler) {

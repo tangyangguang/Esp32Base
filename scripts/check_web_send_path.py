@@ -94,6 +94,8 @@ def main() -> int:
         errors.append("sendRawChunkedContent() must not allocate heap per chunk")
     if "writeClientBytes(" not in send_raw_chunked_content or ".write(" not in write_client_bytes:
         errors.append("sendRawChunkedContent() must write chunk header/body/footer directly to the client")
+    if "while (offset < len)" not in write_client_bytes or "offset += written" not in write_client_bytes:
+        errors.append("writeClientBytes() must retry partial WiFiClient.write() progress before failing")
     if re.search(r"if\s*\([^)]*responseClientConnected\(\)[^)]*\)\s*\{\s*g_server\.sendContent\(\"\"\)", end_response, re.S):
         errors.append("endResponse() must always attempt the final empty chunk unless the response is already broken")
     if "/esp32base/logs/raw" not in handle_logs_page or "iframe" not in handle_logs_page:

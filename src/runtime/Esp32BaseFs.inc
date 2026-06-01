@@ -362,29 +362,36 @@ bool Esp32BaseFs::writeBytesAt(const char* path, uint32_t offset, const uint8_t*
     return verifyReadableByte(path, verifyOffset);
 }
 
-bool Esp32BaseFs::removeFile(const char* path) {
+Esp32BaseFs::RemoveFileResult Esp32BaseFs::removeFileWithRecovery(const char* path) {
     if (!g_fsReady || !validPath(path) || !LittleFS.exists(path)) {
-        return false;
+        return REMOVE_FILE_FAILED;
     }
     Esp32BaseLongOperation::LongOperationScope scope;
     Esp32BaseLongOperation::service();
     if (LittleFS.remove(path)) {
         Esp32BaseLongOperation::service();
-        return true;
+        return REMOVE_FILE_DELETED;
     }
     File file = LittleFS.open(path, "w");
     if (!file) {
-        return false;
+        return REMOVE_FILE_FAILED;
     }
     flushOpenFile(file);
     file.close();
     Esp32BaseLongOperation::service();
     if (LittleFS.remove(path)) {
         Esp32BaseLongOperation::service();
-        return true;
+        return REMOVE_FILE_DELETED;
     }
     const int64_t remainingSize = fileSize(path);
-    return remainingSize == 0;
+    if (remainingSize == 0) {
+        return REMOVE_FILE_CLEARED;
+    }
+    return REMOVE_FILE_FAILED;
+}
+
+bool Esp32BaseFs::removeFile(const char* path) {
+    return removeFileWithRecovery(path) == REMOVE_FILE_DELETED;
 }
 
 bool Esp32BaseFs::rename(const char* from, const char* to) {

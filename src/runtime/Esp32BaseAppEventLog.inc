@@ -153,7 +153,9 @@ bool appEventWriteExact(uint32_t offset, const void* data, size_t len) {
 
 bool appEventRemoveStoreFile() {
     Esp32BaseLongOperation::LongOperationScope scope;
-    const bool ok = Esp32BaseFs::removeFile(kAppEventPath);
+    const Esp32BaseFs::RemoveFileResult result = Esp32BaseFs::removeFileWithRecovery(kAppEventPath);
+    const bool ok = result == Esp32BaseFs::REMOVE_FILE_DELETED ||
+                    result == Esp32BaseFs::REMOVE_FILE_CLEARED;
     Esp32BaseLongOperation::service();
     return ok;
 }

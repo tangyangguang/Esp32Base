@@ -48,7 +48,7 @@ bool parseBasicAuth(char* user, size_t userLen, char* pass, size_t passLen);
 bool authMatches(const char* user, const char* pass);
 bool parseAndCheckAuth(const char* context);
 void applyPlainAuth(const char* user, const char* pass);
-void applyDefaultAuth();
+bool applyDefaultAuth();
 void applyStoredAuth(const char* user, const char* pass);
 bool loadStoredAuth();
 bool saveStoredAuth(const char* user, const char* pass);

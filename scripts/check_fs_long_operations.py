@@ -50,8 +50,8 @@ for needle, message in (
         errors.append(f"src/runtime/internal/Esp32BaseLongOperation.h: {message}")
 
 for needle, message in (
-    ("TaskHandle_t g_removedTask", "watchdog long operation state must track the owning task"),
-    ("uint8_t g_removedDepth", "watchdog long operation state must track nesting depth"),
+    ("TaskHandle_t g_longOperationTask", "watchdog long operation state must track the owning task"),
+    ("uint8_t g_longOperationDepth", "watchdog long operation state must track nesting depth"),
     ("xTaskGetCurrentTaskHandle()", "watchdog long operation state must use the current FreeRTOS task"),
 ):
     if needle not in watchdog:

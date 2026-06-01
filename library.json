@@ -29,6 +29,8 @@
     "exclude": [
       "design-history",
       "design-history/**",
+      "docs/superpowers",
+      "docs/superpowers/**",
       "bug-ticklish-kitten.md",
       ".git",
       ".git/**",

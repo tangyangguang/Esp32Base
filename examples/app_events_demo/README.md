@@ -14,7 +14,7 @@ Application code that needs a business event list or business event detail page 
 
 The Time column shows wall-clock time when NTP or the current boot mapping can resolve it. Otherwise it shows `uptime N ms` plus the boot id, so relative startup events are not confused with real dates.
 
-Default Web auth is `admin` / `admin`.
+The demo sketch calls `Esp32BaseWeb::setDefaultAuth("admin", "admin")` for local testing only. Business projects must set their own credentials before `Esp32Base::begin()`.
 
 Build:
 

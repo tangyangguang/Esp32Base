@@ -44,7 +44,7 @@ pio device monitor -d examples/web_ui_gallery -b 115200
 - `http://esp32base-ui.local`
 - 或串口输出中的 IP 地址
 
-默认账号：
+本地 demo 账号（示例 sketch 显式设置，仅用于样式库测试）：
 
 - 用户名：`admin`
 - 密码：`admin`

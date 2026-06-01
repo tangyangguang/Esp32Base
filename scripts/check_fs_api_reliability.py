@@ -46,8 +46,9 @@ checks = [
     ("file.flush();", "write API must flush before post-write verification"),
     ("verifyFileSize(path, expectedSize)", "write API must verify final file size"),
     ("verifyReadableByte(path, verifyOffset)", "write API must verify written range is readable"),
-    ("File file = LittleFS.open(path, \"w\");", "remove API must try truncate fallback after LittleFS remove fails"),
-    ("return remainingSize == 0;", "remove API must treat successful zeroing as maintenance recovery"),
+    ("Esp32BaseFs::RemoveFileResult Esp32BaseFs::removeFileWithRecovery", "remove API must expose explicit delete vs clear result"),
+    ("return REMOVE_FILE_CLEARED;", "remove recovery API must report truncate-only recovery explicitly"),
+    ("return removeFileWithRecovery(path) == REMOVE_FILE_DELETED;", "removeFile() must only report hard delete success"),
 ]
 
 errors = []
@@ -62,7 +63,8 @@ for needle, message in (
     ("void sendFsUnreadableActions(", "FS management must keep delete available for unreadable files"),
     ("sendFsUnreadableActions(path, manage);", "FS tree must render unreadable delete actions in manage mode"),
     ("sendFsDeleteForm(path);", "FS unreadable action must reuse the normal delete form"),
-    ("File deleted or cleared", "FS page success notice must not claim every recovery was a hard delete"),
+    ("File deleted or cleared", "FS page success notice must distinguish hard delete from truncate recovery"),
+    ("removeFileWithRecovery(path)", "FS maintenance delete must use explicit remove result"),
     ("Esp32BaseFileLog::begin();", "FS delete should let FileLog retry after maintenance frees space"),
 ):
     if needle not in web:

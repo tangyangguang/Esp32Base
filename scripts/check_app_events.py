@@ -160,8 +160,8 @@ if "Target is reserved for App Events" in read("src/web/internal/WebFs.cpp"):
     errors.append("src/web/internal/WebFs.cpp: FS upload must not reject App Events store during test/maintenance imports")
 web_fs_source = read("src/web/internal/WebFs.cpp")
 delete_body = function_body(web_fs_source, "void handleFsDeletePost()")
-if "Esp32BaseFs::fileSize(path) == 0" not in delete_body or "Esp32BaseAppEventLog::clear()" not in delete_body:
-    errors.append("src/web/internal/WebFs.cpp: App Events delete path must rebuild the store when removeFile() only truncates it to 0 bytes")
+if "fileClearedOnly" not in delete_body or "Esp32BaseAppEventLog::clear()" not in delete_body:
+    errors.append("src/web/internal/WebFs.cpp: App Events delete path must rebuild the store when removeFileWithRecovery() only truncates it to 0 bytes")
 if "if (ok && targetIsAppEvents)" in delete_body:
     errors.append("src/web/internal/WebFs.cpp: App Events delete reload must not be gated by FileLog reload mutating ok")
 if "const bool deleteOk = ok;" not in delete_body:

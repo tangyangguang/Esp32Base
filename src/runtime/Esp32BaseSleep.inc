@@ -6,9 +6,6 @@
 #include "../core/Esp32BaseConfig.h"
 #include "../core/Esp32BaseLog.h"
 #include "../core/Esp32BaseSystem.h"
-#if ESP32BASE_ENABLE_FILELOG
-#include "Esp32BaseFileLog.h"
-#endif
 
 #include <esp_sleep.h>
 
@@ -29,9 +26,7 @@ bool Esp32BaseSleep::deepSleepUs(uint64_t us) {
     Esp32BaseSystem::appendRestartLog("deep_sleep");
     Esp32BaseConfig::flushAll();
     ESP32BASE_LOG_I("sleep", "enter deep sleep: %llu us", static_cast<unsigned long long>(us));
-#if ESP32BASE_ENABLE_FILELOG
-    Esp32BaseFileLog::flush();
-#endif
+    Esp32BaseSystem::runPreSleepHook();
     if (us > 0) {
         esp_sleep_enable_timer_wakeup(us);
     }

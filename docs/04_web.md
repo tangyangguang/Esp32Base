@@ -66,15 +66,15 @@ DNS 拦截策略：
 默认：
 
 - Web Auth 开启。
-- 默认开发账号密码可以存在。
 - 应用可在 `Esp32Base::begin()` 前调用 `Esp32BaseWeb::setDefaultAuth()` 设置默认认证。
-- 认证优先级为：已保存认证 > 应用默认认证 > 库默认 `admin/admin`。
+- 认证优先级为：已保存认证 > 应用默认认证。未设置应用默认认证且没有已保存认证时，Web 服务不会启动。
+- 仅显式启用 `ESP32BASE_WEB_ALLOW_INSECURE_DEFAULT_AUTH=1` 的受控开发固件会使用库内置 `admin/admin` 兜底，并输出 WARN 审计日志。
 - 业务项目需要允许用户修改认证账号/密码时，优先链接内置 `/esp32base/auth` 认证管理页面。
 - 业务自建配置页时，应先 `checkAuth()`，再用 `verifyAuth(currentUser, currentPass)` 验证当前凭据，最后调用 `saveAuth(newUser, newPass)`。
 - 更新 Web Auth 后立即生效；浏览器缓存旧 Basic Auth 时，后续请求会重新触发认证。
-- Web Auth 持久化使用 `eb_web.auth_user`、`eb_web.auth_pass`，明文密码用于启动日志和调试。
-- `INFO` 日志明文输出 Web 用户名和密码，这是本库用于业务接入和现场调试的设计。
+- Web Auth 持久化使用 `eb_web.auth_user`、`eb_web.auth_pass`；日志只输出用户名和凭据来源，不输出密码。
 - Basic Auth 请求日志每个 HTTP 请求最多输出 1 条，避免 OTA 上传分块反复校验时刷屏。
+- WiFi 密码字段不会回显已保存密码。留空表示保持已保存密码；需要切换开放网络时必须显式勾选清除密码。
 
 OTA 规则：
 
@@ -94,7 +94,7 @@ OTA 规则：
 - 关闭 Web Auth 时，内置页面和 OTA 均无密码保护。
 - 关闭 Web Auth 不只是关闭登录框，而是让所有内置 HTTP 页面和 POST 操作无需认证。
 - 关闭 Web Auth 只影响 HTTP/Web OTA；不关闭 ArduinoOTA/espota 密码。
-- Web Auth 密码不在 HTML、JSON 或 API 响应中输出；INFO 日志会明文输出 Web 用户名和密码，日志访问权限由应用和部署环境控制。
+- Web Auth 密码不在 HTML、JSON、API 响应或日志中输出；INFO 日志只记录用户名、来源和状态。
 - 内置危险 POST 必须是 POST method，并会做轻量 `Origin` / `Referer` host 校验；存在这些头时必须与请求 `Host` 同源，缺失时放行，保证 curl、PlatformIO `webota` 和简单脚本可用。非 POST 返回 405，校验失败返回 403，不执行副作用。
 
 ## 5. 路由表

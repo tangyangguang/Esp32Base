@@ -530,10 +530,9 @@ POST -> 303 Redirect -> GET
 - 配置行、分页 footer、导航结构属于中改。
 - 页面能力分类或 helper API 变化属于大改。
 
-大改必须先回到设计文档和示例页验证。
+大改必须先更新当前 `docs/` 中对应规范并通过示例页验证；发布分支不保留 `docs/superpowers` 过程设计或执行计划。
 
 ## 13. 相关文档
 
 - `docs/04_web.md`：Web 层 API、路由、认证、POST、安全和输出机制。
-- `docs/superpowers/specs/2026-05-27-web-ui-template-baseline-design.md`：本次基线设计稿。
-- `docs/superpowers/plans/2026-05-27-web-ui-template-baseline-implementation.md`：实现计划。
+- `examples/web_ui_gallery`：页面状态、表单、操作、确认和空状态的可运行基线。
