@@ -412,6 +412,27 @@ bool appEventEnsureStoreFile() {
 
     const uint32_t expectedSize = appEventStoreSize();
     const int64_t actualSize = Esp32BaseFs::fileSize(kAppEventPath);
+    if (actualSize < 0) {
+        if (Esp32BaseFs::exists(kAppEventPath)) {
+            appEventMarkFault("store_unreadable");
+            return false;
+        }
+        if (!appEventCreateStoreFile()) {
+            appEventMarkFault("create_failed");
+            return false;
+        }
+        if (!appEventWriteEmptyStore(1, 0)) {
+            appEventMarkFault("header_write_failed");
+            return false;
+        }
+        ESP32BASE_LOG_I("app_events",
+                        "store_created path=%s records=%u bytes=%lu",
+                        kAppEventPath,
+                        static_cast<unsigned>(kAppEventCapacity),
+                        static_cast<unsigned long>(expectedSize));
+        return true;
+    }
+
     if (actualSize == static_cast<int64_t>(expectedSize)) {
         if (appEventLoadHeader()) {
             return true;
@@ -423,24 +444,13 @@ bool appEventEnsureStoreFile() {
         return false;
     }
 
-    if (Esp32BaseFs::exists(kAppEventPath) && !appEventRemoveStoreFile()) {
-        appEventMarkFault("remove_failed");
-        return false;
-    }
-    if (!appEventCreateStoreFile()) {
-        appEventMarkFault("create_failed");
-        return false;
-    }
-    if (!appEventWriteEmptyStore(1, 0)) {
-        appEventMarkFault("header_write_failed");
-        return false;
-    }
-    ESP32BASE_LOG_I("app_events",
-                    "store_created path=%s records=%u bytes=%lu",
+    appEventMarkFault("size_mismatch");
+    ESP32BASE_LOG_W("app_events",
+                    "store_size_mismatch path=%s actual=%lld expected=%lu",
                     kAppEventPath,
-                    static_cast<unsigned>(kAppEventCapacity),
+                    static_cast<long long>(actualSize),
                     static_cast<unsigned long>(expectedSize));
-    return true;
+    return false;
 }
 
 bool appEventTokenChar(char c) {
@@ -694,10 +704,13 @@ bool Esp32BaseAppEventLog::append(const Event& event) {
 }
 
 bool Esp32BaseAppEventLog::readLatest(uint16_t offset, uint16_t limit, ReadCallback cb, void* user) {
-    if (!cb || (!g_appEventReady && !begin())) {
+    if (!cb) {
         return false;
     }
     if (g_appEventFault || !g_appEventReady) {
+        if (!g_appEventFault) {
+            appEventSetError("not_ready");
+        }
         return false;
     }
     if (offset >= g_appEventValidCount || limit == 0) {
@@ -745,9 +758,6 @@ bool Esp32BaseAppEventLog::readStoreInfo(StoreInfo& info) {
     info.headerSize = sizeof(Esp32BaseAppEventHeader);
     info.recordSize = kAppEventRecordSize;
     info.capacity = kAppEventCapacity;
-    if (!g_appEventReady && !g_appEventFault) {
-        begin();
-    }
     info.count = g_appEventCount;
     info.validCount = g_appEventValidCount;
     info.head = g_appEventHead;
@@ -756,14 +766,20 @@ bool Esp32BaseAppEventLog::readStoreInfo(StoreInfo& info) {
     info.activeHeader = g_appEventActiveHeader;
     info.ready = g_appEventReady;
     info.faulted = g_appEventFault;
+    if (!info.ready && !info.faulted) {
+        appEventSetError("not_ready");
+    }
     return info.ready && !info.faulted;
 }
 
 bool Esp32BaseAppEventLog::readStoreRecords(uint16_t offset, uint16_t limit, StoreRecordCallback cb, void* user) {
-    if (!cb || (!g_appEventReady && !begin())) {
+    if (!cb) {
         return false;
     }
     if (g_appEventFault || !g_appEventReady) {
+        if (!g_appEventFault) {
+            appEventSetError("not_ready");
+        }
         return false;
     }
     if (offset >= g_appEventCount || limit == 0) {

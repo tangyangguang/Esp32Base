@@ -21,6 +21,33 @@ def require(path: str, needle: str, message: str) -> None:
         errors.append(f"{path}: {message}")
 
 
+def require_absent(path: str, needle: str, message: str) -> None:
+    target = ROOT / path
+    if not target.exists():
+        errors.append(f"{path}: missing file")
+        return
+    if needle in read(path):
+        errors.append(f"{path}: {message}")
+
+
+def function_body(text: str, signature: str) -> str:
+    start = text.find(signature)
+    if start < 0:
+        return ""
+    brace = text.find("{", start)
+    if brace < 0:
+        return ""
+    depth = 0
+    for i in range(brace, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[brace : i + 1]
+    return ""
+
+
 require("src/Esp32BaseProfile.h", "ESP32BASE_ENABLE_APP_EVENTS", "missing default-off app event macro")
 require("src/Esp32BaseProfile.h", "ESP32BASE_ENABLE_APP_EVENTS && !ESP32BASE_ENABLE_FS", "app events must require FS")
 require("src/runtime/Esp32BaseAppEventLog.h", "class Esp32BaseAppEventLog", "missing public app event log API")
@@ -58,11 +85,30 @@ require(
     "appEventEnsureDir",
     "clear must recreate /app before rebuilding the fixed store",
 )
+require(
+    "src/runtime/Esp32BaseAppEventLog.inc",
+    'appEventMarkFault("size_mismatch")',
+    "existing app event store with mismatched size must fault instead of being rebuilt",
+)
 if 'appEventMarkFault("record_crc_failed")' in read("src/runtime/Esp32BaseAppEventLog.inc"):
     errors.append("src/runtime/Esp32BaseAppEventLog.inc: single record CRC damage must not put the whole store in fault")
+app_events_source = read("src/runtime/Esp32BaseAppEventLog.inc")
+ensure_store_body = function_body(app_events_source, "bool appEventEnsureStoreFile()")
+if "appEventRemoveStoreFile()" in ensure_store_body:
+    errors.append("src/runtime/Esp32BaseAppEventLog.inc: begin must not remove/rebuild an existing app event store")
+for signature in (
+    "bool Esp32BaseAppEventLog::readLatest",
+    "bool Esp32BaseAppEventLog::readStoreInfo",
+    "bool Esp32BaseAppEventLog::readStoreRecords",
+):
+    body = function_body(app_events_source, signature)
+    if "begin()" in body:
+        errors.append(f"src/runtime/Esp32BaseAppEventLog.inc: {signature} must not call begin() from a read-only path")
 require("src/Esp32Base.cpp", "Esp32BaseAppEventLog::begin()", "base begin must initialize app events")
 require("src/web/Esp32BaseWeb.h", "BUILTIN_APP_EVENTS", "built-in labels must expose App Events")
 require("src/web/Esp32BaseWeb.h", "checkPostAllowed", "public Web API must expose POST auth + same-origin helper")
+require("src/web/internal/WebRouting.cpp", "g_currentMethod != Esp32BaseWeb::METHOD_POST", "checkPostAllowed must reject non-POST methods")
+require("src/web/internal/WebRouting.cpp", "g_server.send(405", "checkPostAllowed must return 405 for non-POST methods")
 require("src/web/internal/WebAppEvents.cpp", "handleAppEventsPage", "missing App Events page")
 require("src/web/internal/WebAppEvents.cpp", "/esp32base/api/app-events", "missing API route marker")
 require("src/web/internal/WebAppEvents.cpp", "struct AppEventFilter", "App Events page must support common filters")
@@ -133,6 +179,8 @@ require("docs/10_known_limitations.md", "不是第二套系统诊断日志", "kn
 require("docs/09_release_checklist.md", "record_skipped", "release checklist must use current damaged-record skip semantics")
 require("examples/app_events_demo/src/main.cpp", "Esp32BaseAppEventLog::append", "sample must write app events")
 require("examples/app_events_demo/src/main.cpp", "checkPostAllowed", "sample POST route must use auth + same-origin helper")
+require_absent("examples/app_events_demo/src/main.cpp", '"boot"', "sample App Events must not teach apps to log system boot events")
+require_absent("examples/app_events_demo/src/main.cpp", "bootCount", "sample App Events must not copy system boot counters into business events")
 require("examples/app_events_demo/README.md", "/esp32base/app-events", "sample README must explain viewing page")
 require("examples/app_events_demo/README.md", "business event list", "sample README must explain app-owned business event pages")
 

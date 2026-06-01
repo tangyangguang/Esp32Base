@@ -36,16 +36,16 @@ bool appendDemoEvent(Esp32BaseAppEventLog::Level level,
 
 void seedDemoEvents() {
     appendDemoEvent(Esp32BaseAppEventLog::LEVEL_INFO,
-                    "demo",
-                    "boot",
-                    "startup",
-                    "device:demo",
+                    "policy",
+                    "state_ready",
+                    "sample_config_loaded",
+                    "policy:demo",
                     1,
-                    static_cast<int32_t>(Esp32BaseSystem::bootCount()),
+                    3,
                     0,
                     0,
                     Esp32BaseAppEventLog::VALUE1,
-                    "demo firmware started");
+                    "sample policy ready");
 
     appendDemoEvent(Esp32BaseAppEventLog::LEVEL_INFO,
                     "scheduler",

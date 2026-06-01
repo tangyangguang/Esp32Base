@@ -362,6 +362,17 @@ bool requestSameOrigin() {
 }
 
 bool ensurePostAllowed(const char* context) {
+    if (!g_requestContextActive) {
+        markRequest();
+    }
+    if (g_currentMethod != Esp32BaseWeb::METHOD_POST) {
+        ESP32BASE_LOG_W("web",
+                        "post_rejected context=%s reason=method method=%s",
+                        context ? context : "unknown",
+                        methodName(g_currentMethod));
+        g_server.send(405, "text/plain", "Method Not Allowed");
+        return false;
+    }
     if (!ensureAuth()) {
         return false;
     }

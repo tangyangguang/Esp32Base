@@ -337,8 +337,10 @@ public:
 - 固定文件双 header，记录带 `crc16`，header 带 `crc32`。
 - append 先写记录槽，再写 inactive header；未满时断电最多丢失未提交的新记录，不破坏上一版 header。
 - 满环覆盖最老槽时，如果断电发生在 record 写入后、header 提交前，恢复时会识别该未提交槽并从可见范围移除；结果可能丢失被覆盖的最老记录和未提交的新记录，但不会把整个日志打入 fault。
+- 首次没有 `/app/events.bin` 时，`begin()` 会创建固定容量事件文件；如果路径已存在但文件尺寸不匹配或不可读，则视为结构性故障进入 `faulted()`，不会自动删除或重建，避免升级或损坏场景静默丢失事件。
 - 双 header 都无效、文件尺寸不匹配、创建/删除/写 header 失败或写后校验失败属于结构性故障，会进入 `faulted()`。
 - 单条 record CRC 损坏或未提交 future record 不会进入全局 fault；业务读取 `readLatest()` 会跳过该槽，`begin()` 和完整 `readLatest(0, count(), ...)` 扫描会把 `count()` 收敛到可读取的有效记录数，append 仍可继续覆盖后续槽。
+- `readLatest()`、`readStoreInfo()` 和 `readStoreRecords()` 是只读路径，不会隐式调用 `begin()`、创建文件或重建 store；未 ready 时返回失败并暴露 `not_ready` 或当前 fault。
 - `readStoreInfo()` / `readStoreRecords()` 是事件日志内置页面使用的存储级读取能力。它按当前 header 的事件环范围读取底层槽位，只要 record 字节能读出就返回，并标记 `ok/crc_mismatch/invalid_magic/invalid_level/uncommitted/empty/read_failed`、slot、offset、stored/calculated crc、magic/level/crc/commit 布尔状态。该能力用于查看事件日志文件内容和存储状态，不作为业务事件列表的默认数据源。
 - FS 未 ready、空间不足、读写失败或记录跳过时通过 `lastError()` 暴露原因；读路径遇到不可读 I/O 会返回 `false`，但不会自动清空。
 - `clear()` 重建空文件，默认保留递增 `nextId()`；业务恢复出厂或清空业务记录时可显式调用。
@@ -994,7 +996,7 @@ Route 缓冲机制：
 - Basic Auth `Authorization` header 有内部长度上限；超长 header 会被拒绝并输出 WARN，不会静默截断后继续认证。
 - `setAuthEnabled(false)` 会完全开放内置 HTTP 路由，包括 WiFi 保存/清除、Auth 保存、重启、System、System Logs clear 和 Web OTA；只适合受控调试网络。
 - `checkAuth()` 用于业务页面复用基础库 Basic Auth；返回 `false` 时已发送认证挑战，业务 handler 应直接 return。
-- `checkPostAllowed(context)` 用于业务 POST/危险操作复用基础库 Web Auth 和 Origin/Referer 同源检查；返回 `false` 时已发送认证挑战或 `403 Forbidden`，业务 handler 应直接 return。`context` 只用于安全审计日志。
+- `checkPostAllowed(context)` 用于业务 POST/危险操作复用基础库 Web Auth、POST method 和 Origin/Referer 同源检查；非 POST 返回 `405 Method Not Allowed`，认证失败发送认证挑战，同源失败返回 `403 Forbidden`。返回 `false` 时业务 handler 应直接 return。`context` 只用于安全审计日志。
 - `verifyAuth(user, pass)` 校验显式传入的账号密码；无参 `verifyAuth()` 仍表示当前请求是否已认证。
 - `saveAuth(user, pass)` 保存 Web Auth 到 `eb_web.auth_user`、`eb_web.auth_pass`，并立即切换为新认证。
 - `resetAuth()` 清除 `eb_web` 持久化 Auth，并恢复应用默认认证；没有应用默认认证时恢复库默认 `admin/admin`。

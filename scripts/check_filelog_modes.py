@@ -86,17 +86,17 @@ checks = [
     (
         "src/web/internal Web modules",
         'Esp32BaseFileLog::faulted() ? "write fault"',
-        "Status/Logs pages must distinguish runtime write fault from disabled mode",
+        "Status/System Logs pages must distinguish runtime write fault from disabled mode",
     ),
     (
         "src/web/internal Web modules",
-        "New FileLog writes are stopped after a FS write failure.",
-        "Logs/System pages must explain that write fault does not mean old logs are unreadable",
+        "New system log writes are stopped after a FS write failure.",
+        "System Logs/System pages must explain that write fault does not mean old logs are unreadable",
     ),
     (
         "src/web/internal Web modules",
-        "FileLog mode is OFF. Existing log files are historical; new logs are not written.",
-        "Logs/System pages must make disabled FileLog state visible",
+        "System log mode is OFF. Existing system diagnostic logs are historical; new logs are not written.",
+        "System Logs/System pages must make disabled FileLog state visible",
     ),
     (
         "src/web/internal Web modules",

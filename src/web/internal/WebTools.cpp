@@ -80,9 +80,9 @@ void sendFileLogRuntimeStateRow(const char* label) {
 
 void sendFileLogRuntimeNotice() {
     if (Esp32BaseFileLog::faulted()) {
-        sendChunk("<p class='notice warn'>New FileLog writes are stopped after a FS write failure. Existing log files may still be readable. Clear space or save the FileLog mode again after maintenance.</p>");
+        sendChunk("<p class='notice warn'>New system log writes are stopped after a FS write failure. Existing system diagnostic logs may still be readable. Clear space or save the system log mode again after maintenance.</p>");
     } else if (Esp32BaseFileLog::mode() == Esp32BaseFileLog::OFF) {
-        sendChunk("<p class='notice info'>FileLog mode is OFF. Existing log files are historical; new logs are not written.</p>");
+        sendChunk("<p class='notice info'>System log mode is OFF. Existing system diagnostic logs are historical; new logs are not written.</p>");
     }
 }
 #endif
@@ -155,7 +155,7 @@ void handleToolsPage() {
     Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_TOOLS]);
     Esp32BaseWeb::sendPageTitle(g_builtinLabels[Esp32BaseWeb::BUILTIN_TOOLS], "Low-frequency device settings and maintenance actions.");
     if (g_server.hasArg("formatted")) {
-        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "LittleFS formatted", "FileLog mode was reloaded.");
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "LittleFS formatted", "System log mode was reloaded.");
     } else if (g_server.hasArg("logs_cleared")) {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "System logs cleared");
 #if ESP32BASE_ENABLE_APP_EVENTS

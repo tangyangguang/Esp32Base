@@ -17,6 +17,8 @@
 - 新增 `Esp32BaseWeb::checkPostAllowed(context)`，供业务自定义 POST 复用基础库 Auth 和 Origin/Referer 同源检查。
 - 新增 `examples/app_events_demo`，演示启动写入、分页查看、JSON/CSV 输出和手工 POST 写入事件。
 - 新增 `scripts/check_app_events.py`，静态检查开关、API、Web 分离、文档和样例。
+- App Events 存储边界收紧：缺失的 `/app/events.bin` 可在初始化时创建；已存在但尺寸不匹配或不可读的 store 进入 fault，不自动删除或重建。`readLatest()`、`readStoreInfo()`、`readStoreRecords()` 保持只读，未 ready 时返回 unavailable/fault，不从 GET/API/CSV 路径隐式创建 store。
+- `Esp32BaseWeb::checkPostAllowed(context)` 现在强制要求当前请求为 POST；业务若把危险 handler 注册为 `METHOD_ANY`，GET 也会返回 `405 Method Not Allowed`，不会只靠 Auth/同源检查放行。
 
 业务侧影响：
 
@@ -27,6 +29,7 @@
 - 业务项目需要面向业务用户展示事件时，应使用 `readLatest()` 或 `/esp32base/api/app-events` 创建自己的业务事件列表和详情页，用业务语言解释 `source/type/reason/code/value`，不展示 `magic/crc16/reserved/valueMask/flags` 等内部字段。
 - `/esp32base/logs` 仍只展示 Esp32Base 系统诊断日志；应用事件单独进入 `/esp32base/app-events`，避免和 WiFi、OTA、NTP、启动、健康状态等基础库诊断混在一起。
 - 恢复出厂或清空业务记录时，业务可按需调用 `Esp32BaseAppEventLog::clear()`；基础库的普通系统配置清理不会隐式删除应用事件。
+- `examples/app_events_demo` 只写示例业务事件，不再把 boot/boot count 作为 App Events 示例，避免业务项目照抄系统诊断语义。
 
 ### Web UI 原生 dialog 基线
 

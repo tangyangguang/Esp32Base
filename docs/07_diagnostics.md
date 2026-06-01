@@ -133,6 +133,7 @@
 - FS 未 ready 时 `begin()` / `append()` 返回 false，不崩溃。
 - 默认容量 1024 条，写满后环形覆盖，`readLatest(offset, limit)` 按最新优先分页。
 - 重启后 header 和记录可恢复，`nextId()` 继续递增。
+- 已存在 `/app/events.bin` 但文件尺寸不匹配或不可读时必须进入 fault，不得自动删除或重建；只有文件缺失时 `begin()` 才可创建空 store。
 - 满容量环形覆盖时，模拟 record 已写入但 header 未提交的重启；恢复后不得进入 fault，未提交槽应不可见，后续 append 仍可继续。
 - Watchdog 启用后，在 setup、Web handler 或业务回调里同步 append/clear 不应因为 LittleFS flush 较慢触发 loopTask WDT。
 - 双 header 损坏、文件尺寸错误、写后校验失败等结构性问题进入 fault，不自动清空；单条记录 `crc16` 错误应跳过、暴露 `record_skipped`，完整扫描后 `count()` 应收敛到可读取记录数，并继续允许 append。
@@ -142,6 +143,7 @@
 - Web 页面、JSON API 和 CSV 导出分别验证 HTML/JSON/CSV escape。
 - CSV 导出读取失败时必须输出可见错误行或错误状态，不得静默返回截断内容。
 - `POST /esp32base/tools/app-events-clear` 必须需要认证、POST 和同源检查；GET 不得触发清空，App Events 页面本身不得放清空按钮。
+- `GET /esp32base/app-events`、JSON API 和 CSV 导出不得隐式创建或重建 `/app/events.bin`；App Events 未 ready 时应展示 unavailable/fault。
 - `/esp32base/logs` 不显示 App Events，App Events 不混入 WiFi、OTA、NTP、启动、健康状态等系统诊断日志。
 - 应用接入验收时必须检查 App Events 不重复记录 Esp32Base 系统事件，例如 boot/reset/restart reason、WiFi、NTP、OTA、LittleFS mount/write fault、FileLog fault 或基础库健康状态；同一故障如果两边都记录，系统诊断日志必须表达技术原因和内部错误链路，App Event 必须表达业务影响、保护动作、跳过原因、用户维护结果或外部决策结果。
 - `examples/app_events_demo` 可构建，并能演示写入、分页读取、Web/API 展示和清空。
