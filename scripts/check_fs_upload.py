@@ -160,6 +160,20 @@ if "g_fsUploadModified = true;" not in upload_write:
     errors.append("src/web/internal/WebFs.cpp: upload start must mark the target modified after truncating/opening it")
 if "g_fsUploadAppEventsTarget" not in upload_write or "g_fsUploadFileLogTarget" not in upload_write:
     errors.append("src/web/internal/WebFs.cpp: upload start must classify App Events/FileLog targets before writes can fail")
+target_marker = "g_fsUploadAppEventsTarget = appEventsOwnsPath(g_fsUploadPath);"
+write_marker = "Esp32BaseFs::writeBytes(g_fsUploadPath, nullptr, 0)"
+modified_marker = "g_fsUploadModified = true;"
+target_pos = upload_write.find(target_marker)
+write_pos = upload_write.find(write_marker)
+modified_pos = upload_write.find(modified_marker)
+if target_pos < 0 or write_pos < 0:
+    errors.append("src/web/internal/WebFs.cpp: upload start must classify sensitive targets before opening/truncating")
+elif target_pos > write_pos:
+    errors.append("src/web/internal/WebFs.cpp: upload start must classify sensitive targets before the truncate/create attempt")
+if write_pos >= 0 and (modified_pos < 0 or modified_pos > write_pos):
+    failure_block = block_after(upload_write, f"if (!{write_marker})")
+    if "fsRecoverModifiedUploadRuntime(" not in failure_block:
+        errors.append("src/web/internal/WebFs.cpp: upload truncate/create attempt must mark sensitive targets modified before failure can return")
 if 'strlcpy(path, g_server.arg' in upload_done + upload_write or 'strlcpy(dir, g_server.arg' in upload_done + upload_write:
     errors.append("src/web/internal/WebFs.cpp: upload path args must not be copied from g_server.arg before length checks")
 if "fsUploadReceived(false)" not in read("src/web/internal/WebContext.cpp"):

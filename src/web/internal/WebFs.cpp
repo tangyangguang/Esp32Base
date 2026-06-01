@@ -915,12 +915,12 @@ void handleFsUpload() {
             fsSetUploadError("File exists");
             return;
         }
+        g_fsUploadModified = true;
         if (!Esp32BaseFs::writeBytes(g_fsUploadPath, nullptr, 0)) {
             g_fsUploadStartFailed = true;
             fsSetUploadError("Could not open target file");
             return;
         }
-        g_fsUploadModified = true;
         g_fsUploadActive = true;
     } else if (upload.status == UPLOAD_FILE_WRITE) {
         if (g_fsUploadForbidden || g_fsUploadStartFailed || !g_fsUploadActive) {
@@ -988,11 +988,12 @@ void handleFsDeletePost() {
     }
 #endif
     bool ok = Esp32BaseFs::removeFile(path);
+    const bool deleteOk = ok;
 #if ESP32BASE_ENABLE_FILELOG
     if (!targetIsFileLog) {
         ESP32BASE_LOG_W("web", "fs_delete_requested path=%s result=%s", path, ok ? "success" : "failed");
     }
-    if (ok && (targetIsFileLog || retryFileLogAfterDelete)) {
+    if (deleteOk && (targetIsFileLog || retryFileLogAfterDelete)) {
         const bool reloadOk = Esp32BaseFileLog::begin();
         ESP32BASE_LOG_W("web", "fs_delete_reload path=%s target=filelog result=%s", path, reloadOk ? "success" : "failed");
         if (!reloadOk) {
@@ -1003,7 +1004,7 @@ void handleFsDeletePost() {
     ESP32BASE_LOG_W("web", "fs_delete_requested path=%s result=%s", path, ok ? "success" : "failed");
 #endif
 #if ESP32BASE_ENABLE_APP_EVENTS
-    if (ok && targetIsAppEvents) {
+    if (deleteOk && targetIsAppEvents) {
         const bool reloadOk = Esp32BaseFs::fileSize(path) == 0
             ? Esp32BaseAppEventLog::clear()
             : Esp32BaseAppEventLog::reload();

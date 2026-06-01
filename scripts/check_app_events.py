@@ -162,6 +162,10 @@ web_fs_source = read("src/web/internal/WebFs.cpp")
 delete_body = function_body(web_fs_source, "void handleFsDeletePost()")
 if "Esp32BaseFs::fileSize(path) == 0" not in delete_body or "Esp32BaseAppEventLog::clear()" not in delete_body:
     errors.append("src/web/internal/WebFs.cpp: App Events delete path must rebuild the store when removeFile() only truncates it to 0 bytes")
+if "if (ok && targetIsAppEvents)" in delete_body:
+    errors.append("src/web/internal/WebFs.cpp: App Events delete reload must not be gated by FileLog reload mutating ok")
+if "const bool deleteOk = ok;" not in delete_body:
+    errors.append("src/web/internal/WebFs.cpp: delete post-processing must preserve raw delete result before runtime reloads")
 web_logs_source = read("src/web/internal/WebLogs.cpp")
 for signature in ("void handleLogsPage", "void handleLogsRaw"):
     body = function_body(web_logs_source, signature)

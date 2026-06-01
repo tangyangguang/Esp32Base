@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Check Esp32Base-owned LittleFS namespace boundaries."""
 
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -30,6 +31,32 @@ def function_body(text: str, signature: str) -> str:
             if depth == 0:
                 return text[brace:i + 1]
     return text[brace:]
+
+
+def normalize_signature(signature: str) -> str:
+    signature = re.sub(r"//.*", "", signature)
+    signature = re.sub(r"/\*.*?\*/", "", signature, flags=re.S)
+    signature = re.sub(r"\s+", " ", signature).strip()
+    signature = signature.rstrip(";{").strip()
+    signature = re.sub(r"\s*=\s*[^,\)]+", "", signature)
+    signature = signature.replace(" &", "&").replace("& ", "& ")
+    signature = signature.replace(" *", "*").replace("* ", "* ")
+    signature = re.sub(r"\s*,\s*", ", ", signature)
+    signature = re.sub(r"\s*\(\s*", "(", signature)
+    signature = re.sub(r"\s*\)\s*", ")", signature)
+    return signature
+
+
+def extract_declaration(text: str, name: str) -> str:
+    pattern = re.compile(rf"(?m)^[ \t]*(?!#)([A-Za-z_][\w:<>,\s*&]*\b{name}\s*\([^;{{}}]*\)\s*;)")
+    match = pattern.search(text)
+    return normalize_signature(match.group(1)) if match else ""
+
+
+def extract_definition(text: str, name: str) -> str:
+    pattern = re.compile(rf"(?m)^[ \t]*(?!#)([A-Za-z_][\w:<>,\s*&]*\b{name}\s*\([^;{{}}]*\))\s*\{{")
+    match = pattern.search(text)
+    return normalize_signature(match.group(1)) if match else ""
 
 
 errors: list[str] = []
@@ -153,6 +180,28 @@ if "strlen(ESP32BASE_EB_FILELOG_PATH) >= sizeof(g_fileLogPath)" not in filelog_s
 
 if "bool fsJoinPath(" not in web_fs or "bool fsJoinPath(" not in web_internal:
     errors.append("src/web/internal Web modules: fsJoinPath must return bool so truncation is detectable")
+for helper_name in [
+    "fsJoinPath",
+    "fsReadArg",
+    "fsReadPathArg",
+    "fsBuildUploadPath",
+    "fsSendUploadJson",
+    "fsUploadTargetIsDirectory",
+    "fsUploadFileReadableEnd",
+    "fsDownloadFilename",
+    "fileLogOwnsPath",
+]:
+    declaration = extract_declaration(web_internal, helper_name)
+    definition = extract_definition(web_fs, helper_name)
+    if not declaration:
+        errors.append(f"src/web/internal/WebInternal.h: missing declaration for {helper_name}")
+    elif not definition:
+        errors.append(f"src/web/internal/WebFs.cpp: missing definition for {helper_name}")
+    elif declaration != definition:
+        errors.append(
+            "src/web/internal Web modules: signature mismatch for "
+            f"{helper_name}: header {declaration!r} vs source {definition!r}"
+        )
 if "sendFsPathTooLongRow(" not in web_fs:
     errors.append("src/web/internal/WebFs.cpp: FS tree must render overlong paths without download/delete actions")
 if "fsReadPathArg(" not in web_fs:
