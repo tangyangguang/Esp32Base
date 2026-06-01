@@ -121,7 +121,7 @@ bool fsUploadFileReadableEnd(const char* path, uint64_t size);
 void fsSendJsonBool(const char* name, bool value, bool comma);
 void fsSendUploadJson(int code, bool ok, const char* error, const char* path, bool exists, bool isDir);
 void fsUploadDirOptionCallback(const char* name, size_t, bool isDir, void* user);
-void sendFsUploadDirectoryOptionsFor(const char* dir, uint8_t depth, uint16_t* emitted);
+void sendFsUploadDirectoryOptionsFor(const char* dir, uint8_t depth, uint16_t* emitted, bool* pathTooLong);
 void sendFsUploadPanel();
 void fsDownloadFilename(const char* path, char* out, size_t len);
 bool fileLogOwnsPath(const char* path);

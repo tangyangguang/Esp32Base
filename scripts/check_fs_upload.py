@@ -28,6 +28,24 @@ def function_body(text: str, signature: str) -> str:
     return text[brace:]
 
 
+def block_after(text: str, marker: str) -> str:
+    start = text.find(marker)
+    if start < 0:
+        return ""
+    brace = text.find("{", start)
+    if brace < 0:
+        return ""
+    depth = 0
+    for i in range(brace, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[brace:i + 1]
+    return text[brace:]
+
+
 
 WEB_SOURCE_PATHS = [
     "src/web/Esp32BaseWeb.cpp",
@@ -133,8 +151,11 @@ if "uploadModified" not in upload_done or "uploadAppEventsTarget" not in upload_
     errors.append("src/web/internal/WebFs.cpp: upload completion must snapshot modified sensitive target state")
 if upload_done.find("fsRecoverModifiedUploadRuntime(") > upload_done.find("fsSendUploadJson(400"):
     errors.append("src/web/internal/WebFs.cpp: failed uploads that modified sensitive targets must reload runtime before returning upload errors")
-if upload_done.find("fsRecoverModifiedUploadRuntime(") > upload_done.find('"Upload verification failed"'):
-    errors.append("src/web/internal/WebFs.cpp: verification failures after modifying sensitive targets must reload runtime before returning")
+verification_block = block_after(upload_done, "if (actualSize < 0")
+if "fsRecoverModifiedUploadRuntime(" not in verification_block:
+    errors.append("src/web/internal/WebFs.cpp: verification failure branch must reload modified sensitive targets")
+elif verification_block.find("fsRecoverModifiedUploadRuntime(") > verification_block.find("fsSendUploadJson(500"):
+    errors.append("src/web/internal/WebFs.cpp: verification failure branch must reload before returning the 500 upload error")
 if "g_fsUploadModified = true;" not in upload_write:
     errors.append("src/web/internal/WebFs.cpp: upload start must mark the target modified after truncating/opening it")
 if "g_fsUploadAppEventsTarget" not in upload_write or "g_fsUploadFileLogTarget" not in upload_write:
