@@ -119,6 +119,8 @@ upload_done = function_body(web_fs, "void handleFsUploadDone()")
 upload_write = function_body(web_fs, "void handleFsUpload()")
 if '"No upload received"' not in upload_done:
     errors.append("src/web/internal/WebFs.cpp: upload completion must reject POSTs that did not receive UPLOAD_FILE_START")
+if upload_done.find("if (startFailed || uploadError[0])") > upload_done.find("if (!uploadReceived"):
+    errors.append("src/web/internal/WebFs.cpp: upload start errors must be reported before the no-upload fallback")
 if upload_done.count("fsResetUploadState();") < 4:
     errors.append("src/web/internal/WebFs.cpp: upload completion must clear path/error/bytes flags before every response")
 if "Esp32BaseAppEventLog::reload()" in upload_done and "App Events store reload failed" not in upload_done:
@@ -127,6 +129,8 @@ if "Esp32BaseFileLog::begin()" in upload_done and "FileLog reload failed" not in
     errors.append("src/web/internal/WebFs.cpp: FileLog upload reload failure must be returned to the client")
 if 'strlcpy(path, g_server.arg' in upload_done + upload_write or 'strlcpy(dir, g_server.arg' in upload_done + upload_write:
     errors.append("src/web/internal/WebFs.cpp: upload path args must not be copied from g_server.arg before length checks")
+if "fsUploadReceived(false)" not in read("src/web/internal/WebContext.cpp"):
+    errors.append("src/web/internal/WebContext.cpp: fsUploadReceived must be explicitly initialized with the upload state")
 
 for forbidden in [
     "fsUploadPathProtected",

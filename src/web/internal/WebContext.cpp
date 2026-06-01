@@ -42,6 +42,7 @@ WebContext::WebContext()
       ,
       fsUploadForbidden(false),
       fsUploadStartFailed(false),
+      fsUploadReceived(false),
       fsUploadActive(false),
       fsUploadOverwrite(false),
       fsUploadBytes(0),

@@ -745,16 +745,16 @@ void handleFsUploadDone() {
         fsSendUploadJson(403, false, "forbidden", uploadPath);
         return;
     }
-    if (!uploadReceived || !uploadPath[0]) {
-        ESP32BASE_LOG_W("web", "fs_upload_rejected reason=no_upload");
-        fsResetUploadState();
-        fsSendUploadJson(400, false, "No upload received", nullptr);
-        return;
-    }
     if (startFailed || uploadError[0]) {
         ESP32BASE_LOG_W("web", "fs_upload_rejected path=%s error=%s", uploadPath[0] ? uploadPath : "-", uploadError[0] ? uploadError : "upload rejected");
         fsResetUploadState();
         fsSendUploadJson(400, false, uploadError[0] ? uploadError : "upload rejected", uploadPath);
+        return;
+    }
+    if (!uploadReceived || !uploadPath[0]) {
+        ESP32BASE_LOG_W("web", "fs_upload_rejected reason=no_upload");
+        fsResetUploadState();
+        fsSendUploadJson(400, false, "No upload received", nullptr);
         return;
     }
     const int64_t actualSize = uploadPath[0] ? Esp32BaseFs::fileSize(uploadPath) : -1;
