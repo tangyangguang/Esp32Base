@@ -14,6 +14,8 @@ library = read("library.json")
 libraryignore = read(".libraryignore")
 piopmignore = read(".piopmignore")
 profiles = read("docs/02_profiles.md")
+api_docs = read("docs/03_api.md")
+memory_budget = read("docs/06_memory_budget.md")
 
 for path, text in (
     ("library.json", library),
@@ -27,6 +29,14 @@ if "#if ESP32BASE_PROFILE == ESP32BASE_PROFILE_NET" not in profiles:
     errors.append("docs/02_profiles.md: profile example must use numeric ESP32BASE_PROFILE comparison")
 if "#if defined(ESP32BASE_PROFILE_NET)" in profiles:
     errors.append("docs/02_profiles.md: profile example must not use defined(ESP32BASE_PROFILE_NET)")
+if "ESP32BASE_ENABLE_APP_CONFIG" not in profiles:
+    errors.append("docs/02_profiles.md: bottom macro list must include ESP32BASE_ENABLE_APP_CONFIG")
+if "`APP_CONFIG` 需要 `WEB`" not in profiles:
+    errors.append("docs/02_profiles.md: dependency rules must document APP_CONFIG requires WEB")
+if "保留用于兼容旧代码" in api_docs:
+    errors.append("docs/03_api.md: must not explain current APIs as legacy compatibility")
+if "| FULL | 1031040 |" not in memory_budget:
+    errors.append("docs/06_memory_budget.md: ESP32/Core2 FULL size table must be refreshed to current build")
 
 docs = {
     "README.md": "发布包排除 docs/superpowers",

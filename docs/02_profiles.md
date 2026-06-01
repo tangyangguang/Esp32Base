@@ -29,6 +29,7 @@ ESP32BASE_PROFILE_CORE
 - `ESP32BASE_ENABLE_NTP`
 - `ESP32BASE_ENABLE_MDNS`
 - `ESP32BASE_ENABLE_WEB`
+- `ESP32BASE_ENABLE_APP_CONFIG`
 - `ESP32BASE_ENABLE_OTA`
 - `ESP32BASE_ENABLE_WEB_OTA`
 - `ESP32BASE_ENABLE_ARDUINO_OTA`
@@ -74,6 +75,7 @@ Profile 默认值不能覆盖用户显式 `-D`。
 - `MDNS` 需要 `WIFI`。
 - `FILELOG` 需要 `FS`。
 - `APP_EVENTS` 需要 `FS`，默认关闭，不随任何 profile 自动开启。
+- `APP_CONFIG` 需要 `WEB`，默认关闭，不随任何 profile 自动开启。
 
 软依赖：
 
@@ -90,6 +92,8 @@ Profile 默认值不能覆盖用户显式 `-D`。
 启用 FS 的 profile 默认启用系统诊断日志。底层实现/API 名称仍为 FileLog（`Esp32BaseFileLog`）；用户仍可显式关闭 `ESP32BASE_ENABLE_FILELOG`。
 
 应用事件日志通过 `ESP32BASE_ENABLE_APP_EVENTS=1` 显式启用，默认容量 `ESP32BASE_APP_EVENT_LOG_CAPACITY=1024`，允许范围 `64..2048`。该能力使用 LittleFS 固定文件存储，适合结构化业务事件，不作为系统诊断日志、调试日志或业务长期数据模型。
+
+应用持久化参数配置页通过 `ESP32BASE_ENABLE_APP_CONFIG=1` 显式启用，依赖 Web。业务必须在 `Esp32Base::begin()` 前注册分组和字段；保存前 veto、字段校验和保存后回调语义见 [API 契约](03_api.md) 与 [Web 与配网](04_web.md)。
 
 ## 4. 最终 Profile 表
 

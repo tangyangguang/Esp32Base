@@ -471,7 +471,7 @@ deferred 语义：
 - `clearSystemConfig()` 只清理 `eb_sys.hostname`；`eb_sys.rst_cnt`、restart log、`boot_cnt`、`wdt_cnt`、`wdt_trip_base`、`wdt_trip_time` 等统计/诊断 key 必须保留。
 - `clearLogConfig()` 清理 `eb_log`，包含 FileLog 配置。
 - `clearUiConfig()` 清理 `eb_ui`，包含 Footer bar 显示模式。
-- `clearLibraryNamespaces()` 等价于 `factoryReset()`，保留用于兼容旧代码。
+- `clearLibraryNamespaces()` 是库级配置清理入口，当前语义等价于 `factoryReset()`：只清理基础库 NVS 配置，保留统计/诊断资产、业务 namespace 和 LittleFS 内容。
 - `clearNamespace()` 和各出厂重置 API 在 namespace 不存在时返回成功，不创建空 namespace，也不输出底层 `NOT_FOUND` 噪声。
 
 基础库出厂重置推荐流程：
