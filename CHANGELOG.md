@@ -4,6 +4,11 @@
 
 ## 2026-06-01
 
+### 慢请求和慢循环日志降级
+
+- Web `slow_request` 中非 GET 操作和 Health `loop_slow` 从 WARN 降为 INFO；默认 WARN 系统诊断日志不再记录这类性能提示，现场排查时可把 System Logs/FileLog 模式切到 INFO 查看。
+- `GET` 慢请求仍保持 DEBUG；慢请求阈值 250ms、Health 慢循环阈值 3000ms 和 FileLog 的 OFF/ERROR/WARN/INFO 模式边界不变。
+
 ### Esp32BaseFs 大块读写长操作治理
 
 - `Esp32BaseFs` 的 `writeBytes()`、`appendBytes()`、`writeBytesAt()`、`createFixedFile()`、`readBytes()` 和 `readBytesAt()` 现在统一按 512B 小块访问 LittleFS，并在累计约 4KB I/O 后让出调度；Watchdog 启用时会配合基础库长操作机制，避免业务一次保存较大二进制明细时长时间占住 loop/system task 后触发 task WDT。
@@ -941,7 +946,7 @@ upload_flags =
 - Tools 页格式化成功后会明确提示，并重新加载 FileLog 模式；FileLog 会在格式化后重新创建日志目录，避免后续写入触发底层 VFS 目录不存在错误。
 - 格式化 LittleFS 会输出 WARN 级维护日志，记录请求来源、format/mount/FileLog reload 结果；FileLog 目录或 segment 准备失败也会输出 WARN。
 - FileLog 切换模式前会先 flush 现有 buffer，避免启动阶段 boot session 多行日志在示例或维护操作重新加载 FileLog 模式时丢失尾部。
-- 普通 `GET` 页面慢请求日志降为 DEBUG；非 GET 操作慢请求仍保持 WARN，避免维护/写操作耗时被忽略。
+- 普通 `GET` 页面慢请求日志降为 DEBUG；非 GET 操作慢请求作为性能提示记录，后续已统一收敛为 INFO，避免默认 WARN 系统日志把慢操作提示当成告警。
 - 配置审计中 `changed=no result=skipped`、读取审计和 deferred 排队日志降为 DEBUG；实际写入成功/flush 成功仍为 INFO，失败为 WARN/ERROR。
 - 普通页面 Basic Auth 校验成功降为 DEBUG；认证缺失、无效或密码错误仍为 WARN，启动认证加载和认证修改继续保持 INFO。
 - 业务页面/导航注册日志降为 DEBUG，减少示例 INFO 文件日志中的启动噪音。
@@ -1049,7 +1054,7 @@ upload_flags =
 关键边界：
 
 - `health.tick` bus 事件仍按 `ESP32BASE_HEALTH_TICK_INTERVAL_MS` 默认每 30 秒发布。
-- `WARN health loop_slow...` 仍在 30 秒窗口超过 `ESP32BASE_HEALTH_LOOP_WARN_MS` 时立即输出。
+- `INFO health loop_slow...` 仍在 30 秒窗口超过 `ESP32BASE_HEALTH_LOOP_WARN_MS` 时立即输出。
 
 推荐接入：
 

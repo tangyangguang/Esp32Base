@@ -262,7 +262,7 @@
 - 高频 deferred NVS 写入。
 - 周期 Web 状态查询。
 - 周期 `health.tick` bus 事件。
-- Health tick 默认只输出 DEBUG；超过 loop 阈值才输出 WARN。
+- Health tick 默认只输出 DEBUG；超过 loop 阈值才输出 INFO。
 - 路由器掉电恢复。
 - 周期读取 System Logs 页面。
 - 无意外重启、卡死、heap 持续退化或重连失败。

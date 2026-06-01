@@ -220,7 +220,7 @@ System 维护页：
 - 启用 FileLog 的 profile 显示系统诊断日志模式设置、运行态和 `Clear system logs`；模式设置只接受 OFF、ERROR、WARN、INFO，保存后立即生效并写入 `eb_log.mode`，清空日志只接受 POST，表单使用 `confirm()` 和 `once(form)`，成功后回到 System 页面显示结果。运行态为 `write fault` 时使用 WARN notice，表示配置模式仍开启，但 FileLog 因 FS 写入故障被运行期保护停写；已有日志仍可能可读，不应显示成 `disabled`。运行态为 `unavailable` 时使用 WARN notice，表示配置模式开启但 FS/init 前置条件未满足。运行态为 `disabled` 时使用 INFO notice，明确 FileLog 模式为 OFF，新日志不会写入。
 - 启用 App Events 的 profile 显示 `Clear App Events` 危险操作；它只清空 `/app/events.bin` 应用业务事件日志，不清系统诊断日志、WiFi、Web Auth、NVS 配置或其他 LittleFS 文件。
 - 格式化 FS 是显式 POST 操作；执行前 flush 系统诊断日志，成功后重新 mount FS、重新加载 FileLog 模式，并在 App Events 启用时重新创建 `/app/events.bin`；成功提示应明确显示在 System 页面，同时输出 WARN 级维护日志记录请求、format/mount/FileLog reload/App Events recreate 结果。重启请求同样输出 WARN 级维护日志。
-- 普通 `GET` 页面慢请求只输出 DEBUG；`POST` 等操作慢请求继续输出 WARN。
+- 普通 `GET` 页面慢请求只输出 DEBUG；`POST` 等操作慢请求输出 INFO，默认 WARN 系统日志不记录，现场排查时可切到 INFO 查看。
 - API 层仍建议要求 POST，不使用 GET 触发重启。
 - 内置危险 POST 包括 WiFi 保存/清除、App Config 保存、Hostname 保存、Auth 保存、重启、System 操作、System Logs clear、Web OTA upload/done；跨站 `Origin` 或 `Referer` 会被拒绝。
 - 业务自定义 POST 或危险操作应优先调用 `Esp32BaseWeb::checkPostAllowed(context)`，不要只做 `checkAuth()`；即使业务误把危险 handler 注册为 `METHOD_ANY`，该 helper 也会拒绝非 POST 请求。
@@ -584,7 +584,7 @@ Arduino `WebServer` 是同步模型。
 - 单次执行 < 200ms。
 - 不在 handler 中做长时间阻塞 IO。
 - 长任务采用“启动任务 -> 返回 task id -> 轮询状态”的方式。
-- Web handle 对超过 250ms 的慢请求输出日志。
+- Web handle 对超过 250ms 的慢请求输出日志；GET 使用 DEBUG，POST 等操作使用 INFO。
 
 这属于已知限制，文档和示例必须体现。
 

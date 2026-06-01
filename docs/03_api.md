@@ -1269,7 +1269,7 @@ Health tick 日志策略：
 
 - 每个 tick 窗口内统计一次最大 loop 间隔。
 - 未超过 `ESP32BASE_HEALTH_LOOP_WARN_MS` 时，默认每 30 分钟以 DEBUG 输出一次 `tick loopMax=...`，其中 `loopMax` 是这段 DEBUG 日志周期内普通 tick 窗口的最大值。
-- 超过阈值时，以 WARN 输出 `loop_slow loopMax=... threshold=...`。
-- 默认 WARN 阈值为 3000ms，避免普通 Web 请求造成健康日志刷屏，同时能及时暴露明显卡顿；业务项目可按控制实时性要求覆盖为 1000/2000/5000ms。
-- `ESP32BASE_HEALTH_DEBUG_LOG_INTERVAL_MS` 默认 1800000ms；设为 0 可关闭普通 DEBUG tick 日志，不影响 WARN 慢循环日志。
+- 超过阈值时，以 INFO 输出 `loop_slow loopMax=... threshold=...`。
+- 默认慢循环阈值为 3000ms，避免普通 Web 请求造成健康日志刷屏，同时保留现场 INFO 诊断入口；业务项目可按控制实时性要求覆盖为 1000/2000/5000ms。
+- `ESP32BASE_HEALTH_DEBUG_LOG_INTERVAL_MS` 默认 1800000ms；设为 0 可关闭普通 DEBUG tick 日志，不影响 INFO 慢循环日志。
 - `loopPeriodMaxMs()` 仍返回启动以来最大 loop 间隔，不随 tick 窗口清零。

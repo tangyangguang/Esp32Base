@@ -43,7 +43,7 @@ void Esp32BaseHealth::handle() {
     if (now - g_healthLastTickMs >= ESP32BASE_HEALTH_TICK_INTERVAL_MS) {
         g_healthLastTickMs = now;
         if (g_healthTickLoopPeriodMaxMs > ESP32BASE_HEALTH_LOOP_WARN_MS) {
-            ESP32BASE_LOG_W("health", "loop_slow loopMax=%lu ms threshold=%lu ms",
+            ESP32BASE_LOG_I("health", "loop_slow loopMax=%lu ms threshold=%lu ms",
                             static_cast<unsigned long>(g_healthTickLoopPeriodMaxMs),
                             static_cast<unsigned long>(ESP32BASE_HEALTH_LOOP_WARN_MS));
         } else {

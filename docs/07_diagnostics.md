@@ -223,9 +223,9 @@ CI 应覆盖核心矩阵，release 前执行完整矩阵。
 - 每 10 分钟 1 次 Web 状态查询。
 - 每 30 秒 1 次 `health.tick` bus 事件。
 - Health tick 未超过 loop 阈值时，默认每 30 分钟最多输出 1 条 DEBUG 日志；DEBUG 不进入系统诊断日志模式。
-- Health tick 窗口内最大 loop 间隔超过 `ESP32BASE_HEALTH_LOOP_WARN_MS` 时输出 WARN。
+- Health tick 窗口内最大 loop 间隔超过 `ESP32BASE_HEALTH_LOOP_WARN_MS` 时输出 INFO。
 - `ESP32BASE_HEALTH_LOOP_WARN_MS` 默认 3000ms；高实时性业务可自行降到 1000/2000ms，长操作较多的应用可升到 5000ms。
-- `ESP32BASE_HEALTH_DEBUG_LOG_INTERVAL_MS` 默认 1800000ms；设为 0 可关闭普通 DEBUG tick 日志。
+- `ESP32BASE_HEALTH_DEBUG_LOG_INTERVAL_MS` 默认 1800000ms；设为 0 可关闭普通 DEBUG tick 日志，不影响 INFO 慢循环日志。
 - 至少包含一次路由器断电 5 分钟后恢复。
 - 监控 min heap、reset count、loop max period、WiFi 自动重连成功率、NVS pending 积压。
 - 任意意外重启、卡死、heap 持续退化或重连失败均视为不通过。
@@ -272,7 +272,7 @@ CI 应覆盖核心矩阵，release 前执行完整矩阵。
 - FileLog 模式变更必须输出 WARN 级审计日志，包含上一次模式和新模式。
 - Serial 日志和 FileLog 必须可独立控制；量产设备可通过 `Esp32BaseLog::setSerialLevel(Esp32BaseLog::NONE)` 关闭串口，同时保持 FileLog WARN/ERROR 或 INFO 正常写入。
 - `ESP32BASE_LOG_LEVEL` 是编译期上限；如果编译为 `ESP32BASE_LOG_NONE`，日志宏被移除，FileLog 也不会收到日志。
-- 普通页面 GET 慢请求、认证成功、路由注册和配置审计 skipped/read/deferred 属于 DEBUG 诊断；配置实际写入、flush、启动认证加载、WiFi/OTA/NTP/mDNS 状态、格式化、重启和认证失败应保留 INFO/WARN/ERROR。
+- 普通页面 GET 慢请求、认证成功、路由注册和配置审计 skipped/read/deferred 属于 DEBUG 诊断；POST 等操作慢请求和健康慢循环属于 INFO 性能提示；配置实际写入、flush、启动认证加载、WiFi/OTA/NTP/mDNS 状态、格式化、重启和认证失败应保留 INFO/WARN/ERROR。
 - Config audit 可在 `Esp32Base::begin()` 前开启；begin 前开启可覆盖基础库初始化读写，begin 后开启只覆盖后续业务运行期访问。read audit 噪声较大，且多数为 DEBUG。
 - `INFO` 日志明文输出 WiFi 名称/密码和 Web Auth 用户名/密码，便于业务接入和现场调试。
 

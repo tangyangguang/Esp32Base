@@ -123,7 +123,7 @@ void Esp32BaseWeb::handle() {
                                 g_activeUri[0] ? g_activeUri : "(unknown)",
                                 static_cast<unsigned long>(elapsed));
             } else {
-                ESP32BASE_LOG_W("web", "slow_request method=%s uri=%s elapsed=%lu ms",
+                ESP32BASE_LOG_I("web", "slow_request method=%s uri=%s elapsed=%lu ms",
                                 methodName(g_lastRequestMethod),
                                 g_activeUri[0] ? g_activeUri : "(unknown)",
                                 static_cast<unsigned long>(elapsed));
