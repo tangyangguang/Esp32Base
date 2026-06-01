@@ -1061,9 +1061,9 @@ ESP32BASE_APP_CONFIG_MAX_FIELDS
 回调：
 
 - `FieldValidateCallback`：字段级业务校验，例如只允许英文数字。
-- `PageValidateCallback`：页面级跨字段校验；回调中可用 `submittedString()`、`submittedInt()`、`submittedDecimal()`、`submittedBool()`、`submittedEnum()` 读取本次 POST 值；string buffer 至少应为 `STRING_MAX_LENGTH + 1`，enum buffer 至少应为 `ENUM_VALUE_MAX_LENGTH + 1`，buffer 过小时会返回 false。
+- `PageValidateCallback`：页面级跨字段校验，也是整页保存前 veto hook；回调中可用 `submittedString()`、`submittedInt()`、`submittedDecimal()`、`submittedBool()`、`submittedEnum()` 读取本次 POST 值；string buffer 至少应为 `STRING_MAX_LENGTH + 1`，enum buffer 至少应为 `ENUM_VALUE_MAX_LENGTH + 1`，buffer 过小时会返回 false。
 - `ChangeCallback`：字段成功保存后调用，包含旧值和新值；其中 `text` 指针只在回调期间有效。
-- `SaveCallback`：整次保存结束后调用，提供 changed/saved/failed 统计和是否涉及重启后生效字段。
+- `SaveCallback`：整次保存结束后调用，提供 changed/saved/failed 统计和是否涉及重启后生效字段；`SaveCallback` 是保存后通知，不用于拒绝保存。
 
 保存语义：
 
@@ -1071,6 +1071,7 @@ ESP32BASE_APP_CONFIG_MAX_FIELDS
 - POST 必须通过 Web Auth、POST method 和 Origin/Referer 同源检查。
 - 页面带 RAM revision；过期页面提交会被拒绝并要求刷新。
 - 任一字段或页面级校验失败时不写任何字段，也不触发 change 回调。
+- 只读状态、未来配置版本或业务版本不兼容等需要拒绝整页保存的业务规则，应放在 `PageValidateCallback`；回调返回 false 时不会进入字段写入循环，也不会触发 `ChangeCallback` 或 `SaveCallback`。
 - 校验全部通过后，只写入后端计算出的变化字段；未变化字段不写 NVS。
 - 部分 NVS 写失败时，已成功字段保留，只对成功字段触发 change 回调。
 

@@ -4,6 +4,11 @@
 
 ## 2026-06-01
 
+### App Config 保存前 veto 回归
+
+- 补充 App Config 保存前 veto 回归检查：保存流程必须保持 revision/stale 校验在前，字段级校验和页面级 `PageValidateCallback` 在任何 NVS 写入前完成；页面级校验期间可通过 `submittedString()`、`submittedInt()`、`submittedDecimal()`、`submittedBool()`、`submittedEnum()` 读取整页提交值。
+- 文档明确只读状态、未来配置版本或业务版本不兼容等整页拒绝场景应接入 `setPageValidateCallback()`；`setSaveCallback()` 是保存后通知，不用于拒绝保存。校验拒绝时不会写入任何 App Config NVS 字段，也不会触发 `ChangeCallback` 或 `SaveCallback`。
+
 ### Web/WiFi/Auth 凭据泄露面收敛
 
 - Web/Auth 不再内置启用 admin/admin。未调用 `Esp32BaseWeb::setDefaultAuth()` 且没有已保存认证时，Web 服务不会启动；仅显式启用 `ESP32BASE_WEB_ALLOW_INSECURE_DEFAULT_AUTH=1` 的受控开发固件会使用内置 `admin/admin` 兜底并输出 WARN。

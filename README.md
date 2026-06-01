@@ -102,7 +102,7 @@ build_flags =
   -D ESP32BASE_APP_CONFIG_MAX_FIELDS=8
 ```
 
-App Config 支持 string、int、decimal 定点数、bool 和 enum 字段；保存时后端重新校验并只写入实际变化字段。注册传入的字符串和 enum option 数组需保持固件生命周期有效。标记为重启后生效的字段保存后会在未重启会话内持续提示旧值和已保存新值，适合低频修改的小型业务配置。
+App Config 支持 string、int、decimal 定点数、bool 和 enum 字段；保存时后端重新校验并只写入实际变化字段。需要只读模式、未来配置版本或业务版本不兼容时拒绝整页提交的场景，应使用 `setPageValidateCallback()` 做保存前 veto；该回调可读取本次提交的全部字段，返回 false 时不会写入任何 App Config NVS 字段。`setSaveCallback()` 只用于保存后通知，不用于拒绝保存。注册传入的字符串和 enum option 数组需保持固件生命周期有效。标记为重启后生效的字段保存后会在未重启会话内持续提示旧值和已保存新值，适合低频修改的小型业务配置。
 
 Web 页面应优先使用 Esp32Base 的 UI baseline、helper 和页面能力块；不要在业务项目里为样式问题临时复制 CSS 或绕开基础库。单字段轻量编辑可使用行内编辑 helper，小型 1-3 字段表单可使用弹层表单 helper；二者会在支持 `fetch` 的浏览器中局部提交和局部替换，禁用 JS 时仍回退到普通表单提交。需要业务自控打开/关闭时，也可直接使用原生 `<dialog class="panel eb-modal">` 并复用 `fieldgrid`、`actions`、`btnlink`。找不到合适页面能力块时，先查看 [Web UI 页面结构与样式基线](docs/11_web_ui_baseline.md)，并优先回到 Esp32Base 评估是否补充统一能力。
 
