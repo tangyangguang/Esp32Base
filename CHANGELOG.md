@@ -4,6 +4,12 @@
 
 ## 2026-06-01
 
+### App Config 保存前核对区交互优化
+
+- `/esp32base/app-config` 首次点击 `Save App Config` 时不再主动 `scrollIntoView()`，确认区改为居中 review 浮层，避免保存前 review 区出现闪烁、页面跳动、滚动条位置突变，以及确认按钮落到视口外。
+- Confirm changes 区域继续保持中性 review 语义，同时优化表格间距、旧值/新值列权重、分组底色和按钮对齐；变更列表在浮层内滚动，`Cancel` 仍为低权重中性按钮，`Confirm Save` 保持主操作并和取消按钮居中显示。
+- App Config 保存流程、POST 参数、revision 校验、服务端校验、PRG 跳转和 pending restart 语义不变。
+
 ### 慢请求和慢循环日志降级
 
 - Web `slow_request` 中非 GET 操作和 Health `loop_slow` 从 WARN 降为 INFO；默认 WARN 系统诊断日志不再记录这类性能提示，现场排查时可把 System Logs/FileLog 模式切到 INFO 查看。

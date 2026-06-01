@@ -548,7 +548,7 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Stored value");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Device code");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Confirm changes");
-    RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "id='acbox' class='confirmbox'><h2>Confirm changes</h2>");
+    RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "id='acbox' class='confirmbox' aria-hidden='true'><h2>Confirm changes</h2>");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Save App Config");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "data-group='General'");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "class=\"acgroup\"");
