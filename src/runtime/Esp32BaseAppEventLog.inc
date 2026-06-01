@@ -65,6 +65,10 @@ void appEventSetError(const char* error) {
     esp32base_internal::copySafe(g_appEventLastError, sizeof(g_appEventLastError), error ? error : "error");
 }
 
+void appEventClearError() {
+    g_appEventLastError[0] = '\0';
+}
+
 void appEventMarkFault(const char* error) {
     appEventSetError(error);
     g_appEventReady = false;
@@ -626,6 +630,7 @@ bool appEventFillRecord(const Esp32BaseAppEventLog::Event& event, Esp32BaseAppEv
 
 bool Esp32BaseAppEventLog::begin() {
     if (g_appEventReady) {
+        appEventClearError();
         return true;
     }
     if (g_appEventFault) {
@@ -700,6 +705,7 @@ bool Esp32BaseAppEventLog::append(const Event& event) {
     }
     appEventApplyHeader(nextHeader, inactiveHeader);
     g_appEventValidCount = nextValidCount;
+    appEventClearError();
     return true;
 }
 
@@ -714,6 +720,7 @@ bool Esp32BaseAppEventLog::readLatest(uint16_t offset, uint16_t limit, ReadCallb
         return false;
     }
     if (offset >= g_appEventValidCount || limit == 0) {
+        appEventClearError();
         return true;
     }
 
@@ -745,6 +752,8 @@ bool Esp32BaseAppEventLog::readLatest(uint16_t offset, uint16_t limit, ReadCallb
     if (skipped > 0) {
         appEventSetError("record_skipped");
         ESP32BASE_LOG_W("app_events", "read_skipped_records count=%u", static_cast<unsigned>(skipped));
+    } else {
+        appEventClearError();
     }
     appEventUpdateValidCountAfterScan(validSeen, scanned);
     return true;
@@ -768,6 +777,8 @@ bool Esp32BaseAppEventLog::readStoreInfo(StoreInfo& info) {
     info.faulted = g_appEventFault;
     if (!info.ready && !info.faulted) {
         appEventSetError("not_ready");
+    } else if (info.ready && !info.faulted) {
+        appEventClearError();
     }
     return info.ready && !info.faulted;
 }
@@ -783,6 +794,7 @@ bool Esp32BaseAppEventLog::readStoreRecords(uint16_t offset, uint16_t limit, Sto
         return false;
     }
     if (offset >= g_appEventCount || limit == 0) {
+        appEventClearError();
         return true;
     }
 
@@ -796,6 +808,7 @@ bool Esp32BaseAppEventLog::readStoreRecords(uint16_t offset, uint16_t limit, Sto
         ++emitted;
         yield();
     }
+    appEventClearError();
     return true;
 }
 
@@ -822,6 +835,7 @@ bool Esp32BaseAppEventLog::clear() {
         return false;
     }
     ESP32BASE_LOG_W("app_events", "store_cleared path=%s next_id=%lu", kAppEventPath, static_cast<unsigned long>(g_appEventNextId));
+    appEventClearError();
     return true;
 }
 

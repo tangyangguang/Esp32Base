@@ -143,9 +143,11 @@
 - Web System 页只能设置 Off/ERROR/WARN/INFO，非法 POST 值必须失败。
 - Web System 页切换 FileLog 模式时，WARN 审计日志必须包含上一次模式和新模式。
 - FileLog 配置模式开启但运行期因 FS 写入故障停写时，Status、System Logs、System 页必须显示 `write fault`，并说明已有日志可能仍可读取，不能显示成 `disabled`。
+- FileLog 配置模式开启但 FS/init 前置条件不满足时，Status、System Logs、System 页必须显示 `unavailable`，不能显示成用户关闭的 `disabled`。
 - FileLog 模式为 OFF 时，System Logs 和 System 页必须醒目显示 `disabled`，并说明新日志不会写入。
 - FileLog OFF 后 System Logs 页面仍能查看已有历史 segment。
 - `GET /esp32base/logs` 和 `GET /esp32base/logs/raw` 必须只读，不得主动 `flush()`、创建、清空、重建或改变 FileLog fault 状态；需要写入/清理/格式化的维护动作必须走 POST。
+- System 页格式化 LittleFS 成功并重新 mount 后，启用 App Events 时必须重新创建 `/app/events.bin`，后续 append/read 不得沿用旧 head/count。
 - `setSerialLevel(NONE)` 后 Serial 不输出，但 FileLog 仍按当前模式写入。
 - `setRuntimeLevel(NONE)` 后 Serial 和 FileLog 都停止。
 - WARN/ERROR 立即写入。
@@ -174,6 +176,9 @@
 - App Events 双 header 损坏进入 fault，不自动扫描或清空；单条 record CRC 错误应跳过并暴露 `record_skipped`，完整扫描后 `count()` 收敛到可读记录数，I/O 读取失败才使 `readLatest()` 返回 false。
 - `readLatest()`、`readStoreInfo()` 和 `readStoreRecords()` 不得从只读路径隐式调用 `begin()` 或创建 store。
 - `Esp32BaseAppEventLog::clear()` 幂等，清空后保留递增 id 并可继续写入。
+- App Events 成功 `begin/append/read/clear` 后不得保留旧 `lastError()`；`record_skipped` 只在本次读取确实跳过损坏记录时出现。
+- FS 管理页不得允许普通上传、覆盖或删除 `/app/events.bin`；应提示 `Target is reserved for App Events` 或 `reserved_path`。
+- CSV 文本字段必须防护 spreadsheet formula 前缀，不能只做 CSV 引号转义。
 - `/esp32base/fs?manage=1` 对 `unreadable` 文件仍必须提供单文件删除入口，但不能提供下载入口。
 - 单文件删除失败后应尝试截断为 0；如果因此释放可见文件占用，页面不能只显示 `delete_failed`。
 - 清理文件后如果 FileLog 处于写入故障保护，应重新加载当前 FileLog 模式以便恢复写入。

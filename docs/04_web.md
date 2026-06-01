@@ -217,9 +217,9 @@ System 维护页：
 - 重启和格式化等危险操作必须分组显示，避免按钮与下一项标题贴得太近。
 - 启用 Watchdog 的 profile 显示 Watchdog lifetime/trip 小计维护；当 `wdt_trip_base` 大于 lifetime 时显示 `invalid baseline`，Reset Watchdog Trip 写入并回读确认 `eb_sys.wdt_trip_base` 和 `eb_sys.wdt_trip_time`，不清 `eb_sys.wdt_cnt`。
 - 启用 FS 的 profile 显示 `Format LittleFS`，该操作会删除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth 或 NVS 配置。
-- 启用 FileLog 的 profile 显示系统诊断日志模式设置、运行态和 `Clear system logs`；模式设置只接受 OFF、ERROR、WARN、INFO，保存后立即生效并写入 `eb_log.mode`，清空日志只接受 POST，表单使用 `confirm()` 和 `once(form)`，成功后回到 System 页面显示结果。运行态为 `write fault` 时使用 WARN notice，表示配置模式仍开启，但 FileLog 因 FS 写入故障被运行期保护停写；已有日志仍可能可读，不应显示成 `disabled`。运行态为 `disabled` 时使用 INFO notice，明确 FileLog 模式为 OFF，新日志不会写入。
+- 启用 FileLog 的 profile 显示系统诊断日志模式设置、运行态和 `Clear system logs`；模式设置只接受 OFF、ERROR、WARN、INFO，保存后立即生效并写入 `eb_log.mode`，清空日志只接受 POST，表单使用 `confirm()` 和 `once(form)`，成功后回到 System 页面显示结果。运行态为 `write fault` 时使用 WARN notice，表示配置模式仍开启，但 FileLog 因 FS 写入故障被运行期保护停写；已有日志仍可能可读，不应显示成 `disabled`。运行态为 `unavailable` 时使用 WARN notice，表示配置模式开启但 FS/init 前置条件未满足。运行态为 `disabled` 时使用 INFO notice，明确 FileLog 模式为 OFF，新日志不会写入。
 - 启用 App Events 的 profile 显示 `Clear App Events` 危险操作；它只清空 `/app/events.bin` 应用业务事件日志，不清系统诊断日志、WiFi、Web Auth、NVS 配置或其他 LittleFS 文件。
-- 格式化 FS 是显式 POST 操作；执行前 flush 系统诊断日志，成功后重新 mount FS，并重新加载 FileLog 模式；成功提示应明确显示在 System 页面，同时输出 WARN 级维护日志记录请求、format/mount/FileLog reload 结果。重启请求同样输出 WARN 级维护日志。
+- 格式化 FS 是显式 POST 操作；执行前 flush 系统诊断日志，成功后重新 mount FS、重新加载 FileLog 模式，并在 App Events 启用时重新创建 `/app/events.bin`；成功提示应明确显示在 System 页面，同时输出 WARN 级维护日志记录请求、format/mount/FileLog reload/App Events recreate 结果。重启请求同样输出 WARN 级维护日志。
 - 普通 `GET` 页面慢请求只输出 DEBUG；`POST` 等操作慢请求继续输出 WARN。
 - API 层仍建议要求 POST，不使用 GET 触发重启。
 - 内置危险 POST 包括 WiFi 保存/清除、App Config 保存、Hostname 保存、Auth 保存、重启、System 操作、System Logs clear、Web OTA upload/done；跨站 `Origin` 或 `Referer` 会被拒绝。
@@ -290,7 +290,7 @@ App Events 页面：
 - 清空事件日志是危险操作，只在 System 页面提供 `POST /esp32base/tools/app-events-clear`，必须通过 Web Auth 和同源检查，成功后 303 回到 System 页面。
 - JSON API 事件包含 `epochSec`、`resolvedEpochSec`、`bootId`、`uptimeSec` 和 64-bit 派生 `uptimeMs`；`resolvedEpochSec=0` 表示没有可信真实时间。
 - JSON API 继续只输出有效事件，适合业务系统创建自己的业务事件列表和详情页；业务页面应使用业务语言解释事件，只展示业务需要的字段，不展示 `magic/crc16/reserved/valueMask/flags` 等内部字段。
-- JSON API 和 HTML 页面都必须使用统一 JSON/HTML escape；CSV 导出使用 CSV escape，保留当前筛选条件，并包含 slot/status/crc 等存储字段。CSV 读取失败时必须在输出中追加可见错误行，避免客户端误以为 200 响应是完整导出。
+- JSON API 和 HTML 页面都必须使用统一 JSON/HTML escape；CSV 导出使用 CSV escape 和 spreadsheet formula 前缀防护，保留当前筛选条件，并包含 slot/status/crc 等存储字段。CSV 读取失败时必须在输出中追加可见错误行，避免客户端误以为 200 响应是完整导出。
 - 该页面明确和 `/esp32base/logs` 分离：`/esp32base/logs` 是 System Logs，展示 `Esp32BaseFileLog` 系统诊断日志，记录启动、联网、OTA、基础库运行等系统信息；`/esp32base/app-events` 是应用业务事件日志，记录应用显式写入的业务事件。
 - 应用页面不应把 boot/reset、WiFi、NTP、OTA、LittleFS、FileLog fault 或基础库健康状态重复写入 App Events；这些系统诊断信息继续由 Status、System diagnostics 和 FileLog 展示。同一故障如果同时影响业务，App Events 应只表达业务影响、保护动作、跳过原因、用户维护结果或外部决策结果。App Events 页面只用于查看应用因业务原因写入的事件。
 
@@ -305,9 +305,9 @@ App Events 页面：
 - `/esp32base` 是只读设备体检页，采用诊断优先结构：按 Device、Network、Runtime Health、Storage & Logs、Firmware & OTA、Hardware、Partition Table 展示调试信息，不额外显示相邻重复的总览预览块。
 - Device 显示名称、hostname、固件、profile、uptime 和 boot count；Network 显示 WiFi/IP/RSSI、power save、STA MAC 和 AP MAC。
 - Runtime Health 显示 heap free/min/max alloc/total、Watchdog、NTP time、last reset 和 last wake；heap 与 Watchdog 的多值信息使用紧凑子指标展示，避免逗号串联造成阅读困难。
-- Storage & Logs 显示 FS used/free/total、Details 入口、文件/目录数量、已统计文件大小、other/overhead、FileLog enabled/disabled/write fault、日志级别、当前文件大小、日志总占用/上限和路径；File details 入口并入 FS 行，FileLog level/current/used/limit 合并为一行子指标，避免右侧卡片明显高于 Runtime Health；Top 文件列表只放在 `/esp32base/fs` 详情页，避免状态页被低频诊断明细撑高；Hardware 显示芯片型号、revision、CPU、SDK、Flash、PSRAM 和 eFuse MAC。
+- Storage & Logs 显示 FS used/free/total、Details 入口、文件/目录数量、已统计文件大小、other/overhead、FileLog enabled/disabled/unavailable/write fault、日志级别、当前文件大小、日志总占用/上限和路径；File details 入口并入 FS 行，FileLog level/current/used/limit 合并为一行子指标，避免右侧卡片明显高于 Runtime Health；Top 文件列表只放在 `/esp32base/fs` 详情页，避免状态页被低频诊断明细撑高；Hardware 显示芯片型号、revision、CPU、SDK、Flash、PSRAM 和 eFuse MAC。
 - `/esp32base/fs` 默认是只读 LittleFS 详情页，显示 Summary、Top 10 最大文件和最多 128 项文件树；文件树提供单文件下载；当文件声明有大小但首块无法读取时，Action 显示 `unreadable`，下载路由返回 `500 File read failed`，避免浏览器保存 0 字节伪成功文件；当 FS used 明显大于可见文件合计时显示内部/历史占用告警，提示删除可见文件不一定释放全部空间。业务侧如果使用 `Esp32BaseFs` 读写文件，也必须检查返回值；逻辑大小存在不代表内容块一定可读。
-- `/esp32base/fs?manage=1` 增加单文件删除和受限上传，不提供目录删除、批量删除、编辑、重命名、移动或任意路径输入；删除必须通过 `POST /esp32base/fs/delete -> 303 -> GET`，格式化仍只在 System 页危险操作区。上传流程是“选择已有设备目录 + 选择本地文件”，上传保留本地文件名，不创建目录，可选择任何已有目录；同名文件由 `/esp32base/fs/check` 触发浏览器确认后再带 `overwrite=1` 上传；路径过长会拒绝，不截断。上传完成会校验最终文件大小和末端可读性；上传到 FileLog 路径前会先 flush，上传结束后重新加载 FileLog 运行态。不可读文件在管理模式仍显示删除入口，因为删除只依赖路径存在且是文件，不要求内容块可读。底层删除失败后会尝试截断文件为 0；删除或清理成功后若 FileLog 之前处于 `write fault`，会重新加载当前 FileLog 模式以便恢复写入。
+- `/esp32base/fs?manage=1` 增加单文件删除和受限上传，不提供目录删除、批量删除、编辑、重命名、移动或任意路径输入；删除必须通过 `POST /esp32base/fs/delete -> 303 -> GET`，格式化仍只在 System 页危险操作区。上传流程是“选择已有设备目录 + 选择本地文件”，上传保留本地文件名，不创建目录，可选择任何已有目录；同名文件由 `/esp32base/fs/check` 触发浏览器确认后再带 `overwrite=1` 上传；路径过长会拒绝，不截断。上传完成会校验最终文件大小和末端可读性；上传到 FileLog 路径前会先 flush，上传结束后重新加载 FileLog 运行态。App Events 启用时，`/app/events.bin` 显示为 `app events store`，普通上传或删除返回 `Target is reserved for App Events` / `reserved_path`，必须使用 System 页 `Clear App Events`。不可读文件在管理模式仍显示删除入口，因为删除只依赖路径存在且是文件，不要求内容块可读；基础库内部 store 例外。底层删除失败后会尝试截断文件为 0；删除或清理成功后若 FileLog 之前处于 `write fault`，会重新加载当前 FileLog 模式以便恢复写入。
 - Firmware & OTA 显示当前固件大小、运行 app slot、下一 OTA slot、Max OTA upload、OTA headroom、rollback 状态，以及仅在存在错误时显示的 Last OTA error；`OTA headroom` 表示 `target slot - current sketch`，Max OTA upload 才是上传硬上限。
 - 启用 Watchdog 时显示 `enabled, lifetime resets N, trip resets M` 或 invalid baseline 和 trip reset time；Reset Trip 保存时间使用和页面 NTP time 行一致的可信 epoch 判断，无可用时间则显示 `unknown (time unavailable)`。
 - Partition Table 使用运行时分区表展示 Name、Type、SubType、Offset、Size、Role；Role 用于标识 running app、next OTA、app data、NVS config、OTA state、coredump 等。

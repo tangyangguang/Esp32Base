@@ -85,8 +85,13 @@ checks = [
     ),
     (
         "src/web/internal Web modules",
-        'Esp32BaseFileLog::faulted() ? "write fault"',
+        'return "write fault";',
         "Status/System Logs pages must distinguish runtime write fault from disabled mode",
+    ),
+    (
+        "src/web/internal Web modules",
+        'return Esp32BaseFileLog::mode() == Esp32BaseFileLog::OFF ? "disabled" : "unavailable";',
+        "Status/System Logs pages must distinguish FileLog unavailable from user-disabled mode",
     ),
     (
         "src/web/internal Web modules",
@@ -97,6 +102,11 @@ checks = [
         "src/web/internal Web modules",
         "System log mode is OFF. Existing system diagnostic logs are historical; new logs are not written.",
         "System Logs/System pages must make disabled FileLog state visible",
+    ),
+    (
+        "src/web/internal Web modules",
+        "System logs are unavailable because FileLog could not initialize with the current filesystem state.",
+        "System Logs/System pages must explain FileLog unavailable state",
     ),
     (
         "src/web/internal Web modules",

@@ -9,6 +9,11 @@
 - `GET /esp32base/logs` 和 `GET /esp32base/logs/raw` 现在只读取已经落盘的系统诊断日志快照，不再为了查看页面主动调用 `Esp32BaseFileLog::flush()`；需要写入、清空、格式化或重启的维护动作继续走 POST，避免认证后的页面查看、iframe 加载或监控抓取产生 LittleFS 写入副作用。
 - `examples/full_demo` 和 `examples/web_ui_gallery` 的业务示例 POST 已统一改用 `Esp32BaseWeb::checkPostAllowed(context)`，并在 selftest 中覆盖跨站 `Origin` 返回 403，避免业务项目照抄旧的 `checkAuth() + isMethod(POST)` 模式。
 - 静态检查脚本补充 System Logs GET 不 flush、示例 POST 必须使用 `checkPostAllowed()`、示例 selftest 必须覆盖 hostile Origin 的回归检查。
+- System Logs/Web 状态现在区分 `disabled`、`unavailable` 和 `write fault`：`disabled` 是用户将模式设为 OFF，`unavailable` 是模式开启但 FileLog 因 FS/init 前置条件无法启用，`write fault` 是运行期写入失败后的保护停写。
+- System 页格式化 LittleFS 成功并重新 mount 后，会重新创建 App Events store，避免 `/app/events.bin` 已被格式化删除但运行态仍保持旧 head/count。
+- FS 管理页会识别 `/app/events.bin` 为 App Events 内部 store，普通上传、覆盖或删除会被拒绝；需要清空应用事件时仍通过 System 页 `Clear App Events`。
+- CSV 导出统一对 `= + - @` 等 spreadsheet formula 前缀加安全前缀；这是在 CSV 语法转义之外的表格打开防护。
+- App Events 成功 `begin/append/read/clear` 后会清理旧 `lastError()`；只有当前失败或本次读取确实跳过损坏记录时才保留诊断文本。
 
 ### 应用事件日志
 

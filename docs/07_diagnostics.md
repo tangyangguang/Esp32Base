@@ -138,10 +138,12 @@
 - Watchdog 启用后，在 setup、Web handler 或业务回调里同步 append/clear 不应因为 LittleFS flush 较慢触发 loopTask WDT。
 - 双 header 损坏、文件尺寸错误、写后校验失败等结构性问题进入 fault，不自动清空；单条记录 `crc16` 错误应跳过、暴露 `record_skipped`，完整扫描后 `count()` 应收敛到可读取记录数，并继续允许 append。
 - clear 幂等，清空后可继续写入；业务恢复出厂或清空业务记录时可显式调用。
+- System 页格式化 LittleFS 成功并重新 mount 后，App Events store 必须重新创建并清理旧运行态；FS 管理页不得允许普通上传、覆盖或删除 `/app/events.bin`。
 - Web 页面支持等级、时间类型、来源、类型、原因和关键词筛选；JSON API 和 CSV 导出必须和页面使用同一筛选语义，并避免筛选请求为了 total 重复全量扫描；超长或非法的精确筛选参数必须返回 `400 invalid_filter`，不得截断后匹配。
 - `epochSec` 或当前 boot 可解析时显示真实时间；不可解析时显示 `uptime N ms` 和 `boot N`，不得伪造日期。
-- Web 页面、JSON API 和 CSV 导出分别验证 HTML/JSON/CSV escape。
+- Web 页面、JSON API 和 CSV 导出分别验证 HTML/JSON/CSV escape；CSV 文本字段还必须防护 `= + - @` 等 spreadsheet formula 前缀。
 - CSV 导出读取失败时必须输出可见错误行或错误状态，不得静默返回截断内容。
+- App Events 成功 `begin/append/read/clear` 后不得保留旧 `lastError()`；只有当前失败或本次读取确实跳过损坏记录时才展示诊断文本。
 - `POST /esp32base/tools/app-events-clear` 必须需要认证、POST 和同源检查；GET 不得触发清空，App Events 页面本身不得放清空按钮。
 - `GET /esp32base/app-events`、JSON API 和 CSV 导出不得隐式创建或重建 `/app/events.bin`；App Events 未 ready 时应展示 unavailable/fault。
 - `/esp32base/logs` 不显示 App Events，App Events 不混入 WiFi、OTA、NTP、启动、健康状态等系统诊断日志。
@@ -200,6 +202,7 @@ CI 应覆盖核心矩阵，release 前执行完整矩阵。
 - LittleFS 二进制文件读写和目录列举；文件逻辑大小存在但内容不可读时，FS API 应返回失败并由 `/esp32base/fs` 标记 `unreadable`。只读模式不提供下载，管理模式仍允许单文件删除，便于清理损坏文件。
 - FS 满或损坏时触发 Web WARN 诊断，不应因为 FileLog 写入失败导致 task WDT 重启。
 - FileLog 默认 `4 × 32KB` 轮转。
+- FileLog mode 开启但 FS/init 前置条件不满足时，Web 应显示 `unavailable`，不能误显示为用户关闭的 `disabled`。
 - System Logs 页面可读取 history/current。
 - System Logs 页面和 raw endpoint 的 GET 读取必须是只读快照，不主动 `flush()` 或改变 FileLog 运行态；清空、格式化、重启等维护副作用必须走 POST。
 - System Logs 页面清空后可继续写 current。

@@ -22,6 +22,7 @@
 - 长时间 handler 会阻塞其他请求，建议单次 handler < 200ms。
 - 不支持 WebSocket、SPA、大型前端资源管理器、多用户权限和会话系统。
 - System Logs 的 GET 页面只读取已落盘的系统诊断日志快照，不为了“立即看到缓存中日志”主动 flush；低优先级缓存日志按常规 flush interval 落盘，清空、格式化、重启等维护动作仍必须走 POST。
+- System Logs 的 `unavailable` 表示模式开启但当前 FS/init 前置条件无法启用系统诊断日志；`disabled` 才表示用户把模式设为 OFF。
 - OTA 上传页只复用 Web Basic Auth，不提供第二套认证。
 - ArduinoOTA/espota 不提供用户名，认证只使用当前 Web Auth 密码。
 
@@ -61,6 +62,7 @@ App Events 边界：
 
 - App Events 是固定容量环形事件日志，适合低频关键业务事件，不是业务长期数据模型。
 - 用水量统计、报表数据、累计量、传感器采样历史、完整执行历史、大 payload、高频明细和不允许覆盖的业务数据，应由业务自己的数据文件或存储结构负责。
+- `/app/events.bin` 是基础库内部 store；普通 FS 管理页不允许上传、覆盖或删除它，维护时使用 System 页的 App Events 清空或 LittleFS 格式化动作。
 - App Events 也不是第二套系统诊断日志。boot/reset/restart reason、WiFi、NTP、OTA、LittleFS、FileLog fault、基础库健康状态等 Esp32Base 系统事件仍归 Status、System diagnostics 和 FileLog；App Events 只记录应用业务决策或业务可解释事件。同一故障可同时有系统诊断日志和 App Event，但前者写技术事实和内部错误链路，后者写业务影响、保护动作、跳过原因、用户维护结果或外部决策结果。
 
 ## 6. 文件系统边界

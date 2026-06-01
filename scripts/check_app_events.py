@@ -138,9 +138,12 @@ require("src/web/internal/WebAppEvents.cpp", "# error,", "CSV export must make r
 require("src/web/internal/WebLayout.cpp", "/esp32base/app-events", "system nav must link App Events")
 require("src/web/internal/WebTools.cpp", "handleToolsAppEventsClearPost", "System page must own Clear App Events danger action")
 require("src/web/internal/WebTools.cpp", "App Events cleared", "System page must report cleared App Events")
+require("src/web/internal/WebTools.cpp", "Esp32BaseAppEventLog::clear()", "format FS must recreate App Events store after remount")
+require("src/web/internal/WebTools.cpp", "app_events_recreate", "format FS logs must expose App Events recreate result")
 if "/esp32base/app-events/clear" in read("src/web/Esp32BaseWeb.cpp") or "/esp32base/app-events/clear" in read("src/web/internal/WebAppEvents.cpp"):
     errors.append("App Events clear action must not remain on the App Events page or route")
 require("src/web/Esp32BaseWeb.cpp", "/esp32base/tools/app-events-clear", "Clear App Events route must live under System tools")
+require("src/web/Esp32BaseWeb.cpp", "first == '=' || first == '+' || first == '-' || first == '@'", "CSV export must guard spreadsheet formula prefixes")
 require("src/web/internal/WebLayout.cpp", "pagination.perPage == 0 ? 10", "pagination default must be 10")
 require("src/web/Esp32BaseWeb.cpp", "15, 20, 30, 50", "pagination options must include 10/15/20/30/50")
 if "15, 20, 30, 50, 100" in read("src/web/Esp32BaseWeb.cpp"):
@@ -148,6 +151,9 @@ if "15, 20, 30, 50, 100" in read("src/web/Esp32BaseWeb.cpp"):
 require("src/web/internal/WebLogs.cpp", "Esp32BaseFileLog", "System Logs page must remain FileLog-oriented")
 if (ROOT / "src/web/internal/WebLogs.cpp").exists() and "Esp32BaseAppEventLog" in read("src/web/internal/WebLogs.cpp"):
     errors.append("src/web/internal/WebLogs.cpp: System Logs page must not mix in App Events")
+require("src/web/internal/WebFs.cpp", "appEventsOwnsPath", "FS management must recognize App Events store as an internal path")
+require("src/web/internal/WebFs.cpp", "Target is reserved for App Events", "FS upload must reject overwriting the App Events store")
+require("src/web/internal/WebFs.cpp", "reason=app_events_store", "FS delete/upload must log reserved App Events store attempts")
 web_logs_source = read("src/web/internal/WebLogs.cpp")
 for signature in ("void handleLogsPage", "void handleLogsRaw"):
     body = function_body(web_logs_source, signature)
@@ -172,6 +178,7 @@ require("docs/04_web.md", "/esp32base/app-events", "Web docs must include App Ev
 require("docs/04_web.md", "事件日志", "Web docs must name App Events as event log, not diagnostic page")
 require("docs/04_web.md", "System Logs", "Web docs must expose the user-facing system logs label")
 require("docs/04_web.md", "不应把 boot/reset", "Web docs must prevent duplicating system events in App Events")
+require("docs/04_web.md", "Target is reserved for App Events", "Web docs must document FS upload guard for the App Events store")
 require("docs/03_api.md", "loop/system task", "API docs must document App Events task ownership boundary")
 require("docs/03_api.md", "checkPostAllowed", "API docs must document POST same-origin helper")
 require("docs/06_memory_budget.md", "188 KiB", "memory budget must include default app event storage")

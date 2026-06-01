@@ -193,7 +193,7 @@ public:
 };
 ```
 
-`isEnabled()` 表示当前运行期是否还在写系统诊断日志；`mode()` 表示配置模式。FS 满、文件损坏或底层写失败时，FileLog 会进入运行期故障保护：`faulted()` 返回 true，`mode()` 仍保留用户配置，`isEnabled()` 返回 false，避免后续 WARN/ERROR 继续冲击异常文件系统。Web 显示为 `write fault`，表示新日志写入已停，不表示已有日志一定不可读取。清理/格式化文件系统或重新保存 FileLog 模式后可重试启用。
+`isEnabled()` 表示当前运行期是否还在写系统诊断日志；`mode()` 表示配置模式。FS 满、文件损坏或底层写失败时，FileLog 会进入运行期故障保护：`faulted()` 返回 true，`mode()` 仍保留用户配置，`isEnabled()` 返回 false，避免后续 WARN/ERROR 继续冲击异常文件系统。Web 显示为 `write fault`，表示新日志写入已停，不表示已有日志一定不可读取。若 `mode()!=OFF`、`isEnabled()==false` 且 `faulted()==false`，Web 显示为 `unavailable`，表示系统日志配置开启但 FS 未 ready、路径/容量前置条件或初始化状态暂时不满足；`disabled` 只表示模式为 OFF。清理/格式化文件系统或重新保存 FileLog 模式后可重试启用。
 
 最小可运行示例：
 
@@ -985,10 +985,10 @@ Route 缓冲机制：
 - `/esp32base/logs` 和 `/esp32base/logs/raw` 是只读系统诊断日志查看入口，只读取已经落盘的 FileLog segment 快照；GET 读取不得主动 `flush()`、创建、清空、重建文件或改变 FileLog fault 状态。INFO 缓存中的新日志按常规 flush interval 落盘，清空/格式化/重启等维护副作用必须通过 POST 路径。
 - `/esp32base/fs` 是启用 FS profile 时注册的 LittleFS 诊断页，默认只读，显示 Summary、Top 10 最大文件和最多 128 项文件树；文件树提供单文件下载；当文件声明有大小但首块无法读取时，Action 显示 `unreadable`，不再给出会生成空文件的下载按钮；当 `FS used` 明显大于可见文件合计时提示内部/历史占用异常。
 - `/esp32base/fs/download?path=/file` 下载一个已存在且可读取的文件，复用 Basic Auth 和路径校验，目录、缺失文件和非法路径不会下载；如果文件声明有大小但无法读取首块，返回 `500 File read failed`。
-- `/esp32base/fs?manage=1` 进入单文件删除和受限上传管理模式；`POST /esp32base/fs/delete` 只接受一个已存在文件路径，复用 Basic Auth、同源检查和 `POST -> 303 -> GET`，不提供目录删除、批量删除、编辑或任意路径输入。不可读文件仍允许删除，便于清理损坏文件；删除不以文件内容可读为前提。
+- `/esp32base/fs?manage=1` 进入单文件删除和受限上传管理模式；`POST /esp32base/fs/delete` 只接受一个已存在文件路径，复用 Basic Auth、同源检查和 `POST -> 303 -> GET`，不提供目录删除、批量删除、编辑或任意路径输入。不可读文件仍允许删除，便于清理损坏文件；删除不以文件内容可读为前提。App Events 启用时，`/app/events.bin` 是基础库内部 store，FS 管理页会拒绝普通上传、覆盖和删除，应使用 System 页 `Clear App Events`。
 - `/esp32base/fs/check?dir=/data&name=records.bin` 是上传前检查接口，复用 Basic Auth，按“已有目录 + 本地文件名”计算目标路径，返回目标是否存在、是否是目录以及是否允许上传；路径拼接如果超过内部路径上限会直接拒绝，不截断成另一个目标。
-- `POST /esp32base/fs/upload` 是 multipart 上传接口，复用 Basic Auth 和同源检查；上传保留本地文件名，可以写入任何已有目录，不创建目录。目标文件存在时必须传 `overwrite=1` 才会覆盖；上传到 FileLog 路径前会先 flush，上传结束后重新加载 FileLog 运行态。上传完成后会校验最终文件大小和末端可读性；上传只负责写入 LittleFS，不校验业务数据语义、索引、NVS 状态或运行时缓存。
-- `/esp32base/tools` System 页承载低频维护入口和操作，App Config 启用时作为首个入口显示，后面是 WiFi Setup、Web Auth、Firmware OTA、File system 直达入口、hostname 保存、Watchdog trip reset、重启设备；启用 FS 的 profile 还提供手动格式化 LittleFS 操作，会清除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth 或 NVS 配置。
+- `POST /esp32base/fs/upload` 是 multipart 上传接口，复用 Basic Auth 和同源检查；上传保留本地文件名，可以写入任何已有目录，不创建目录。目标文件存在时必须传 `overwrite=1` 才会覆盖；上传到 FileLog 路径前会先 flush，上传结束后重新加载 FileLog 运行态；目标为 `/app/events.bin` 时返回 `Target is reserved for App Events`。上传完成后会校验最终文件大小和末端可读性；上传只负责写入 LittleFS，不校验业务数据语义、索引、NVS 状态或运行时缓存。
+- `/esp32base/tools` System 页承载低频维护入口和操作，App Config 启用时作为首个入口显示，后面是 WiFi Setup、Web Auth、Firmware OTA、File system 直达入口、hostname 保存、Watchdog trip reset、重启设备；启用 FS 的 profile 还提供手动格式化 LittleFS 操作，会清除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth 或 NVS 配置。格式化后会重新 mount FS、reload FileLog，并在 App Events 启用时重新创建 `/app/events.bin`。
 - `/esp32base/auth` 是内置认证管理页面，受当前 Basic Auth 保护，提交成功后新账号密码立即生效。
 - Web Auth 认证优先级为：已保存认证 > 应用默认认证 > 库默认 `admin/admin`。
 - 内置 Web 不提供首次登录强制改密；量产或可被他人访问的设备应在业务启动时调用 `setDefaultAuth()` 或引导用户尽快保存新认证。
@@ -1007,7 +1007,7 @@ Route 缓冲机制：
 - `isMethod(METHOD_ANY)` 在有效 handler 请求中返回 true；`METHOD_ANY` 不作为实际请求方法返回。
 - `sendResponseHeader(name, value)` 可在 handler 内、响应开始前追加 HTTP 响应头；header name 仅允许字母、数字和 `-`，value 不允许控制字符且最大 127 字节。已进入 chunked 响应后调用会返回 false 并记录 WARN。
 - `beginResponse(code, contentType, filename)` 开始通用 chunked 响应，后续使用 `sendChunk()` 输出文本或 `sendBytes()` 输出二进制块，最后必须调用 `endResponse()`。
-- `beginText(code)` 等价于 `text/plain; charset=utf-8` chunked 响应；`beginCsv(code, filename)` 等价于 `text/csv; charset=utf-8`，filename 非空时发送 `Content-Disposition: attachment`。
+- `beginText(code)` 等价于 `text/plain; charset=utf-8` chunked 响应；`beginCsv(code, filename)` 等价于 `text/csv; charset=utf-8`，filename 非空时发送 `Content-Disposition: attachment`。`writeCsvEscaped()` 除了 CSV 引号转义，还会对 `= + - @` 等 spreadsheet formula 前缀加 `'`，降低运维人员用 Excel/Sheets 打开导出文件时的公式执行风险。
 - `beginResponse()` / `beginText()` / `beginCsv()` 只能在 handler 请求上下文中成功；handler 外、contentType 为空或超过 63 字节、filename 含不安全字符时返回 false 并记录 WARN。
 - 长响应的文本、PROGMEM head、二进制块和结束块发送过程中会主动让出调度；正文 data chunk 由基础库无堆分配 writer 输出并在发送前后喂 watchdog。客户端在发送前已经断开时后续 `sendChunk()` / `sendBytes()` 会停止继续输出。`endResponse()` 会在响应未标记为断开时发送最终 0-length chunk，保证 chunked 响应可被 HTTP 客户端正常判定结束。
 - 已经完整生成的小 JSON 优先使用 `sendJson(code, json)`；该路径发送固定 `Content-Length`，不进入 chunked 响应状态机。
@@ -1259,7 +1259,7 @@ Offset binary API 用于业务二进制定长记录、分页读取和环形覆�
 - `removeFile()` 在 `LittleFS.remove()` 失败后会尝试把目标文件截断为 0；如果删除失败但成功清空文件内容，也返回 true，用于 FS 满或坏文件场景下优先释放可见文件占用。
 - 需要固定容量环形文件时，应用应优先用 `createFixedFile()` 初始化或校验文件容量，再用 `writeBytesAt()` 覆盖记录槽位。
 - 业务代码必须检查所有 FS API 返回值；如果连续返回 false，不能继续假设记录已写入，应进入降级、清理或提示维护流程。
-- 系统诊断日志的实现/API 名称是 `Esp32BaseFileLog`。FileLog 会把追加、清空和轮转截断视为可能较慢的 FS 操作处理；即使 FS 已满或损坏，系统级 WARN 日志写入失败也不应导致 task WDT 重启。检测到 FileLog 写入故障后，会先在运行时停止继续写 FileLog，避免后续 WARN 重复冲击异常文件系统；Web Status/System Logs/System 页显示为 `write fault` 而不是 `disabled`，表示配置仍开启但运行保护停写。Web 清理、格式化或重新保存模式后可重新启用模式。
+- 系统诊断日志的实现/API 名称是 `Esp32BaseFileLog`。FileLog 会把追加、清空和轮转截断视为可能较慢的 FS 操作处理；即使 FS 已满或损坏，系统级 WARN 日志写入失败也不应导致 task WDT 重启。检测到 FileLog 写入故障后，会先在运行时停止继续写 FileLog，避免后续 WARN 重复冲击异常文件系统；Web Status/System Logs/System 页显示为 `write fault` 而不是 `disabled`，表示配置仍开启但运行保护停写。配置开启但 FS/init 前置条件不满足时显示 `unavailable`；只有模式 OFF 才显示 `disabled`。Web 清理、格式化或重新保存模式后可重新启用模式。
 
 Health 仅负责周期性采样、loop 周期统计和发布 `health.tick` 事件。heap、reset reason、WiFi state、FS state 等详情通过对应模块查询，Health 不重复包装所有字段。
 

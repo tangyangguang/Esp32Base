@@ -56,12 +56,19 @@ const char* fileLogModeName(Esp32BaseFileLog::Mode mode) {
 }
 
 const char* fileLogRuntimeStateName() {
-    return Esp32BaseFileLog::faulted() ? "write fault" : (Esp32BaseFileLog::isEnabled() ? "enabled" : "disabled");
+    if (Esp32BaseFileLog::faulted()) {
+        return "write fault";
+    }
+    if (Esp32BaseFileLog::isEnabled()) {
+        return "enabled";
+    }
+    return Esp32BaseFileLog::mode() == Esp32BaseFileLog::OFF ? "disabled" : "unavailable";
 }
 
 Esp32BaseWeb::UiTone fileLogRuntimeStateTone() {
     return Esp32BaseFileLog::faulted() ? Esp32BaseWeb::UI_WARN :
-           (Esp32BaseFileLog::isEnabled() ? Esp32BaseWeb::UI_OK : Esp32BaseWeb::UI_INFO);
+           (Esp32BaseFileLog::isEnabled() ? Esp32BaseWeb::UI_OK :
+            (Esp32BaseFileLog::mode() == Esp32BaseFileLog::OFF ? Esp32BaseWeb::UI_INFO : Esp32BaseWeb::UI_WARN));
 }
 
 bool fileLogHasRuntimeDetails() {
@@ -81,6 +88,8 @@ void sendFileLogRuntimeStateRow(const char* label) {
 void sendFileLogRuntimeNotice() {
     if (Esp32BaseFileLog::faulted()) {
         sendChunk("<p class='notice warn'>New system log writes are stopped after a FS write failure. Existing system diagnostic logs may still be readable. Clear space or save the system log mode again after maintenance.</p>");
+    } else if (!Esp32BaseFileLog::isEnabled() && Esp32BaseFileLog::mode() != Esp32BaseFileLog::OFF) {
+        sendChunk("<p class='notice warn'>System logs are unavailable because FileLog could not initialize with the current filesystem state. Check LittleFS, format if needed, or save the system log mode again after maintenance.</p>");
     } else if (Esp32BaseFileLog::mode() == Esp32BaseFileLog::OFF) {
         sendChunk("<p class='notice info'>System log mode is OFF. Existing system diagnostic logs are historical; new logs are not written.</p>");
     }
@@ -155,7 +164,7 @@ void handleToolsPage() {
     Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_TOOLS]);
     Esp32BaseWeb::sendPageTitle(g_builtinLabels[Esp32BaseWeb::BUILTIN_TOOLS], "Low-frequency device settings and maintenance actions.");
     if (g_server.hasArg("formatted")) {
-        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "LittleFS formatted", "System log mode was reloaded.");
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "LittleFS formatted", "System stores were recreated and system log mode was reloaded.");
     } else if (g_server.hasArg("logs_cleared")) {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "System logs cleared");
 #if ESP32BASE_ENABLE_APP_EVENTS
@@ -350,19 +359,32 @@ void handleToolsFormatFsPost() {
     const bool formatted = Esp32BaseFs::format();
     const bool mounted = formatted && Esp32BaseFs::begin();
     bool fileLogReloaded = false;
+    bool appEventsRecreated = false;
 #if ESP32BASE_ENABLE_FILELOG
     if (mounted) {
         fileLogReloaded = Esp32BaseFileLog::begin();
     }
 #endif
-    ESP32BASE_LOG_W("web", "fs_format_completed source=tools format=%s mount=%s filelog_reload=%s",
+#if ESP32BASE_ENABLE_APP_EVENTS
+    if (mounted) {
+        appEventsRecreated = Esp32BaseAppEventLog::clear();
+    }
+#endif
+    ESP32BASE_LOG_W("web", "fs_format_completed source=tools format=%s mount=%s filelog_reload=%s app_events_recreate=%s",
                     formatted ? "success" : "failed",
                     mounted ? "success" : "failed",
-                    fileLogReloaded ? "success" : "skipped");
-    if (formatted && mounted) {
+                    fileLogReloaded ? "success" : "skipped",
+                    appEventsRecreated ? "success" : "skipped");
+    if (formatted && mounted
+#if ESP32BASE_ENABLE_APP_EVENTS
+        && appEventsRecreated
+#endif
+    ) {
         redirectSeeOther("/esp32base/tools?formatted=1");
     } else {
-        redirectSeeOther(formatted ? "/esp32base/tools?error=mount_failed" : "/esp32base/tools?error=format_failed");
+        redirectSeeOther(!formatted ? "/esp32base/tools?error=format_failed" :
+                         !mounted ? "/esp32base/tools?error=mount_failed" :
+                         "/esp32base/tools?error=app_events_recreate_failed");
     }
 #else
     ESP32BASE_LOG_W("web", "fs_format_requested source=tools result=unavailable");

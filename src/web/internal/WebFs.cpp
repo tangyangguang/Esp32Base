@@ -73,7 +73,25 @@ void sendFsDownloadForm(const char* path) {
     sendChunk("<input class='secondary fsaction' type='submit' value='Download'></form>");
 }
 
+#if ESP32BASE_ENABLE_APP_EVENTS
+bool appEventsOwnsPath(const char* path) {
+    return path && strcmp(path, Esp32BaseAppEventLog::path()) == 0;
+}
+
+void sendFsReservedAppEventsAction() {
+    sendChunk("<div class='fsactions'>");
+    sendStatusTag(Esp32BaseWeb::UI_INFO, "app events store");
+    sendChunk("</div>");
+}
+#endif
+
 void sendFsFileActions(const char* path, bool manage) {
+#if ESP32BASE_ENABLE_APP_EVENTS
+    if (appEventsOwnsPath(path)) {
+        sendFsReservedAppEventsAction();
+        return;
+    }
+#endif
     sendChunk("<div class='fsactions'>");
     sendFsDownloadForm(path);
     if (manage) {
@@ -83,6 +101,12 @@ void sendFsFileActions(const char* path, bool manage) {
 }
 
 void sendFsUnreadableActions(const char* path, bool manage) {
+#if ESP32BASE_ENABLE_APP_EVENTS
+    if (appEventsOwnsPath(path)) {
+        sendFsReservedAppEventsAction();
+        return;
+    }
+#endif
     sendChunk("<div class='fsactions'>");
     sendStatusTag(Esp32BaseWeb::UI_WARN, "unreadable");
     if (manage) {
@@ -474,6 +498,8 @@ void handleFsPage() {
         const String error = g_server.arg("error");
         const char* message = error == "delete_failed" ?
             "LittleFS could not remove or clear the file. For FileLog files, use Clear system logs or format LittleFS if storage remains full." :
+            error == "reserved_path" ?
+            "This file is owned by an Esp32Base service. Use the matching System action instead of generic file management." :
             error.c_str();
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_DANGER, "File action failed", message);
     }
@@ -636,6 +662,12 @@ void handleFsCheckGet() {
         fsSendUploadJson(400, false, "Target is a directory", path, false, true);
         return;
     }
+#if ESP32BASE_ENABLE_APP_EVENTS
+    if (appEventsOwnsPath(path)) {
+        fsSendUploadJson(400, false, "Target is reserved for App Events", path, true, false);
+        return;
+    }
+#endif
     const bool exists = Esp32BaseFs::fileSize(path) >= 0;
     fsSendUploadJson(200, true, nullptr, path, exists, false);
 }
@@ -732,6 +764,14 @@ void handleFsUpload() {
             fsSetUploadError("Target is a directory");
             return;
         }
+#if ESP32BASE_ENABLE_APP_EVENTS
+        if (appEventsOwnsPath(g_fsUploadPath)) {
+            g_fsUploadStartFailed = true;
+            fsSetUploadError("Target is reserved for App Events");
+            ESP32BASE_LOG_W("web", "fs_upload_rejected path=%s reason=app_events_store", g_fsUploadPath);
+            return;
+        }
+#endif
 #if ESP32BASE_ENABLE_FILELOG
         if (fileLogOwnsPath(g_fsUploadPath) && Esp32BaseFileLog::isEnabled()) {
             Esp32BaseFileLog::flush();
@@ -805,6 +845,13 @@ void handleFsDeletePost() {
         redirectSeeOther("/esp32base/fs?manage=1&error=delete_missing");
         return;
     }
+#if ESP32BASE_ENABLE_APP_EVENTS
+    if (appEventsOwnsPath(path)) {
+        ESP32BASE_LOG_W("web", "fs_delete_rejected path=%s reason=app_events_store", path);
+        redirectSeeOther("/esp32base/fs?manage=1&error=reserved_path");
+        return;
+    }
+#endif
 #if ESP32BASE_ENABLE_FILELOG
     const bool targetIsFileLog = fileLogOwnsPath(path);
     const bool retryFileLogAfterDelete = Esp32BaseFileLog::faulted();

@@ -48,6 +48,8 @@ checks = {
         "fsUploadFileReadableEnd",
         "fs_upload_rejected",
         "fs_upload_completed",
+        "appEventsOwnsPath",
+        "Target is reserved for App Events",
         "Upload file",
         "static_cast<size_t>(written) >= len",
         "static_cast<uint64_t>(actualSize) == g_fsUploadBytes",

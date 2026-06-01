@@ -808,6 +808,11 @@ void Esp32BaseWeb::writeHtmlEscaped(const char* text) {
 void Esp32BaseWeb::writeCsvEscaped(const char* text) {
     sendChunk("\"");
     if (text) {
+        const char first = text[0];
+        if (first == '=' || first == '+' || first == '-' || first == '@' ||
+            first == '\t' || first == '\r' || first == '\n') {
+            sendChunk("'");
+        }
         for (const char* p = text; *p; ++p) {
             if (*p == '"') {
                 sendChunk("\"\"");
