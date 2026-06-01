@@ -143,6 +143,7 @@
 - CSV 导出读取失败时必须输出可见错误行或错误状态，不得静默返回截断内容。
 - `POST /esp32base/tools/app-events-clear` 必须需要认证、POST 和同源检查；GET 不得触发清空，App Events 页面本身不得放清空按钮。
 - `/esp32base/logs` 不显示 App Events，App Events 不混入 WiFi、OTA、NTP、启动、健康状态等系统日志。
+- 应用接入验收时必须检查 App Events 不重复记录 Esp32Base 系统事件，例如 boot/reset/restart reason、WiFi、NTP、OTA、LittleFS mount/write fault、FileLog fault 或基础库健康状态；同一故障如果两边都记录，FileLog 必须表达技术原因和内部错误链路，App Event 必须表达业务含义和用户可理解结果。
 - `examples/app_events_demo` 可构建，并能演示写入、分页读取、Web/API 展示和清空。
 
 ## 3. CI 矩阵

@@ -60,6 +60,7 @@ App Events 边界：
 
 - App Events 是固定容量环形事件日志，适合低频关键业务事件，不是业务长期数据模型。
 - 用水量统计、报表数据、累计量、传感器采样历史、完整执行历史、大 payload、高频明细和不允许覆盖的业务数据，应由业务自己的数据文件或存储结构负责。
+- App Events 也不是第二套系统 FileLog。boot/reset/restart reason、WiFi、NTP、OTA、LittleFS、FileLog fault、基础库健康状态等 Esp32Base 系统事件仍归 Status、System diagnostics 和 FileLog；App Events 只记录应用业务决策或业务可解释事件。同一故障可同时有 FileLog 和 App Event，但 FileLog 写技术原因，App Event 写业务含义和用户可理解结果。
 
 ## 6. 文件系统边界
 

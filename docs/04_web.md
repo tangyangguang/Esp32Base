@@ -292,6 +292,7 @@ App Events 页面：
 - JSON API 继续只输出有效事件，适合业务系统创建自己的业务事件列表和详情页；业务页面应使用业务语言解释事件，只展示业务需要的字段，不展示 `magic/crc16/reserved/valueMask/flags` 等内部字段。
 - JSON API 和 HTML 页面都必须使用统一 JSON/HTML escape；CSV 导出使用 CSV escape，保留当前筛选条件，并包含 slot/status/crc 等存储字段。CSV 读取失败时必须在输出中追加可见错误行，避免客户端误以为 200 响应是完整导出。
 - 该页面明确和 `/esp32base/logs` 分离：`/esp32base/logs` 是 Esp32Base/FileLog 系统日志，记录启动、联网、OTA、基础库运行等系统信息；`/esp32base/app-events` 是事件日志，记录应用显式写入的业务事件。
+- 应用页面不应把 boot/reset、WiFi、NTP、OTA、LittleFS、FileLog fault 或基础库健康状态重复写入 App Events；这些系统诊断信息继续由 Status、System diagnostics 和 FileLog 展示。同一故障如果同时影响业务，App Events 应只表达业务含义和用户可理解结果。App Events 页面只用于查看应用因业务原因写入的事件。
 
 状态页/API：
 

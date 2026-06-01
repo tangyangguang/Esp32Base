@@ -323,6 +323,8 @@ public:
 - App Events 用于“近期关键事件窗口”：记录用户能理解、低频、可解释的业务行为，例如计划跳过、保护触发、运行异常、外部 API 决策和用户清除告警。
 - App Events 不是业务长期数据模型。统计、报表、累计量、传感器采样历史、完整执行历史、大 payload、高频明细和不允许覆盖的业务数据，应继续放在业务自己的数据模型和文件中。
 - 若一个记录需要被用户长期查询、聚合或参与业务计算，它通常不是 App Events；若它只用于解释“为什么刚才/最近发生了某个业务行为”，才适合写入 App Events。
+- FileLog/Status/System diagnostics 记录 Esp32Base 系统底层发生了什么，App Events 记录应用业务为什么做了某个决定。应用项目不要把 boot/reset/restart reason、WiFi、NTP、OTA、LittleFS mount/write fault、FileLog fault、基础库健康状态等 Esp32Base 系统事件写入 App Events。
+- 同一个故障可以同时有 FileLog 和 App Event，但不能机械重复：FileLog 写技术原因和内部错误链路，App Event 写业务含义和用户可理解结果。硬件或存储异常如果只是底层诊断，归 FileLog/Status/System diagnostics；只有当它导致业务保护、跳过、停机、业务告警、用户维护或外部决策时，才写 App Events，并且事件类型应表达业务决策，例如 `action_blocked`、`protection_triggered`、`alarm_acknowledged`，而不是重复 `fs_write_failed`、`boot` 这类系统日志语义。
 
 存储和失败语义：
 

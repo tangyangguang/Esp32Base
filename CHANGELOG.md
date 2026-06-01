@@ -22,6 +22,7 @@
 
 - 业务项目不需要在应用层重复实现 BusinessEventStore；只需在合适业务决策点调用 `Esp32BaseAppEventLog::append()` 并定义自己的事件命名。
 - App Events 是面向长期运行设备的“近期关键事件窗口”，不是业务长期数据模型。用水量长期统计、报表、累计量、传感器采样历史、完整执行历史、大 payload、高频明细和不允许覆盖的业务数据，应继续由业务自己的数据模型负责。
+- App Events 也不是第二套系统 FileLog。业务项目不要把 boot/reset/restart reason、WiFi、NTP、OTA、LittleFS mount/write fault、FileLog fault、基础库健康状态等 Esp32Base 系统事件写入 App Events；同一故障可同时有 FileLog 和 App Event，但 FileLog 写技术原因和内部错误链路，App Event 写业务含义和用户可理解结果。
 - 业务项目需要面向业务用户展示事件时，应使用 `readLatest()` 或 `/esp32base/api/app-events` 创建自己的业务事件列表和详情页，用业务语言解释 `source/type/reason/code/value`，不展示 `magic/crc16/reserved/valueMask/flags` 等内部字段。
 - `/esp32base/logs` 仍只展示 Esp32Base/FileLog 系统日志；应用事件单独进入 `/esp32base/app-events`，避免和 WiFi、OTA、NTP、启动、健康状态等基础库诊断混在一起。
 - 恢复出厂或清空业务记录时，业务可按需调用 `Esp32BaseAppEventLog::clear()`；基础库的普通系统配置清理不会隐式删除应用事件。
