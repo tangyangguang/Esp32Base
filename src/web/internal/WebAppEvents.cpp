@@ -48,16 +48,6 @@ uint32_t parseUintArg(const char* name, uint32_t fallback, uint32_t minValue, ui
     return value;
 }
 
-void copyArg(const char* name, char* out, size_t len) {
-    if (!out || len == 0) {
-        return;
-    }
-    out[0] = '\0';
-    if (name && g_server.hasArg(name)) {
-        strlcpy(out, g_server.arg(name).c_str(), len);
-    }
-}
-
 uint8_t parseLevelArg() {
     if (!g_server.hasArg("level")) {
         return 0;
@@ -87,6 +77,69 @@ AppEventTimeMode parseTimeModeArg() {
         return APP_EVENT_TIME_UPTIME;
     }
     return APP_EVENT_TIME_ALL;
+}
+
+bool validFilterTokenChar(char c) {
+    return (c >= 'a' && c <= 'z') ||
+           (c >= 'A' && c <= 'Z') ||
+           (c >= '0' && c <= '9') ||
+           c == '_' || c == '-' || c == '.' || c == ':' || c == '/' || c == '@' || c == '#';
+}
+
+bool validFilterToken(const String& raw, size_t fieldLen) {
+    if (raw.length() >= fieldLen) {
+        return false;
+    }
+    for (size_t i = 0; i < raw.length(); ++i) {
+        if (!validFilterTokenChar(raw.charAt(i))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool readFilterTokenArg(const char* name, char* out, size_t len) {
+    if (!out || len == 0) {
+        return false;
+    }
+    out[0] = '\0';
+    if (!name || !g_server.hasArg(name)) {
+        return true;
+    }
+    const String raw = g_server.arg(name);
+    if (raw.length() == 0) {
+        return true;
+    }
+    if (!validFilterToken(raw, len)) {
+        return false;
+    }
+    strlcpy(out, raw.c_str(), len);
+    return true;
+}
+
+bool readKeywordFilterArg(const char* name, char* out, size_t len) {
+    if (!out || len == 0) {
+        return false;
+    }
+    out[0] = '\0';
+    if (!name || !g_server.hasArg(name)) {
+        return true;
+    }
+    const String raw = g_server.arg(name);
+    if (raw.length() == 0) {
+        return true;
+    }
+    if (raw.length() >= len) {
+        return false;
+    }
+    for (size_t i = 0; i < raw.length(); ++i) {
+        const uint8_t c = static_cast<uint8_t>(raw.charAt(i));
+        if (c < 0x20U || c == 0x7FU) {
+            return false;
+        }
+    }
+    strlcpy(out, raw.c_str(), len);
+    return true;
 }
 
 char asciiLower(char c) {
@@ -230,16 +283,30 @@ void buildFilterQuery(AppEventFilter& filter) {
     appendQueryParam(filter.query, sizeof(filter.query), "q", filter.q);
 }
 
-AppEventFilter readFilter() {
-    AppEventFilter filter = {};
+bool readFilter(AppEventFilter& filter) {
+    memset(&filter, 0, sizeof(filter));
     filter.level = parseLevelArg();
     filter.timeMode = parseTimeModeArg();
-    copyArg("source", filter.source, sizeof(filter.source));
-    copyArg("type", filter.type, sizeof(filter.type));
-    copyArg("reason", filter.reason, sizeof(filter.reason));
-    copyArg("q", filter.q, sizeof(filter.q));
+    if (!readFilterTokenArg("source", filter.source, sizeof(filter.source)) ||
+        !readFilterTokenArg("type", filter.type, sizeof(filter.type)) ||
+        !readFilterTokenArg("reason", filter.reason, sizeof(filter.reason)) ||
+        !readKeywordFilterArg("q", filter.q, sizeof(filter.q))) {
+        return false;
+    }
     buildFilterQuery(filter);
-    return filter;
+    return true;
+}
+
+void sendInvalidFilterJson() {
+    if (!beginResponse(400, "application/json", nullptr)) {
+        return;
+    }
+    sendChunk("{\"ok\":false,\"error\":\"invalid_filter\"}");
+    endResponse();
+}
+
+void sendInvalidFilterText() {
+    g_server.send(400, "text/plain; charset=utf-8", "invalid_filter");
 }
 
 bool filterActive(const AppEventFilter& filter) {
@@ -312,7 +379,7 @@ void sendFilterTimeOption(const char* value, const char* label, AppEventTimeMode
     sendChunk("</option>");
 }
 
-void sendFilterInput(const char* label, const char* name, const char* value, const char* cssClass) {
+void sendFilterInput(const char* label, const char* name, const char* value, const char* cssClass, uint8_t maxLen) {
     sendChunk("<div class='field ");
     sendEscapedHtmlChunk(cssClass);
     sendChunk("'><label>");
@@ -321,6 +388,8 @@ void sendFilterInput(const char* label, const char* name, const char* value, con
     sendEscapedHtmlChunk(name);
     sendChunk("' value='");
     sendEscapedHtmlChunk(value);
+    sendChunk("' maxlength='");
+    sendUintChunk(maxLen);
     sendChunk("'></div>");
 }
 
@@ -337,10 +406,10 @@ void sendFiltersPanel(const AppEventFilter& filter, uint32_t per) {
     sendFilterTimeOption("real", "Real time", APP_EVENT_TIME_REAL, filter);
     sendFilterTimeOption("uptime", "Uptime", APP_EVENT_TIME_UPTIME, filter);
     sendChunk("</select></div>");
-    sendFilterInput("Source", "source", filter.source, "med");
-    sendFilterInput("Type", "type", filter.type, "med");
-    sendFilterInput("Reason", "reason", filter.reason, "med");
-    sendFilterInput("Keyword", "q", filter.q, "long");
+    sendFilterInput("Source", "source", filter.source, "med", sizeof(filter.source) - 1U);
+    sendFilterInput("Type", "type", filter.type, "med", sizeof(filter.type) - 1U);
+    sendFilterInput("Reason", "reason", filter.reason, "med", sizeof(filter.reason) - 1U);
+    sendFilterInput("Keyword", "q", filter.q, "long", sizeof(filter.q) - 1U);
     sendChunk("</div><div class='actions'><input type='submit' value='Apply'><a class='btnlink secondary' href='/esp32base/app-events'>Reset</a></div></form></section>");
 }
 
@@ -578,7 +647,11 @@ void handleAppEventsPage() {
     if (!ensureAuth()) {
         return;
     }
-    const AppEventFilter filter = readFilter();
+    AppEventFilter filter;
+    if (!readFilter(filter)) {
+        sendInvalidFilterText();
+        return;
+    }
     const uint32_t per = parseUintArg("per", 20, 1, 100);
     const uint32_t page = parseUintArg("page", 1, 1, 65535);
 
@@ -628,15 +701,17 @@ void handleAppEventsApi() {
         return;
     }
     // Route marker: /esp32base/api/app-events
-    const AppEventFilter filter = readFilter();
+    AppEventFilter filter;
+    if (!readFilter(filter)) {
+        sendInvalidFilterJson();
+        return;
+    }
     const uint32_t offset = parseUintArg("offset", 0, 0, 65535);
     const uint32_t limit = parseUintArg("limit", 50, 1, 100);
     if (!beginResponse(200, "application/json", nullptr)) {
         return;
     }
-    sendChunk("{\"kind\":\"app_events\",\"path\":\"/esp32base/api/app-events\",\"count\":");
-    sendUintChunk(Esp32BaseAppEventLog::count());
-    sendChunk(",\"capacity\":");
+    sendChunk("{\"kind\":\"app_events\",\"path\":\"/esp32base/api/app-events\",\"capacity\":");
     sendUintChunk(Esp32BaseAppEventLog::capacity());
     sendChunk(",\"offset\":");
     sendUintChunk(offset);
@@ -652,7 +727,9 @@ void handleAppEventsApi() {
                                                         Esp32BaseAppEventLog::count(),
                                                         sendAppEventJsonRow,
                                                         &state);
-    sendChunk("],\"total\":");
+    sendChunk("],\"count\":");
+    sendUintChunk(Esp32BaseAppEventLog::count());
+    sendChunk(",\"total\":");
     sendUintChunk(state.matched);
     sendChunk(",\"readOk\":");
     sendChunk(readOk ? "true" : "false");
@@ -669,7 +746,11 @@ void handleAppEventsCsv() {
     if (!ensureAuth()) {
         return;
     }
-    const AppEventFilter filter = readFilter();
+    AppEventFilter filter;
+    if (!readFilter(filter)) {
+        sendInvalidFilterText();
+        return;
+    }
     if (!Esp32BaseWeb::beginCsv(200, "app-events.csv")) {
         return;
     }

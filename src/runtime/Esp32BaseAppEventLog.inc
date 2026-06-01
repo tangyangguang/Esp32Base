@@ -166,6 +166,20 @@ bool appEventRemoveStoreFile() {
     return ok;
 }
 
+bool appEventEnsureDir() {
+    if (!Esp32BaseFs::isReady()) {
+        appEventSetError("fs_not_ready");
+        return false;
+    }
+    if (!Esp32BaseFs::exists(kAppEventDir) &&
+        !Esp32BaseFs::mkdir(kAppEventDir) &&
+        !Esp32BaseFs::exists(kAppEventDir)) {
+        appEventMarkFault("dir_create_failed");
+        return false;
+    }
+    return true;
+}
+
 bool appEventCreateStoreFile() {
     const bool watchdogReleased = appEventBeginFsOperation();
     const bool ok = Esp32BaseFs::createFixedFile(kAppEventPath, appEventStoreSize(), 0);
@@ -359,14 +373,7 @@ bool appEventLoadHeader() {
 }
 
 bool appEventEnsureStoreFile() {
-    if (!Esp32BaseFs::isReady()) {
-        appEventSetError("fs_not_ready");
-        return false;
-    }
-    if (!Esp32BaseFs::exists(kAppEventDir) &&
-        !Esp32BaseFs::mkdir(kAppEventDir) &&
-        !Esp32BaseFs::exists(kAppEventDir)) {
-        appEventMarkFault("dir_create_failed");
+    if (!appEventEnsureDir()) {
         return false;
     }
 
@@ -522,6 +529,17 @@ Esp32BaseAppEventLog::TimeSnapshot appEventNow() {
     return appEventDefaultTime();
 }
 
+void appEventUpdateValidCountAfterScan(uint16_t validRecords, uint16_t scannedRecords) {
+    if (scannedRecords < g_appEventCount || validRecords == g_appEventValidCount) {
+        return;
+    }
+    g_appEventValidCount = validRecords;
+    ESP32BASE_LOG_W("app_events",
+                    "valid_count_reconciled span=%u valid=%u",
+                    static_cast<unsigned>(g_appEventCount),
+                    static_cast<unsigned>(g_appEventValidCount));
+}
+
 bool appEventFillRecord(const Esp32BaseAppEventLog::Event& event, Esp32BaseAppEventRecord& record) {
     if (event.level < Esp32BaseAppEventLog::LEVEL_INFO || event.level > Esp32BaseAppEventLog::LEVEL_ERROR) {
         appEventSetError("invalid_level");
@@ -656,7 +674,9 @@ bool Esp32BaseAppEventLog::readLatest(uint16_t offset, uint16_t limit, ReadCallb
     uint16_t emitted = 0;
     uint16_t validSeen = 0;
     uint16_t skipped = 0;
+    uint16_t scanned = 0;
     for (uint16_t i = 0; i < g_appEventCount && emitted < limit; ++i) {
+        scanned = static_cast<uint16_t>(i + 1U);
         const uint32_t distance = static_cast<uint32_t>(i) + 1U;
         const uint16_t slot = static_cast<uint16_t>((static_cast<uint32_t>(g_appEventHead) + kAppEventCapacity - distance) % kAppEventCapacity);
         Esp32BaseAppEventRecord record;
@@ -680,12 +700,16 @@ bool Esp32BaseAppEventLog::readLatest(uint16_t offset, uint16_t limit, ReadCallb
         appEventSetError("record_skipped");
         ESP32BASE_LOG_W("app_events", "read_skipped_records count=%u", static_cast<unsigned>(skipped));
     }
+    appEventUpdateValidCountAfterScan(validSeen, scanned);
     return true;
 }
 
 bool Esp32BaseAppEventLog::clear() {
     if (!Esp32BaseFs::isReady()) {
         appEventSetError("fs_not_ready");
+        return false;
+    }
+    if (!appEventEnsureDir()) {
         return false;
     }
     const uint32_t preserveNextId = g_appEventNextId ? g_appEventNextId : 1;

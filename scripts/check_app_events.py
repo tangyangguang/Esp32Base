@@ -46,6 +46,16 @@ require(
     "removeCurrentTaskForLongOperation",
     "app event FS operations must protect loopTask watchdog",
 )
+require(
+    "src/runtime/Esp32BaseAppEventLog.inc",
+    "appEventUpdateValidCountAfterScan",
+    "full read scans must tighten count() after runtime record damage",
+)
+require(
+    "src/runtime/Esp32BaseAppEventLog.inc",
+    "appEventEnsureDir",
+    "clear must recreate /app before rebuilding the fixed store",
+)
 if 'appEventMarkFault("record_crc_failed")' in read("src/runtime/Esp32BaseAppEventLog.inc"):
     errors.append("src/runtime/Esp32BaseAppEventLog.inc: single record CRC damage must not put the whole store in fault")
 require("src/Esp32Base.cpp", "Esp32BaseAppEventLog::begin()", "base begin must initialize app events")
@@ -54,6 +64,10 @@ require("src/web/Esp32BaseWeb.h", "checkPostAllowed", "public Web API must expos
 require("src/web/internal/WebAppEvents.cpp", "handleAppEventsPage", "missing App Events page")
 require("src/web/internal/WebAppEvents.cpp", "/esp32base/api/app-events", "missing API route marker")
 require("src/web/internal/WebAppEvents.cpp", "struct AppEventFilter", "App Events page must support common filters")
+require("src/web/internal/WebAppEvents.cpp", "validFilterToken", "exact App Events filters must validate token length/chars before matching")
+require("src/web/internal/WebAppEvents.cpp", "invalid_filter", "invalid App Events filters must return an explicit client error")
+if 'copyArg("source"' in read("src/web/internal/WebAppEvents.cpp"):
+    errors.append("src/web/internal/WebAppEvents.cpp: exact source filter must not be silently truncated")
 require("src/web/internal/WebAppEvents.cpp", "struct AppEventScanState", "App Events filters must scan once per response")
 require("src/web/internal/WebAppEvents.cpp", "resolveAppEventEpoch", "App Events must resolve/display real time when possible")
 require("src/web/internal/WebAppEvents.cpp", "uptimeMs", "App Events must expose uptime in milliseconds")
@@ -75,6 +89,7 @@ require("docs/03_api.md", "loop/system task", "API docs must document App Events
 require("docs/03_api.md", "checkPostAllowed", "API docs must document POST same-origin helper")
 require("docs/06_memory_budget.md", "188 KiB", "memory budget must include default app event storage")
 require("docs/07_diagnostics.md", "App Events", "diagnostics docs must include verification")
+require("docs/09_release_checklist.md", "record_skipped", "release checklist must use current damaged-record skip semantics")
 require("examples/app_events_demo/src/main.cpp", "Esp32BaseAppEventLog::append", "sample must write app events")
 require("examples/app_events_demo/src/main.cpp", "checkPostAllowed", "sample POST route must use auth + same-origin helper")
 require("examples/app_events_demo/README.md", "/esp32base/app-events", "sample README must explain viewing page")

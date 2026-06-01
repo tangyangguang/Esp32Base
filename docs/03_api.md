@@ -308,13 +308,13 @@ public:
 - append 先写记录槽，再写 inactive header；未满时断电最多丢失未提交的新记录，不破坏上一版 header。
 - 满环覆盖最老槽时，如果断电发生在 record 写入后、header 提交前，恢复时会识别该未提交槽并从可见范围移除；结果可能丢失被覆盖的最老记录和未提交的新记录，但不会把整个日志打入 fault。
 - 双 header 都无效、文件尺寸不匹配、创建/删除/写 header 失败或写后校验失败属于结构性故障，会进入 `faulted()`。
-- 单条 record CRC 损坏或未提交 future record 不会进入全局 fault；读取会跳过该槽，`count()` 只统计可读取的有效记录，append 仍可继续覆盖后续槽。
+- 单条 record CRC 损坏或未提交 future record 不会进入全局 fault；读取会跳过该槽，`begin()` 和完整 `readLatest(0, count(), ...)` 扫描会把 `count()` 收敛到可读取的有效记录数，append 仍可继续覆盖后续槽。
 - FS 未 ready、空间不足、读写失败或记录跳过时通过 `lastError()` 暴露原因；读路径遇到不可读 I/O 会返回 `false`，但不会自动清空。
 - `clear()` 重建空文件，默认保留递增 `nextId()`；业务恢复出厂或清空业务记录时可显式调用。
 
 Web/API 查询：
 
-- HTML 页面 `/esp32base/app-events` 支持 `page`、`per` 以及常用筛选：`level=info|warn|error`、`time=real|uptime`、`source`、`type`、`reason`、`q`。`source/type/reason` 是精确匹配，`q` 在 `source/type/reason/object/text` 内做大小写不敏感关键词匹配。
+- HTML 页面 `/esp32base/app-events` 支持 `page`、`per` 以及常用筛选：`level=info|warn|error`、`time=real|uptime`、`source`、`type`、`reason`、`q`。`source/type/reason` 是精确匹配，并复用事件 token 的长度和字符校验；超长或非法筛选返回 `400 invalid_filter`，不会截断后误匹配。`q` 在 `source/type/reason/object/text` 内做大小写不敏感关键词匹配。
 - JSON API `/esp32base/api/app-events` 支持 `offset`、`limit` 和同一组筛选条件，返回 `count`、`total`、`filters` 和最新优先的 `events`；筛选请求单次扫描完成当前页输出和匹配计数。
 - 每条 JSON 事件包含 `epochSec`、`resolvedEpochSec`、`bootId`、`uptimeSec`、`uptimeMs`、`level/source/type/reason/object/code/value1..value3/valueMask/flags/text`。`uptimeSec` 是存储稳定字段，`uptimeMs` 是 64-bit 派生展示值；`resolvedEpochSec=0` 表示没有可信真实时间。
 - CSV `/esp32base/app-events.csv` 使用同一组筛选条件，字段为 `id,epoch_sec,resolved_epoch_sec,boot_id,uptime_sec,uptime_ms,level,source,type,reason,object,code,value1,value2,value3,text`。如果导出过程中读取失败，响应末尾追加 `# error,...` 行暴露失败原因。

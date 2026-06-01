@@ -135,9 +135,9 @@
 - 重启后 header 和记录可恢复，`nextId()` 继续递增。
 - 满容量环形覆盖时，模拟 record 已写入但 header 未提交的重启；恢复后不得进入 fault，未提交槽应不可见，后续 append 仍可继续。
 - Watchdog 启用后，在 setup、Web handler 或业务回调里同步 append/clear 不应因为 LittleFS flush 较慢触发 loopTask WDT。
-- 双 header 损坏、文件尺寸错误、写后校验失败等结构性问题进入 fault，不自动清空；单条记录 `crc16` 错误应跳过并继续允许 append。
+- 双 header 损坏、文件尺寸错误、写后校验失败等结构性问题进入 fault，不自动清空；单条记录 `crc16` 错误应跳过、暴露 `record_skipped`，完整扫描后 `count()` 应收敛到可读取记录数，并继续允许 append。
 - clear 幂等，清空后可继续写入；业务恢复出厂或清空业务记录时可显式调用。
-- Web 页面支持等级、时间类型、来源、类型、原因和关键词筛选；JSON API 和 CSV 导出必须和页面使用同一筛选语义，并避免筛选请求为了 total 重复全量扫描。
+- Web 页面支持等级、时间类型、来源、类型、原因和关键词筛选；JSON API 和 CSV 导出必须和页面使用同一筛选语义，并避免筛选请求为了 total 重复全量扫描；超长或非法的精确筛选参数必须返回 `400 invalid_filter`，不得截断后匹配。
 - `epochSec` 或当前 boot 可解析时显示真实时间；不可解析时显示 `uptime N ms` 和 `boot N`，不得伪造日期。
 - Web 页面、JSON API 和 CSV 导出分别验证 HTML/JSON/CSV escape。
 - CSV 导出读取失败时必须输出可见错误行或错误状态，不得静默返回截断内容。

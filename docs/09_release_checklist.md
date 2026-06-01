@@ -169,7 +169,7 @@
 - `writeBytesAt()` 支持已有文件固定位置覆盖，文件不存在和写越界返回失败，不隐式扩展文件；覆盖后文件大小不变且覆盖范围可读。
 - FS 已满或存在不可读文件时，Web 诊断返回错误不应触发 task WDT 重启。
 - 启用 `ESP32BASE_ENABLE_APP_EVENTS=1` 时，`/app/events.bin` 固定容量创建成功；默认 1024 条、单条 188 bytes、约 188 KiB；重复写入后环形覆盖，重启后仍可分页读取。
-- App Events 双 header 损坏进入 fault，不自动扫描或清空；单条记录 CRC 错误时读取失败并暴露 `lastError()`。
+- App Events 双 header 损坏进入 fault，不自动扫描或清空；单条 record CRC 错误应跳过并暴露 `record_skipped`，完整扫描后 `count()` 收敛到可读记录数，I/O 读取失败才使 `readLatest()` 返回 false。
 - `Esp32BaseAppEventLog::clear()` 幂等，清空后保留递增 id 并可继续写入。
 - `/esp32base/fs?manage=1` 对 `unreadable` 文件仍必须提供单文件删除入口，但不能提供下载入口。
 - 单文件删除失败后应尝试截断为 0；如果因此释放可见文件占用，页面不能只显示 `delete_failed`。

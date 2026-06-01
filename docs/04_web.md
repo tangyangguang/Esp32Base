@@ -165,9 +165,9 @@ Logs:
 
 App Events，仅 `ESP32BASE_ENABLE_APP_EVENTS=1`：
 
-- `GET /esp32base/app-events`，独立应用事件页面，不混入系统 FileLog；支持 `page/per/level/time/source/type/reason/q` 筛选参数。
-- `GET /esp32base/api/app-events?offset=0&limit=50`，按最新优先分页输出 JSON；支持 `level/time/source/type/reason/q` 筛选参数，事件对象同时包含 `uptimeSec` 和 64-bit 派生 `uptimeMs`。
-- `GET /esp32base/app-events.csv`，导出当前筛选后的应用事件 CSV。
+- `GET /esp32base/app-events`，独立应用事件页面，不混入系统 FileLog；支持 `page/per/level/time/source/type/reason/q` 筛选参数，非法筛选返回 `400 invalid_filter`。
+- `GET /esp32base/api/app-events?offset=0&limit=50`，按最新优先分页输出 JSON；支持 `level/time/source/type/reason/q` 筛选参数，事件对象同时包含 `uptimeSec` 和 64-bit 派生 `uptimeMs`，非法筛选返回 `400 {"ok":false,"error":"invalid_filter"}`。
+- `GET /esp32base/app-events.csv`，导出当前筛选后的应用事件 CSV；非法筛选返回 `400 invalid_filter`。
 - `POST /esp32base/app-events/clear`，清空应用事件；需要认证、POST 和同源检查，成功后 303 回到页面。
 
 System:
@@ -281,7 +281,7 @@ App Events 页面：
 
 - 仅在 `ESP32BASE_ENABLE_APP_EVENTS=1` 时注册，标题和导航标签为 `App Events`，可通过 `setBuiltinLabel(BUILTIN_APP_EVENTS, "...")` 覆盖。
 - 页面显示有效事件数、容量、存储路径、筛选状态、筛选表单、CSV 导出、清空按钮和分页表格；分页使用 `sendPagination()`，默认每页 20 条。
-- 筛选条件包括等级、时间类型、来源、类型、原因和关键词；HTML、JSON API、CSV 共用同一组筛选语义。筛选请求不额外做独立 count 扫描，而是在输出当前页时统计匹配总数。
+- 筛选条件包括等级、时间类型、来源、类型、原因和关键词；HTML、JSON API、CSV 共用同一组筛选语义。`source/type/reason` 必须符合事件 token 的字符和长度约束，避免超长参数被截断后误匹配。筛选请求不额外做独立 count 扫描，而是在输出当前页时统计匹配总数。
 - 表格按日志阅读方式压缩为 ID、Time、Level、Event、Object、Details。`Event` 合并展示 `source/type/reason`，`Details` 展示短文本、code 和有效数值槽；基础库不解释事件类型和业务对象。
 - `epochSec` 可用时按本地时间显示；否则如果本次 boot 后续 NTP 已同步，则解析并显示真实时间；仍无法解析时显示 `uptime N ms` 和 `boot N`，不伪造日期。
 - 清空应用事件是危险操作，只接受 `POST /esp32base/app-events/clear`，必须通过 Web Auth 和同源检查，成功后 303 回到页面。
