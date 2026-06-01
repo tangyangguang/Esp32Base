@@ -63,7 +63,7 @@ Web 应用路由默认容量统一为 24。该上限只覆盖业务 `addRoute()`
 
 业务首页推荐注册为 `/index`。在 `HOME_APP` 或 `HOME_COMBINED` 下，如果没有显式 `setHomePath()` 且存在 `/index` 业务页，裸 `/` 会跳转到 `/index`；如果应用确实需要直接渲染裸根路径，可显式 `setHomePath("/")` 并注册 GET `/` 业务页。`/esp32base` 始终保留为基础库系统入口。
 
-启用 FS 的 profile 会默认启用 Runtime 文件日志：`/logs/eb_app.log`，默认 `4 × 32KB`，模式 WARN。运行时可配置为 OFF、ERROR、WARN、INFO；如果 FS 满或文件损坏导致写入失败，Web 会显示 FileLog 运行态为 `write fault`，表示配置仍开启、已有日志可能仍可读取，但新日志写入已被保护停写。`disabled` 表示模式为 OFF，新日志不会写入。示例通过构建参数把默认模式改为 INFO：
+启用 FS 的 profile 会默认启用系统诊断日志。它的实现/API 名称仍是 `Esp32BaseFileLog`，默认写入 `/logs/eb_app.log`，Web 默认入口显示为 `System Logs`，URL 仍是 `/esp32base/logs`。系统诊断日志面向开发、维护和运维排障，记录设备运行过程中的技术事实和内部链路，例如启动、reset reason、WiFi、NTP、OTA、LittleFS、FileLog 写入保护和基础库健康状态。默认容量 `4 × 32KB`，模式 WARN；运行时可配置为 OFF、ERROR、WARN、INFO。如果 FS 满或文件损坏导致写入失败，Web 会显示 FileLog 运行态为 `write fault`，表示配置仍开启、已有日志可能仍可读取，但新日志写入已被保护停写。`disabled` 表示模式为 OFF，新日志不会写入。示例通过构建参数把默认模式改为 INFO：
 
 ```ini
 build_flags =
@@ -78,11 +78,18 @@ build_flags =
   -D ESP32BASE_ENABLE_APP_EVENTS=1
 ```
 
-内置入口为 `/esp32base/app-events`，JSON API 为 `/esp32base/api/app-events?offset=0&limit=50`，CSV 导出为 `/esp32base/app-events.csv`，清空入口位于 System 页的危险操作区。内置事件日志页面用偏底层视角展示事件日志文件、slot、状态、CRC 和完整记录字段；JSON API 只输出有效事件，适合业务系统创建自己的业务事件列表和详情页并用业务语言解释。页面/API/CSV 支持等级、时间类型、来源、类型、原因和关键词筛选；时间优先显示可信真实时间，无法解析时显示 `uptime N ms` 和 boot id。单条损坏记录不会让整个日志停写；结构性 header/写入故障才进入 fault。该能力明确独立于 `/esp32base/logs` 的系统 FileLog，不混入 WiFi、OTA、NTP、启动、健康状态等基础库系统日志。样例见 `examples/app_events_demo`。
+内置入口为 `/esp32base/app-events`，JSON API 为 `/esp32base/api/app-events?offset=0&limit=50`，CSV 导出为 `/esp32base/app-events.csv`，清空入口位于 System 页的危险操作区。内置事件日志页面用偏底层视角展示事件日志文件、slot、状态、CRC 和完整记录字段；JSON API 只输出有效事件，适合业务系统创建自己的业务事件列表和详情页并用业务语言解释。页面/API/CSV 支持等级、时间类型、来源、类型、原因和关键词筛选；时间优先显示可信真实时间，无法解析时显示 `uptime N ms` 和 boot id。单条损坏记录不会让整个日志停写；结构性 header/写入故障才进入 fault。该能力明确独立于 `/esp32base/logs` 的系统诊断日志，不混入 WiFi、OTA、NTP、启动、健康状态等基础库系统日志。样例见 `examples/app_events_demo`。
 
 App Events 适合记录计划跳过、保护触发、运行异常、外部 API 决策、用户清除告警等低频关键事件。不适合记录用水量长期统计、报表数据、累计值、传感器采样序列、大 payload、高频明细或必须永久保留的完整业务历史；这些应继续由业务自己的数据模型和文件负责。
 
-判定规则：FileLog/Status/System diagnostics 记录系统底层发生了什么，App Events 记录业务为什么做了某个决定。应用项目不要把 Esp32Base 系统事件写入 App Events，例如 boot/reset/restart reason、WiFi、NTP、OTA、LittleFS mount/write fault、FileLog fault、基础库健康状态等。同一个故障可以同时有 FileLog 和 App Event，但不能机械重复：FileLog 写技术原因和内部链路，App Event 写业务含义和用户可理解结果。硬件或存储异常只有在导致业务保护、跳过、停机、业务告警或用户维护动作时，才以业务事件写入 App Events。
+判定规则：System Diagnostic Logs（系统诊断日志，`Esp32BaseFileLog`）记录设备和基础库“内部发生了什么、技术原因是什么、排障链路在哪里”；App Events（应用业务事件，`Esp32BaseAppEventLog`）记录“对业务产生了什么影响、系统做出了什么业务决策、用户需要理解什么结果”。
+
+| 能力 | 面向对象 | 应记录 | 不应记录 |
+| --- | --- | --- | --- |
+| System Logs / 系统诊断日志（`Esp32BaseFileLog`） | 开发、维护、运维排障 | boot/reset、WiFi、NTP、OTA、LittleFS、FileLog fault、基础库健康状态、内部错误链路 | 业务枚举、业务文案、业务报表或用户可解释的业务历史 |
+| App Events / 应用业务事件（`Esp32BaseAppEventLog`） | 业务页面、现场用户、业务排查 | 业务决策、保护动作、跳过原因、业务告警、用户维护结果、外部决策结果 | 纯系统诊断、调试日志、高频采样、长期统计、完整业务数据模型 |
+
+应用项目不要把 Esp32Base 系统事件写入 App Events，例如 boot/reset/restart reason、WiFi、NTP、OTA、LittleFS mount/write fault、FileLog fault、基础库健康状态等。同一个底层故障可以同时留下系统诊断日志和应用业务事件，但这是因为它跨越了两个语义层，而不是为了复制一条日志：系统诊断日志写技术事实和内部错误链路，应用业务事件写业务影响、保护动作、跳过原因、用户维护结果或外部决策结果。硬件或存储异常只有在导致业务保护、跳过、停机、业务告警或用户维护动作时，才以业务事件写入 App Events。
 
 需要业务持久化参数配置页时，可启用 App Config。业务显式声明容量并在 `Esp32Base::begin()` 前注册分组和字段，基础库会在 System 页首位提供 `App Config` 入口：
 
@@ -141,7 +148,7 @@ WiFi 默认关闭 modem sleep，让 Web 首屏和 OTA 不被 Arduino ESP32 默�
 
 Profile 是默认组合，用户仍可用 `ESP32BASE_ENABLE_*` 精细覆盖。所有覆盖都必须经过编译期依赖检查。
 
-文件日志是 Runtime/FS 能力，不属于 Core。`CORE` 和默认 `NET` 不链接 LittleFS；`RUNTIME`、`NET_RUNTIME`、`WEB_RUNTIME`、`FULL` 默认可用文件日志。
+系统诊断日志（实现/API 名称 `Esp32BaseFileLog`）是 Runtime/FS 能力，不属于 Core。`CORE` 和默认 `NET` 不链接 LittleFS；`RUNTIME`、`NET_RUNTIME`、`WEB_RUNTIME`、`FULL` 默认可用系统诊断日志。
 
 仓库示例默认面向 ESP32 4MB Flash，并使用 `partitions/esp32-4mb-ota-balanced.csv`。ESP32-S3、ESP32-C3 或 8MB 板型请优先使用示例中对应 env，或在业务项目里选择匹配芯片和 Flash 容量的分区表，避免 FULL/Web OTA 固件超过 app slot。
 

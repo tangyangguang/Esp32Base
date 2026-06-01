@@ -70,13 +70,13 @@ Core 不包含 Event Bus。Bus 是 Runtime 可选模块。
 - Task Watchdog。
 - Sleep。
 - LittleFS。
-- 文件日志 sink，依赖 Fs，通过 Core Log 的 line sink 接收日志。
+- 系统诊断日志 sink（`Esp32BaseFileLog`），依赖 Fs，通过 Core Log 的 line sink 接收日志。
 - 应用事件日志，依赖 Fs，提供业务项目可复用的结构化事件环形存储，不解释业务语义。
 - 健康诊断。
 
 Runtime 只依赖 Core。
 
-`Esp32BaseLog` 仍属于 Core，只负责 Serial、格式化和 sink 分发，不包含 LittleFS。文件日志由 Runtime 的 `Esp32BaseFileLog` 承担，避免 Core 依赖 FS。
+`Esp32BaseLog` 仍属于 Core，只负责 Serial、格式化和 sink 分发，不包含 LittleFS。系统诊断日志由 Runtime 的 `Esp32BaseFileLog` 承担，避免 Core 依赖 FS。
 
 ## 4. Layer 2: Network
 

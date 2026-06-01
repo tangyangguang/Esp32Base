@@ -131,7 +131,7 @@ public:
 
 运行时级别只能进一步过滤，不能突破编译期上限。
 
-`runtimeLevel()` 控制日志是否生成并分发给 sink / FileLog；`serialLevel()` 只控制 Serial 输出。量产设备需要关闭串口但保留文件日志时，不要把 `ESP32BASE_LOG_LEVEL` 编译为 `ESP32BASE_LOG_NONE`，而应保持编译期等级为文件日志需要记录的最高等级，再在运行期关闭 Serial：
+`runtimeLevel()` 控制日志是否生成并分发给 sink / FileLog；`serialLevel()` 只控制 Serial 输出。量产设备需要关闭串口但保留系统诊断日志时，不要把 `ESP32BASE_LOG_LEVEL` 编译为 `ESP32BASE_LOG_NONE`，而应保持编译期等级为系统诊断日志需要记录的最高等级，再在运行期关闭 Serial：
 
 ```cpp
 Esp32BaseLog::setSerialLevel(Esp32BaseLog::NONE);
@@ -144,7 +144,7 @@ Esp32BaseFileLog::setMode(Esp32BaseFileLog::WARN);
 
 - Serial。
 - 可选 sink callback。
-- Runtime/FS profile 中由 `Esp32BaseFileLog` 提供文件日志；Core Log 本身不依赖 FS。
+- Runtime/FS profile 中由 `Esp32BaseFileLog` 提供系统诊断日志；Core Log 本身不依赖 FS。
 
 日志格式要求：
 
@@ -160,7 +160,7 @@ Esp32BaseFileLog::setMode(Esp32BaseFileLog::WARN);
 
 ### 3.4 Esp32BaseFileLog
 
-仅在 `ESP32BASE_ENABLE_FILELOG=1` 时可用，依赖 `Esp32BaseFs`。默认文件为 `/logs/eb_app.log`，`4 × 32KB` 轮转，默认模式 WARN。运行时文件日志模式只支持 OFF、ERROR、WARN、INFO；DEBUG/VERBOSE 不作为文件日志模式。INFO 模式使用 1KB / 2s 缓存，不做节流。
+`Esp32BaseFileLog` 是系统诊断日志的实现/API 名称，面向开发、维护和运维排障，不是应用业务事件接口。仅在 `ESP32BASE_ENABLE_FILELOG=1` 时可用，依赖 `Esp32BaseFs`。默认文件为 `/logs/eb_app.log`，默认 Web 标签为 `System Logs`，`4 × 32KB` 轮转，默认模式 WARN。运行时系统诊断日志模式只支持 OFF、ERROR、WARN、INFO；DEBUG/VERBOSE 不作为文件日志模式。INFO 模式使用 1KB / 2s 缓存，不做节流。
 
 ```cpp
 class Esp32BaseFileLog {
@@ -193,7 +193,7 @@ public:
 };
 ```
 
-`isEnabled()` 表示当前运行期是否还在写文件日志；`mode()` 表示配置模式。FS 满、文件损坏或底层写失败时，FileLog 会进入运行期故障保护：`faulted()` 返回 true，`mode()` 仍保留用户配置，`isEnabled()` 返回 false，避免后续 WARN/ERROR 继续冲击异常文件系统。Web 显示为 `write fault`，表示新日志写入已停，不表示已有日志一定不可读取。清理/格式化文件系统或重新保存 FileLog 模式后可重试启用。
+`isEnabled()` 表示当前运行期是否还在写系统诊断日志；`mode()` 表示配置模式。FS 满、文件损坏或底层写失败时，FileLog 会进入运行期故障保护：`faulted()` 返回 true，`mode()` 仍保留用户配置，`isEnabled()` 返回 false，避免后续 WARN/ERROR 继续冲击异常文件系统。Web 显示为 `write fault`，表示新日志写入已停，不表示已有日志一定不可读取。清理/格式化文件系统或重新保存 FileLog 模式后可重试启用。
 
 最小可运行示例：
 
@@ -318,13 +318,19 @@ public:
 - 当前 boot 后续完成 NTP 同步时，Web/API 会通过 `Esp32BaseNtp::resolveCurrentBootEvent()` 把同一 boot 的未同步事件解析为 `resolvedEpochSec`；历史 boot 或无法确认的事件仍显示相对 uptime。
 - `Esp32BaseAppEventLog` 不是跨任务并发 API；建议只在 loop/system task、Web handler 或同一业务执行上下文中调用。其他 FreeRTOS task 需要写业务事件时，应通过业务 queue 投递回 loop/system task，避免 append/read/clear 并发修改同一文件和全局状态。
 
-适用边界：
+术语和适用边界：
 
 - App Events 用于“近期关键事件窗口”：记录用户能理解、低频、可解释的业务行为，例如计划跳过、保护触发、运行异常、外部 API 决策和用户清除告警。
 - App Events 不是业务长期数据模型。统计、报表、累计量、传感器采样历史、完整执行历史、大 payload、高频明细和不允许覆盖的业务数据，应继续放在业务自己的数据模型和文件中。
 - 若一个记录需要被用户长期查询、聚合或参与业务计算，它通常不是 App Events；若它只用于解释“为什么刚才/最近发生了某个业务行为”，才适合写入 App Events。
-- FileLog/Status/System diagnostics 记录 Esp32Base 系统底层发生了什么，App Events 记录应用业务为什么做了某个决定。应用项目不要把 boot/reset/restart reason、WiFi、NTP、OTA、LittleFS mount/write fault、FileLog fault、基础库健康状态等 Esp32Base 系统事件写入 App Events。
-- 同一个故障可以同时有 FileLog 和 App Event，但不能机械重复：FileLog 写技术原因和内部错误链路，App Event 写业务含义和用户可理解结果。硬件或存储异常如果只是底层诊断，归 FileLog/Status/System diagnostics；只有当它导致业务保护、跳过、停机、业务告警、用户维护或外部决策时，才写 App Events，并且事件类型应表达业务决策，例如 `action_blocked`、`protection_triggered`、`alarm_acknowledged`，而不是重复 `fs_write_failed`、`boot` 这类系统日志语义。
+- System Diagnostic Logs（系统诊断日志，实现/API 名称 `Esp32BaseFileLog`）记录设备和基础库运行过程中的技术事实：boot/reset/restart reason、WiFi、NTP、OTA、LittleFS mount/write fault、FileLog fault、基础库健康状态和内部错误链路。它面向开发、维护和运维排障，不面向业务枚举解释。
+- App Events（应用业务事件，实现/API 名称 `Esp32BaseAppEventLog`）记录业务事实、业务决策、业务影响和用户可理解结果。应用项目不要把 Esp32Base 系统事件原样写入 App Events。
+- 同一个底层故障可以同时有系统诊断日志和 App Event，但不能机械重复。判断方法是分层：系统诊断日志回答“设备内部发生了什么、技术原因是什么、维护人员如何排障”；App Event 回答“业务流程受到了什么影响、系统采取了什么业务动作、用户看到的结果是什么”。硬件或存储异常如果只是底层诊断，归 System Diagnostic Logs/Status/System diagnostics；只有当它导致业务保护、跳过、停机、业务告警、用户维护或外部决策时，才写 App Events，并且事件类型应表达业务决策，例如 `action_blocked`、`protection_triggered`、`alarm_acknowledged`，而不是重复 `fs_write_failed`、`boot` 这类系统日志语义。
+
+| 能力 | API/路径 | 主要受众 | 回答的问题 |
+| --- | --- | --- | --- |
+| System Diagnostic Logs / 系统诊断日志 | `Esp32BaseFileLog`、`/esp32base/logs` | 开发、维护、运维排障 | 设备内部发生了什么，技术原因和错误链路是什么 |
+| App Events / 应用业务事件 | `Esp32BaseAppEventLog`、`/esp32base/app-events`、`/esp32base/api/app-events` | 业务页面、现场用户、业务排查 | 业务流程受到了什么影响，系统做出了什么业务动作，用户应理解什么结果 |
 
 存储和失败语义：
 
@@ -965,7 +971,7 @@ Route 缓冲机制：
 - `addRoute()` 和 `addApi()` 不进入业务入口列表，避免 API 或隐藏路由污染导航。
 - `setDeviceName()` 设置导航品牌和默认标题；`setHomePath()` 设置业务首页路径。
 - `setHomeMode(HOME_ESP32BASE)` 保持基础库首页默认行为，`/` 跳转 `/esp32base`；`HOME_APP` 和 `HOME_COMBINED` 让 `/` 进入业务首页，并保留 `/esp32base` 系统入口。未显式 `setHomePath()` 时优先使用已注册的 `/index` 业务页作为首页；显式 `setHomePath("/")` 且注册 GET `/` 业务页时，裸 `/` 直接调用业务 handler，不产生自跳转。
-- `setSystemNavMode()` 控制系统入口位置：顶部、底部或底部紧凑系统工具区；默认使用 `SYSTEM_NAV_SECTION`，把 Status、Logs、System 作为小字链接与 `Free heap`、`Up`、`RSSI` 放在同一 footer 区域，窄屏可自然换行；启用 App Config 时系统入口同时显示 App Config 直达链接。
+- `setSystemNavMode()` 控制系统入口位置：顶部、底部或底部紧凑系统工具区；默认使用 `SYSTEM_NAV_SECTION`，把 Status、System Logs、System 作为小字链接与 `Free heap`、`Up`、`RSSI` 放在同一 footer 区域，窄屏可自然换行；启用 App Config 或 App Events 时系统入口同时显示对应直达链接。System Logs 是 `/esp32base/logs` 的默认用户标签，底层枚举仍是 `BUILTIN_LOGS`。
 - `FooterBarMode` 控制 `sendFooter()` 的底部横条输出：`FOOTER_BAR_OFF` 不显示，`FOOTER_BAR_STATUS_ONLY` 只显示运行摘要，`FOOTER_BAR_FULL` 显示系统入口和运行摘要。默认 `FOOTER_BAR_FULL`，System 页面保存后写入 `eb_ui.footer_mode` 并立即影响后续页面输出。
 - `setBuiltinLabel()` 覆盖内置导航标签，可用于中文本地化；系统工具页统一使用 `BUILTIN_TOOLS`，不提供旧 Reboot 历史别名。
 - `setHeadExtraCallback()` 设置额外 head 输出回调；`sendHeader()` 在默认 `WEB_HEAD` 后、`</head><body>` 和顶部导航前调用它，业务项目可在这里输出 `<style>`，避免页面刷新时先显示基础库默认导航样式。该回调不会注入 `/esp32base` 及其子路径的内置页面，避免业务 CSS 增加内置页体积。
@@ -986,7 +992,7 @@ Route 缓冲机制：
 - `setDefaultAuth(user, pass)` 设置应用默认认证；如果用户已保存认证，不会覆盖已保存认证。
 - `authUser()` 返回当前用户名；`authPassword()` 返回当前生效密码，仅供本地 C++ 认证集成使用，例如 ArduinoOTA/espota，禁止输出到 HTML、JSON 或 API 响应。
 - Basic Auth `Authorization` header 有内部长度上限；超长 header 会被拒绝并输出 WARN，不会静默截断后继续认证。
-- `setAuthEnabled(false)` 会完全开放内置 HTTP 路由，包括 WiFi 保存/清除、Auth 保存、重启、System、Logs clear 和 Web OTA；只适合受控调试网络。
+- `setAuthEnabled(false)` 会完全开放内置 HTTP 路由，包括 WiFi 保存/清除、Auth 保存、重启、System、System Logs clear 和 Web OTA；只适合受控调试网络。
 - `checkAuth()` 用于业务页面复用基础库 Basic Auth；返回 `false` 时已发送认证挑战，业务 handler 应直接 return。
 - `checkPostAllowed(context)` 用于业务 POST/危险操作复用基础库 Web Auth 和 Origin/Referer 同源检查；返回 `false` 时已发送认证挑战或 `403 Forbidden`，业务 handler 应直接 return。`context` 只用于安全审计日志。
 - `verifyAuth(user, pass)` 校验显式传入的账号密码；无参 `verifyAuth()` 仍表示当前请求是否已认证。
@@ -1250,7 +1256,7 @@ Offset binary API 用于业务二进制定长记录、分页读取和环形覆�
 - `removeFile()` 在 `LittleFS.remove()` 失败后会尝试把目标文件截断为 0；如果删除失败但成功清空文件内容，也返回 true，用于 FS 满或坏文件场景下优先释放可见文件占用。
 - 需要固定容量环形文件时，应用应优先用 `createFixedFile()` 初始化或校验文件容量，再用 `writeBytesAt()` 覆盖记录槽位。
 - 业务代码必须检查所有 FS API 返回值；如果连续返回 false，不能继续假设记录已写入，应进入降级、清理或提示维护流程。
-- FileLog 会把追加、清空和轮转截断视为可能较慢的 FS 操作处理；即使 FS 已满或损坏，系统级 WARN 日志写入失败也不应导致 task WDT 重启。检测到 FileLog 写入故障后，会先在运行时停止继续写 FileLog，避免后续 WARN 重复冲击异常文件系统；Web Status/Logs/System 页显示为 `write fault` 而不是 `disabled`，表示配置仍开启但运行保护停写。Web 清理、格式化或重新保存模式后可重新启用模式。
+- 系统诊断日志的实现/API 名称是 `Esp32BaseFileLog`。FileLog 会把追加、清空和轮转截断视为可能较慢的 FS 操作处理；即使 FS 已满或损坏，系统级 WARN 日志写入失败也不应导致 task WDT 重启。检测到 FileLog 写入故障后，会先在运行时停止继续写 FileLog，避免后续 WARN 重复冲击异常文件系统；Web Status/System Logs/System 页显示为 `write fault` 而不是 `disabled`，表示配置仍开启但运行保护停写。Web 清理、格式化或重新保存模式后可重新启用模式。
 
 Health 仅负责周期性采样、loop 周期统计和发布 `health.tick` 事件。heap、reset reason、WiFi state、FS state 等详情通过对应模块查询，Health 不重复包装所有字段。
 

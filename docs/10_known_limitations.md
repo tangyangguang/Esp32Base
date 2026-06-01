@@ -60,7 +60,7 @@ App Events 边界：
 
 - App Events 是固定容量环形事件日志，适合低频关键业务事件，不是业务长期数据模型。
 - 用水量统计、报表数据、累计量、传感器采样历史、完整执行历史、大 payload、高频明细和不允许覆盖的业务数据，应由业务自己的数据文件或存储结构负责。
-- App Events 也不是第二套系统 FileLog。boot/reset/restart reason、WiFi、NTP、OTA、LittleFS、FileLog fault、基础库健康状态等 Esp32Base 系统事件仍归 Status、System diagnostics 和 FileLog；App Events 只记录应用业务决策或业务可解释事件。同一故障可同时有 FileLog 和 App Event，但 FileLog 写技术原因，App Event 写业务含义和用户可理解结果。
+- App Events 也不是第二套系统诊断日志。boot/reset/restart reason、WiFi、NTP、OTA、LittleFS、FileLog fault、基础库健康状态等 Esp32Base 系统事件仍归 Status、System diagnostics 和 FileLog；App Events 只记录应用业务决策或业务可解释事件。同一故障可同时有系统诊断日志和 App Event，但前者写技术事实和内部错误链路，后者写业务影响、保护动作、跳过原因、用户维护结果或外部决策结果。
 
 ## 6. 文件系统边界
 
@@ -98,7 +98,7 @@ App Events 边界：
 ## 10. 日志边界
 
 - Core Log 只输出 Serial 和可选 sink callback，不依赖 FS。
-- 文件日志由 Runtime/FS 的 `Esp32BaseFileLog` 提供；CORE 和默认 NET 不具备文件日志能力。
+- 系统诊断日志由 Runtime/FS 的 `Esp32BaseFileLog` 提供；CORE 和默认 NET 不具备该能力。FileLog 是实现/API 名称，业务文档和页面默认称为 System Logs 或系统诊断日志。
 - `INFO` 日志明文输出 WiFi 名称/密码和 Web Auth 用户名/密码，用于业务接入和现场调试。
 - 日志访问权限由应用和部署环境控制。
 - 用户 sink callback 同步执行，不得长时间阻塞。

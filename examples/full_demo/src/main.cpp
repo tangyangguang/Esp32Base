@@ -348,7 +348,7 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "target slot - current sketch");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "Rollback</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "WiFi</th>");
-    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "File log</th>");
+    RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "System logs</th>");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "app0");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "app1");
     RUN_SELFTEST("GET", "/esp32base", nullptr, true, 200, "nvs");
@@ -362,7 +362,7 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/wifi?saved=1", nullptr, true, 200, "Credentials updated and connection started.");
     RUN_SELFTEST("GET", "/esp32base/wifi?error=clear_failed", nullptr, true, 200, "WiFi credentials were not cleared");
     RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "<section class='panel logpanel'><div class='tablewrap'><table class='logmeta'>");
-    RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "<th>File log</th><td><span class='tag ok'>enabled</span>");
+    RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "<th>System logs</th><td><span class='tag ok'>enabled</span>");
     RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "class='logmeta'");
     RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "class='segname'");
     RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "class='segsize'");
@@ -371,8 +371,8 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "class='active' href='/esp32base/logs?segment=0'><span class='segname'>current-0");
     RUN_SELFTEST("GET", "/esp32base/logs?segment=1", nullptr, true, 200, "history-1");
     RUN_SELFTEST("GET", "/esp32base/logs?segment=99", nullptr, true, 200, "class='active' href='/esp32base/logs?segment=0'><span class='segname'>current-0");
-    RUN_SELFTEST("GET", "/esp32base/logs?cleared=1", nullptr, true, 200, "Logs cleared");
-    RUN_SELFTEST("GET", "/esp32base/logs?error=clear_failed", nullptr, true, 200, "Logs action failed");
+    RUN_SELFTEST("GET", "/esp32base/logs?cleared=1", nullptr, true, 200, "System logs cleared");
+    RUN_SELFTEST("GET", "/esp32base/logs?error=clear_failed", nullptr, true, 200, "System logs action failed");
     RUN_SELFTEST("GET", "/esp32base/fs", nullptr, false, 401, "Unauthorized");
     RUN_SELFTEST("GET", "/esp32base/fs", nullptr, true, 200, "<title>File system</title>");
     RUN_SELFTEST("GET", "/esp32base/fs", nullptr, true, 200, "Summary");
@@ -468,7 +468,7 @@ void runSelfTest() {
     RUN_SELFTEST("POST", "/api/control", "value=selftest", true, 303, "Location: /control?saved=1");
     RUN_SELFTEST("GET", "/dashboard", nullptr, true, 200, "Stored value: selftest");
     RUN_SELFTEST("POST", "/esp32base/logs/clear", nullptr, true, 303, "Location: /esp32base/logs?cleared=1");
-    RUN_SELFTEST("GET", "/esp32base/logs?cleared=1", nullptr, true, 200, "Logs cleared");
+    RUN_SELFTEST("GET", "/esp32base/logs?cleared=1", nullptr, true, 200, "System logs cleared");
     RUN_BOOL(Esp32BaseWeb::verifyAuth("admin", "admin"));
     RUN_BOOL(Esp32BaseWeb::saveAuth("selftest_user", "selftestPass1"));
     RUN_BOOL(Esp32BaseWeb::verifyAuth("selftest_user", "selftestPass1"));
@@ -503,7 +503,7 @@ void handleDashboard() {
     Esp32BaseWeb::writeHtmlEscaped(Esp32Base::firmwareVersion());
     Esp32BaseWeb::sendChunk("</p><p>Stored value: ");
     Esp32BaseWeb::writeHtmlEscaped(value);
-    Esp32BaseWeb::sendChunk("</p><p><a href='/esp32base/logs'>Logs</a> <a href='/esp32base/ota'>OTA</a></p>");
+    Esp32BaseWeb::sendChunk("</p><p><a href='/esp32base/logs'>System Logs</a> <a href='/esp32base/ota'>OTA</a></p>");
     Esp32BaseWeb::sendFooter();
 }
 

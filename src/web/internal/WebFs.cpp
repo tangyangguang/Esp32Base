@@ -473,7 +473,7 @@ void handleFsPage() {
     } else if (g_server.hasArg("error")) {
         const String error = g_server.arg("error");
         const char* message = error == "delete_failed" ?
-            "LittleFS could not remove or clear the file. For FileLog files, use Clear logs or format LittleFS if storage remains full." :
+            "LittleFS could not remove or clear the file. For FileLog files, use Clear system logs or format LittleFS if storage remains full." :
             error.c_str();
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_DANGER, "File action failed", message);
     }

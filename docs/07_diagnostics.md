@@ -112,14 +112,14 @@
 - `clearLibraryNamespaces()` 不清理业务 namespace。
 - Fs 文本读写、二进制读写、追加、目录列举、rename、mkdir、rmdir。
 
-### 2.7 FileLog
+### 2.7 System Diagnostic Logs (FileLog)
 
 验证：
 
-- FS profile 默认启用 WARN 文件日志。
-- 示例中 INFO 文件日志生效。
+- FS profile 默认启用 WARN 系统诊断日志。
+- 示例中 INFO 系统诊断日志生效。
 - 默认 `4 × 32KB` 轮转正确。
-- ERROR 仅在 FileLog 模式为 ERROR/WARN/INFO 后写文件；WARN 仅在 WARN/INFO 后写文件；INFO 仅在 INFO 后写文件；DEBUG/VERBOSE 不作为文件日志模式。
+- ERROR 仅在 FileLog 模式为 ERROR/WARN/INFO 后写文件；WARN 仅在 WARN/INFO 后写文件；INFO 仅在 INFO 后写文件；DEBUG/VERBOSE 不作为系统诊断日志模式。
 - INFO 使用 `1KB / 2s` 缓存。
 - WARN/ERROR 立即写入。
 - clear 幂等。
@@ -142,8 +142,8 @@
 - Web 页面、JSON API 和 CSV 导出分别验证 HTML/JSON/CSV escape。
 - CSV 导出读取失败时必须输出可见错误行或错误状态，不得静默返回截断内容。
 - `POST /esp32base/tools/app-events-clear` 必须需要认证、POST 和同源检查；GET 不得触发清空，App Events 页面本身不得放清空按钮。
-- `/esp32base/logs` 不显示 App Events，App Events 不混入 WiFi、OTA、NTP、启动、健康状态等系统日志。
-- 应用接入验收时必须检查 App Events 不重复记录 Esp32Base 系统事件，例如 boot/reset/restart reason、WiFi、NTP、OTA、LittleFS mount/write fault、FileLog fault 或基础库健康状态；同一故障如果两边都记录，FileLog 必须表达技术原因和内部错误链路，App Event 必须表达业务含义和用户可理解结果。
+- `/esp32base/logs` 不显示 App Events，App Events 不混入 WiFi、OTA、NTP、启动、健康状态等系统诊断日志。
+- 应用接入验收时必须检查 App Events 不重复记录 Esp32Base 系统事件，例如 boot/reset/restart reason、WiFi、NTP、OTA、LittleFS mount/write fault、FileLog fault 或基础库健康状态；同一故障如果两边都记录，系统诊断日志必须表达技术原因和内部错误链路，App Event 必须表达业务影响、保护动作、跳过原因、用户维护结果或外部决策结果。
 - `examples/app_events_demo` 可构建，并能演示写入、分页读取、Web/API 展示和清空。
 
 ## 3. CI 矩阵
@@ -198,8 +198,8 @@ CI 应覆盖核心矩阵，release 前执行完整矩阵。
 - LittleFS 二进制文件读写和目录列举；文件逻辑大小存在但内容不可读时，FS API 应返回失败并由 `/esp32base/fs` 标记 `unreadable`。只读模式不提供下载，管理模式仍允许单文件删除，便于清理损坏文件。
 - FS 满或损坏时触发 Web WARN 诊断，不应因为 FileLog 写入失败导致 task WDT 重启。
 - FileLog 默认 `4 × 32KB` 轮转。
-- Logs 页面可读取 history/current。
-- Logs 页面清空后可继续写 current。
+- System Logs 页面可读取 history/current。
+- System Logs 页面清空后可继续写 current。
 - App Events 启用后默认约 188 KiB 存储、分页读取、常用筛选、真实时间/uptime fallback、CSV 导出、POST 清空和环形覆盖正常；未启用时无 App Events 路由和符号依赖。
 - JSON escape。
 - ESP32-C3 单核重负载。
@@ -215,7 +215,7 @@ CI 应覆盖核心矩阵，release 前执行完整矩阵。
 - 每秒 1 次 NVS deferred 写。
 - 每 10 分钟 1 次 Web 状态查询。
 - 每 30 秒 1 次 `health.tick` bus 事件。
-- Health tick 未超过 loop 阈值时，默认每 30 分钟最多输出 1 条 DEBUG 日志；DEBUG 不进入文件日志模式。
+- Health tick 未超过 loop 阈值时，默认每 30 分钟最多输出 1 条 DEBUG 日志；DEBUG 不进入系统诊断日志模式。
 - Health tick 窗口内最大 loop 间隔超过 `ESP32BASE_HEALTH_LOOP_WARN_MS` 时输出 WARN。
 - `ESP32BASE_HEALTH_LOOP_WARN_MS` 默认 3000ms；高实时性业务可自行降到 1000/2000ms，长操作较多的应用可升到 5000ms。
 - `ESP32BASE_HEALTH_DEBUG_LOG_INTERVAL_MS` 默认 1800000ms；设为 0 可关闭普通 DEBUG tick 日志。
@@ -261,7 +261,7 @@ CI 应覆盖核心矩阵，release 前执行完整矩阵。
 - WiFi 连接、断开、重连 backoff、进入/退出 config portal 都必须有清晰日志。
 - WiFi 初始化安全启动保护必须输出可诊断日志：`wifi_init_safe_boot_guard_set` 表示已在任何 Arduino WiFi 初始化调用前建立 guard，`wifi_init_safe_boot_guarded_reset` 表示检测到连续 WiFi 初始化期 brownout/panic/watchdog/software reset 但仍未达到阈值，`wifi_init_safe_boot_pause` 表示已暂停 WiFi 初始化并进入无 WiFi 诊断状态，`wifi_init_safe_boot_paused` 表示危险复位后仍保持暂停，`wifi_init_safe_boot_auto_resume` 表示后续非危险复位自动恢复一次 WiFi 初始化。触发暂停时必须输出中文供电风险提示，说明疑似 WiFi/RF 启动瞬时电流导致供电跌落，并建议检查电源、USB 线、稳压器余量、接线和板端 VIN/5V-GND 低 ESR 储能电容。
 - WiFi STA 安全启动保护必须输出可诊断日志：`sta_safe_boot_guard_set` 表示已进入 guarded STA 尝试，`sta_safe_boot_guarded_reset` 表示检测到连续 guarded brownout/panic/watchdog 复位但仍未达到阈值，`sta_safe_boot_pause` 表示已暂停凭据并回退 AP 配网，`sta_safe_boot_paused` 表示危险复位后仍保持暂停，`sta_safe_boot_auto_resume` 表示后续非危险复位自动恢复已保存 STA 尝试，`sta_safe_boot_resume` 表示用户重新提交凭据或点击重试后恢复 STA 尝试，`sta_safe_boot_cleared` 表示连接成功、凭据清除或恢复重试后保护状态已清空。
-- 文件日志默认 WARN；量产极简现场记录可通过 Web System 页或 `Esp32BaseFileLog::setMode(Esp32BaseFileLog::ERROR)` 只记录 ERROR；现场调试可切到 INFO，方便通过 Logs 页面观察。
+- 系统诊断日志默认 WARN；量产极简现场记录可通过 Web System 页或 `Esp32BaseFileLog::setMode(Esp32BaseFileLog::ERROR)` 只记录 ERROR；现场调试可切到 INFO，方便通过 System Logs 页面观察。
 - FileLog 模式变更必须输出 WARN 级审计日志，包含上一次模式和新模式。
 - Serial 日志和 FileLog 必须可独立控制；量产设备可通过 `Esp32BaseLog::setSerialLevel(Esp32BaseLog::NONE)` 关闭串口，同时保持 FileLog WARN/ERROR 或 INFO 正常写入。
 - `ESP32BASE_LOG_LEVEL` 是编译期上限；如果编译为 `ESP32BASE_LOG_NONE`，日志宏被移除，FileLog 也不会收到日志。

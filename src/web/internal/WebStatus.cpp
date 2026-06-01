@@ -674,7 +674,7 @@ void handleRoot() {
     }
 #endif
 #if ESP32BASE_ENABLE_FILELOG
-    sendInfoRowStart("File log");
+    sendInfoRowStart("System logs");
     sendFileLogRuntimeStateTag();
     if (fileLogHasRuntimeDetails()) {
         char sizeBuf[48];

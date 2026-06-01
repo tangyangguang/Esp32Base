@@ -1,6 +1,6 @@
 # App Events Demo
 
-This sample enables `ESP32BASE_ENABLE_APP_EVENTS=1` on `ESP32BASE_PROFILE_FULL`.
+This sample enables `ESP32BASE_ENABLE_APP_EVENTS=1` on `ESP32BASE_PROFILE_FULL`. App Events are application/business events; the System Logs page at `/esp32base/logs` remains the `Esp32BaseFileLog` system diagnostic log for boot, WiFi, OTA, FS and other base-library diagnostics.
 
 It writes several generic application events during boot, then exposes:
 

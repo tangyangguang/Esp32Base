@@ -127,7 +127,7 @@ for path, needle, message in checks:
         errors.append(f"{path}: {message}")
 
 docs = {
-    "docs/03_api.md": "运行时文件日志模式只支持 OFF、ERROR、WARN、INFO",
+    "docs/03_api.md": "运行时系统诊断日志模式只支持 OFF、ERROR、WARN、INFO",
     "docs/04_web.md": "模式设置只接受 OFF、ERROR、WARN、INFO",
     "docs/07_diagnostics.md": "ERROR/WARN/INFO",
     "docs/09_release_checklist.md": "ERROR 仅在 FileLog 模式为 ERROR",

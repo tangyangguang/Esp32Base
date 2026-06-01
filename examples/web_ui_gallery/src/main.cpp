@@ -201,9 +201,9 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/ui-form", nullptr, true, 200, "fieldgrid");
     RUN_SELFTEST("POST", "/ui-form/save", "name=gallery&limit=30", true, 303, "Location: /ui-form?saved=1");
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Device title");
-    RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "File log unavailable");
-    RUN_SELFTEST("GET", "/esp32base/logs?error=unavailable", nullptr, true, 200, "Logs action failed");
-    RUN_SELFTEST("GET", "/ui-status", nullptr, true, 200, "<footer class='footerbar'><span class='syslinks'><a href='/esp32base'>Status</a><a href='/esp32base/logs'>Logs</a><a href='/esp32base/app-config'>App Config</a>");
+    RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "System logs unavailable");
+    RUN_SELFTEST("GET", "/esp32base/logs?error=unavailable", nullptr, true, 200, "System logs action failed");
+    RUN_SELFTEST("GET", "/ui-status", nullptr, true, 200, "<footer class='footerbar'><span class='syslinks'><a href='/esp32base'>Status</a><a href='/esp32base/logs'>System Logs</a><a href='/esp32base/app-config'>App Config</a>");
 #undef RUN_SELFTEST
 #undef RUN_AJAX_SELFTEST
     ESP32BASE_LOG_I("selftest", "summary pass=%u total=%u", static_cast<unsigned>(pass), static_cast<unsigned>(total));

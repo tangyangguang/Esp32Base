@@ -157,13 +157,13 @@ void handleToolsPage() {
     if (g_server.hasArg("formatted")) {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "LittleFS formatted", "FileLog mode was reloaded.");
     } else if (g_server.hasArg("logs_cleared")) {
-        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "Logs cleared");
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "System logs cleared");
 #if ESP32BASE_ENABLE_APP_EVENTS
     } else if (g_server.hasArg("app_events_cleared")) {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "App Events cleared");
 #endif
     } else if (g_server.hasArg("filelog_saved")) {
-        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "File log mode saved");
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "System log mode saved");
     } else if (g_server.hasArg("footer_saved")) {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "Footer bar mode saved");
     } else if (g_server.hasArg("watchdog_trip_reset")) {
@@ -218,7 +218,7 @@ void handleToolsPage() {
     sendFooterBarModeOption("full", "Links + status", Esp32BaseWeb::FOOTER_BAR_FULL);
     sendChunk("</div><p class='muted'>Controls the compact bottom bar on built-in and app pages.</p><div class='actions'><input type='submit' value='Save Footer Bar'></div></form></section>");
 #if ESP32BASE_ENABLE_FILELOG
-    sendChunk("<section class='panel actionpanel'><h2>File log</h2><div class='tablewrap'><table class='kv'>");
+    sendChunk("<section class='panel actionpanel'><h2>System logs</h2><div class='tablewrap'><table class='kv'>");
     sendInfoRow("Current mode", Esp32BaseFileLog::modeName());
     sendFileLogRuntimeStateRow("Runtime state");
     sendInfoRow("Path", Esp32BaseFileLog::path());
@@ -235,9 +235,9 @@ void handleToolsPage() {
 #if ESP32BASE_LOG_LEVEL >= ESP32BASE_LOG_INFO
     sendFileLogModeOption("info", "INFO", Esp32BaseFileLog::INFO);
 #endif
-    sendChunk("</div><p class='muted'>File log mode is capped by the build log level.</p><div class='actions'><input type='submit' value='Save File Log'></div></form></section>");
+    sendChunk("</div><p class='muted'>System log mode is capped by the build log level.</p><div class='actions'><input type='submit' value='Save System Logs'></div></form></section>");
 #else
-    sendChunk("<section class='panel actionpanel'><h2>File log</h2><p class='muted'>File log is unavailable in this profile.</p></section>");
+    sendChunk("<section class='panel actionpanel'><h2>System logs</h2><p class='muted'>System diagnostic logs are unavailable in this profile.</p></section>");
 #endif
 #if ESP32BASE_ENABLE_WATCHDOG
     sendWatchdogPanel();
@@ -245,12 +245,12 @@ void handleToolsPage() {
     sendChunk("</div><div class='toolgrid'>");
     sendChunk("<section class='panel dangerpanel'><h2>Restart device</h2><p class='muted'>Restart the device through the normal lifecycle path.</p><form method='post' action='/esp32base/tools/reboot' onsubmit=\"return confirm('Reboot device now?')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Restart device'></div></form></section>");
 #if ESP32BASE_ENABLE_FILELOG
-    sendChunk("<section class='panel dangerpanel'><h2>Clear logs</h2><p class='dangertext'>Delete all file log contents. Runtime settings and WiFi credentials are not changed.</p><form method='post' action='/esp32base/tools/logs-clear' onsubmit=\"return confirm('Clear log files?')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Clear Logs'></div></form></section>");
+    sendChunk("<section class='panel dangerpanel'><h2>Clear system logs</h2><p class='dangertext'>Delete all system diagnostic log contents. Runtime settings and WiFi credentials are not changed.</p><form method='post' action='/esp32base/tools/logs-clear' onsubmit=\"return confirm('Clear system logs?')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Clear System Logs'></div></form></section>");
 #else
-    sendChunk("<section class='panel actionpanel'><h2>Clear logs</h2><p class='muted'>File log is unavailable in this profile.</p></section>");
+    sendChunk("<section class='panel actionpanel'><h2>Clear system logs</h2><p class='muted'>System diagnostic logs are unavailable in this profile.</p></section>");
 #endif
 #if ESP32BASE_ENABLE_APP_EVENTS
-    sendChunk("<section class='panel dangerpanel'><h2>Clear App Events</h2><p class='dangertext'>Delete the application event log store. System FileLog, runtime settings and WiFi credentials are not changed.</p><form method='post' action='/esp32base/tools/app-events-clear' onsubmit=\"return confirm('Clear App Events?')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Clear App Events'></div></form></section>");
+    sendChunk("<section class='panel dangerpanel'><h2>Clear App Events</h2><p class='dangertext'>Delete the application event log store. System diagnostic logs, runtime settings and WiFi credentials are not changed.</p><form method='post' action='/esp32base/tools/app-events-clear' onsubmit=\"return confirm('Clear App Events?')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Clear App Events'></div></form></section>");
 #endif
 #if ESP32BASE_ENABLE_FS
     sendChunk("<section class='panel dangerpanel'><h2>Format LittleFS</h2><p class='dangertext'>This deletes logs and all files stored in LittleFS. WiFi, Web Auth and NVS config are not cleared.</p><form method='post' action='/esp32base/tools/format-fs' onsubmit=\"return confirm('Format LittleFS? This deletes logs and all files stored in LittleFS.')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Format LittleFS'></div></form></section>");

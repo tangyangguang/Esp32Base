@@ -104,7 +104,7 @@ Core 不包含：
 - 模板 policy 架构
 - 静态模块注册表
 
-文件日志作为 Runtime/FS 可选模块提供，不属于 Core。启用 FS 的 profile 默认开启文件日志；CORE 不为 LittleFS 或文件日志付成本。
+系统诊断日志作为 Runtime/FS 可选模块提供，实现/API 名称为 `Esp32BaseFileLog`，不属于 Core。启用 FS 的 profile 默认开启系统诊断日志；CORE 不为 LittleFS 或系统诊断日志付成本。
 
 ## 4. 质量目标
 

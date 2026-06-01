@@ -130,21 +130,21 @@
 - 合法 `eb_sys.hostname` 覆盖构建默认 hostname；非法持久化 hostname 被忽略并输出 WARN。
 - `factoryReset()` 后重启清除 `eb_sys.hostname`，恢复构建默认 hostname。
 
-## 9. 文件日志检查
+## 9. 系统诊断日志（FileLog）检查
 
 必须通过：
 
-- FS profile 默认启用 WARN 文件日志。
+- FS profile 默认启用 WARN 系统诊断日志（实现/API 名称 `Esp32BaseFileLog`）。
 - 非 FS profile 不强行启用 FileLog。
 - 默认路径为 `/logs/eb_app.log`。
 - 默认轮转为 `4 × 32KB`。
-- ERROR 仅在 FileLog 模式为 ERROR/WARN/INFO 后写文件；WARN 仅在 WARN/INFO 后写文件；INFO 仅在 INFO 后写文件；DEBUG/VERBOSE 不能配置为文件日志模式。
+- ERROR 仅在 FileLog 模式为 ERROR/WARN/INFO 后写文件；WARN 仅在 WARN/INFO 后写文件；INFO 仅在 INFO 后写文件；DEBUG/VERBOSE 不能配置为系统诊断日志模式。
 - INFO 使用 `1KB / 2s` 缓存。
 - Web System 页只能设置 Off/ERROR/WARN/INFO，非法 POST 值必须失败。
 - Web System 页切换 FileLog 模式时，WARN 审计日志必须包含上一次模式和新模式。
-- FileLog 配置模式开启但运行期因 FS 写入故障停写时，Status、Logs、System 页必须显示 `write fault`，并说明已有日志可能仍可读取，不能显示成 `disabled`。
-- FileLog 模式为 OFF 时，Logs 和 System 页必须醒目显示 `disabled`，并说明新日志不会写入。
-- FileLog OFF 后 Logs 页面仍能查看已有历史 segment。
+- FileLog 配置模式开启但运行期因 FS 写入故障停写时，Status、System Logs、System 页必须显示 `write fault`，并说明已有日志可能仍可读取，不能显示成 `disabled`。
+- FileLog 模式为 OFF 时，System Logs 和 System 页必须醒目显示 `disabled`，并说明新日志不会写入。
+- FileLog OFF 后 System Logs 页面仍能查看已有历史 segment。
 - `setSerialLevel(NONE)` 后 Serial 不输出，但 FileLog 仍按当前模式写入。
 - `setRuntimeLevel(NONE)` 后 Serial 和 FileLog 都停止。
 - WARN/ERROR 立即写入。
@@ -198,16 +198,16 @@
 - firmware API。
 - Hostname API。
 - WiFi 配置 API。
-- Logs 页面。
-- Logs clear POST + confirm + once + 303。
-- Logs clear 回到页面后显示成功/失败提示。
-- FS/FileLog 不可用时 Logs 页面显示 `File log unavailable`。
+- System Logs 页面。
+- System Logs clear POST + confirm + once + 303。
+- System Logs clear 回到页面后显示成功/失败提示。
+- FS/FileLog 不可用时 System Logs 页面显示 `System logs unavailable`。
 - 日志内容 HTML escape。
 - 默认 Web 首页和导航开箱可用。
 - 业务优先导航可设置 device name、home path、home mode、system nav mode。
 - Footer bar 可切换 Off、Status only、Links + status；Off 不输出底部横条，Status only 只输出运行摘要，Links + status 输出系统入口和运行摘要。
 - `addPage()` / `addNavItem()` 注册的业务入口进入业务导航且不重复业务首页入口。
-- 内置 Status/WiFi/OTA/Logs/Tools/Auth 标签可覆盖，用于本地化。
+- 内置 Status/WiFi/OTA/System Logs/Tools/Auth 标签可覆盖，用于本地化；底层枚举名仍为 `BUILTIN_LOGS`。
 - Tools 维护页中的重启和格式化 FS 按钮都有二次确认。
 - Tools 维护页可保存 hostname，显示当前值、默认值、已保存值和重启需求；保存后不热切换当前运行时 hostname。
 - 启用 `ESP32BASE_ENABLE_APP_CONFIG` 后，System 页显示 App Config 入口，`/esp32base/app-config` 可按 group 展示业务参数。
@@ -240,7 +240,7 @@
 - `examples/web_logs_ota` 可在自身目录 `pio run`。
 - `examples/net_runtime` 可在自身目录 `pio run`。
 - `examples/app_events_demo` 可在自身目录 `pio run`，并演示 App Events 写入、分页查看、JSON/CSV 和 POST 写入。
-- 所有启用 FS 的示例通过 `ESP32BASE_EB_FILELOG_DEFAULT_MODE=ESP32BASE_FILELOG_MODE_INFO` 将文件日志默认模式设为 INFO。
+- 所有启用 FS 的示例通过 `ESP32BASE_EB_FILELOG_DEFAULT_MODE=ESP32BASE_FILELOG_MODE_INFO` 将系统诊断日志默认模式设为 INFO。
 
 ## 14. Soak 检查
 
@@ -253,7 +253,7 @@
 - 周期 `health.tick` bus 事件。
 - Health tick 默认只输出 DEBUG；超过 loop 阈值才输出 WARN。
 - 路由器掉电恢复。
-- 周期读取 Logs 页面。
+- 周期读取 System Logs 页面。
 - 无意外重启、卡死、heap 持续退化或重连失败。
 
 ## 15. 发布后维护规则

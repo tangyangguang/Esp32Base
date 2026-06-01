@@ -24,7 +24,7 @@ WebContext::WebContext()
       homeMode(Esp32BaseWeb::HOME_ESP32BASE),
       systemNavMode(Esp32BaseWeb::SYSTEM_NAV_SECTION),
       footerBarMode(Esp32BaseWeb::FOOTER_BAR_FULL),
-      builtinLabels{"Status", "WiFi", "OTA", "Logs", "App Events", "System", "System", "Auth"},
+      builtinLabels{"Status", "WiFi", "OTA", "System Logs", "App Events", "System", "System", "Auth"},
       headExtraCallback(nullptr),
       pageHeadProgmem(nullptr),
       chunkBuffer{""},

@@ -79,9 +79,9 @@ void handleLogsPage() {
     Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_LOGS]);
     Esp32BaseWeb::sendPageTitle(g_builtinLabels[Esp32BaseWeb::BUILTIN_LOGS]);
     if (g_server.hasArg("cleared")) {
-        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "Logs cleared");
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "System logs cleared");
     } else if (g_server.hasArg("error")) {
-        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_DANGER, "Logs action failed", g_server.arg("error").c_str());
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_DANGER, "System logs action failed", g_server.arg("error").c_str());
     }
 #if ESP32BASE_ENABLE_FILELOG
     Esp32BaseFileLog::flush();
@@ -94,7 +94,7 @@ void handleLogsPage() {
     formatReadableBytes(Esp32BaseFileLog::bufferUsed(), bufferUsed, sizeof(bufferUsed));
     formatReadableBytes(Esp32BaseFileLog::bufferSize(), bufferTotal, sizeof(bufferTotal));
     char line[320];
-    sendChunk("<section class='panel logpanel'><div class='tablewrap'><table class='logmeta'><tr><th>File log</th><td>");
+    sendChunk("<section class='panel logpanel'><div class='tablewrap'><table class='logmeta'><tr><th>System logs</th><td>");
     sendFileLogRuntimeStateTag();
     sendChunk("</td></tr><tr><th>Path</th><td>");
     sendEscapedHtmlChunk(Esp32BaseFileLog::path());
@@ -123,7 +123,7 @@ void handleLogsPage() {
     sendChunk(line);
     sendChunk("</section>");
 #else
-    sendChunk("<section class='panel actionpanel'><h2>File log unavailable</h2><p class='muted'>File log is not available in this firmware profile.</p></section>");
+    sendChunk("<section class='panel actionpanel'><h2>System logs unavailable</h2><p class='muted'>System diagnostic logs are not available in this firmware profile.</p></section>");
 #endif
     Esp32BaseWeb::sendFooter();
 }
@@ -145,7 +145,7 @@ void handleLogsRaw() {
     }
     endResponse();
 #else
-    g_server.send(404, "text/plain", "File log unavailable");
+    g_server.send(404, "text/plain", "System logs unavailable");
 #endif
 }
 

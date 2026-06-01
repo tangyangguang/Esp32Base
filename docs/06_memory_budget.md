@@ -68,7 +68,7 @@ ESP32 full_demo 对照构建中，24 route 相比 16 route 让 `g_routes` 增加
 
 ### 3.4 FileLog
 
-文件日志仅在 FS profile 中启用。默认 `4 × 32KB = 128KB`，低优先级缓存 1KB，flush interval 2s。量产推荐 WARN 模式；示例使用 INFO 默认模式方便观察。Core 和默认 NET 不链接 LittleFS，也不产生 FileLog 静态状态。
+系统诊断日志仅在 FS profile 中启用，底层实现/API 名称是 `Esp32BaseFileLog`。默认 `4 × 32KB = 128KB`，低优先级缓存 1KB，flush interval 2s。量产推荐 WARN 模式；示例使用 INFO 默认模式方便观察。Core 和默认 NET 不链接 LittleFS，也不产生 FileLog 静态状态。
 
 ### 3.5 App Events
 
@@ -135,7 +135,7 @@ Web 发送 buffer：
 - HTML/JSON/CSV 与 PROGMEM CSS/JS 共用 512 B 静态 chunk buffer。响应头仍走 Arduino `WebServer`，正文 data chunk 由基础库写出 `hex\r\n + payload + \r\n` 标准 chunked 帧，避免每个 chunk 触发 `WebServer::sendContent()` 内部小块 `malloc/free`。chunk payload 保持 512 B，不恢复早前实机回归中不稳定的 1 KB/1.4 KB 大 chunk。长响应发送每个 chunk 时会喂 watchdog，避免 UI baseline 增加页面体积后，业务长页面仍在同步 `WebServer::handleClient()` 内就触发 task WDT。若 flush 前后检测到客户端断开，当前响应标记为 broken 并停止继续输出。
 - Web 内部已拆为多 `.cpp` 模块，但运行时仍共享同一个 `WebContext` 和 512 B chunk buffer；拆分只改变维护边界，不引入每请求堆分配、页面对象层级或额外响应 buffer。
 - 不再为每页面下发 App Config 专用 CSS（~700 B），只在 App Config 页注入；其他 6 个内置页和业务页首屏均受益。
-- `setHeadExtraCallback()` 的业务 head 注入不会作用到 `/esp32base` 内置页面，业务项目的大段应用 CSS 不会增加 Status、Logs、System 等内置页首屏字节数。
+- `setHeadExtraCallback()` 的业务 head 注入不会作用到 `/esp32base` 内置页面，业务项目的大段应用 CSS 不会增加 Status、System Logs、System 等内置页首屏字节数。
 
 ## 5. PSRAM
 
