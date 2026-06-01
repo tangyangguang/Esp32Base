@@ -437,7 +437,7 @@ void handleHeadExtra() {
 - `sendInfoRowCompactForm()`：带单按钮 POST 动作的紧凑行。
 - `sendInfoRowInlineEdit()`：单字段行内编辑。
 - `sendInfoRowDialogForm()`：1-3 字段小表单弹层入口。
-- `sendPagination()`：页码型分页，包含每页条数和跳页提交。
+- `sendPagination()`：页码型分页，包含每页条数和跳页提交；默认 10 条，每页选项为 10、15、20、30、50。
 
 行内动作优先使用 `sendInfoRowCompactLink()` 或 `sendInfoRowCompactForm()`；单字段修改优先使用 `sendInfoRowInlineEdit()`；小表单优先使用 `sendInfoRowDialogForm()`。如果业务确实需要自定义 HTML，使用底层 `sendChunk()` 手动输出；来自配置、URL、日志、设备名、用户输入或远端数据的内容不得直接拼接，必须使用 `writeHtmlEscaped()`。
 

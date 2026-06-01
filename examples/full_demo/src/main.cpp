@@ -454,7 +454,7 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/control/edit", nullptr, true, 200, "<footer class='footerbar'><span class='syslinks'>");
     RUN_SELFTEST("GET", "/ui-status", nullptr, true, 200, "状态概览模板");
     RUN_SELFTEST("GET", "/ui-stats", nullptr, true, 200, "统计摘要模板");
-    RUN_SELFTEST("GET", "/ui-records?page=2", nullptr, true, 200, "共 128 条 / 7 页");
+    RUN_SELFTEST("GET", "/ui-records?page=2", nullptr, true, 200, "共 128 条 / 13 页");
     RUN_SELFTEST("GET", "/ui-records?page=2", nullptr, true, 200, "page=1'>上一页");
     RUN_SELFTEST("GET", "/ui-config?saved=1", nullptr, true, 200, "保存成功");
     RUN_SELFTEST("GET", "/ui-action", nullptr, true, 200, "操作命令模板");
@@ -645,9 +645,9 @@ void handleUiRecordsDemo() {
     Esp32BaseWeb::sendHeader("UI Records");
     Esp32BaseWeb::sendPageTitle("列表记录模板", "包含紧凑筛选、表头、分页和空状态。");
     Esp32BaseWeb::beginPanel("最近记录");
-    Esp32BaseWeb::sendChunk("<div class='actions'><span class='tag info'>最近 24 小时</span><span class='tag'>全部类型</span><span class='tag'>每页 20 条</span></div>");
+    Esp32BaseWeb::sendChunk("<div class='actions'><span class='tag info'>最近 24 小时</span><span class='tag'>全部类型</span><span class='tag'>每页 10 条</span></div>");
     Esp32BaseWeb::sendChunk("<table class='kv'><tr><th>时间</th><th>类型</th><th>结果</th></tr><tr><td>18:30</td><td>计划执行</td><td>完成</td></tr><tr><td>16:10</td><td>手动执行</td><td>完成</td></tr></table>");
-    Esp32BaseWeb::Pagination pagination = {"/ui-records", "range=24h&type=all", page, 20, 128};
+    Esp32BaseWeb::Pagination pagination = {"/ui-records", "range=24h&type=all", page, 10, 128};
     Esp32BaseWeb::sendPagination(pagination);
     Esp32BaseWeb::endPanel();
     Esp32BaseWeb::sendFooter();

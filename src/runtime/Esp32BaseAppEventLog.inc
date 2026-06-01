@@ -235,6 +235,39 @@ AppEventRecordStatus appEventReadRecordForNextId(uint16_t slot, uint32_t nextId,
     return APP_EVENT_RECORD_OK;
 }
 
+void appEventInspectRecord(uint16_t slot, uint16_t index, Esp32BaseAppEventLog::StoreRecord& item) {
+    memset(&item, 0, sizeof(item));
+    item.slot = slot;
+    item.index = index;
+    item.offset = appEventRecordOffset(slot);
+    item.status = Esp32BaseAppEventLog::STORE_RECORD_READ_FAILED;
+    if (!appEventReadExact(item.offset, &item.record, sizeof(item.record))) {
+        return;
+    }
+    item.readOk = true;
+    item.storedCrc16 = item.record.crc16;
+    item.calculatedCrc16 = appEventRecordCrc(item.record);
+    item.magicOk = item.record.magic == kAppEventRecordMagic;
+    item.levelOk = item.record.level >= Esp32BaseAppEventLog::LEVEL_INFO &&
+                   item.record.level <= Esp32BaseAppEventLog::LEVEL_ERROR;
+    item.crcOk = item.storedCrc16 == item.calculatedCrc16;
+    item.committed = item.record.id != 0 && appEventRecordIdBeforeNext(item.record.id, g_appEventNextId);
+
+    if (item.record.magic == 0 && item.record.id == 0 && item.storedCrc16 == 0) {
+        item.status = Esp32BaseAppEventLog::STORE_RECORD_EMPTY;
+    } else if (!item.magicOk) {
+        item.status = Esp32BaseAppEventLog::STORE_RECORD_INVALID_MAGIC;
+    } else if (!item.levelOk) {
+        item.status = Esp32BaseAppEventLog::STORE_RECORD_INVALID_LEVEL;
+    } else if (!item.crcOk) {
+        item.status = Esp32BaseAppEventLog::STORE_RECORD_CRC_MISMATCH;
+    } else if (!item.committed) {
+        item.status = Esp32BaseAppEventLog::STORE_RECORD_UNCOMMITTED;
+    } else {
+        item.status = Esp32BaseAppEventLog::STORE_RECORD_OK;
+    }
+}
+
 uint16_t appEventOldestSlot(uint16_t head, uint16_t count) {
     return static_cast<uint16_t>((static_cast<uint32_t>(head) + kAppEventCapacity - count) % kAppEventCapacity);
 }
@@ -704,6 +737,52 @@ bool Esp32BaseAppEventLog::readLatest(uint16_t offset, uint16_t limit, ReadCallb
     return true;
 }
 
+bool Esp32BaseAppEventLog::readStoreInfo(StoreInfo& info) {
+    memset(&info, 0, sizeof(info));
+    info.path = kAppEventPath;
+    info.fileSize = Esp32BaseFs::isReady() ? Esp32BaseFs::fileSize(kAppEventPath) : -1;
+    info.expectedFileSize = appEventStoreSize();
+    info.headerSize = sizeof(Esp32BaseAppEventHeader);
+    info.recordSize = kAppEventRecordSize;
+    info.capacity = kAppEventCapacity;
+    if (!g_appEventReady && !g_appEventFault) {
+        begin();
+    }
+    info.count = g_appEventCount;
+    info.validCount = g_appEventValidCount;
+    info.head = g_appEventHead;
+    info.nextId = g_appEventNextId;
+    info.sequence = g_appEventSequence;
+    info.activeHeader = g_appEventActiveHeader;
+    info.ready = g_appEventReady;
+    info.faulted = g_appEventFault;
+    return info.ready && !info.faulted;
+}
+
+bool Esp32BaseAppEventLog::readStoreRecords(uint16_t offset, uint16_t limit, StoreRecordCallback cb, void* user) {
+    if (!cb || (!g_appEventReady && !begin())) {
+        return false;
+    }
+    if (g_appEventFault || !g_appEventReady) {
+        return false;
+    }
+    if (offset >= g_appEventCount || limit == 0) {
+        return true;
+    }
+
+    uint16_t emitted = 0;
+    for (uint16_t i = offset; i < g_appEventCount && emitted < limit; ++i) {
+        const uint32_t distance = static_cast<uint32_t>(i) + 1U;
+        const uint16_t slot = static_cast<uint16_t>((static_cast<uint32_t>(g_appEventHead) + kAppEventCapacity - distance) % kAppEventCapacity);
+        StoreRecord item;
+        appEventInspectRecord(slot, i, item);
+        cb(item, user);
+        ++emitted;
+        yield();
+    }
+    return true;
+}
+
 bool Esp32BaseAppEventLog::clear() {
     if (!Esp32BaseFs::isReady()) {
         appEventSetError("fs_not_ready");
@@ -768,6 +847,19 @@ const char* Esp32BaseAppEventLog::levelName(Level level) {
         case LEVEL_WARN: return "warn";
         case LEVEL_ERROR: return "error";
         default: return "unknown";
+    }
+}
+
+const char* Esp32BaseAppEventLog::storeRecordStatusName(StoreRecordStatus status) {
+    switch (status) {
+        case STORE_RECORD_OK: return "ok";
+        case STORE_RECORD_EMPTY: return "empty";
+        case STORE_RECORD_INVALID_MAGIC: return "invalid_magic";
+        case STORE_RECORD_INVALID_LEVEL: return "invalid_level";
+        case STORE_RECORD_CRC_MISMATCH: return "crc_mismatch";
+        case STORE_RECORD_UNCOMMITTED: return "uncommitted";
+        case STORE_RECORD_READ_FAILED:
+        default: return "read_failed";
     }
 }
 

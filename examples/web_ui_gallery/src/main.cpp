@@ -144,8 +144,8 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/index", nullptr, true, 200, "状态概览");
     RUN_SELFTEST("GET", "/ui-status", nullptr, true, 200, "状态概览");
     RUN_SELFTEST("GET", "/ui-status/stats", nullptr, true, 200, "统计摘要");
-    RUN_SELFTEST("GET", "/ui-records?page=2", nullptr, true, 200, "共 128 条 / 7 页");
-    RUN_SELFTEST("GET", "/ui-records?page=2", nullptr, true, 200, "range=24h&amp;type=all&amp;per=20&amp;page=1");
+    RUN_SELFTEST("GET", "/ui-records?page=2", nullptr, true, 200, "共 128 条 / 13 页");
+    RUN_SELFTEST("GET", "/ui-records?page=2", nullptr, true, 200, "range=24h&amp;type=all&amp;per=10&amp;page=1");
     RUN_SELFTEST("GET", "/ui-records?page=2", nullptr, true, 200, "<link rel='stylesheet' href='/esp32base/ui.css", ":root{color-scheme");
     RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, "Cache-Control: public, max-age=86400");
     RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, "h1{font-size:18px}h2{font-size:16px}");
@@ -173,10 +173,10 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, "dialog .fieldgrid{margin:0}");
     RUN_SELFTEST("GET", "/esp32base/ui.css", nullptr, true, 200, ".eb-inline-edit{");
     RUN_SELFTEST("GET", "/ui-records?page=2", nullptr, true, 200, "aria-current='page'>2</span>", "当前第");
-    RUN_SELFTEST("GET", "/ui-records?range=24h&type=all&per=20&page=2", nullptr, true, 200, "filterbar", "name='start'");
+    RUN_SELFTEST("GET", "/ui-records?range=24h&type=all&per=10&page=2", nullptr, true, 200, "filterbar", "name='start'");
     RUN_SELFTEST("GET", "/ui-records?range=custom&type=all&start=2026-05-28T08:00&end=2026-05-28T09:00", nullptr, true, 200, "name='start'");
     RUN_SELFTEST("GET", "/ui-records?range=30d&type=guard&page=4", nullptr, true, 200, "aria-current='page'>4</span>");
-    RUN_SELFTEST("GET", "/ui-records?range=30d&type=guard&page=4", nullptr, true, 200, "filterbar", "每页 20 条");
+    RUN_SELFTEST("GET", "/ui-records?range=30d&type=guard&page=4", nullptr, true, 200, "filterbar", "每页 10 条");
     RUN_SELFTEST("GET", "/ui-config?saved=1", nullptr, true, 200, "保存成功");
     RUN_SELFTEST("GET", "/ui-config", nullptr, true, 200, "data-eb-inline-edit");
     RUN_SELFTEST("GET", "/ui-config", nullptr, true, 200, "data-eb-dialog");
@@ -431,11 +431,11 @@ void handleRecordsPage() {
     if (page == 0) {
         page = 1;
     }
-    char perText[12] = "20";
+    char perText[12] = "10";
     Esp32BaseWeb::getParam("per", perText, sizeof(perText));
     uint32_t perPage = static_cast<uint32_t>(strtoul(perText, nullptr, 10));
-    if (perPage != 10 && perPage != 20 && perPage != 50) {
-        perPage = 20;
+    if (perPage != 10 && perPage != 15 && perPage != 20 && perPage != 30 && perPage != 50) {
+        perPage = 10;
     }
     Esp32BaseWeb::sendHeader("UI Records");
     Esp32BaseWeb::sendPageTitle("记录列表", "筛选、表头、空状态和分页的基准样式。");

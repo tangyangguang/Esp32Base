@@ -141,7 +141,7 @@
 - `epochSec` 或当前 boot 可解析时显示真实时间；不可解析时显示 `uptime N ms` 和 `boot N`，不得伪造日期。
 - Web 页面、JSON API 和 CSV 导出分别验证 HTML/JSON/CSV escape。
 - CSV 导出读取失败时必须输出可见错误行或错误状态，不得静默返回截断内容。
-- `POST /esp32base/app-events/clear` 必须需要认证、POST 和同源检查；GET 不得触发清空。
+- `POST /esp32base/tools/app-events-clear` 必须需要认证、POST 和同源检查；GET 不得触发清空，App Events 页面本身不得放清空按钮。
 - `/esp32base/logs` 不显示 App Events，App Events 不混入 WiFi、OTA、NTP、启动、健康状态等系统日志。
 - `examples/app_events_demo` 可构建，并能演示写入、分页读取、Web/API 展示和清空。
 

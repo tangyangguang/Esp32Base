@@ -51,7 +51,7 @@ void sendPaginationLink(const char* label, const Esp32BaseWeb::Pagination& pagin
         sendChunk("&amp;");
     }
     char perValue[16];
-    snprintf(perValue, sizeof(perValue), "%lu", static_cast<unsigned long>(pagination.perPage == 0 ? 20 : pagination.perPage));
+    snprintf(perValue, sizeof(perValue), "%lu", static_cast<unsigned long>(pagination.perPage == 0 ? 10 : pagination.perPage));
     sendChunk("per=");
     sendChunk(perValue);
     sendChunk("&amp;");

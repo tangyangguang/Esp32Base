@@ -51,7 +51,6 @@ bool Esp32BaseWeb::begin() {
     g_server.on("/esp32base/app-events", HTTP_GET, handleAppEventsPage);
     g_server.on("/esp32base/api/app-events", HTTP_GET, handleAppEventsApi);
     g_server.on("/esp32base/app-events.csv", HTTP_GET, handleAppEventsCsv);
-    g_server.on("/esp32base/app-events/clear", HTTP_POST, handleAppEventsClearPost);
 #endif
 #if ESP32BASE_ENABLE_FS
     g_server.on("/esp32base/fs", HTTP_GET, handleFsPage);
@@ -76,6 +75,9 @@ bool Esp32BaseWeb::begin() {
 #endif
     g_server.on("/esp32base/tools/format-fs", HTTP_POST, handleToolsFormatFsPost);
     g_server.on("/esp32base/tools/logs-clear", HTTP_POST, handleToolsLogsClearPost);
+#if ESP32BASE_ENABLE_APP_EVENTS
+    g_server.on("/esp32base/tools/app-events-clear", HTTP_POST, handleToolsAppEventsClearPost);
+#endif
     g_server.on("/esp32base/api/restart", HTTP_POST, handleRestart);
     g_server.on("/generate_204", HTTP_GET, handleCaptiveProbe);
     g_server.on("/hotspot-detect.html", HTTP_GET, handleCaptiveProbe);
@@ -697,7 +699,7 @@ void Esp32BaseWeb::sendAjaxError(int code, const char* error) {
 }
 
 void Esp32BaseWeb::sendPagination(const Pagination& pagination) {
-    const uint32_t perPage = pagination.perPage == 0 ? 20 : pagination.perPage;
+    const uint32_t perPage = pagination.perPage == 0 ? 10 : pagination.perPage;
     const uint32_t totalPages = pagination.total == 0 ? 1 : ((pagination.total + perPage - 1) / perPage);
     uint32_t page = pagination.page == 0 ? 1 : pagination.page;
     if (page > totalPages) {
@@ -732,8 +734,8 @@ void Esp32BaseWeb::sendPagination(const Pagination& pagination) {
     sendQueryHiddenInputs(pathQuery ? pathQuery + 1 : nullptr);
     sendQueryHiddenInputs(pagination.query);
     sendChunk("<label class='muted'>每页</label><select name='per'>");
-    const uint16_t options[] = {10, 20, 50};
-    for (uint8_t i = 0; i < 3; ++i) {
+    const uint16_t options[] = {10, 15, 20, 30, 50};
+    for (uint8_t i = 0; i < 5; ++i) {
         char opt[8];
         snprintf(opt, sizeof(opt), "%u", static_cast<unsigned>(options[i]));
         sendChunk("<option value='");

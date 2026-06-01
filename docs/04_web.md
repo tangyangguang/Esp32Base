@@ -165,10 +165,9 @@ Logs:
 
 App Events，仅 `ESP32BASE_ENABLE_APP_EVENTS=1`：
 
-- `GET /esp32base/app-events`，独立应用事件页面，不混入系统 FileLog；支持 `page/per/level/time/source/type/reason/q` 筛选参数，非法筛选返回 `400 invalid_filter`。
+- `GET /esp32base/app-events`，独立事件日志页面，不混入系统 FileLog；支持 `page/per/level/time/source/type/reason/q` 筛选参数，非法筛选返回 `400 invalid_filter`。
 - `GET /esp32base/api/app-events?offset=0&limit=50`，按最新优先分页输出 JSON；支持 `level/time/source/type/reason/q` 筛选参数，事件对象同时包含 `uptimeSec` 和 64-bit 派生 `uptimeMs`，非法筛选返回 `400 {"ok":false,"error":"invalid_filter"}`。
 - `GET /esp32base/app-events.csv`，导出当前筛选后的应用事件 CSV；非法筛选返回 `400 invalid_filter`。
-- `POST /esp32base/app-events/clear`，清空应用事件；需要认证、POST 和同源检查，成功后 303 回到页面。
 
 System:
 
@@ -185,6 +184,7 @@ System:
 - `POST /esp32base/tools/footer-bar`
 - `POST /esp32base/tools/filelog`
 - `POST /esp32base/tools/logs-clear`，System 页面主入口，成功后回到 System 页面
+- `POST /esp32base/tools/app-events-clear`，仅 `ESP32BASE_ENABLE_APP_EVENTS=1`，清空事件日志；System 页面危险操作入口，成功后回到 System 页面
 - `POST /esp32base/tools/watchdog-trip-reset`
 - `POST /esp32base/tools/format-fs`
 - `POST /esp32base/api/restart`
@@ -218,6 +218,7 @@ System 维护页：
 - 启用 Watchdog 的 profile 显示 Watchdog lifetime/trip 小计维护；当 `wdt_trip_base` 大于 lifetime 时显示 `invalid baseline`，Reset Watchdog Trip 写入并回读确认 `eb_sys.wdt_trip_base` 和 `eb_sys.wdt_trip_time`，不清 `eb_sys.wdt_cnt`。
 - 启用 FS 的 profile 显示 `Format LittleFS`，该操作会删除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth 或 NVS 配置。
 - 启用 FileLog 的 profile 显示 File log 模式设置、运行态和 `Clear logs`；模式设置只接受 OFF、ERROR、WARN、INFO，保存后立即生效并写入 `eb_log.mode`，清空日志只接受 POST，表单使用 `confirm()` 和 `once(form)`，成功后回到 System 页面显示结果。运行态为 `write fault` 时使用 WARN notice，表示配置模式仍开启，但 FileLog 因 FS 写入故障被运行期保护停写；已有日志仍可能可读，不应显示成 `disabled`。运行态为 `disabled` 时使用 INFO notice，明确 FileLog 模式为 OFF，新日志不会写入。
+- 启用 App Events 的 profile 显示 `Clear App Events` 危险操作；它只清空 `/app/events.bin` 事件日志，不清系统 FileLog、WiFi、Web Auth、NVS 配置或其他 LittleFS 文件。
 - 格式化 FS 是显式 POST 操作；执行前 flush 文件日志，成功后重新 mount FS，并重新加载 FileLog 模式；成功提示应明确显示在 System 页面，同时输出 WARN 级维护日志记录请求、format/mount/FileLog reload 结果。重启请求同样输出 WARN 级维护日志。
 - 普通 `GET` 页面慢请求只输出 DEBUG；`POST` 等操作慢请求继续输出 WARN。
 - API 层仍建议要求 POST，不使用 GET 触发重启。
@@ -280,14 +281,17 @@ Logs 页面：
 App Events 页面：
 
 - 仅在 `ESP32BASE_ENABLE_APP_EVENTS=1` 时注册，标题和导航标签为 `App Events`，可通过 `setBuiltinLabel(BUILTIN_APP_EVENTS, "...")` 覆盖。
-- 页面显示有效事件数、容量、存储路径、筛选状态、筛选表单、CSV 导出、清空按钮和分页表格；分页使用 `sendPagination()`，默认每页 20 条。
+- 这是业务事件日志的内置系统视图，用偏底层的维护视角展示事件日志内容、管理和存储状态；它不属于 System Logs，也不替业务系统解释业务语义。
+- 页面显示 record/capacity、实际文件大小、有效事件数、next id、存储路径、expected size、head、active header、sequence、record size、紧凑筛选和 CSV 导出、分页表格和详情弹层；分页使用 `sendPagination()`，默认每页 10 条。
 - 筛选条件包括等级、时间类型、来源、类型、原因和关键词；HTML、JSON API、CSV 共用同一组筛选语义。`source/type/reason` 必须符合事件 token 的字符和长度约束，避免超长参数被截断后误匹配。筛选请求不额外做独立 count 扫描，而是在输出当前页时统计匹配总数。
-- 表格按日志阅读方式压缩为 ID、Time、Level、Event、Object、Details。`Event` 合并展示 `source/type/reason`，`Details` 展示短文本、code 和有效数值槽；基础库不解释事件类型和业务对象。
+- 表格展示 `Status`、slot/index、ID、Time、Level、Event、Object、Details 和详情入口。CRC 损坏、magic 异常、level 异常、未提交或空槽等只要能读出 record 字节就客观展示并标记 status；字符串字段按固定长度安全显示，不假设损坏记录带有 `\0`。
+- 详情弹层展示 `magic/id/epochSec/bootId/uptimeSec/value1/value2/value3/code/level/flags/valueMask/reserved/crc16/source/type/reason/object/text` 全部 record 字段，并展示 `slot/index/recordOffset/status/stored crc/calculated crc/readOk/magicOk/levelOk/crcOk/committed/resolvedEpochSec/uptimeMs` 等派生信息；内部字段使用弱化样式。
 - `epochSec` 可用时按本地时间显示；否则如果本次 boot 后续 NTP 已同步，则解析并显示真实时间；仍无法解析时显示 `uptime N ms` 和 `boot N`，不伪造日期。
-- 清空应用事件是危险操作，只接受 `POST /esp32base/app-events/clear`，必须通过 Web Auth 和同源检查，成功后 303 回到页面。
+- 清空事件日志是危险操作，只在 System 页面提供 `POST /esp32base/tools/app-events-clear`，必须通过 Web Auth 和同源检查，成功后 303 回到 System 页面。
 - JSON API 事件包含 `epochSec`、`resolvedEpochSec`、`bootId`、`uptimeSec` 和 64-bit 派生 `uptimeMs`；`resolvedEpochSec=0` 表示没有可信真实时间。
-- JSON API 和 HTML 页面都必须使用统一 JSON/HTML escape；CSV 导出使用 CSV escape，并保留当前筛选条件。CSV 读取失败时必须在输出中追加可见错误行，避免客户端误以为 200 响应是完整导出。
-- 该页面明确和 `/esp32base/logs` 分离，避免把 WiFi、OTA、NTP、启动、健康状态等基础库系统日志与业务事件混在一起。
+- JSON API 继续只输出有效事件，适合业务系统创建自己的业务事件列表和详情页；业务页面应使用业务语言解释事件，只展示业务需要的字段，不展示 `magic/crc16/reserved/valueMask/flags` 等内部字段。
+- JSON API 和 HTML 页面都必须使用统一 JSON/HTML escape；CSV 导出使用 CSV escape，保留当前筛选条件，并包含 slot/status/crc 等存储字段。CSV 读取失败时必须在输出中追加可见错误行，避免客户端误以为 200 响应是完整导出。
+- 该页面明确和 `/esp32base/logs` 分离：`/esp32base/logs` 是 Esp32Base/FileLog 系统日志，记录启动、联网、OTA、基础库运行等系统信息；`/esp32base/app-events` 是事件日志，记录应用显式写入的业务事件。
 
 状态页/API：
 
@@ -433,9 +437,9 @@ Esp32BaseWeb::addRoute("/api/faucet/config", Esp32BaseWeb::METHOD_ANY, handleCon
 - `sendInfoRowInlineEdit(id, title, help, value, action, inputName, inputValue, label, tone)`：单字段行内编辑，支持 AJAX 局部保存和普通 POST fallback。
 - `sendInfoRowDialogForm(dialogId, targetId, title, help, value, action, fieldsHtml, label, tone)`：小表单弹层入口，适合 1-3 个字段；`fieldsHtml` 只传业务侧可信的静态表单片段，动态内容必须先 escape。
 - `isAjaxRequest()`、`sendAjaxReplace()`、`sendAjaxError()`：配合 `X-Esp32Base-Ajax: 1` 处理局部提交结果。
-- `sendPagination(pagination)`：页码型列表分页，包含总条数、总页数、首页、上一页、下一页、尾页、当前页附近页码、每页条数和跳页提交。
+- `sendPagination(pagination)`：页码型列表分页，包含总条数、总页数、首页、上一页、下一页、尾页、当前页附近页码、每页条数和跳页提交；`perPage=0` 时默认 10 条，每页选项为 10、15、20、30、50。
 
-如果业务页面已经使用浏览器原生 `<dialog>`，推荐写作 `<dialog class="panel eb-modal">`。基础 `/esp32base/ui.css` 会统一原生 dialog、遮罩、`dialog.panel` 和 `dialog.eb-modal` 的轻量弹层外观；弹层内部继续复用 `fieldgrid`、`field`、`actions`、`btnlink` 和 `secondary`，无需在业务库复制 modal 样式。
+如果业务页面已经使用浏览器原生 `<dialog>`，推荐写作 `<dialog class="panel eb-modal">`。基础 `/esp32base/ui.css` 会统一原生 dialog、遮罩、`dialog.panel` 和 `dialog.eb-modal` 的轻量弹层外观；弹层内部继续复用 `fieldgrid`、`field`、`actions`、`btnlink` 和 `secondary`，无需在业务库复制 modal 样式。只读详情弹层可以增加 `data-eb-light-dismiss="1"`，允许点击遮罩关闭；危险确认、提交表单和可能丢失输入的弹层不要启用。
 
 示例：
 

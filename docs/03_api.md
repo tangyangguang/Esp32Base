@@ -250,6 +250,15 @@ public:
     enum Level : uint8_t { LEVEL_INFO = 1, LEVEL_WARN = 2, LEVEL_ERROR = 3 };
     enum ValueMask : uint8_t { VALUE1 = 1 << 0, VALUE2 = 1 << 1, VALUE3 = 1 << 2 };
     enum Flags : uint8_t { FLAG_TIME_SYNCED = 1 << 0, FLAG_TEXT_TRUNCATED = 1 << 1 };
+    enum StoreRecordStatus : uint8_t {
+        STORE_RECORD_OK,
+        STORE_RECORD_EMPTY,
+        STORE_RECORD_INVALID_MAGIC,
+        STORE_RECORD_INVALID_LEVEL,
+        STORE_RECORD_CRC_MISMATCH,
+        STORE_RECORD_UNCOMMITTED,
+        STORE_RECORD_READ_FAILED
+    };
 
     struct Event {
         Level level;
@@ -272,12 +281,18 @@ public:
         uint32_t uptimeSec;
     };
 
+    struct StoreInfo { /* path/fileSize/capacity/count/validCount/head/nextId/sequence/header sizes */ };
+    struct StoreRecord { /* record/status/slot/index/offset/storedCrc16/calculatedCrc16/readOk/magicOk/levelOk/crcOk/committed */ };
+
     using TimeProvider = TimeSnapshot (*)();
     using ReadCallback = void (*)(const Esp32BaseAppEventRecord& event, void* user);
+    using StoreRecordCallback = void (*)(const StoreRecord& item, void* user);
 
     static bool begin();
     static bool append(const Event& event);
     static bool readLatest(uint16_t offset, uint16_t limit, ReadCallback cb, void* user = nullptr);
+    static bool readStoreInfo(StoreInfo& info);
+    static bool readStoreRecords(uint16_t offset, uint16_t limit, StoreRecordCallback cb, void* user = nullptr);
     static bool clear();
     static void setTimeProvider(TimeProvider provider);
     static bool isReady();
@@ -288,6 +303,7 @@ public:
     static uint32_t nextId();
     static const char* path();
     static const char* levelName(Level level);
+    static const char* storeRecordStatusName(StoreRecordStatus status);
 };
 ```
 
@@ -308,16 +324,22 @@ public:
 - append 先写记录槽，再写 inactive header；未满时断电最多丢失未提交的新记录，不破坏上一版 header。
 - 满环覆盖最老槽时，如果断电发生在 record 写入后、header 提交前，恢复时会识别该未提交槽并从可见范围移除；结果可能丢失被覆盖的最老记录和未提交的新记录，但不会把整个日志打入 fault。
 - 双 header 都无效、文件尺寸不匹配、创建/删除/写 header 失败或写后校验失败属于结构性故障，会进入 `faulted()`。
-- 单条 record CRC 损坏或未提交 future record 不会进入全局 fault；读取会跳过该槽，`begin()` 和完整 `readLatest(0, count(), ...)` 扫描会把 `count()` 收敛到可读取的有效记录数，append 仍可继续覆盖后续槽。
+- 单条 record CRC 损坏或未提交 future record 不会进入全局 fault；业务读取 `readLatest()` 会跳过该槽，`begin()` 和完整 `readLatest(0, count(), ...)` 扫描会把 `count()` 收敛到可读取的有效记录数，append 仍可继续覆盖后续槽。
+- `readStoreInfo()` / `readStoreRecords()` 是事件日志内置页面使用的存储级读取能力。它按当前 header 的事件环范围读取底层槽位，只要 record 字节能读出就返回，并标记 `ok/crc_mismatch/invalid_magic/invalid_level/uncommitted/empty/read_failed`、slot、offset、stored/calculated crc、magic/level/crc/commit 布尔状态。该能力用于查看事件日志文件内容和存储状态，不作为业务事件列表的默认数据源。
 - FS 未 ready、空间不足、读写失败或记录跳过时通过 `lastError()` 暴露原因；读路径遇到不可读 I/O 会返回 `false`，但不会自动清空。
 - `clear()` 重建空文件，默认保留递增 `nextId()`；业务恢复出厂或清空业务记录时可显式调用。
 
+两套使用方向：
+
+- 内置 `/esp32base/app-events` 是事件日志页面。它展示业务事件日志的内容、文件、容量、slot、status、CRC、`flags/valueMask/reserved` 等底层字段，面向维护人员和开发人员；它不解释业务语义，也不把 `source/type/reason/code/value` 翻译成业务话术。
+- 业务系统自己的业务事件列表和详情页应使用 `readLatest()` 或 `/esp32base/api/app-events` 获取有效事件，再用业务语言解释。业务页面通常只展示时间、等级、业务对象、业务动作、业务结果和必要数值，不展示 `magic/crc16/reserved/valueMask/flags` 等内部字段。基础库不提供业务枚举表、不内置业务文案，也不要求业务系统复用内置页面。
+
 Web/API 查询：
 
-- HTML 页面 `/esp32base/app-events` 支持 `page`、`per` 以及常用筛选：`level=info|warn|error`、`time=real|uptime`、`source`、`type`、`reason`、`q`。`source/type/reason` 是精确匹配，并复用事件 token 的长度和字符校验；超长或非法筛选返回 `400 invalid_filter`，不会截断后误匹配。`q` 在 `source/type/reason/object/text` 内做大小写不敏感关键词匹配。
+- HTML 页面 `/esp32base/app-events` 支持 `page`、`per` 以及常用筛选：`level=info|warn|error`、`time=real|uptime`、`source`、`type`、`reason`、`q`。`source/type/reason` 是精确匹配，并复用事件 token 的长度和字符校验；超长或非法筛选返回 `400 invalid_filter`，不会截断后误匹配。`q` 在 `source/type/reason/object/text` 内做大小写不敏感关键词匹配。该页面和 CSV 使用存储级记录读取，因此 CRC 损坏但能读出的记录也会展示并标记状态。
 - JSON API `/esp32base/api/app-events` 支持 `offset`、`limit` 和同一组筛选条件，返回 `count`、`total`、`filters` 和最新优先的 `events`；筛选请求单次扫描完成当前页输出和匹配计数。
 - 每条 JSON 事件包含 `epochSec`、`resolvedEpochSec`、`bootId`、`uptimeSec`、`uptimeMs`、`level/source/type/reason/object/code/value1..value3/valueMask/flags/text`。`uptimeSec` 是存储稳定字段，`uptimeMs` 是 64-bit 派生展示值；`resolvedEpochSec=0` 表示没有可信真实时间。
-- CSV `/esp32base/app-events.csv` 使用同一组筛选条件，字段为 `id,epoch_sec,resolved_epoch_sec,boot_id,uptime_sec,uptime_ms,level,source,type,reason,object,code,value1,value2,value3,text`。如果导出过程中读取失败，响应末尾追加 `# error,...` 行暴露失败原因。
+- CSV `/esp32base/app-events.csv` 使用同一组筛选条件，并导出 `slot,status,record_offset,stored_crc16,calculated_crc16,crc_ok` 以及全部 record 字段。如果导出过程中读取失败，响应末尾追加 `# error,...` 行暴露失败原因。
 
 示例：
 
@@ -939,7 +961,7 @@ Route 缓冲机制：
 - `FooterBarMode` 控制 `sendFooter()` 的底部横条输出：`FOOTER_BAR_OFF` 不显示，`FOOTER_BAR_STATUS_ONLY` 只显示运行摘要，`FOOTER_BAR_FULL` 显示系统入口和运行摘要。默认 `FOOTER_BAR_FULL`，System 页面保存后写入 `eb_ui.footer_mode` 并立即影响后续页面输出。
 - `setBuiltinLabel()` 覆盖内置导航标签，可用于中文本地化；系统工具页统一使用 `BUILTIN_TOOLS`，不提供旧 Reboot 历史别名。
 - `setHeadExtraCallback()` 设置额外 head 输出回调；`sendHeader()` 在默认 `WEB_HEAD` 后、`</head><body>` 和顶部导航前调用它，业务项目可在这里输出 `<style>`，避免页面刷新时先显示基础库默认导航样式。该回调不会注入 `/esp32base` 及其子路径的内置页面，避免业务 CSS 增加内置页体积。
-- Web UI helper 只负责轻量 HTML 结构和统一样式，不接管业务数据模型：`sendPageTitle()` 输出页面标题区，`beginPanel()` / `endPanel()` 输出内容分组，`sendNotice()` / `sendResultNotice()` 输出横向状态反馈，`beginMetricGrid()` / `sendMetric()` / `endMetricGrid()` 输出状态和统计摘要，`sendInfoRowCompact*()` 输出紧凑信息行和单动作，`sendInfoRowInlineEdit()` 输出单字段行内编辑，`sendInfoRowDialogForm()` 输出 1-3 字段小表单弹层，`sendPagination()` 输出页码型分页、每页条数和跳页表单。`sendInfoRowCompactLink()`、`sendInfoRowCompactForm()`、行内编辑和弹层入口都会按 `UiTone` 输出轻量按钮；页面级明确保存/执行按钮仍可直接使用普通 submit 按钮。
+- Web UI helper 只负责轻量 HTML 结构和统一样式，不接管业务数据模型：`sendPageTitle()` 输出页面标题区，`beginPanel()` / `endPanel()` 输出内容分组，`sendNotice()` / `sendResultNotice()` 输出横向状态反馈，`beginMetricGrid()` / `sendMetric()` / `endMetricGrid()` 输出状态和统计摘要，`sendInfoRowCompact*()` 输出紧凑信息行和单动作，`sendInfoRowInlineEdit()` 输出单字段行内编辑，`sendInfoRowDialogForm()` 输出 1-3 字段小表单弹层，`sendPagination()` 输出页码型分页、每页条数和跳页表单。分页 `perPage=0` 时默认 10 条，每页选项为 10、15、20、30、50。`sendInfoRowCompactLink()`、`sendInfoRowCompactForm()`、行内编辑和弹层入口都会按 `UiTone` 输出轻量按钮；页面级明确保存/执行按钮仍可直接使用普通 submit 按钮。
 - 带 `data-eb-ajax` 的 helper 表单会在浏览器支持 `fetch` 时携带 `X-Esp32Base-Ajax: 1` 和 `Accept: application/json` 局部提交；服务端用 `isAjaxRequest()` 判断后返回 `sendAjaxReplace(targetId, html, noticeTitle)` 或 `sendAjaxError(code, error)`。未携带 AJAX header 时，同一 POST endpoint 仍应保留 `POST -> 303 -> GET` fallback。
 - `UiTone` 仅表达语义色：neutral、ok、warn、danger、info。业务项目不得把危险、警告、成功语义当作普通装饰色复用。
 - 导航会给当前匹配项输出 `active` class；匹配规则为 path 完全相等，或当前路径以 `path + "/"` 开头，多个匹配时选择最长 path。`SYSTEM_NAV_SECTION` 下 WiFi/Auth/OTA 二级页会把底部 System 入口标记为 active；App Config 页面在启用时使用自己的底部入口标记 active。

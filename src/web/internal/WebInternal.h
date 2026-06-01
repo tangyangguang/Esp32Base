@@ -237,6 +237,9 @@ void handleToolsRebootPost();
 void handleToolsWatchdogTripResetPost();
 void handleToolsFormatFsPost();
 void handleToolsLogsClearPost();
+#if ESP32BASE_ENABLE_APP_EVENTS
+void handleToolsAppEventsClearPost();
+#endif
 void handleCaptiveProbe();
 void handleRootRedirect();
 void handleNoContent();
@@ -270,7 +273,6 @@ void handleLogsClear();
 void handleAppEventsPage();
 void handleAppEventsApi();
 void handleAppEventsCsv();
-void handleAppEventsClearPost();
 #endif
 void handleAuthPage();
 void handleAuthSubmit();

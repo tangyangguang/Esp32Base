@@ -158,6 +158,10 @@ void handleToolsPage() {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "LittleFS formatted", "FileLog mode was reloaded.");
     } else if (g_server.hasArg("logs_cleared")) {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "Logs cleared");
+#if ESP32BASE_ENABLE_APP_EVENTS
+    } else if (g_server.hasArg("app_events_cleared")) {
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "App Events cleared");
+#endif
     } else if (g_server.hasArg("filelog_saved")) {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "File log mode saved");
     } else if (g_server.hasArg("footer_saved")) {
@@ -244,6 +248,9 @@ void handleToolsPage() {
     sendChunk("<section class='panel dangerpanel'><h2>Clear logs</h2><p class='dangertext'>Delete all file log contents. Runtime settings and WiFi credentials are not changed.</p><form method='post' action='/esp32base/tools/logs-clear' onsubmit=\"return confirm('Clear log files?')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Clear Logs'></div></form></section>");
 #else
     sendChunk("<section class='panel actionpanel'><h2>Clear logs</h2><p class='muted'>File log is unavailable in this profile.</p></section>");
+#endif
+#if ESP32BASE_ENABLE_APP_EVENTS
+    sendChunk("<section class='panel dangerpanel'><h2>Clear App Events</h2><p class='dangertext'>Delete the application event log store. System FileLog, runtime settings and WiFi credentials are not changed.</p><form method='post' action='/esp32base/tools/app-events-clear' onsubmit=\"return confirm('Clear App Events?')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Clear App Events'></div></form></section>");
 #endif
 #if ESP32BASE_ENABLE_FS
     sendChunk("<section class='panel dangerpanel'><h2>Format LittleFS</h2><p class='dangertext'>This deletes logs and all files stored in LittleFS. WiFi, Web Auth and NVS config are not cleared.</p><form method='post' action='/esp32base/tools/format-fs' onsubmit=\"return confirm('Format LittleFS? This deletes logs and all files stored in LittleFS.')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Format LittleFS'></div></form></section>");
@@ -375,6 +382,17 @@ void handleToolsLogsClearPost() {
     redirectSeeOther("/esp32base/tools?error=logs_unavailable");
 #endif
 }
+
+#if ESP32BASE_ENABLE_APP_EVENTS
+void handleToolsAppEventsClearPost() {
+    markRequest();
+    if (!ensurePostAllowed("tools_app_events_clear")) {
+        return;
+    }
+    const bool ok = Esp32BaseAppEventLog::clear();
+    redirectSeeOther(ok ? "/esp32base/tools?app_events_cleared=1" : "/esp32base/tools?error=app_events_clear_failed");
+}
+#endif
 
 } // namespace esp32base_web
 

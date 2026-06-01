@@ -10,9 +10,10 @@
 
 - 新增默认关闭的 `ESP32BASE_ENABLE_APP_EVENTS` 能力，用于应用项目记录结构化业务/应用事件；该能力依赖 FS，不包含任何具体业务枚举或领域语义。
 - 新增 `Esp32BaseAppEventLog` API，支持 `level/source/type/reason/object/code/value1..value3/text` 等通用字段、可信 epoch 或 `bootId+uptimeSec` 时间、固定容量、环形覆盖、分页读取和按需清空。
+- 新增 `readStoreInfo()` / `readStoreRecords()` 存储级读取能力，供内置事件日志页面按底层视角展示 slot、offset、record status、stored/calculated `crc16`、`magic/level/crc/committed` 状态和全部 record 字段；业务读取仍使用 `readLatest()` 获取有效事件。
 - 默认 `ESP32BASE_APP_EVENT_LOG_CAPACITY=1024`，单条记录 188 bytes，默认存储约 188 KiB；容量可在 `64..2048` 内按项目调整。
 - 存储文件为 `/app/events.bin`，使用双 header、记录 `crc16`、header `crc32` 和写后校验。满环覆盖中断恢复时会丢弃未提交槽；单条损坏记录会被跳过且不阻止后续 append。双 header、文件尺寸或写后校验等结构性故障才进入 fault，不自动清空。
-- Web 启用时新增独立 App Events 入口：`GET /esp32base/app-events`、`GET /esp32base/api/app-events?offset=0&limit=50`、`GET /esp32base/app-events.csv`、`POST /esp32base/app-events/clear`。页面/API/CSV 支持等级、时间类型、来源、类型、原因和关键词筛选；精确筛选参数复用事件 token 校验，超长或非法时返回 `invalid_filter`，不会截断后误匹配；筛选请求单次扫描完成当前页输出和匹配计数。时间优先显示可信真实时间，无法解析时显示 `uptime N ms` 和 boot id；JSON/CSV 同时保留 `uptimeSec` 和派生 `uptimeMs`。清空操作要求 POST、Web Auth 和同源检查。
+- Web 启用时新增独立 App Events 入口：`GET /esp32base/app-events`、`GET /esp32base/api/app-events?offset=0&limit=50`、`GET /esp32base/app-events.csv`、`POST /esp32base/tools/app-events-clear`。页面/API/CSV 支持等级、时间类型、来源、类型、原因和关键词筛选；精确筛选参数复用事件 token 校验，超长或非法时返回 `invalid_filter`，不会截断后误匹配；筛选请求单次扫描完成当前页输出和匹配计数。内置事件日志页面和 CSV 会展示能读出的底层记录，包括 CRC 异常记录并标记状态；JSON API 继续只输出有效事件。时间优先显示可信真实时间，无法解析时显示 `uptime N ms` 和 boot id；JSON/CSV 同时保留 `uptimeSec` 和派生 `uptimeMs`。清空操作位于 System 页面危险操作区，要求 POST、Web Auth 和同源检查。
 - 新增 `Esp32BaseWeb::checkPostAllowed(context)`，供业务自定义 POST 复用基础库 Auth 和 Origin/Referer 同源检查。
 - 新增 `examples/app_events_demo`，演示启动写入、分页查看、JSON/CSV 输出和手工 POST 写入事件。
 - 新增 `scripts/check_app_events.py`，静态检查开关、API、Web 分离、文档和样例。
@@ -20,6 +21,7 @@
 业务侧影响：
 
 - 业务项目不需要在应用层重复实现 BusinessEventStore；只需在合适业务决策点调用 `Esp32BaseAppEventLog::append()` 并定义自己的事件命名。
+- 业务项目需要面向业务用户展示事件时，应使用 `readLatest()` 或 `/esp32base/api/app-events` 创建自己的业务事件列表和详情页，用业务语言解释 `source/type/reason/code/value`，不展示 `magic/crc16/reserved/valueMask/flags` 等内部字段。
 - `/esp32base/logs` 仍只展示 Esp32Base/FileLog 系统日志；应用事件单独进入 `/esp32base/app-events`，避免和 WiFi、OTA、NTP、启动、健康状态等基础库诊断混在一起。
 - 恢复出厂或清空业务记录时，业务可按需调用 `Esp32BaseAppEventLog::clear()`；基础库的普通系统配置清理不会隐式删除应用事件。
 
