@@ -318,6 +318,12 @@ public:
 - 当前 boot 后续完成 NTP 同步时，Web/API 会通过 `Esp32BaseNtp::resolveCurrentBootEvent()` 把同一 boot 的未同步事件解析为 `resolvedEpochSec`；历史 boot 或无法确认的事件仍显示相对 uptime。
 - `Esp32BaseAppEventLog` 不是跨任务并发 API；建议只在 loop/system task、Web handler 或同一业务执行上下文中调用。其他 FreeRTOS task 需要写业务事件时，应通过业务 queue 投递回 loop/system task，避免 append/read/clear 并发修改同一文件和全局状态。
 
+适用边界：
+
+- App Events 用于“近期关键事件窗口”：记录用户能理解、低频、可解释的业务行为，例如计划跳过、保护触发、运行异常、外部 API 决策和用户清除告警。
+- App Events 不是业务长期数据模型。统计、报表、累计量、传感器采样历史、完整执行历史、大 payload、高频明细和不允许覆盖的业务数据，应继续放在业务自己的数据模型和文件中。
+- 若一个记录需要被用户长期查询、聚合或参与业务计算，它通常不是 App Events；若它只用于解释“为什么刚才/最近发生了某个业务行为”，才适合写入 App Events。
+
 存储和失败语义：
 
 - 固定文件双 header，记录带 `crc16`，header 带 `crc32`。

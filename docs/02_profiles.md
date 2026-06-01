@@ -89,7 +89,7 @@ Profile 默认值不能覆盖用户显式 `-D`。
 
 启用 FS 的 profile 默认启用 FileLog；用户仍可显式关闭 `ESP32BASE_ENABLE_FILELOG`。
 
-应用事件日志通过 `ESP32BASE_ENABLE_APP_EVENTS=1` 显式启用，默认容量 `ESP32BASE_APP_EVENT_LOG_CAPACITY=1024`，允许范围 `64..2048`。该能力使用 LittleFS 固定文件存储，适合结构化业务事件，不作为系统 FileLog 或调试日志。
+应用事件日志通过 `ESP32BASE_ENABLE_APP_EVENTS=1` 显式启用，默认容量 `ESP32BASE_APP_EVENT_LOG_CAPACITY=1024`，允许范围 `64..2048`。该能力使用 LittleFS 固定文件存储，适合结构化业务事件，不作为系统 FileLog、调试日志或业务长期数据模型。
 
 ## 4. 最终 Profile 表
 
