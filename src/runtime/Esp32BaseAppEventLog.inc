@@ -7,9 +7,7 @@
 #include "../core/Esp32BaseLog.h"
 #include "../core/Esp32BaseSystem.h"
 #include "../core/Esp32BaseUtil.h"
-#if ESP32BASE_ENABLE_WATCHDOG
-#include "Esp32BaseWatchdog.h"
-#endif
+#include "internal/Esp32BaseLongOperation.h"
 
 #include <esp_timer.h>
 #include <string.h>
@@ -76,28 +74,6 @@ void appEventMarkFault(const char* error) {
     ESP32BASE_LOG_W("app_events", "fault error=%s", g_appEventLastError);
 }
 
-bool appEventBeginFsOperation() {
-#if ESP32BASE_ENABLE_WATCHDOG
-    if (Esp32BaseWatchdog::currentTaskRemovedForLongOperation()) {
-        return false;
-    }
-    return Esp32BaseWatchdog::removeCurrentTaskForLongOperation();
-#else
-    return false;
-#endif
-}
-
-void appEventEndFsOperation(bool active) {
-#if ESP32BASE_ENABLE_WATCHDOG
-    if (active) {
-        Esp32BaseWatchdog::restoreCurrentTaskAfterLongOperation();
-    }
-#else
-    (void)active;
-#endif
-    yield();
-}
-
 uint32_t appEventCrc32(const uint8_t* data, size_t len) {
     uint32_t crc = 0xFFFFFFFFUL;
     for (size_t i = 0; i < len; ++i) {
@@ -139,14 +115,14 @@ bool appEventReadExact(uint32_t offset, void* out, size_t len) {
         return false;
     }
     size_t readLen = 0;
-    const bool watchdogReleased = appEventBeginFsOperation();
+    Esp32BaseLongOperation::LongOperationScope scope;
     const bool ok = Esp32BaseFs::readBytesAt(kAppEventPath,
                                              offset,
                                              reinterpret_cast<uint8_t*>(out),
                                              len,
                                              &readLen) &&
                     readLen == len;
-    appEventEndFsOperation(watchdogReleased);
+    Esp32BaseLongOperation::service();
     return ok;
 }
 
@@ -154,19 +130,19 @@ bool appEventWriteExact(uint32_t offset, const void* data, size_t len) {
     if (!data && len > 0) {
         return false;
     }
-    const bool watchdogReleased = appEventBeginFsOperation();
+    Esp32BaseLongOperation::LongOperationScope scope;
     const bool ok = Esp32BaseFs::writeBytesAt(kAppEventPath,
                                               offset,
                                               reinterpret_cast<const uint8_t*>(data),
                                               len);
-    appEventEndFsOperation(watchdogReleased);
+    Esp32BaseLongOperation::service();
     return ok;
 }
 
 bool appEventRemoveStoreFile() {
-    const bool watchdogReleased = appEventBeginFsOperation();
+    Esp32BaseLongOperation::LongOperationScope scope;
     const bool ok = Esp32BaseFs::removeFile(kAppEventPath);
-    appEventEndFsOperation(watchdogReleased);
+    Esp32BaseLongOperation::service();
     return ok;
 }
 
@@ -185,9 +161,9 @@ bool appEventEnsureDir() {
 }
 
 bool appEventCreateStoreFile() {
-    const bool watchdogReleased = appEventBeginFsOperation();
+    Esp32BaseLongOperation::LongOperationScope scope;
     const bool ok = Esp32BaseFs::createFixedFile(kAppEventPath, appEventStoreSize(), 0);
-    appEventEndFsOperation(watchdogReleased);
+    Esp32BaseLongOperation::service();
     return ok;
 }
 

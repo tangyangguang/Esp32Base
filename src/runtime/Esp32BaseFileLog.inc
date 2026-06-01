@@ -6,9 +6,7 @@
 #include "Esp32BaseFs.h"
 #include "../core/Esp32BaseConfig.h"
 #include "../core/Esp32BaseLog.h"
-#if ESP32BASE_ENABLE_WATCHDOG
-#include "Esp32BaseWatchdog.h"
-#endif
+#include "internal/Esp32BaseLongOperation.h"
 
 #include <LittleFS.h>
 
@@ -63,9 +61,6 @@ Esp32BaseLog::Level modeLevel(Esp32BaseFileLog::Mode mode) {
     }
 }
 
-bool beginLongFsOperation();
-void endLongFsOperation(bool active);
-
 void markFileLogFault() {
     g_fileLogFault = true;
     g_fileLogEnabled = false;
@@ -82,14 +77,14 @@ bool truncateSegment(uint8_t index) {
     if (!Esp32BaseFileLog::segmentPath(index, seg, sizeof(seg))) {
         return false;
     }
-    const bool watchdogReleased = beginLongFsOperation();
+    Esp32BaseLongOperation::LongOperationScope scope;
     const bool ok = Esp32BaseFs::writeBytes(seg, nullptr, 0);
-    endLongFsOperation(watchdogReleased);
+    Esp32BaseLongOperation::service();
     return ok;
 }
 
 bool ensureSegmentFiles() {
-    const bool watchdogReleased = beginLongFsOperation();
+    Esp32BaseLongOperation::LongOperationScope scope;
     bool ok = true;
     for (uint8_t i = 0; i < g_fileLogRotateFiles; ++i) {
         char seg[64];
@@ -103,8 +98,9 @@ bool ensureSegmentFiles() {
             break;
         }
         file.close();
+        Esp32BaseLongOperation::service();
     }
-    endLongFsOperation(watchdogReleased);
+    Esp32BaseLongOperation::service();
     return ok;
 }
 
@@ -124,9 +120,9 @@ bool ensureDirReady() {
         }
         memcpy(dir, g_fileLogPath, len);
         dir[len] = '\0';
-        const bool watchdogReleased = beginLongFsOperation();
+        Esp32BaseLongOperation::LongOperationScope scope;
         const bool dirReady = Esp32BaseFs::mkdir(dir) || Esp32BaseFs::exists(dir);
-        endLongFsOperation(watchdogReleased);
+        Esp32BaseLongOperation::service();
         if (!dirReady) {
             markFileLogFault();
             ESP32BASE_LOG_W("filelog", "dir_create_failed path=%s", dir);
@@ -150,51 +146,30 @@ bool truncateCurrent() {
     if (!g_fileLogEnabled || !g_fileLogPath[0]) {
         return false;
     }
-    const bool watchdogReleased = beginLongFsOperation();
+    Esp32BaseLongOperation::LongOperationScope scope;
     const bool ok = Esp32BaseFs::writeBytes(g_fileLogPath, nullptr, 0);
-    endLongFsOperation(watchdogReleased);
+    Esp32BaseLongOperation::service();
     if (ok) {
         g_fileLogCurrentBytes = 0;
     }
     return ok;
 }
 
-bool beginLongFsOperation() {
-#if ESP32BASE_ENABLE_WATCHDOG
-    if (Esp32BaseWatchdog::currentTaskRemovedForLongOperation()) {
-        return false;
-    }
-    return Esp32BaseWatchdog::removeCurrentTaskForLongOperation();
-#else
-    return true;
-#endif
-}
-
-void endLongFsOperation(bool active) {
-#if ESP32BASE_ENABLE_WATCHDOG
-    if (active) {
-        Esp32BaseWatchdog::restoreCurrentTaskAfterLongOperation();
-    }
-#else
-    (void)active;
-#endif
-}
-
 bool appendCurrentChunk(const char* data, size_t len) {
-    const bool watchdogReleased = beginLongFsOperation();
+    Esp32BaseLongOperation::LongOperationScope scope;
     const bool ok = Esp32BaseFs::appendBytes(g_fileLogPath,
                                              reinterpret_cast<const uint8_t*>(data),
                                              len);
-    endLongFsOperation(watchdogReleased);
+    Esp32BaseLongOperation::service();
     return ok;
 }
 
 bool rotateFile() {
-    const bool watchdogReleased = beginLongFsOperation();
+    Esp32BaseLongOperation::LongOperationScope scope;
     bool ok = true;
     if (g_fileLogRotateFiles <= 1) {
         ok = truncateCurrent();
-        endLongFsOperation(watchdogReleased);
+        Esp32BaseLongOperation::service();
         return ok;
     }
 
@@ -233,7 +208,7 @@ bool rotateFile() {
     if (ok) {
         ok = truncateCurrent();
     }
-    endLongFsOperation(watchdogReleased);
+    Esp32BaseLongOperation::service();
     return ok;
 }
 

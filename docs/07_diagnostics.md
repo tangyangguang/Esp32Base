@@ -136,6 +136,7 @@
 - 已存在 `/app/events.bin` 但文件尺寸不匹配或不可读时必须进入 fault，不得自动删除或重建；只有文件缺失时 `begin()` 才可创建空 store。
 - 满容量环形覆盖时，模拟 record 已写入但 header 未提交的重启；恢复后不得进入 fault，未提交槽应不可见，后续 append 仍可继续。
 - Watchdog 启用后，在 setup、Web handler 或业务回调里同步 append/clear 不应因为 LittleFS flush 较慢触发 loopTask WDT。
+- Esp32BaseFs 大块读写必须通过库内分块 I/O 和长操作 service 覆盖；业务一次保存 12KB 以上二进制数据、Web FS 上传/下载和 App Events/FileLog 写入都不应因为单次 LittleFS 同步 I/O 触发 task WDT。
 - 双 header 损坏、文件尺寸错误、写后校验失败等结构性问题进入 fault，不自动清空；单条记录 `crc16` 错误应跳过、暴露 `record_skipped`，完整扫描后 `count()` 应收敛到可读取记录数，并继续允许 append。
 - clear 幂等，清空后可继续写入；业务恢复出厂或清空业务记录时可显式调用。
 - System 页格式化 LittleFS 成功并重新 mount 后，App Events store 必须重新创建并清理旧运行态；FS 管理页不得允许普通上传、覆盖或删除 `/app/events.bin`。

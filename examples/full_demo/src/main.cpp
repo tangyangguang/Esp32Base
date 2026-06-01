@@ -106,6 +106,8 @@ struct SelfTestRequestJob {
     char statusLine[96];
 };
 
+static uint8_t g_fsLargeIoBuffer[12UL * 1024UL];
+
 size_t selfTestAdvanceMatch(const char* pattern, size_t patternLen, size_t matched, char c) {
     while (matched > 0 && c != pattern[matched]) {
         size_t next = matched - 1;
@@ -200,6 +202,112 @@ bool verifyFixedFileByte(const char* path, uint32_t offset, uint8_t expected) {
            value == expected;
 }
 
+uint8_t fsLargePattern(size_t index, uint8_t seed) {
+    return static_cast<uint8_t>((index * 37U + seed) & 0xFFU);
+}
+
+void fillFsLargeBuffer(size_t len, uint8_t seed) {
+    for (size_t i = 0; i < len; ++i) {
+        g_fsLargeIoBuffer[i] = fsLargePattern(i, seed);
+    }
+}
+
+bool verifyFsLargePatternByte(const char* path, uint32_t offset, uint8_t seed, size_t patternIndex) {
+    uint8_t value = 0;
+    size_t readLen = 0;
+    return Esp32BaseFs::readBytesAt(path, offset, &value, 1, &readLen) &&
+           readLen == 1 &&
+           value == fsLargePattern(patternIndex, seed);
+}
+
+bool runFsLargeWriteReadCase() {
+    static const char* path = "/large-write-12k.bin";
+    static const size_t len = 12UL * 1024UL;
+    Esp32BaseFs::removeFile(path);
+    fillFsLargeBuffer(len, 0x21);
+    if (!Esp32BaseFs::writeBytes(path, g_fsLargeIoBuffer, len)) {
+        ESP32BASE_LOG_E("selftest", "large_io write_failed path=%s", path);
+        return false;
+    }
+    memset(g_fsLargeIoBuffer, 0, len);
+    size_t readLen = 0;
+    if (!Esp32BaseFs::readBytesAt(path, 0, g_fsLargeIoBuffer, len, &readLen) || readLen != len) {
+        ESP32BASE_LOG_E("selftest", "large_io read_failed path=%s read=%lu", path, static_cast<unsigned long>(readLen));
+        Esp32BaseFs::removeFile(path);
+        return false;
+    }
+    const bool ok = Esp32BaseFs::fileSize(path) == static_cast<int64_t>(len) &&
+                    g_fsLargeIoBuffer[0] == fsLargePattern(0, 0x21) &&
+                    g_fsLargeIoBuffer[len / 2U] == fsLargePattern(len / 2U, 0x21) &&
+                    g_fsLargeIoBuffer[len - 1U] == fsLargePattern(len - 1U, 0x21);
+    Esp32BaseFs::removeFile(path);
+    if (!ok) {
+        ESP32BASE_LOG_E("selftest", "large_io write_read_mismatch path=%s", path);
+    }
+    return ok;
+}
+
+bool runFsLargeAppendCase() {
+    static const char* path = "/large-append.bin";
+    static const size_t chunkLen = 4UL * 1024UL;
+    Esp32BaseFs::removeFile(path);
+    bool ok = true;
+    for (uint8_t part = 0; part < 3; ++part) {
+        const uint8_t seed = static_cast<uint8_t>(0x30U + part);
+        fillFsLargeBuffer(chunkLen, seed);
+        if (!Esp32BaseFs::appendBytes(path, g_fsLargeIoBuffer, chunkLen)) {
+            ok = false;
+            break;
+        }
+    }
+    const size_t totalLen = chunkLen * 3U;
+    ok = ok &&
+         Esp32BaseFs::fileSize(path) == static_cast<int64_t>(totalLen) &&
+         verifyFsLargePatternByte(path, 0, 0x30, 0) &&
+         verifyFsLargePatternByte(path, chunkLen - 1U, 0x30, chunkLen - 1U) &&
+         verifyFsLargePatternByte(path, chunkLen, 0x31, 0) &&
+         verifyFsLargePatternByte(path, (chunkLen * 2U) + 17U, 0x32, 17);
+    Esp32BaseFs::removeFile(path);
+    if (!ok) {
+        ESP32BASE_LOG_E("selftest", "large_io append_mismatch path=%s", path);
+    }
+    return ok;
+}
+
+bool runFsLargeWriteAtCase() {
+    static const char* path = "/large-overwrite-8k.bin";
+    static const uint32_t fileLen = 12UL * 1024UL;
+    static const uint32_t offset = 2UL * 1024UL;
+    static const size_t writeLen = 8UL * 1024UL;
+    Esp32BaseFs::removeFile(path);
+    if (!Esp32BaseFs::createFixedFile(path, fileLen, 0xEE)) {
+        ESP32BASE_LOG_E("selftest", "large_io overwrite_create_failed path=%s", path);
+        return false;
+    }
+    fillFsLargeBuffer(writeLen, 0x44);
+    const bool writeOk = Esp32BaseFs::writeBytesAt(path, offset, g_fsLargeIoBuffer, writeLen);
+    const bool ok = writeOk &&
+                    Esp32BaseFs::fileSize(path) == static_cast<int64_t>(fileLen) &&
+                    verifyFixedFileByte(path, 0, 0xEE) &&
+                    verifyFixedFileByte(path, offset - 1U, 0xEE) &&
+                    verifyFsLargePatternByte(path, offset, 0x44, 0) &&
+                    verifyFsLargePatternByte(path, offset + 4096U, 0x44, 4096U) &&
+                    verifyFsLargePatternByte(path, offset + writeLen - 1U, 0x44, writeLen - 1U) &&
+                    verifyFixedFileByte(path, offset + writeLen, 0xEE);
+    Esp32BaseFs::removeFile(path);
+    if (!ok) {
+        ESP32BASE_LOG_E("selftest", "large_io overwrite_mismatch path=%s", path);
+    }
+    return ok;
+}
+
+bool runFsLargeIoSelfTest() {
+    return Esp32BaseFs::isReady() &&
+           runFsLargeWriteReadCase() &&
+           runFsLargeAppendCase() &&
+           runFsLargeWriteAtCase();
+}
+
 bool runFixedFileCase(const FixedFileSelfTestCase& testCase) {
     Esp32BaseFs::removeFile(testCase.path);
     if (!Esp32BaseFs::createFixedFile(testCase.path, testCase.size, testCase.fill)) {
@@ -238,6 +346,7 @@ bool runFixedFileSelfTest() {
     for (const auto& testCase : cases) {
         ok = runFixedFileCase(testCase) && ok;
     }
+    ok = runFsLargeIoSelfTest() && ok;
     return ok;
 }
 

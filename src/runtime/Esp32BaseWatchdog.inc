@@ -8,10 +8,12 @@
 
 #include <esp_system.h>
 #include <esp_task_wdt.h>
+#include <freertos/task.h>
 
 namespace {
 bool g_enabled = false;
-bool g_removed = false;
+TaskHandle_t g_removedTask = nullptr;
+uint8_t g_removedDepth = 0;
 
 uint32_t loadLifetimeResetCount() {
     const int32_t stored = Esp32BaseConfig::getInt("eb_sys", "wdt_cnt", -1);
@@ -65,35 +67,64 @@ bool Esp32BaseWatchdog::begin(uint32_t timeoutMs) {
 }
 
 void Esp32BaseWatchdog::feed() {
-    if (g_enabled && !g_removed) {
+    if (!g_enabled) {
+        return;
+    }
+    if (g_removedTask && xTaskGetCurrentTaskHandle() == g_removedTask) {
+        return;
+    }
+    {
         esp_task_wdt_reset();
     }
 }
 
 bool Esp32BaseWatchdog::removeCurrentTaskForLongOperation() {
-    if (!g_enabled || g_removed) {
+    if (!g_enabled) {
         return true;
+    }
+    TaskHandle_t current = xTaskGetCurrentTaskHandle();
+    if (g_removedTask == current) {
+        if (g_removedDepth < UINT8_MAX) {
+            ++g_removedDepth;
+        }
+        return true;
+    }
+    if (g_removedTask) {
+        return false;
     }
     if (esp_task_wdt_delete(nullptr) != ESP_OK) {
         return false;
     }
-    g_removed = true;
+    g_removedTask = current;
+    g_removedDepth = 1;
     return true;
 }
 
 bool Esp32BaseWatchdog::restoreCurrentTaskAfterLongOperation() {
-    if (!g_enabled || !g_removed) {
+    if (!g_enabled) {
+        return true;
+    }
+    TaskHandle_t current = xTaskGetCurrentTaskHandle();
+    if (!g_removedTask) {
+        return true;
+    }
+    if (g_removedTask != current) {
+        return false;
+    }
+    if (g_removedDepth > 1) {
+        --g_removedDepth;
         return true;
     }
     if (esp_task_wdt_add(nullptr) != ESP_OK) {
         return false;
     }
-    g_removed = false;
+    g_removedTask = nullptr;
+    g_removedDepth = 0;
     return true;
 }
 
 bool Esp32BaseWatchdog::currentTaskRemovedForLongOperation() {
-    return g_removed;
+    return g_removedTask && xTaskGetCurrentTaskHandle() == g_removedTask;
 }
 
 bool Esp32BaseWatchdog::isEnabled() {

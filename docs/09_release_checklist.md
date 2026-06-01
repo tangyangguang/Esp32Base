@@ -167,6 +167,7 @@
 - append 正常。
 - `readBytes()` / `readBytesAt()` 支持分页读取，文件不存在和 offset 越界返回失败，EOF 短读返回实际长度；未到 EOF 却读出 0 字节必须返回失败。
 - `writeFile()` / `writeBytes()` / `appendFile()` / `appendBytes()` 写后大小校验正常，非空写入后末端可读。
+- `writeBytes() / appendBytes() / writeBytesAt() 大块读写` 通过 `Esp32BaseFs` 分块 I/O 和 4KB 级 watchdog-friendly service 覆盖；业务不需要在存储类里重复拆分 Flash 写入。
 - `createFixedFile() 支持 16KB、32KB、64KB` 定长文件创建，首字节、中间字节和末尾字节填充值正确；非法路径、FS 未 ready、空间不足等情况返回 false 且不崩溃。
 - `createFixedFile()` 初始化大文件时不得用 `appendBytes()` 做分块循环；必须避免大 heap 分配，并避免触发 task watchdog。
 - `writeBytesAt()` 支持已有文件固定位置覆盖，文件不存在和写越界返回失败，不隐式扩展文件；覆盖后文件大小不变且覆盖范围可读。

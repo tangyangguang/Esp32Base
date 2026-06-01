@@ -110,7 +110,6 @@ bool& g_fsUploadOverwrite = ctx().fsUploadOverwrite;
 size_t& g_fsUploadBytes = ctx().fsUploadBytes;
 char (&g_fsUploadPath)[96] = ctx().fsUploadPath;
 char (&g_fsUploadError)[96] = ctx().fsUploadError;
-File& g_fsUploadFile = ctx().fsUploadFile;
 #endif
 
 #if ESP32BASE_ENABLE_APP_CONFIG

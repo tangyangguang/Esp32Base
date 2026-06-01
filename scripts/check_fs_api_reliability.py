@@ -70,7 +70,7 @@ for needle, message in (
 
 for needle, message in (
     ("bool appendCurrentChunk(", "FileLog append must isolate potentially slow FS writes"),
-    ("const bool watchdogReleased = beginLongFsOperation();\n    const bool ok = Esp32BaseFs::writeBytes", "FileLog truncate must be protected as a long FS operation"),
+    ("Esp32BaseLongOperation::LongOperationScope scope;\n    const bool ok = Esp32BaseFs::writeBytes", "FileLog truncate must be protected as a long FS operation"),
     ("void markFileLogFault()", "FileLog must stop repeated writes after FS fault"),
     ("markFileLogFault();\n                return false;", "FileLog write failure must trip runtime fault state"),
 ):

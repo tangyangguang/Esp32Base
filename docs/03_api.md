@@ -1180,6 +1180,7 @@ public:
 `Esp32BaseWatchdog::begin(timeoutMs)` 要求 `timeoutMs >= 1000`；更小值返回 false 并输出 WARN，避免 Arduino ESP32 2.x 下秒级 WDT 参数被截断为 0。
 
 `removeCurrentTaskForLongOperation()` / `restoreCurrentTaskAfterLongOperation()` 用于 OTA、FileLog 轮转等预期较长的 flash 操作；`currentTaskRemovedForLongOperation()` 可在嵌套长操作前检查当前任务是否已被其他模块临时移出 WDT，避免提前恢复别的模块移除的 WDT 状态。
+这些接口按当前 FreeRTOS task 和嵌套深度记录长操作状态，只供基础库内部同步 Flash/FS/OTA 等长操作使用，不是业务关闭 Watchdog 的通用开关。
 
 `begin()` 是轻量初始化，只记录 Sleep 模块进入统一生命周期管理，不配置任何默认 wake source。
 
@@ -1253,7 +1254,8 @@ Offset binary API 用于业务二进制定长记录、分页读取和环形覆�
 
 - `readBytesAt()` 打开已存在文件并从 `offset` 读取最多 `maxLen` 字节，实际读取长度写入 `readLen`；读到 EOF 前允许短读并返回 true。
 - `readBytes()` / `readBytesAt()` 在 FS 未 ready、path 非绝对路径、文件不存在、out 为空或 `offset > fileSize` 时返回 false；失败时 `readLen` 为 0。`offset == fileSize` 返回 true 且读取 0 字节。底层声明文件仍有剩余内容但读出 0 字节时，`readBytes()` / `readBytesAt()` 返回 false，避免把 LittleFS 元数据仍存在但内容块不可读的文件误判为成功读取。
-- `writeFile()` / `writeBytes()` / `appendFile()` / `appendBytes()` 会在写入后 flush 并校验最终大小；非空写入还会确认写入后文件末端可读。`appendBytes()` 面向低频追加，不适合用循环追加来初始化大容量定长文件。
+- 大块读写会在 Esp32BaseFs 层分块并定期让出调度；当前默认单次底层 I/O 块为 512B，累计约 4KB 后进行 watchdog-friendly service。`readBytes()`、`readBytesAt()`、`writeBytes()`、`appendBytes()`、`writeBytesAt()` 和 `createFixedFile()` 都走同一长操作治理，不要求业务存储类重复分块。
+- `writeFile()` / `writeBytes()` / `appendFile()` / `appendBytes()` 会在写入后 flush 并校验最终大小；非空写入还会确认写入后文件末端可读。`appendBytes()` 面向低频追加，不适合用循环追加来初始化大容量定长文件。写入失败不等于已回滚，调用方必须按返回值处理可能的部分写入或文件不可读状态。
 - `createFixedFile(const char* path, uint32_t size, uint8_t fillByte = 0)` 用于固定容量二进制文件初始化。FS 未 ready、path 非绝对路径或底层创建/写入/校验失败时返回 false；`size == 0` 会创建或截断为空文件。文件不存在、大小不匹配，或同尺寸但末端不可读时会用 `fillByte` 分块重建；已存在且大小一致、末端可读时返回 true 并保留原内容，避免业务每次启动清空持久环形记录。重建过程使用固定小块写入，避免一次性占用大 heap，并按长 FS 操作处理 watchdog；完成后校验最终大小并抽样校验首字节、中间字节和末尾字节。
 - `writeBytesAt()` 只覆盖已存在文件中的现有字节，不隐式创建文件、不扩展文件、不填洞；FS 未 ready、path 非绝对路径、文件不存在、data 为空但 len 非 0、`offset + len > fileSize`、底层写失败、写后大小不符或写入范围不可读时返回 false。
 - `removeFile()` 在 `LittleFS.remove()` 失败后会尝试把目标文件截断为 0；如果删除失败但成功清空文件内容，也返回 true，用于 FS 满或坏文件场景下优先释放可见文件占用。

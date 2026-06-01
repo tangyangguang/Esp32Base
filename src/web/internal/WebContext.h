@@ -25,7 +25,6 @@
 #endif
 #if ESP32BASE_ENABLE_FS
 #include "../../runtime/Esp32BaseFs.h"
-#include <LittleFS.h>
 #endif
 #if ESP32BASE_ENABLE_NTP
 #include "../../network/Esp32BaseNtp.h"
@@ -192,7 +191,6 @@ struct WebContext {
     size_t fsUploadBytes;
     char fsUploadPath[96];
     char fsUploadError[96];
-    File fsUploadFile;
 #endif
 #if ESP32BASE_ENABLE_APP_CONFIG
     AppConfigGroupSlot appConfigGroups[ESP32BASE_APP_CONFIG_MAX_GROUPS];
@@ -253,7 +251,6 @@ extern bool& g_fsUploadOverwrite;
 extern size_t& g_fsUploadBytes;
 extern char (&g_fsUploadPath)[96];
 extern char (&g_fsUploadError)[96];
-extern File& g_fsUploadFile;
 #endif
 
 #if ESP32BASE_ENABLE_APP_CONFIG

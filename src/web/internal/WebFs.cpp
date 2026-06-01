@@ -257,11 +257,8 @@ void fsSetUploadError(const char* message) {
 }
 
 void fsCloseUploadFile() {
-    if (g_fsUploadActive) {
-        g_fsUploadFile.flush();
-        g_fsUploadFile.close();
-    }
     g_fsUploadActive = false;
+    fsScanYield();
 }
 
 bool fsUploadTargetIsDirectory(const char* path) {
@@ -580,27 +577,22 @@ void handleFsDownloadGet() {
         g_server.send(400, "text/plain", "Directory download is not supported");
         return;
     }
-    File file = LittleFS.open(path, "r");
-    if (!file) {
+    const int64_t fileSize = Esp32BaseFs::fileSize(path);
+    if (fileSize < 0) {
         g_server.send(404, "text/plain", "File not found");
         return;
     }
-    if (file.isDirectory()) {
-        file.close();
-        g_server.send(400, "text/plain", "Directory download is not supported");
-        return;
-    }
-    const size_t size = file.size();
-    if (size > static_cast<size_t>(UINT32_MAX)) {
-        file.close();
+    if (static_cast<uint64_t>(fileSize) > static_cast<uint64_t>(UINT32_MAX)) {
         g_server.send(413, "text/plain", "File too large");
         return;
     }
+    const uint32_t size = static_cast<uint32_t>(fileSize);
 
     uint8_t buffer[512];
-    const size_t firstLen = size > 0 ? file.readBytes(reinterpret_cast<char*>(buffer), size > sizeof(buffer) ? sizeof(buffer) : size) : 0;
-    if (size > 0 && firstLen == 0) {
-        file.close();
+    size_t firstLen = 0;
+    if (size > 0 &&
+        (!Esp32BaseFs::readBytesAt(path, 0, buffer, size > sizeof(buffer) ? sizeof(buffer) : size, &firstLen) ||
+         firstLen == 0)) {
         ESP32BASE_LOG_W("web", "fs_download_read_failed path=%s offset=0", path);
         g_server.send(500, "text/plain", "File read failed");
         return;
@@ -610,7 +602,6 @@ void handleFsDownloadGet() {
     fsDownloadFilename(path, filename, sizeof(filename));
     sendResponseHeader("Cache-Control", "no-store");
     if (!beginResponse(200, "application/octet-stream", filename)) {
-        file.close();
         g_server.send(500, "text/plain", "Download failed");
         return;
     }
@@ -622,8 +613,8 @@ void handleFsDownloadGet() {
     }
     while (sent < size && !g_responseBroken) {
         const size_t maxLen = size - sent > sizeof(buffer) ? sizeof(buffer) : size - sent;
-        const size_t readLen = file.readBytes(reinterpret_cast<char*>(buffer), maxLen);
-        if (readLen == 0) {
+        size_t readLen = 0;
+        if (!Esp32BaseFs::readBytesAt(path, static_cast<uint32_t>(sent), buffer, maxLen, &readLen) || readLen == 0) {
             ESP32BASE_LOG_W("web", "fs_download_read_failed path=%s offset=%lu", path, static_cast<unsigned long>(sent));
             break;
         }
@@ -631,7 +622,6 @@ void handleFsDownloadGet() {
         sent += readLen;
         fsScanYield();
     }
-    file.close();
     endResponse();
     ESP32BASE_LOG_I("web", "fs_download_requested path=%s bytes=%lu", path, static_cast<unsigned long>(sent));
 }
@@ -783,8 +773,7 @@ void handleFsUpload() {
             fsSetUploadError("File exists");
             return;
         }
-        g_fsUploadFile = LittleFS.open(g_fsUploadPath, "w");
-        if (!g_fsUploadFile) {
+        if (!Esp32BaseFs::writeBytes(g_fsUploadPath, nullptr, 0)) {
             g_fsUploadStartFailed = true;
             fsSetUploadError("Could not open target file");
             return;
@@ -794,13 +783,13 @@ void handleFsUpload() {
         if (g_fsUploadForbidden || g_fsUploadStartFailed || !g_fsUploadActive) {
             return;
         }
-        const size_t written = g_fsUploadFile.write(upload.buf, upload.currentSize);
-        g_fsUploadBytes += written;
-        if (written != upload.currentSize) {
+        if (!Esp32BaseFs::appendBytes(g_fsUploadPath, upload.buf, upload.currentSize)) {
             g_fsUploadStartFailed = true;
             fsSetUploadError("File write failed");
             fsCloseUploadFile();
+            return;
         }
+        g_fsUploadBytes += upload.currentSize;
         fsScanYield();
     } else if (upload.status == UPLOAD_FILE_END) {
         if (g_fsUploadForbidden || g_fsUploadStartFailed || !g_fsUploadActive) {

@@ -4,9 +4,7 @@
 
 #include "Esp32BaseFs.h"
 #include "../core/Esp32BaseLog.h"
-#if ESP32BASE_ENABLE_WATCHDOG
-#include "Esp32BaseWatchdog.h"
-#endif
+#include "internal/Esp32BaseLongOperation.h"
 
 #include <LittleFS.h>
 
@@ -14,7 +12,8 @@
 
 namespace {
 bool g_fsReady = false;
-constexpr size_t kFixedFileChunkSize = 512;
+constexpr size_t kFsIoChunkSize = 512;
+constexpr size_t kFsServiceEveryBytes = 4096;
 
 bool validPath(const char* path) {
     return path && path[0] == '/';
@@ -23,7 +22,25 @@ bool validPath(const char* path) {
 bool readFromOpenFile(File& file, uint8_t* out, size_t maxLen, size_t* readLen) {
     const size_t positionBefore = file.position();
     const size_t size = file.size();
-    const size_t n = maxLen ? file.read(out, maxLen) : 0;
+    size_t n = 0;
+    if (positionBefore < size && maxLen > 0) {
+        const size_t available = size - positionBefore;
+        const size_t target = maxLen < available ? maxLen : available;
+        size_t serviced = 0;
+        while (n < target) {
+            const size_t chunkLen = target - n > kFsIoChunkSize ? kFsIoChunkSize : target - n;
+            const size_t got = file.read(out + n, chunkLen);
+            if (got == 0) {
+                break;
+            }
+            n += got;
+            serviced += got;
+            if (serviced >= kFsServiceEveryBytes) {
+                Esp32BaseLongOperation::service();
+                serviced = 0;
+            }
+        }
+    }
     if (readLen) {
         *readLen = n;
     }
@@ -34,6 +51,7 @@ bool readFromOpenFile(File& file, uint8_t* out, size_t maxLen, size_t* readLen) 
 }
 
 bool verifyFileSize(const char* path, uint64_t expectedSize) {
+    Esp32BaseLongOperation::LongOperationScope scope;
     File verify = LittleFS.open(path, "r");
     if (!verify || verify.isDirectory()) {
         if (verify) {
@@ -69,6 +87,7 @@ bool verifyByteEquals(const char* path, uint32_t offset, uint8_t expected) {
 }
 
 bool existingFixedFileUsable(const char* path, uint32_t expectedSize) {
+    Esp32BaseLongOperation::LongOperationScope scope;
     File file = LittleFS.open(path, "r");
     if (!file || file.isDirectory()) {
         if (file) {
@@ -84,38 +103,45 @@ bool existingFixedFileUsable(const char* path, uint32_t expectedSize) {
     return expectedSize == 0 || verifyReadableByte(path, static_cast<uint64_t>(expectedSize - 1U));
 }
 
-bool beginFixedFileLongOperation() {
-#if ESP32BASE_ENABLE_WATCHDOG
-    if (Esp32BaseWatchdog::currentTaskRemovedForLongOperation()) {
-        return false;
+bool writeOpenFileChunked(File& file, const uint8_t* data, size_t len, size_t* writtenLen = nullptr) {
+    size_t written = 0;
+    size_t serviced = 0;
+    while (written < len) {
+        const size_t chunkLen = len - written > kFsIoChunkSize ? kFsIoChunkSize : len - written;
+        const size_t n = file.write(data + written, chunkLen);
+        if (n == 0) {
+            break;
+        }
+        written += n;
+        serviced += n;
+        if (serviced >= kFsServiceEveryBytes) {
+            Esp32BaseLongOperation::service();
+            serviced = 0;
+        }
+        if (n != chunkLen) {
+            break;
+        }
     }
-    return Esp32BaseWatchdog::removeCurrentTaskForLongOperation();
-#else
-    return false;
-#endif
+    if (writtenLen) {
+        *writtenLen = written;
+    }
+    return written == len;
 }
 
-void endFixedFileLongOperation(bool active) {
-#if ESP32BASE_ENABLE_WATCHDOG
-    if (active) {
-        Esp32BaseWatchdog::restoreCurrentTaskAfterLongOperation();
-    }
-#else
-    (void)active;
-#endif
+bool readOpenFileChunked(File& file, uint8_t* out, size_t maxLen, size_t* readLen) {
+    return readFromOpenFile(file, out, maxLen, readLen);
 }
 
-void feedFixedFileLongOperation() {
-#if ESP32BASE_ENABLE_WATCHDOG
-    Esp32BaseWatchdog::feed();
-#endif
-    yield();
+void flushOpenFile(File& file) {
+    file.flush();
+    Esp32BaseLongOperation::service();
 }
 
 bool writeMode(const char* path, const uint8_t* data, size_t len, const char* mode) {
     if (!g_fsReady || !validPath(path) || (!data && len > 0)) {
         return false;
     }
+    Esp32BaseLongOperation::LongOperationScope scope;
     const bool append = mode && mode[0] == 'a';
     const int64_t before = append ? Esp32BaseFs::fileSize(path) : 0;
     if (append && before > 0 && !verifyReadableByte(path, static_cast<uint64_t>(before - 1))) {
@@ -126,10 +152,11 @@ bool writeMode(const char* path, const uint8_t* data, size_t len, const char* mo
     if (!file) {
         return false;
     }
-    const size_t written = len ? file.write(data, len) : 0;
-    file.flush();
+    size_t written = 0;
+    const bool writeOk = len == 0 || writeOpenFileChunked(file, data, len, &written);
+    flushOpenFile(file);
     file.close();
-    if (written != len || !verifyFileSize(path, expectedSize)) {
+    if (!writeOk || written != len || !verifyFileSize(path, expectedSize)) {
         return false;
     }
     if (expectedSize == 0 || len == 0) {
@@ -159,9 +186,12 @@ bool Esp32BaseFs::isReady() {
 }
 
 bool Esp32BaseFs::format() {
+    Esp32BaseLongOperation::LongOperationScope scope;
+    Esp32BaseLongOperation::service();
     LittleFS.end();
     g_fsReady = false;
     const bool ok = LittleFS.format();
+    Esp32BaseLongOperation::service();
     ESP32BASE_LOG_W("fs", "LittleFS format result=%s", ok ? "success" : "failed");
     return ok;
 }
@@ -195,11 +225,12 @@ bool Esp32BaseFs::readBytes(const char* path, uint8_t* out, size_t maxLen, size_
     if (!g_fsReady || !validPath(path) || !out) {
         return false;
     }
+    Esp32BaseLongOperation::LongOperationScope scope;
     File file = LittleFS.open(path, "r");
     if (!file) {
         return false;
     }
-    const bool ok = readFromOpenFile(file, out, maxLen, readLen);
+    const bool ok = readOpenFileChunked(file, out, maxLen, readLen);
     file.close();
     return ok;
 }
@@ -217,30 +248,33 @@ bool Esp32BaseFs::createFixedFile(const char* path, uint32_t size, uint8_t fillB
         return true;
     }
 
-    const bool watchdogReleased = beginFixedFileLongOperation();
+    Esp32BaseLongOperation::LongOperationScope scope;
     File file = LittleFS.open(path, "w");
     if (!file) {
-        endFixedFileLongOperation(watchdogReleased);
         return false;
     }
 
-    uint8_t chunk[kFixedFileChunkSize];
+    uint8_t chunk[kFsIoChunkSize];
     memset(chunk, fillByte, sizeof(chunk));
     uint32_t remaining = size;
+    size_t serviced = 0;
     bool ok = true;
     while (remaining > 0) {
         const size_t chunkLen = remaining > sizeof(chunk) ? sizeof(chunk) : static_cast<size_t>(remaining);
-        if (file.write(chunk, chunkLen) != chunkLen) {
+        if (!writeOpenFileChunked(file, chunk, chunkLen)) {
             ok = false;
             break;
         }
         remaining -= static_cast<uint32_t>(chunkLen);
-        feedFixedFileLongOperation();
+        serviced += chunkLen;
+        if (serviced >= kFsServiceEveryBytes) {
+            Esp32BaseLongOperation::service();
+            serviced = 0;
+        }
     }
 
-    file.flush();
+    flushOpenFile(file);
     file.close();
-    endFixedFileLongOperation(watchdogReleased);
 
     if (!ok || !verifyFileSize(path, size)) {
         return false;
@@ -262,6 +296,7 @@ bool Esp32BaseFs::readBytesAt(const char* path, uint32_t offset, uint8_t* out, s
     if (!g_fsReady || !validPath(path) || !out) {
         return false;
     }
+    Esp32BaseLongOperation::LongOperationScope scope;
     File file = LittleFS.open(path, "r");
     if (!file) {
         return false;
@@ -271,7 +306,7 @@ bool Esp32BaseFs::readBytesAt(const char* path, uint32_t offset, uint8_t* out, s
         file.close();
         return false;
     }
-    const bool ok = readFromOpenFile(file, out, maxLen, readLen);
+    const bool ok = readOpenFileChunked(file, out, maxLen, readLen);
     file.close();
     return ok;
 }
@@ -280,6 +315,7 @@ bool Esp32BaseFs::writeBytesAt(const char* path, uint32_t offset, const uint8_t*
     if (!g_fsReady || !validPath(path) || (!data && len > 0)) {
         return false;
     }
+    Esp32BaseLongOperation::LongOperationScope scope;
     File file = LittleFS.open(path, "r+");
     if (!file) {
         return false;
@@ -289,10 +325,11 @@ bool Esp32BaseFs::writeBytesAt(const char* path, uint32_t offset, const uint8_t*
         file.close();
         return false;
     }
-    const size_t written = len ? file.write(data, len) : 0;
-    file.flush();
+    size_t written = 0;
+    const bool writeOk = len == 0 || writeOpenFileChunked(file, data, len, &written);
+    flushOpenFile(file);
     file.close();
-    if (written != len || !verifyFileSize(path, size)) {
+    if (!writeOk || written != len || !verifyFileSize(path, size)) {
         return false;
     }
     if (len == 0) {
@@ -306,16 +343,21 @@ bool Esp32BaseFs::removeFile(const char* path) {
     if (!g_fsReady || !validPath(path) || !LittleFS.exists(path)) {
         return false;
     }
+    Esp32BaseLongOperation::LongOperationScope scope;
+    Esp32BaseLongOperation::service();
     if (LittleFS.remove(path)) {
+        Esp32BaseLongOperation::service();
         return true;
     }
     File file = LittleFS.open(path, "w");
     if (!file) {
         return false;
     }
-    file.flush();
+    flushOpenFile(file);
     file.close();
+    Esp32BaseLongOperation::service();
     if (LittleFS.remove(path)) {
+        Esp32BaseLongOperation::service();
         return true;
     }
     const int64_t remainingSize = fileSize(path);
@@ -323,7 +365,14 @@ bool Esp32BaseFs::removeFile(const char* path) {
 }
 
 bool Esp32BaseFs::rename(const char* from, const char* to) {
-    return g_fsReady && validPath(from) && validPath(to) && LittleFS.rename(from, to);
+    if (!g_fsReady || !validPath(from) || !validPath(to)) {
+        return false;
+    }
+    Esp32BaseLongOperation::LongOperationScope scope;
+    Esp32BaseLongOperation::service();
+    const bool ok = LittleFS.rename(from, to);
+    Esp32BaseLongOperation::service();
+    return ok;
 }
 
 bool Esp32BaseFs::exists(const char* path) {
@@ -334,6 +383,7 @@ int64_t Esp32BaseFs::fileSize(const char* path) {
     if (!g_fsReady || !validPath(path)) {
         return -1;
     }
+    Esp32BaseLongOperation::LongOperationScope scope;
     File file = LittleFS.open(path, "r");
     if (!file) {
         return -1;
@@ -347,6 +397,7 @@ bool Esp32BaseFs::listDir(const char* path, ListCallback cb, void* user) {
     if (!g_fsReady || !validPath(path) || !cb) {
         return false;
     }
+    Esp32BaseLongOperation::LongOperationScope scope;
     File root = LittleFS.open(path);
     if (!root) {
         return false;
@@ -359,6 +410,7 @@ bool Esp32BaseFs::listDir(const char* path, ListCallback cb, void* user) {
     while (file) {
         cb(file.name(), file.size(), file.isDirectory(), user);
         file.close();
+        Esp32BaseLongOperation::service();
         file = root.openNextFile();
     }
     root.close();
@@ -366,11 +418,25 @@ bool Esp32BaseFs::listDir(const char* path, ListCallback cb, void* user) {
 }
 
 bool Esp32BaseFs::mkdir(const char* path) {
-    return g_fsReady && validPath(path) && LittleFS.mkdir(path);
+    if (!g_fsReady || !validPath(path)) {
+        return false;
+    }
+    Esp32BaseLongOperation::LongOperationScope scope;
+    Esp32BaseLongOperation::service();
+    const bool ok = LittleFS.mkdir(path);
+    Esp32BaseLongOperation::service();
+    return ok;
 }
 
 bool Esp32BaseFs::rmdir(const char* path) {
-    return g_fsReady && validPath(path) && LittleFS.rmdir(path);
+    if (!g_fsReady || !validPath(path)) {
+        return false;
+    }
+    Esp32BaseLongOperation::LongOperationScope scope;
+    Esp32BaseLongOperation::service();
+    const bool ok = LittleFS.rmdir(path);
+    Esp32BaseLongOperation::service();
+    return ok;
 }
 
 size_t Esp32BaseFs::totalBytes() {

@@ -71,6 +71,8 @@ App Events 边界：
 - 业务需要二进制定长日志时，应通过 `Esp32BaseFs::readBytesAt()` / `writeBytesAt()` 做分页读取和固定位置覆盖，不直接依赖 LittleFS 或 Arduino `File`。
 - `writeBytesAt()` 只覆盖已有文件内容，不创建、不扩展文件；环形文件容量应由 `createFixedFile()` 初始化或校验。
 - `createFixedFile()` 会在文件不存在、大小不匹配或同尺寸但末端不可读时重建固定大小文件；同尺寸且可读时保留原内容，避免启动期清空持久环形记录。`appendBytes()` 适合低频追加，不适合循环零填充大文件。
+- 大块读写会在 Esp32BaseFs 层分块并定期让出调度，降低同步 LittleFS I/O 触发 task watchdog 的风险；但 LittleFS/Web/OTA/FileLog 仍是同步阻塞操作，实时任务仍应通过队列投递给 loop/system task 处理。
+- 写入失败不等于已回滚；FS 满、电源异常或底层写失败后，文件可能部分更新、大小不符或内容不可读，业务必须检查返回值并按业务语义重试、丢弃暂存或提示维护。
 - 逻辑文件大小不等于内容一定可读；brownout、FS 满、跨项目反复烧录或业务侧未处理写失败后，LittleFS 可能仍能列出文件大小，但读取内容失败。`Esp32BaseFs` 会把这种“未到 EOF 却读出 0 字节”的情况返回为失败，业务必须检查返回值。
 - 不提供大型文件管理器。
 - 不保证在 OTA 写 flash 时并行执行大量 FS 写入的实时性。

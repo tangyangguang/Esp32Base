@@ -2,6 +2,16 @@
 
 本文从 2026-05-06 起记录 Esp32Base 新增和优化的能力，面向正在接入本库的业务项目。业务项目应优先查看本文，了解最近可用的新 API、行为变化和推荐接入方式。
 
+## 2026-06-01
+
+### Esp32BaseFs 大块读写长操作治理
+
+- `Esp32BaseFs` 的 `writeBytes()`、`appendBytes()`、`writeBytesAt()`、`createFixedFile()`、`readBytes()` 和 `readBytesAt()` 现在统一按 512B 小块访问 LittleFS，并在累计约 4KB I/O 后让出调度；Watchdog 启用时会配合基础库长操作机制，避免业务一次保存较大二进制明细时长时间占住 loop/system task 后触发 task WDT。
+- `format()`、`removeFile()` 截断 fallback、`rename()`、`mkdir()`、`rmdir()`、`listDir()` 和写后 `flush()` 也纳入长操作保护；不可细分的底层 FS 调用会在调用前后进行 watchdog-friendly service。
+- Web FS 下载不再直接裸读 `LittleFS File`，改为通过 `Esp32BaseFs::readBytesAt()` 分块读取；Web FS 上传的每个 HTTP upload chunk 也通过 `Esp32BaseFs` 写入，不再要求业务或 Web 层自己维护 Flash 分块策略。
+- `Esp32BaseWatchdog` 的长操作移除/恢复状态改为按当前 FreeRTOS task 和嵌套深度记录，避免 FileLog、App Events、Web 和 FS 多层调用时提前恢复其他层建立的 WDT 状态。
+- `appendBytes()` 仍面向低频追加，固定容量业务记录仍推荐 `createFixedFile()` + `writeBytesAt()`；写入失败不等于已回滚，调用方仍必须检查返回值并按业务需要丢弃 RAM 暂存、重试或提示维护。
+
 ## 2026-05-31
 
 ### Web 安全和系统日志只读边界
