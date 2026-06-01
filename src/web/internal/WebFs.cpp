@@ -316,6 +316,17 @@ void fsCloseUploadFile() {
     fsScanYield();
 }
 
+void fsResetUploadState() {
+    g_fsUploadForbidden = false;
+    g_fsUploadStartFailed = false;
+    g_fsUploadReceived = false;
+    g_fsUploadActive = false;
+    g_fsUploadOverwrite = false;
+    g_fsUploadBytes = 0;
+    g_fsUploadPath[0] = '\0';
+    g_fsUploadError[0] = '\0';
+}
+
 bool fsUploadTargetIsDirectory(const char* path) {
     return validFsFilePath(path) && Esp32BaseFs::listDir(path, fsNoopListCallback, nullptr);
 }
@@ -552,8 +563,6 @@ void handleFsPage() {
         const String error = g_server.arg("error");
         const char* message = error == "delete_failed" ?
             "LittleFS could not remove or clear the file. For FileLog files, use Clear system logs or format LittleFS if storage remains full." :
-            error == "reserved_path" ?
-            "This file is owned by an Esp32Base service. Use the matching System action instead of generic file management." :
             error.c_str();
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_DANGER, "File action failed", message);
     }
@@ -717,53 +726,76 @@ void handleFsCheckGet() {
 void handleFsUploadDone() {
     markRequest();
     if (!ensureAuth()) {
+        fsResetUploadState();
         return;
     }
-    if (g_fsUploadForbidden || !requestSameOrigin()) {
-        ESP32BASE_LOG_W("web", "post_rejected context=fs_upload reason=cross_origin");
-        g_fsUploadForbidden = false;
-        g_fsUploadStartFailed = false;
-        fsCloseUploadFile();
-        fsSendUploadJson(403, false, "forbidden", g_fsUploadPath);
-        return;
-    }
-    g_fsUploadForbidden = false;
+    const bool uploadReceived = g_fsUploadReceived;
+    const bool forbidden = g_fsUploadForbidden;
     const bool startFailed = g_fsUploadStartFailed;
-    g_fsUploadStartFailed = false;
+    const bool overwrite = g_fsUploadOverwrite;
+    const size_t uploadBytes = g_fsUploadBytes;
+    char uploadPath[96];
+    char uploadError[96];
+    strlcpy(uploadPath, g_fsUploadPath, sizeof(uploadPath));
+    strlcpy(uploadError, g_fsUploadError, sizeof(uploadError));
     fsCloseUploadFile();
+    if (forbidden || !requestSameOrigin()) {
+        ESP32BASE_LOG_W("web", "post_rejected context=fs_upload reason=cross_origin");
+        fsResetUploadState();
+        fsSendUploadJson(403, false, "forbidden", uploadPath);
+        return;
+    }
+    if (!uploadReceived || !uploadPath[0]) {
+        ESP32BASE_LOG_W("web", "fs_upload_rejected reason=no_upload");
+        fsResetUploadState();
+        fsSendUploadJson(400, false, "No upload received", nullptr);
+        return;
+    }
+    if (startFailed || uploadError[0]) {
+        ESP32BASE_LOG_W("web", "fs_upload_rejected path=%s error=%s", uploadPath[0] ? uploadPath : "-", uploadError[0] ? uploadError : "upload rejected");
+        fsResetUploadState();
+        fsSendUploadJson(400, false, uploadError[0] ? uploadError : "upload rejected", uploadPath);
+        return;
+    }
+    const int64_t actualSize = uploadPath[0] ? Esp32BaseFs::fileSize(uploadPath) : -1;
+    if (actualSize < 0 ||
+        static_cast<uint64_t>(actualSize) != uploadBytes ||
+        !fsUploadFileReadableEnd(uploadPath, static_cast<uint64_t>(actualSize))) {
+        fsResetUploadState();
+        fsSendUploadJson(500, false, "Upload verification failed", uploadPath);
+        return;
+    }
 #if ESP32BASE_ENABLE_APP_EVENTS
-    const bool targetIsAppEvents = g_fsUploadPath[0] && appEventsOwnsPath(g_fsUploadPath);
-    if (targetIsAppEvents) {
-        Esp32BaseAppEventLog::reload();
+    const bool targetIsAppEvents = appEventsOwnsPath(uploadPath);
+    if (targetIsAppEvents && !Esp32BaseAppEventLog::reload()) {
+        ESP32BASE_LOG_W("web", "fs_upload_reload_failed path=%s target=app_events error=%s", uploadPath, Esp32BaseAppEventLog::lastError());
+        fsResetUploadState();
+        fsSendUploadJson(500, false, "App Events store reload failed", uploadPath);
+        return;
     }
 #endif
 #if ESP32BASE_ENABLE_FILELOG
-    if (g_fsUploadPath[0] && (fileLogOwnsPath(g_fsUploadPath) || Esp32BaseFileLog::faulted())) {
-        Esp32BaseFileLog::begin();
-    }
-#endif
-    if (startFailed || g_fsUploadError[0]) {
-        ESP32BASE_LOG_W("web", "fs_upload_rejected path=%s error=%s", g_fsUploadPath[0] ? g_fsUploadPath : "-", g_fsUploadError[0] ? g_fsUploadError : "upload rejected");
-        fsSendUploadJson(400, false, g_fsUploadError[0] ? g_fsUploadError : "upload rejected", g_fsUploadPath);
+    if ((fileLogOwnsPath(uploadPath) || Esp32BaseFileLog::faulted()) && !Esp32BaseFileLog::begin()) {
+        ESP32BASE_LOG_W("web", "fs_upload_reload_failed path=%s target=filelog", uploadPath);
+        fsResetUploadState();
+        fsSendUploadJson(500, false, "FileLog reload failed", uploadPath);
         return;
     }
-    const int64_t actualSize = g_fsUploadPath[0] ? Esp32BaseFs::fileSize(g_fsUploadPath) : -1;
-    if (actualSize >= 0 &&
-        static_cast<uint64_t>(actualSize) == g_fsUploadBytes &&
-        fsUploadFileReadableEnd(g_fsUploadPath, static_cast<uint64_t>(actualSize))) {
+#endif
+    {
         ESP32BASE_LOG_W("web", "fs_upload_completed path=%s bytes=%lu overwrite=%s",
-                        g_fsUploadPath,
-                        static_cast<unsigned long>(g_fsUploadBytes),
-                        g_fsUploadOverwrite ? "yes" : "no");
+                        uploadPath,
+                        static_cast<unsigned long>(uploadBytes),
+                        overwrite ? "yes" : "no");
+        fsResetUploadState();
         if (beginResponse(200, "application/json", nullptr)) {
             sendChunk("{\"ok\":true,\"redirect\":\"/esp32base/fs?manage=1&uploaded=1\",\"path\":\"");
-            sendEscapedJsonChunk(g_fsUploadPath);
+            sendEscapedJsonChunk(uploadPath);
             sendChunk("\"}");
             endResponse();
         }
         return;
     }
-    fsSendUploadJson(500, false, "Upload verification failed", g_fsUploadPath);
 }
 
 void handleFsUpload() {
@@ -776,13 +808,9 @@ void handleFsUpload() {
     }
     HTTPUpload& upload = g_server.upload();
     if (upload.status == UPLOAD_FILE_START) {
-        g_fsUploadForbidden = false;
-        g_fsUploadStartFailed = false;
-        g_fsUploadActive = false;
+        fsResetUploadState();
+        g_fsUploadReceived = true;
         g_fsUploadOverwrite = g_server.hasArg("overwrite") && g_server.arg("overwrite") == "1";
-        g_fsUploadBytes = 0;
-        g_fsUploadPath[0] = '\0';
-        g_fsUploadError[0] = '\0';
         if (!requestSameOrigin()) {
             g_fsUploadForbidden = true;
             g_fsUploadStartFailed = true;
@@ -904,7 +932,11 @@ void handleFsDeletePost() {
         ESP32BASE_LOG_W("web", "fs_delete_requested path=%s result=%s", path, ok ? "success" : "failed");
     }
     if (ok && (targetIsFileLog || retryFileLogAfterDelete)) {
-        Esp32BaseFileLog::begin();
+        const bool reloadOk = Esp32BaseFileLog::begin();
+        ESP32BASE_LOG_W("web", "fs_delete_reload path=%s target=filelog result=%s", path, reloadOk ? "success" : "failed");
+        if (!reloadOk) {
+            ok = false;
+        }
     }
 #else
     ESP32BASE_LOG_W("web", "fs_delete_requested path=%s result=%s", path, ok ? "success" : "failed");

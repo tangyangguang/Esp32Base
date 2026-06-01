@@ -105,6 +105,7 @@ bool& g_otaUploadStartFailed = ctx().otaUploadStartFailed;
 #if ESP32BASE_ENABLE_FS
 bool& g_fsUploadForbidden = ctx().fsUploadForbidden;
 bool& g_fsUploadStartFailed = ctx().fsUploadStartFailed;
+bool& g_fsUploadReceived = ctx().fsUploadReceived;
 bool& g_fsUploadActive = ctx().fsUploadActive;
 bool& g_fsUploadOverwrite = ctx().fsUploadOverwrite;
 size_t& g_fsUploadBytes = ctx().fsUploadBytes;

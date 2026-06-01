@@ -186,6 +186,7 @@ struct WebContext {
 #if ESP32BASE_ENABLE_FS
     bool fsUploadForbidden;
     bool fsUploadStartFailed;
+    bool fsUploadReceived;
     bool fsUploadActive;
     bool fsUploadOverwrite;
     size_t fsUploadBytes;
@@ -246,6 +247,7 @@ extern bool& g_otaUploadStartFailed;
 #if ESP32BASE_ENABLE_FS
 extern bool& g_fsUploadForbidden;
 extern bool& g_fsUploadStartFailed;
+extern bool& g_fsUploadReceived;
 extern bool& g_fsUploadActive;
 extern bool& g_fsUploadOverwrite;
 extern size_t& g_fsUploadBytes;

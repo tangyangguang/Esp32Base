@@ -10,6 +10,24 @@ def read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
+def function_body(text: str, signature: str) -> str:
+    start = text.find(signature)
+    if start < 0:
+        return ""
+    brace = text.find("{", start)
+    if brace < 0:
+        return ""
+    depth = 0
+    for i in range(brace, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[brace:i + 1]
+    return text[brace:]
+
+
 
 WEB_SOURCE_PATHS = [
     "src/web/Esp32BaseWeb.cpp",
@@ -53,7 +71,7 @@ checks = {
         "Esp32BaseAppEventLog::reload();",
         "Upload file",
         "static_cast<size_t>(written) >= len",
-        "static_cast<uint64_t>(actualSize) == g_fsUploadBytes",
+        "static_cast<uint64_t>(actualSize) != uploadBytes",
         "overwrite=1",
         "confirm(",
     ],
@@ -93,6 +111,22 @@ if "Esp32BaseFs::writeBytes(g_fsUploadPath, nullptr, 0)" not in source:
     errors.append("src/web/internal Web modules: upload must create or truncate the target before streaming chunks")
 if "Target is reserved for App Events" in source:
     errors.append("src/web/internal Web modules: App Events store upload should warn/reload, not reject")
+if "fsResetUploadState()" not in source:
+    errors.append("src/web/internal Web modules: upload request state must be reset after each completed upload request")
+
+web_fs = read("src/web/internal/WebFs.cpp")
+upload_done = function_body(web_fs, "void handleFsUploadDone()")
+upload_write = function_body(web_fs, "void handleFsUpload()")
+if '"No upload received"' not in upload_done:
+    errors.append("src/web/internal/WebFs.cpp: upload completion must reject POSTs that did not receive UPLOAD_FILE_START")
+if upload_done.count("fsResetUploadState();") < 4:
+    errors.append("src/web/internal/WebFs.cpp: upload completion must clear path/error/bytes flags before every response")
+if "Esp32BaseAppEventLog::reload()" in upload_done and "App Events store reload failed" not in upload_done:
+    errors.append("src/web/internal/WebFs.cpp: App Events store upload reload failure must be returned to the client")
+if "Esp32BaseFileLog::begin()" in upload_done and "FileLog reload failed" not in upload_done:
+    errors.append("src/web/internal/WebFs.cpp: FileLog upload reload failure must be returned to the client")
+if 'strlcpy(path, g_server.arg' in upload_done + upload_write or 'strlcpy(dir, g_server.arg' in upload_done + upload_write:
+    errors.append("src/web/internal/WebFs.cpp: upload path args must not be copied from g_server.arg before length checks")
 
 for forbidden in [
     "fsUploadPathProtected",

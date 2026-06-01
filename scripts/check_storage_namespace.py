@@ -11,12 +11,16 @@ def read(path: str) -> str:
 
 
 def function_body(text: str, signature: str) -> str:
-    start = text.find(signature)
-    if start < 0:
-        return ""
-    brace = text.find("{", start)
-    if brace < 0:
-        return ""
+    start = 0
+    while True:
+        start = text.find(signature, start)
+        if start < 0:
+            return ""
+        brace = text.find("{", start)
+        semi = text.find(";", start)
+        if brace >= 0 and (semi < 0 or brace < semi):
+            break
+        start += len(signature)
     depth = 0
     for i in range(brace, len(text)):
         if text[i] == "{":
@@ -112,6 +116,9 @@ for path in [
 
 if 'Target is reserved for Esp32Base services' in web_fs:
     errors.append("src/web/internal/WebFs.cpp: generic /esp32base paths must warn in the UI, not reject upload/delete")
+for forbidden in ["reserved_path", "owned by an Esp32Base service", "owned by service"]:
+    if forbidden in web_fs:
+        errors.append(f"src/web/internal/WebFs.cpp: must not keep hard-block namespace wording {forbidden!r}")
 
 for path in ["README.md", "docs/03_api.md", "docs/04_web.md", "CHANGELOG.md"]:
     text = read(path)
@@ -151,12 +158,41 @@ if "sendFsPathTooLongRow(" not in web_fs:
 if "fsReadPathArg(" not in web_fs:
     errors.append("src/web/internal/WebFs.cpp: request path args must be length-checked before copying")
 
+for line_no, line in enumerate(web_fs.splitlines(), start=1):
+    if "fsJoinPath(" not in line or "bool fsJoinPath(" in line:
+        continue
+    stripped = line.strip()
+    handled = (
+        stripped.startswith("const bool ") or
+        stripped.startswith("bool ") or
+        stripped.startswith("if (!fsJoinPath(") or
+        stripped.startswith("return fsJoinPath(")
+    )
+    if not handled:
+        errors.append(f"src/web/internal/WebFs.cpp:{line_no}: fsJoinPath return value must be checked")
+
+for forbidden in ["strlcpy(path, g_server.arg", "strlcpy(dir, g_server.arg", "strlcpy(name, g_server.arg"]:
+    if forbidden in web_fs:
+        errors.append(f"src/web/internal/WebFs.cpp: request args must be length-checked before copying ({forbidden})")
+
 download = function_body(web_fs, "void handleFsDownloadGet()")
 delete = function_body(web_fs, "void handleFsDeletePost()")
+check = function_body(web_fs, "void handleFsCheckGet()")
+upload = function_body(web_fs, "void handleFsUpload()")
+walk = function_body(web_fs, "void fsWalkCallback(const char* name")
+upload_dirs = function_body(web_fs, "void fsUploadDirOptionCallback(const char* name")
 if "fsReadPathArg(\"path\", path, sizeof(path))" not in download:
     errors.append("src/web/internal/WebFs.cpp: download must validate raw path length before copying")
 if "fsReadPathArg(\"path\", path, sizeof(path))" not in delete:
     errors.append("src/web/internal/WebFs.cpp: delete must validate raw path length before copying")
+if "fsReadArg(\"dir\", dir, sizeof(dir))" not in check or "fsReadArg(\"name\", name, sizeof(name))" not in check:
+    errors.append("src/web/internal/WebFs.cpp: upload check must validate raw dir/name length before copying")
+if "fsReadArg(\"dir\", dir, sizeof(dir))" not in upload:
+    errors.append("src/web/internal/WebFs.cpp: upload start must validate raw dir length before copying")
+if "const bool pathOk = fsJoinPath(" not in walk:
+    errors.append("src/web/internal/WebFs.cpp: file tree walk must branch on fsJoinPath return value")
+if "if (!fsJoinPath(" not in upload_dirs:
+    errors.append("src/web/internal/WebFs.cpp: upload directory options must skip overlong joined paths")
 if 'strlcpy(path, g_server.hasArg("path")' in download + delete:
     errors.append("src/web/internal/WebFs.cpp: download/delete still copy possibly overlong path before validation")
 if "char segment[64]" in filelog_owns:
