@@ -147,8 +147,8 @@ bool Esp32Base::begin() {
         esp32base_internal::copySafe(g_lastError, sizeof(g_lastError), "system");
         return false;
     }
-    Esp32BaseSystem::setPreRestartHook(flushRuntimeBeforeLifecycleStop);
-    Esp32BaseSystem::setPreSleepHook(flushRuntimeBeforeLifecycleStop);
+    esp32base_internal::registerPreRestartHook(flushRuntimeBeforeLifecycleStop);
+    esp32base_internal::registerPreSleepHook(flushRuntimeBeforeLifecycleStop);
     ESP32BASE_LOG_D("base", "module_ready name=system");
 #if ESP32BASE_ENABLE_OTA
     // Keep ESP32BASE_OTA_REQUIRE_MARK_VALID rollback timing independent from WiFi/Web readiness.
@@ -262,6 +262,7 @@ void Esp32Base::handle() {
 #endif
 #if ESP32BASE_ENABLE_WEB
     if (!Esp32BaseWeb::isReady() &&
+        !Esp32BaseWeb::startLocked() &&
         (Esp32BaseWiFi::isConnected() || Esp32BaseWiFi::state() == Esp32BaseWiFi::CONFIG_PORTAL)) {
         if (!g_webStartDebugLogged) {
             ESP32BASE_LOG_D("base", "deferred_start module=web reason=%s",

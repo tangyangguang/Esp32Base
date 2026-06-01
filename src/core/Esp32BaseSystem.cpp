@@ -13,15 +13,41 @@ namespace {
 bool g_ready = false;
 uint32_t g_bootCount = 0;
 uint8_t g_restartLogCount = 0;
-Esp32BaseSystem::PreLifecycleHook g_preRestartHook = nullptr;
-Esp32BaseSystem::PreLifecycleHook g_preSleepHook = nullptr;
 
 constexpr uint8_t RESTART_LOG_CAPACITY = 4;
+constexpr uint8_t LIFECYCLE_HOOK_CAPACITY = 4;
+esp32base_internal::PreLifecycleHook g_preRestartHooks[LIFECYCLE_HOOK_CAPACITY] = {};
+esp32base_internal::PreLifecycleHook g_preSleepHooks[LIFECYCLE_HOOK_CAPACITY] = {};
 
-void runPreRestartHook() {
-    if (g_preRestartHook) {
-        g_preRestartHook();
+bool registerLifecycleHook(esp32base_internal::PreLifecycleHook* hooks,
+                           esp32base_internal::PreLifecycleHook hook) {
+    if (!hook) {
+        return false;
     }
+    for (uint8_t i = 0; i < LIFECYCLE_HOOK_CAPACITY; ++i) {
+        if (hooks[i] == hook) {
+            return true;
+        }
+    }
+    for (uint8_t i = 0; i < LIFECYCLE_HOOK_CAPACITY; ++i) {
+        if (!hooks[i]) {
+            hooks[i] = hook;
+            return true;
+        }
+    }
+    return false;
+}
+
+void runLifecycleHooks(esp32base_internal::PreLifecycleHook* hooks) {
+    for (uint8_t i = 0; i < LIFECYCLE_HOOK_CAPACITY; ++i) {
+        if (hooks[i]) {
+            hooks[i]();
+        }
+    }
+}
+
+void runPreRestartHooks() {
+    runLifecycleHooks(g_preRestartHooks);
 }
 }
 
@@ -99,24 +125,26 @@ void Esp32BaseSystem::restart(const char* reason) {
     appendRestartLog(reason ? reason : "restart");
     Esp32BaseConfig::flushAll();
     ESP32BASE_LOG_W("system", "restart: %s", reason ? reason : "");
-    runPreRestartHook();
+    runPreRestartHooks();
     delay(50);
     ESP.restart();
 }
 
-void Esp32BaseSystem::setPreRestartHook(PreLifecycleHook hook) {
-    g_preRestartHook = hook;
+namespace esp32base_internal {
+
+bool registerPreRestartHook(PreLifecycleHook hook) {
+    return registerLifecycleHook(g_preRestartHooks, hook);
 }
 
-void Esp32BaseSystem::setPreSleepHook(PreLifecycleHook hook) {
-    g_preSleepHook = hook;
+bool registerPreSleepHook(PreLifecycleHook hook) {
+    return registerLifecycleHook(g_preSleepHooks, hook);
 }
 
-void Esp32BaseSystem::runPreSleepHook() {
-    if (g_preSleepHook) {
-        g_preSleepHook();
-    }
+void runPreSleepHooks() {
+    runLifecycleHooks(g_preSleepHooks);
 }
+
+} // namespace esp32base_internal
 
 bool Esp32BaseSystem::appendRestartLog(const char* reason) {
     char reasonCopy[64];

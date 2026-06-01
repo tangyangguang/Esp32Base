@@ -85,6 +85,7 @@ public:
     static bool begin();
     static void handle();
     static bool isReady();
+    static bool startLocked();
 
     static void setDefaultAuth(const char* user, const char* pass);
     static const char* authUser();

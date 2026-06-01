@@ -12,6 +12,7 @@ WebContext::WebContext()
       navItems{},
       headerKeys{"Authorization", "X-Sha256", "X-Firmware-Size", "Host", "Origin", "Referer", "X-Esp32Base-Ajax"},
       webReady(false),
+      startLocked(false),
       authEnabled(true),
       defaultAuthSet(false),
       authLoadedFromStorage(false),
@@ -79,6 +80,7 @@ Route (&g_routes)[ESP32BASE_WEB_MAX_ROUTES] = ctx().routes;
 NavItem (&g_navItems)[ESP32BASE_WEB_MAX_NAV_ITEMS] = ctx().navItems;
 const char* (&g_headerKeys)[7] = ctx().headerKeys;
 bool& g_webReady = ctx().webReady;
+bool& g_startLocked = ctx().startLocked;
 bool& g_authEnabled = ctx().authEnabled;
 bool& g_defaultAuthSet = ctx().defaultAuthSet;
 bool& g_authLoadedFromStorage = ctx().authLoadedFromStorage;

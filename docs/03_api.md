@@ -1165,9 +1165,9 @@ class Esp32BaseWatchdog {
 public:
     static bool begin(uint32_t timeoutMs);
     static void feed();
-    static bool removeCurrentTaskForLongOperation();
-    static bool restoreCurrentTaskAfterLongOperation();
-    static bool currentTaskRemovedForLongOperation();
+    static bool enterLongOperation();
+    static bool exitLongOperation();
+    static bool currentTaskInLongOperation();
     static bool isEnabled();
     static bool wasWatchdogReset();
     static uint32_t lifetimeResetCount();
@@ -1185,8 +1185,8 @@ public:
 
 `Esp32BaseWatchdog::begin(timeoutMs)` 要求 `timeoutMs >= 1000`；更小值返回 false 并输出 WARN，避免 Arduino ESP32 2.x 下秒级 WDT 参数被截断为 0。
 
-`removeCurrentTaskForLongOperation()` / `restoreCurrentTaskAfterLongOperation()` 用于 OTA、FileLog 轮转等预期较长的 flash 操作；`currentTaskRemovedForLongOperation()` 可在嵌套长操作前检查当前任务是否已被其他模块临时移出 WDT，避免提前恢复别的模块移除的 WDT 状态。
-这些接口按当前 FreeRTOS task 和嵌套深度记录长操作状态，只供基础库内部同步 Flash/FS/OTA 等长操作使用，不是业务关闭 Watchdog 的通用开关。
+`enterLongOperation()` / `exitLongOperation()` 用于 OTA、FileLog 轮转等预期较长的 flash 操作；`currentTaskInLongOperation()` 可在嵌套长操作前检查当前任务是否已经处于基础库长操作范围。
+这些接口按当前 FreeRTOS task 和嵌套深度记录长操作状态，并不把当前 task 从 WDT 注销；只供基础库内部同步 Flash/FS/OTA 等长操作使用，不是业务关闭 Watchdog 的通用开关。
 
 `begin()` 是轻量初始化，只记录 Sleep 模块进入统一生命周期管理，不配置任何默认 wake source。
 

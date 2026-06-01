@@ -26,7 +26,7 @@ bool Esp32BaseSleep::deepSleepUs(uint64_t us) {
     Esp32BaseSystem::appendRestartLog("deep_sleep");
     Esp32BaseConfig::flushAll();
     ESP32BASE_LOG_I("sleep", "enter deep sleep: %llu us", static_cast<unsigned long long>(us));
-    Esp32BaseSystem::runPreSleepHook();
+    esp32base_internal::runPreSleepHooks();
     if (us > 0) {
         esp_sleep_enable_timer_wakeup(us);
     }

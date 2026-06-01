@@ -46,8 +46,8 @@ extra_scripts =
   post:path/to/Esp32Base/scripts/esp32base_webota.py
 
 custom_esp32base_webota_host = 192.168.2.112
-custom_esp32base_webota_user = admin
-custom_esp32base_webota_password = admin
+custom_esp32base_webota_user = <current-web-auth-user>
+custom_esp32base_webota_password = <current-web-auth-password>
 ```
 
 运行：
@@ -204,16 +204,16 @@ python path/to/Esp32Base/scripts/esp32base_serial_recover_ota.py \
 OTA 写 flash 期间：
 
 ```cpp
-Esp32BaseWatchdog::removeCurrentTaskForLongOperation();
+Esp32BaseWatchdog::enterLongOperation();
 ```
 
 结束后：
 
 ```cpp
-Esp32BaseWatchdog::restoreCurrentTaskAfterLongOperation();
+Esp32BaseWatchdog::exitLongOperation();
 ```
 
-所有路径都必须 restore：
+所有路径都必须 exit：
 
 - success
 - failed

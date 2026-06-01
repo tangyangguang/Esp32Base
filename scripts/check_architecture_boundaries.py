@@ -19,33 +19,38 @@ for forbidden in ("../runtime/", "Esp32BaseFileLog"):
     if forbidden in system:
         errors.append(f"src/core/Esp32BaseSystem.cpp: core system must not depend on {forbidden}")
 
+for forbidden in ("setPreRestartHook", "setPreSleepHook"):
+    if forbidden in system_header:
+        errors.append(f"src/core/Esp32BaseSystem.h: lifecycle hook setters must not be public Esp32BaseSystem API ({forbidden})")
+
 for needle, message in (
-    ("PreLifecycleHook", "System must expose a low-level lifecycle hook type"),
-    ("setPreRestartHook", "System must allow facade-level pre-restart orchestration"),
-    ("setPreSleepHook", "System must allow facade-level pre-sleep orchestration"),
+    ("namespace esp32base_internal", "System must keep lifecycle hooks in the internal namespace"),
+    ("registerPreRestartHook", "System must support internal pre-restart hook registration"),
+    ("registerPreSleepHook", "System must support internal pre-sleep hook registration"),
 ):
     if needle not in system_header:
         errors.append(f"src/core/Esp32BaseSystem.h: {message}")
 
 for needle, message in (
-    ("runPreRestartHook();", "restart must run the registered pre-restart hook"),
-    ("void Esp32BaseSystem::setPreRestartHook", "pre-restart hook setter must be implemented"),
-    ("void Esp32BaseSystem::setPreSleepHook", "pre-sleep hook setter must be implemented"),
+    ("runPreRestartHooks();", "restart must run registered pre-restart hooks"),
+    ("bool registerPreRestartHook", "pre-restart hook registration must be implemented"),
+    ("bool registerPreSleepHook", "pre-sleep hook registration must be implemented"),
+    ("constexpr uint8_t LIFECYCLE_HOOK_CAPACITY", "lifecycle hooks must support more than one internal registrant"),
 ):
     if needle not in system:
         errors.append(f"src/core/Esp32BaseSystem.cpp: {message}")
 
 for needle, message in (
-    ("Esp32BaseSystem::setPreRestartHook(flushRuntimeBeforeLifecycleStop);", "facade must install the restart lifecycle hook"),
-    ("Esp32BaseSystem::setPreSleepHook(flushRuntimeBeforeLifecycleStop);", "facade must install the sleep lifecycle hook"),
+    ("esp32base_internal::registerPreRestartHook(flushRuntimeBeforeLifecycleStop);", "facade must install the restart lifecycle hook internally"),
+    ("esp32base_internal::registerPreSleepHook(flushRuntimeBeforeLifecycleStop);", "facade must install the sleep lifecycle hook internally"),
 ):
     if needle not in base:
         errors.append(f"src/Esp32Base.cpp: {message}")
 
 if "Esp32BaseFileLog" in sleep:
     errors.append("src/runtime/Esp32BaseSleep.inc: sleep must use the system pre-sleep hook instead of depending on FileLog")
-if "runPreSleepHook();" not in sleep:
-    errors.append("src/runtime/Esp32BaseSleep.inc: deep sleep must run the registered pre-sleep hook")
+if "esp32base_internal::runPreSleepHooks();" not in sleep:
+    errors.append("src/runtime/Esp32BaseSleep.inc: deep sleep must run registered pre-sleep hooks")
 
 docs = {
     "docs/01_architecture.md": "Core 不 include Runtime/FileLog",

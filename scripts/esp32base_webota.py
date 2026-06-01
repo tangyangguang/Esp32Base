@@ -164,8 +164,13 @@ def _auth_header():
     if auth:
         token = base64.b64encode(auth.encode("utf-8")).decode("ascii")
         return "Basic " + token
-    user = _option("esp32base_webota_user", "admin")
-    password = _option("esp32base_webota_password", "admin")
+    user = _option("esp32base_webota_user")
+    password = _option("esp32base_webota_password")
+    if not user or not password:
+        raise ValueError(
+            "Web OTA auth is required: set esp32base_webota_auth or both "
+            "esp32base_webota_user and esp32base_webota_password"
+        )
     token = base64.b64encode(("%s:%s" % (user, password)).encode("utf-8")).decode("ascii")
     return "Basic " + token
 

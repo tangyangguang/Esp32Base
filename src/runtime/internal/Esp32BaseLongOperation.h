@@ -14,14 +14,14 @@ class LongOperationScope {
 public:
     LongOperationScope() {
 #if ESP32BASE_ENABLE_WATCHDOG
-        active_ = Esp32BaseWatchdog::removeCurrentTaskForLongOperation();
+        active_ = Esp32BaseWatchdog::enterLongOperation();
 #endif
     }
 
     ~LongOperationScope() {
 #if ESP32BASE_ENABLE_WATCHDOG
         if (active_) {
-            Esp32BaseWatchdog::restoreCurrentTaskAfterLongOperation();
+            Esp32BaseWatchdog::exitLongOperation();
         }
 #endif
     }

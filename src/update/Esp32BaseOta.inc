@@ -152,7 +152,7 @@ bool copySha256Hex(const char* in, char* out, size_t outLen) {
 
 void cleanupLongOps() {
 #if ESP32BASE_ENABLE_WATCHDOG
-    Esp32BaseWatchdog::restoreCurrentTaskAfterLongOperation();
+    Esp32BaseWatchdog::exitLongOperation();
 #endif
 #if ESP32BASE_ENABLE_WIFI
     Esp32BaseWiFi::setPowerSave(g_otaPrevPowerSave);
@@ -163,7 +163,7 @@ void cleanupLongOps() {
 void prepareLongOps() {
     Esp32BaseConfig::pauseDeferredFlush();
 #if ESP32BASE_ENABLE_WATCHDOG
-    Esp32BaseWatchdog::removeCurrentTaskForLongOperation();
+    Esp32BaseWatchdog::enterLongOperation();
 #endif
 #if ESP32BASE_ENABLE_WIFI
     g_otaPrevPowerSave = Esp32BaseWiFi::powerSave();

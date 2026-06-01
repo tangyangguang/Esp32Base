@@ -196,7 +196,7 @@ OTA 路由只在启用 OTA 且认证条件满足时注册。
 WiFi 配置页：
 
 - 回显当前 SSID。
-- 回显当前密码。
+- 不回显当前密码；留空表示保持已保存密码，显式勾选清除密码才会切换开放网络。
 - 页面使用 baseline 表单结构：`formpanel + editform + fieldgrid`；清除 WiFi 使用 `dangerpanel`。
 - 表单提交前用前端 JS 校验 SSID 非空；密码可为空，用于开放 WiFi。
 - 服务端 API 必须重复校验 SSID 非空，密码允许为空。

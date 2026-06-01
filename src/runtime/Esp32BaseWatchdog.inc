@@ -73,7 +73,7 @@ void Esp32BaseWatchdog::feed() {
     esp_task_wdt_reset();
 }
 
-bool Esp32BaseWatchdog::removeCurrentTaskForLongOperation() {
+bool Esp32BaseWatchdog::enterLongOperation() {
     if (!g_enabled) {
         return true;
     }
@@ -93,7 +93,7 @@ bool Esp32BaseWatchdog::removeCurrentTaskForLongOperation() {
     return true;
 }
 
-bool Esp32BaseWatchdog::restoreCurrentTaskAfterLongOperation() {
+bool Esp32BaseWatchdog::exitLongOperation() {
     if (!g_enabled) {
         return true;
     }
@@ -112,10 +112,6 @@ bool Esp32BaseWatchdog::restoreCurrentTaskAfterLongOperation() {
     g_longOperationTask = nullptr;
     g_longOperationDepth = 0;
     return true;
-}
-
-bool Esp32BaseWatchdog::currentTaskRemovedForLongOperation() {
-    return currentTaskInLongOperation();
 }
 
 bool Esp32BaseWatchdog::currentTaskInLongOperation() {

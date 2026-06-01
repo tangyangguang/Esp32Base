@@ -15,6 +15,10 @@ web_core = read("src/web/Esp32BaseWeb.cpp")
 web_wifi = read("src/web/internal/WebWifi.cpp")
 wifi = read("src/network/Esp32BaseWiFi.inc")
 profile = read("src/Esp32BaseProfile.h")
+base = read("src/Esp32Base.cpp")
+webota = read("scripts/esp32base_webota.py")
+web_docs = read("docs/04_web.md")
+ota_docs = read("docs/05_ota.md")
 
 secret_log_patterns = (
     "password=%s",
@@ -48,8 +52,20 @@ if 'applyPlainAuth(g_defaultAuthSet ? g_defaultAuthUser : "admin"' in web_routin
     errors.append("src/web/internal/WebRouting.cpp: Web auth must not silently fall back to admin/admin")
 if "auth_default_missing" not in web_core:
     errors.append("src/web/Esp32BaseWeb.cpp: Web begin must fail closed when no stored/default auth is configured")
+if "g_startLocked" not in web_core or "bool Esp32BaseWeb::startLocked()" not in web_core:
+    errors.append("src/web/Esp32BaseWeb.cpp: auth-missing fail-closed must latch startLocked after the first failure")
+if "!Esp32BaseWeb::startLocked()" not in base:
+    errors.append("src/Esp32Base.cpp: deferred Web start must stop retrying while Web start is locked")
 if "source=insecure_builtin" not in web_core:
     errors.append("src/web/Esp32BaseWeb.cpp: insecure built-in default auth must be explicitly logged when enabled")
+if '_option("esp32base_webota_user", "admin")' in webota or '_option("esp32base_webota_password", "admin")' in webota:
+    errors.append("scripts/esp32base_webota.py: webota must not default Basic Auth to admin/admin")
+if "Web OTA auth is required" not in webota:
+    errors.append("scripts/esp32base_webota.py: webota must fail with a clear message when auth is not configured")
+if "- 回显当前密码" in web_docs:
+    errors.append("docs/04_web.md: WiFi page docs must not claim the saved password is echoed")
+if "custom_esp32base_webota_user = admin" in ota_docs or "custom_esp32base_webota_password = admin" in ota_docs:
+    errors.append("docs/05_ota.md: Web OTA examples must not use admin/admin placeholders")
 
 docs = {
     "README.md": "Web/Auth 不再内置启用 admin/admin",

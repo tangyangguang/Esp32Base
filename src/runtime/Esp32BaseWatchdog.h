@@ -7,9 +7,8 @@ class Esp32BaseWatchdog {
 public:
     static bool begin(uint32_t timeoutMs);
     static void feed();
-    static bool removeCurrentTaskForLongOperation();
-    static bool restoreCurrentTaskAfterLongOperation();
-    static bool currentTaskRemovedForLongOperation();
+    static bool enterLongOperation();
+    static bool exitLongOperation();
     static bool currentTaskInLongOperation();
     static bool isEnabled();
     static bool wasWatchdogReset();

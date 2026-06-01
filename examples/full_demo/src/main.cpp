@@ -409,7 +409,7 @@ void runSelfTest() {
     g_selfTestDone = true;
     const IPAddress targetIp = Esp32BaseWiFi::state() == Esp32BaseWiFi::CONFIG_PORTAL ? WiFi.softAPIP() : WiFi.localIP();
     ESP32BASE_LOG_I("selftest", "start ip=%s state=%s", targetIp.toString().c_str(), Esp32BaseWiFi::stateName());
-    const bool wdtRemoved = Esp32BaseWatchdog::removeCurrentTaskForLongOperation();
+    const bool wdtEntered = Esp32BaseWatchdog::enterLongOperation();
     uint8_t pass = 0;
     uint8_t total = 0;
 #define RUN_SELFTEST(method, path, body, auth, code, contains) do { ++total; if (selfTestRequest(method, path, body, auth, code, contains)) ++pass; } while (0)
@@ -600,8 +600,8 @@ void runSelfTest() {
 #undef RUN_BOOL
 #undef RUN_CROSS_ORIGIN_SELFTEST
 #undef RUN_SELFTEST
-    if (wdtRemoved) {
-        Esp32BaseWatchdog::restoreCurrentTaskAfterLongOperation();
+    if (wdtEntered) {
+        Esp32BaseWatchdog::exitLongOperation();
     }
     ESP32BASE_LOG_I("selftest", "summary pass=%u total=%u", static_cast<unsigned>(pass), static_cast<unsigned>(total));
 }
