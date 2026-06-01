@@ -158,6 +158,10 @@ require("src/runtime/Esp32BaseAppEventLog.inc", "bool Esp32BaseAppEventLog::relo
 require("src/web/internal/WebFs.cpp", "Esp32BaseAppEventLog::reload();", "FS upload/delete of App Events store must reload runtime state")
 if "Target is reserved for App Events" in read("src/web/internal/WebFs.cpp"):
     errors.append("src/web/internal/WebFs.cpp: FS upload must not reject App Events store during test/maintenance imports")
+web_fs_source = read("src/web/internal/WebFs.cpp")
+delete_body = function_body(web_fs_source, "void handleFsDeletePost()")
+if "Esp32BaseFs::fileSize(path) == 0" not in delete_body or "Esp32BaseAppEventLog::clear()" not in delete_body:
+    errors.append("src/web/internal/WebFs.cpp: App Events delete path must rebuild the store when removeFile() only truncates it to 0 bytes")
 web_logs_source = read("src/web/internal/WebLogs.cpp")
 for signature in ("void handleLogsPage", "void handleLogsRaw"):
     body = function_body(web_logs_source, signature)
