@@ -20,6 +20,7 @@
 #if ESP32BASE_ENABLE_WATCHDOG
 #include "../runtime/Esp32BaseWatchdog.h"
 #endif
+#include "../runtime/internal/Esp32BaseLongOperation.h"
 #if ESP32BASE_ENABLE_ARDUINO_OTA
 #include "../web/Esp32BaseWeb.h"
 #include <ArduinoOTA.h>
@@ -635,7 +636,7 @@ bool Esp32BaseOta::writeChunk(const uint8_t* data, size_t len) {
     }
     g_otaProcessed += len;
     logProgressIfDue();
-    yield();
+    Esp32BaseLongOperation::service();
 #if ESP32BASE_ENABLE_BUS
     Esp32BaseBus::publish(EVENT_PROGRESS, "");
 #endif

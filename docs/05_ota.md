@@ -123,7 +123,7 @@ pio run -t webota
 6. 关闭 WiFi power save 并记录原状态。
 7. `Update.begin(...)`。
 8. 写入 chunk。
-9. 每个 chunk 后 `yield()`。
+9. 每个 chunk 后 `feed/yield`，避免 WebServer 同步上传期间触发 task WDT。
 10. 接收完成后计算 SHA256。
 11. SHA256 通过后调用 `Update.end(true)`。
 12. 进入 `SUCCESS`。

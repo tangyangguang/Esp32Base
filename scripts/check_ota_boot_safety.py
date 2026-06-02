@@ -27,6 +27,8 @@ def main() -> int:
         errors.append("OTA network services must be split from early boot/rollback initialization")
     if "ESP32BASE_OTA_REQUIRE_MARK_VALID" not in begin_body:
         errors.append("Early OTA begin must be documented in code near the boot/rollback initialization path")
+    if "Esp32BaseLongOperation::service();" not in ota:
+        errors.append("OTA upload chunks must feed watchdog and yield through Esp32BaseLongOperation::service()")
 
     if errors:
         for error in errors:
