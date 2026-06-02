@@ -37,11 +37,20 @@ expected = {
         "coredump": (0x3F0000, 0x10000),
     },
     "partitions/esp32-4mb-ota-large-app.csv": {
-        "nvs": (0x9000, 0x10000),
-        "otadata": (0x19000, 0x2000),
-        "ota_0": (0x20000, 0x160000),
-        "ota_1": (0x180000, 0x160000),
-        "spiffs": (0x2E0000, 0x120000),
+        "nvs": (0x9000, 0x5000),
+        "otadata": (0xE000, 0x2000),
+        "app0": (0x10000, 0x160000),
+        "app1": (0x170000, 0x160000),
+        "spiffs": (0x2D0000, 0x120000),
+        "coredump": (0x3F0000, 0x10000),
+    },
+    "partitions/esp32-4mb-ota-large-fs.csv": {
+        "nvs": (0x9000, 0x5000),
+        "otadata": (0xE000, 0x2000),
+        "app0": (0x10000, 0x100000),
+        "app1": (0x110000, 0x100000),
+        "spiffs": (0x210000, 0x1E0000),
+        "coredump": (0x3F0000, 0x10000),
     },
     "partitions/esp32-c3-4mb-ota-balanced.csv": {
         "nvs": (0x9000, 0x5000),
@@ -83,12 +92,13 @@ docs = [
     ("README.md", "应用项目强烈推荐直接选择 `partitions/` 中已有分区表"),
     ("README.md", "单 app slot（最大固件）"),
     ("README.md", "LittleFS（最大文件数据）"),
-    ("README.md", "无 coredump 分区"),
+    ("README.md", "`partitions/esp32-4mb-ota-large-fs.csv`"),
     ("docs/02_profiles.md", "应用项目强烈推荐直接选择 `partitions/` 中已有分区表"),
     ("docs/06_memory_budget.md", "除非硬件容量、OTA 策略或持久化容量确实不匹配，否则不推荐业务项目自定义分区表"),
     ("docs/06_memory_budget.md", "LittleFS（最大文件数据）"),
     ("docs/06_memory_budget.md", "1.38 MB / 0x160000"),
     ("docs/09_release_checklist.md", "`partitions/esp32-4mb-ota-large-app.csv`"),
+    ("docs/09_release_checklist.md", "`partitions/esp32-4mb-ota-large-fs.csv`"),
 ]
 for path, needle in docs:
     if needle not in read(path):

@@ -162,7 +162,7 @@ Web 发送 buffer：
 
 本库推荐分区表示例优先保证 Arduino / PlatformIO 常规上传流程可靠，默认 balanced 分区表的 `app0` 固定在默认上传地址 `0x10000`，NVS 为 20KB。应用项目应优先从 `partitions/` 目录选择已有分区表；除非硬件容量、OTA 策略或持久化容量确实不匹配，否则不推荐业务项目自定义分区表。
 
-20KB NVS 足够本库默认配置、WiFi 凭证、启动日志环和少量应用配置。FULL profile 或频繁保存配置的量产应用可以使用 24KB / 32KB 以上 NVS，但如果因此移动 `app0` 偏移，必须同步验证串口烧录、OTA、bootloader 和分区表的一致性。`partitions/esp32-4mb-ota-large-app.csv` 使用 64KB NVS 和 `app0=0x20000`，用于 classic ESP32 4MB 大固件双 OTA 项目；使用它时 PlatformIO env 必须设置 `board_upload.offset_address = 0x20000`。
+20KB NVS 足够本库默认配置、WiFi 凭证、启动日志环和少量应用配置。推荐分区表不为 NVS 扩容而移动 `app0`；所有 classic ESP32 4MB 预设都保持 `app0=0x10000`，避免业务项目额外维护上传偏移。需要更大 NVS 的特殊项目应自定义分区表并同步验证串口烧录、OTA、bootloader、NVS 和分区表一致性。
 
 重启日志环写入量：
 
@@ -181,7 +181,8 @@ ESP32-C3 4MB 要控制 Web/OTA/Fs 组合的体积。
 | Target | 分区表 | NVS | 单 app slot（最大固件） | LittleFS（最大文件数据） | coredump | 当前代表 FULL firmware.bin | 余量 |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | ESP32 4MB, Core 2.x | `partitions/esp32-4mb-ota-balanced.csv` | `20 KB / 0x5000` | `1.25 MB / 0x140000` | `1.38 MB / 0x160000` | `64 KB / 0x10000` | 1031040 | 280680 |
-| ESP32 4MB, large app | `partitions/esp32-4mb-ota-large-app.csv` | `64 KB / 0x10000` | `1.38 MB / 0x160000` | `1.13 MB / 0x120000` | 无 | 1031040 | 410752 |
+| ESP32 4MB, large app | `partitions/esp32-4mb-ota-large-app.csv` | `20 KB / 0x5000` | `1.38 MB / 0x160000` | `1.13 MB / 0x120000` | `64 KB / 0x10000` | 1031040 | 410752 |
+| ESP32 4MB, large FS | `partitions/esp32-4mb-ota-large-fs.csv` | `20 KB / 0x5000` | `1.00 MB / 0x100000` | `1.88 MB / 0x1E0000` | `64 KB / 0x10000` | 1031040 | -82336 |
 | ESP32 4MB, Core 3.x | `partitions/esp32-4mb-ota-balanced.csv` | `20 KB / 0x5000` | `1.25 MB / 0x140000` | `1.38 MB / 0x160000` | `64 KB / 0x10000` | 1177904 | 132816 |
 | ESP32-S3 8MB, Core 2.x | `partitions/esp32-s3-8mb-ota-balanced.csv` | `20 KB / 0x5000` | `2.25 MB / 0x240000` | `3.38 MB / 0x360000` | `64 KB / 0x10000` | 862096 | 1497200 |
 | ESP32-C3 4MB, Core 2.x | `partitions/esp32-c3-4mb-ota-balanced.csv` | `20 KB / 0x5000` | `1.25 MB / 0x140000` | `1.38 MB / 0x160000` | `64 KB / 0x10000` | 1002064 | 308656 |

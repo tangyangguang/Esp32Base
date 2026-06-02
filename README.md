@@ -161,7 +161,8 @@ Profile 是默认组合，用户仍可用 `ESP32BASE_ENABLE_*` 精细覆盖。�
 | 文件 | 适用场景 | NVS | OTA state | 单 app slot（最大固件） | LittleFS（最大文件数据） | coredump | 关键要求 |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
 | `partitions/esp32-4mb-ota-balanced.csv` | classic ESP32 4MB 默认双 OTA，固件体积正常，保留较大 LittleFS | `20 KB / 0x5000` | `8 KB / 0x2000` | `1.25 MB / 0x140000` | `1.38 MB / 0x160000` | `64 KB / 0x10000` | `app0=0x10000`，兼容 PlatformIO/Arduino 默认上传偏移 |
-| `partitions/esp32-4mb-ota-large-app.csv` | classic ESP32 4MB 双 OTA，大 Web/FULL 业务固件，需要更大 app slot | `64 KB / 0x10000` | `8 KB / 0x2000` | `1.38 MB / 0x160000` | `1.13 MB / 0x120000` | 无 coredump 分区 | `app0=0x20000`，业务项目必须设置 `board_upload.offset_address = 0x20000` |
+| `partitions/esp32-4mb-ota-large-app.csv` | classic ESP32 4MB 双 OTA，大 Web/FULL 业务固件，需要更大 app slot | `20 KB / 0x5000` | `8 KB / 0x2000` | `1.38 MB / 0x160000` | `1.13 MB / 0x120000` | `64 KB / 0x10000` | `app0=0x10000`，兼容 PlatformIO/Arduino 默认上传偏移 |
+| `partitions/esp32-4mb-ota-large-fs.csv` | classic ESP32 4MB 双 OTA，固件较小但记录、日志或文件数据较多 | `20 KB / 0x5000` | `8 KB / 0x2000` | `1.00 MB / 0x100000` | `1.88 MB / 0x1E0000` | `64 KB / 0x10000` | `app0=0x10000`，适合非 FULL 或页面较少的应用 |
 | `partitions/esp32-c3-4mb-ota-balanced.csv` | ESP32-C3 4MB 双 OTA | `20 KB / 0x5000` | `8 KB / 0x2000` | `1.25 MB / 0x140000` | `1.38 MB / 0x160000` | `64 KB / 0x10000` | C3 项目优先使用 |
 | `partitions/esp32-s3-8mb-ota-balanced.csv` | ESP32-S3 8MB 双 OTA，较宽松 app/FS 空间 | `20 KB / 0x5000` | `8 KB / 0x2000` | `2.25 MB / 0x240000` | `3.38 MB / 0x360000` | `64 KB / 0x10000` | S3 8MB 项目优先使用 |
 

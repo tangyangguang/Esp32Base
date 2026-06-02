@@ -46,9 +46,9 @@
 
 - `platformio pkg pack .` 成功。
 - 发布包包含可选模块 `.inc` 实现文件，以及 `src/web/*.cpp`、`src/web/internal/*.h/.cpp` Web 多编译单元实现。
-- 发布包包含推荐分区表：`partitions/esp32-4mb-ota-balanced.csv`、`partitions/esp32-4mb-ota-large-app.csv`、`partitions/esp32-c3-4mb-ota-balanced.csv`、`partitions/esp32-s3-8mb-ota-balanced.csv`。
+- 发布包包含推荐分区表：`partitions/esp32-4mb-ota-balanced.csv`、`partitions/esp32-4mb-ota-large-app.csv`、`partitions/esp32-4mb-ota-large-fs.csv`、`partitions/esp32-c3-4mb-ota-balanced.csv`、`partitions/esp32-s3-8mb-ota-balanced.csv`。
 - 推荐分区表的 `app0` 偏移必须和 PlatformIO / Arduino 上传地址一致；默认应为 `0x10000`。
-- 使用 `partitions/esp32-4mb-ota-large-app.csv` 的项目必须设置 `board_upload.offset_address = 0x20000`。
+- classic ESP32 4MB 推荐分区表都必须保持 `app0=0x10000`，不要求业务项目设置 `board_upload.offset_address`。
 - 发布包包含示例依赖哨兵 `examples/basic/src/deps_*.cpp`。
 - 发布包包含独立 PIO 示例 `examples/full_demo`、`examples/web_ui_gallery`、`examples/web_logs_ota`、`examples/net_runtime`。
 - 发布包不包含历史设计、评审、评估等过程文件。
