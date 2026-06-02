@@ -413,12 +413,13 @@ def _run_webota(target, source, env):
         url = _build_url()
         parsed = urlparse(url)
         sha256 = _sha256_header(firmware)
+        auth_header = _auth_header()
     except ValueError as exc:
         print("Error: %s" % exc, file=sys.stderr)
         env.Exit(1)
 
     headers = {
-        "Authorization": _auth_header(),
+        "Authorization": auth_header,
         "X-Firmware-Size": str(firmware_size),
     }
     if sha256:
@@ -426,7 +427,7 @@ def _run_webota(target, source, env):
 
     try:
         timeout = _as_float(_option("esp32base_webota_timeout"), 120.0)
-        upload_timeout = _as_float(_option("esp32base_webota_upload_timeout"), 600.0)
+        upload_timeout = _as_float(_option("esp32base_webota_upload_timeout"), 90.0)
     except ValueError as exc:
         print("Error: %s" % exc, file=sys.stderr)
         env.Exit(1)

@@ -137,7 +137,7 @@ void handleOtaUploadDone() {
 void handleOtaUpload() {
     if (!isAuthenticated()) {
         if (g_server.upload().status == UPLOAD_FILE_START) {
-            Esp32BaseOta::abortUpload("unauthorized ota upload");
+            Esp32BaseOta::rejectUpload("unauthorized ota upload");
         }
         return;
     }
@@ -148,7 +148,7 @@ void handleOtaUpload() {
         if (!requestSameOrigin()) {
             g_otaUploadForbidden = true;
             ESP32BASE_LOG_W("web", "post_rejected context=ota_upload reason=cross_origin");
-            Esp32BaseOta::abortUpload("forbidden ota upload origin");
+            Esp32BaseOta::rejectUpload("forbidden ota upload origin");
             return;
         }
         char sha256[65] = "";
@@ -190,7 +190,7 @@ void handleOtaUpload() {
 void handleOtaRawUpload() {
     if (!isAuthenticated()) {
         if (g_server.raw().status == RAW_START) {
-            Esp32BaseOta::abortUpload("unauthorized ota raw upload");
+            Esp32BaseOta::rejectUpload("unauthorized ota raw upload");
         }
         return;
     }
@@ -201,7 +201,7 @@ void handleOtaRawUpload() {
         if (!requestSameOrigin()) {
             g_otaUploadForbidden = true;
             ESP32BASE_LOG_W("web", "post_rejected context=ota_raw_upload reason=cross_origin");
-            Esp32BaseOta::abortUpload("forbidden ota raw upload origin");
+            Esp32BaseOta::rejectUpload("forbidden ota raw upload origin");
             return;
         }
         char sha256[65] = "";

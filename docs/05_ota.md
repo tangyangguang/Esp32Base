@@ -66,7 +66,7 @@ pio run -t webota
 - `esp32base_webota_auth`：可用 `user:password` 一次性设置 Basic Auth。
 - `esp32base_webota_sha256`：默认 `auto`，可设为 `off` 或 64 字符 SHA256。
 - `esp32base_webota_timeout`：默认 `120` 秒，用于预检和普通请求。
-- `esp32base_webota_upload_timeout`：默认 `600` 秒，用于实际固件上传，弱网或大固件可单独调大。
+- `esp32base_webota_upload_timeout`：默认 `90` 秒，用于实际固件上传，弱网或大固件可单独调大。
 - `esp32base_webota_chunk_size`：默认 `65536` 字节；HTTP 上传默认使用较大分块以提高反复烧录效率。
 - `esp32base_webota_preflight`：默认 `true`，上传前通过状态接口快速校验连接和认证，避免错误密码时传完整包。
 - `esp32base_webota_status_path`：默认 `/esp32base/api/ota`，用于预检。

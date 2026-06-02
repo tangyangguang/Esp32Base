@@ -57,6 +57,7 @@ char g_otaLastError[96] = "";
 mbedtls_sha256_context g_otaSha;
 bool g_otaShaActive = false;
 bool g_otaPrevPowerSave = true;
+bool g_otaLongOpsActive = false;
 uint32_t g_otaTransferStartedMs = 0;
 uint32_t g_otaTransferFinishedMs = 0;
 bool g_otaSummaryLogged = false;
@@ -152,6 +153,9 @@ bool copySha256Hex(const char* in, char* out, size_t outLen) {
 }
 
 void cleanupLongOps() {
+    if (!g_otaLongOpsActive) {
+        return;
+    }
 #if ESP32BASE_ENABLE_WATCHDOG
     Esp32BaseWatchdog::exitLongOperation();
 #endif
@@ -159,9 +163,11 @@ void cleanupLongOps() {
     Esp32BaseWiFi::setPowerSave(g_otaPrevPowerSave);
 #endif
     Esp32BaseConfig::resumeDeferredFlush();
+    g_otaLongOpsActive = false;
 }
 
 void prepareLongOps() {
+    g_otaLongOpsActive = true;
     Esp32BaseConfig::pauseDeferredFlush();
 #if ESP32BASE_ENABLE_WATCHDOG
     Esp32BaseWatchdog::enterLongOperation();
