@@ -227,7 +227,7 @@ download = function_body(web_fs, "void handleFsDownloadGet()")
 delete = function_body(web_fs, "void handleFsDeletePost()")
 check = function_body(web_fs, "void handleFsCheckGet()")
 upload = function_body(web_fs, "void handleFsUpload()")
-walk = function_body(web_fs, "void fsWalkCallback(const char* name")
+walk = function_body(web_fs, "void fsWalkCallback(const Esp32BaseFs::EntryInfo& entry")
 upload_dirs = function_body(web_fs, "void fsUploadDirOptionCallback(const char* name")
 if "fsReadPathArg(\"path\", path, sizeof(path))" not in download:
     errors.append("src/web/internal/WebFs.cpp: download must validate raw path length before copying")

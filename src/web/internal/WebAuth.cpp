@@ -6,6 +6,19 @@
 
 namespace esp32base_web {
 
+bool authReadArg(const char* name, char* out, size_t len) {
+    if (!name || !out || len == 0 || !g_server.hasArg(name)) {
+        return false;
+    }
+    const String value = g_server.arg(name);
+    if (value.length() >= len) {
+        out[0] = '\0';
+        return false;
+    }
+    strlcpy(out, value.c_str(), len);
+    return true;
+}
+
 void handleAuthPage() {
     markRequest();
     if (!ensureAuth()) {
@@ -42,11 +55,15 @@ void handleAuthSubmit() {
     char newUser[32];
     char newPass[64];
     char confirmPass[64];
-    strlcpy(currentUser, g_server.arg("current_user").c_str(), sizeof(currentUser));
-    strlcpy(currentPass, g_server.arg("current_pass").c_str(), sizeof(currentPass));
-    strlcpy(newUser, g_server.arg("new_user").c_str(), sizeof(newUser));
-    strlcpy(newPass, g_server.arg("new_pass").c_str(), sizeof(newPass));
-    strlcpy(confirmPass, g_server.arg("confirm_pass").c_str(), sizeof(confirmPass));
+    if (!authReadArg("current_user", currentUser, sizeof(currentUser)) ||
+        !authReadArg("current_pass", currentPass, sizeof(currentPass)) ||
+        !authReadArg("new_user", newUser, sizeof(newUser)) ||
+        !authReadArg("new_pass", newPass, sizeof(newPass)) ||
+        !authReadArg("confirm_pass", confirmPass, sizeof(confirmPass))) {
+        ESP32BASE_LOG_W("web", "auth_update_failed reason=invalid_input");
+        redirectSeeOther("/esp32base/auth?error=invalid_input");
+        return;
+    }
     if (!Esp32BaseWeb::verifyAuth(currentUser, currentPass)) {
         ESP32BASE_LOG_W("web", "auth_update_failed reason=current_auth");
         redirectSeeOther("/esp32base/auth?error=current_auth");

@@ -57,6 +57,10 @@ for needle, message in checks:
 
 if "Esp32BaseFs::readBytesAt(path, 0, &value, 1, &readLen) && readLen == 1" not in web:
     errors.append("src/web/internal Web modules: FS tree readability check must use Esp32BaseFs failure semantics")
+if "bool fsFileFullyReadable(" not in web:
+    errors.append("src/web/internal Web modules: FS download must preflight full file readability before starting the response")
+if "fsFileFullyReadable(path, size)" not in web:
+    errors.append("src/web/internal Web modules: FS download must reject partially unreadable files before sending 200")
 
 for needle, message in (
     ("void sendFsUnreadableActions(", "FS management must keep delete available for unreadable files"),

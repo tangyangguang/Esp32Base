@@ -12,6 +12,7 @@ errors = []
 
 web_routing = read("src/web/internal/WebRouting.cpp")
 web_core = read("src/web/Esp32BaseWeb.cpp")
+web_auth = read("src/web/internal/WebAuth.cpp")
 web_wifi = read("src/web/internal/WebWifi.cpp")
 wifi = read("src/network/Esp32BaseWiFi.inc")
 profile = read("src/Esp32BaseProfile.h")
@@ -69,6 +70,24 @@ if '_option("esp32base_webota_user", "admin")' in webota or '_option("esp32base_
     errors.append("scripts/esp32base_webota.py: webota must not default Basic Auth to admin/admin")
 if "Web OTA auth is required" not in webota:
     errors.append("scripts/esp32base_webota.py: webota must fail with a clear message when auth is not configured")
+for forbidden in [
+    'strlcpy(currentUser, g_server.arg("current_user").c_str()',
+    'strlcpy(currentPass, g_server.arg("current_pass").c_str()',
+    'strlcpy(newUser, g_server.arg("new_user").c_str()',
+    'strlcpy(newPass, g_server.arg("new_pass").c_str()',
+    'strlcpy(confirmPass, g_server.arg("confirm_pass").c_str()',
+]:
+    if forbidden in web_auth:
+        errors.append("src/web/internal/WebAuth.cpp: auth submit must reject overlong form values instead of truncating g_server.arg()")
+for needle in [
+    'authReadArg("current_user", currentUser, sizeof(currentUser))',
+    'authReadArg("current_pass", currentPass, sizeof(currentPass))',
+    'authReadArg("new_user", newUser, sizeof(newUser))',
+    'authReadArg("new_pass", newPass, sizeof(newPass))',
+    'authReadArg("confirm_pass", confirmPass, sizeof(confirmPass))',
+]:
+    if needle not in web_auth:
+        errors.append(f"src/web/internal/WebAuth.cpp: missing bounded auth form read {needle!r}")
 if "- 回显当前密码" in web_docs:
     errors.append("docs/04_web.md: WiFi page docs must not claim the saved password is echoed")
 if "custom_esp32base_webota_user = admin" in ota_docs or "custom_esp32base_webota_password = admin" in ota_docs:

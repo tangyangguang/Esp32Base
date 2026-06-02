@@ -41,7 +41,7 @@ checks = [
     ),
     (
         source,
-        "static_cast<uint32_t>(file.getLastWrite())",
+        "file.getLastWrite()",
         "src/runtime/Esp32BaseFs.inc: listDirInfo must read File::getLastWrite() during enumeration",
     ),
     (

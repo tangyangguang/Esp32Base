@@ -12,6 +12,13 @@ public:
         REMOVE_FILE_CLEARED
     };
 
+    struct EntryInfo {
+        const char* name;
+        size_t size;
+        bool isDir;
+        uint32_t modifiedEpoch;
+    };
+
     static bool begin();
     static bool isReady();
     static bool format();
@@ -34,7 +41,9 @@ public:
     static int64_t fileSize(const char* path);
 
     using ListCallback = void (*)(const char* name, size_t size, bool isDir, void* user);
+    using ListInfoCallback = void (*)(const EntryInfo& entry, void* user);
     static bool listDir(const char* path, ListCallback cb, void* user = nullptr);
+    static bool listDirInfo(const char* path, ListInfoCallback cb, void* user = nullptr);
     static bool mkdir(const char* path);
     static bool rmdir(const char* path);
 

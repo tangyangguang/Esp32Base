@@ -1014,7 +1014,7 @@ Route 缓冲机制：
 - 导航会给当前匹配项输出 `active` class；匹配规则为 path 完全相等，或当前路径以 `path + "/"` 开头，多个匹配时选择最长 path。`SYSTEM_NAV_SECTION` 下 WiFi/Auth/OTA 二级页会把底部 System 入口标记为 active；App Config 页面在启用时使用自己的底部入口标记 active。
 - `/esp32base` Status 页是只读设备体检页，采用诊断优先结构：不额外显示和相邻详细区重复的 `System Overview` 预览块，而是按 Device、Network、Runtime Health、Storage & Logs、Firmware & OTA、Hardware、Partition Table 排序展示 hostname、固件/profile、uptime/boot count、WiFi/IP/RSSI、STA/AP/eFuse MAC、heap、max alloc、Watchdog lifetime/trip resets、NTP time、last reset/wake、FS/File inventory/FileLog/OTA headroom 和运行时分区表；File details 入口并入 FS 行，FileLog level/current/used/limit 合并为一行子指标，Top 文件列表只放在 `/esp32base/fs` 详情页，页面容量值只显示 KB/MB/B 人性化格式，`OTA headroom` 表示 `target slot - current sketch`，Max OTA upload 才是上传硬上限。
 - `/esp32base/logs` 和 `/esp32base/logs/raw` 是只读系统诊断日志查看入口，只读取已经落盘的 FileLog segment 快照；GET 读取不得主动 `flush()`、创建、清空、重建文件或改变 FileLog fault 状态。INFO 缓存中的新日志按常规 flush interval 落盘，清空/格式化/重启等维护副作用必须通过 POST 路径。
-- `/esp32base/fs` 是启用 FS profile 时注册的 LittleFS 诊断页，默认只读，显示 Summary、Top 10 最大文件和最多 128 项文件树；文件树提供单文件下载；当文件声明有大小但首块无法读取时，Action 显示 `unreadable`，不再给出会生成空文件的下载按钮；当 `FS used` 明显大于可见文件合计时提示内部/历史占用异常。
+- `/esp32base/fs` 是启用 FS profile 时注册的 LittleFS 诊断页，默认只读，显示 Summary、Top 10 最大文件和最多 128 项文件树；文件树展示 Path、Type、Size、Last modified、Status 和 Action。Last modified 来自 LittleFS 最后修改时间，不是创建时间，时间明显不可信时显示 `unknown`；Status 展示 `ok`、`unreadable`、`filelog`、`app events store` 或 `esp32base managed` 等维护标签。文件树提供单文件下载；当文件声明有大小但首块无法读取时，Status 显示 `unreadable`，不再给出会生成空文件的下载按钮；当 `FS used` 明显大于可见文件合计时提示内部/历史占用异常。
 - `/esp32base/fs/download?path=/file` 下载一个已存在且可读取的文件，复用 Basic Auth 和路径校验，目录、缺失文件和非法路径不会下载；如果文件声明有大小但无法读取首块，返回 `500 File read failed`。
 - `/esp32base/fs?manage=1` 进入单文件删除和受限上传管理模式；`POST /esp32base/fs/delete` 只接受一个已存在文件路径，复用 Basic Auth、同源检查和 `POST -> 303 -> GET`，不提供目录删除、批量删除、编辑或任意路径输入。不可读文件仍允许删除，便于清理损坏文件；删除不以文件内容可读为前提。App Events 启用时，`/esp32base/app-events/events.bin` 是基础库内部 store，FS 管理页会显示 `app events store` 作为提醒；普通上传或删除仍允许用于测试和维护实验，上传或删除后会重新加载 App Events 运行态。
 - `/esp32base/fs/check?dir=/data&name=records.bin` 是上传前检查接口，复用 Basic Auth，按“已有目录 + 本地文件名”计算目标路径，返回目标是否存在、是否是目录以及是否允许上传；路径拼接如果超过内部路径上限会直接拒绝，不截断成另一个目标。
@@ -1240,6 +1240,13 @@ public:
 ```cpp
 class Esp32BaseFs {
 public:
+    struct EntryInfo {
+        const char* name;
+        size_t size;
+        bool isDir;
+        uint32_t modifiedEpoch;
+    };
+
     static bool begin();
     static bool isReady();
     static bool format();
@@ -1271,7 +1278,9 @@ public:
 
     // directory
     using ListCallback = void (*)(const char* name, size_t size, bool isDir, void* user);
+    using ListInfoCallback = void (*)(const EntryInfo& entry, void* user);
     static bool listDir(const char* path, ListCallback cb, void* user = nullptr);
+    static bool listDirInfo(const char* path, ListInfoCallback cb, void* user = nullptr);
     static bool mkdir(const char* path);
     static bool rmdir(const char* path);
 
@@ -1296,7 +1305,7 @@ public:
 
 FS 未成功 `begin()` 时，文件和目录操作返回失败，容量查询返回 0，不隐式格式化文件系统。
 
-`listDir()` 遍历目录时会在每次 callback 后显式关闭当前 `File`，避免长目录遍历时积累底层句柄。
+`listDirInfo()` 遍历目录时返回文件名、大小、目录标记和 `modifiedEpoch`。`modifiedEpoch` 来自 Arduino `File::getLastWrite()` / LittleFS 最后修改时间，不是创建时间；只有文件写入时设备系统时间可信时才代表真实日期。`listDir()` 是保留给只需要 name/size/isDir 的轻量回调，会复用同一枚举路径。目录遍历在每次 callback 后显式关闭当前 `File`，避免长目录遍历时积累底层句柄。
 
 Offset binary API 用于业务二进制定长记录、分页读取和环形覆盖写入，不要求业务 include `LittleFS.h` 或 Arduino `File`：
 

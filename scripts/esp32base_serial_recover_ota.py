@@ -186,7 +186,7 @@ def main() -> int:
     parser.add_argument("--firmware", help="Firmware .bin path; defaults to .pio/build/<env>/firmware.bin")
     parser.add_argument("--bootloader-offset", default="0x1000", help="Bootloader flash offset")
     parser.add_argument("--partition-offset", default="0x8000", help="Partition table flash offset")
-    parser.add_argument("--boot-app0-offset", help="boot_app0 offset; defaults to ota_0 offset minus 0x2000")
+    parser.add_argument("--boot-app0-offset", help="boot_app0 offset; defaults to data/ota offset when present")
     parser.add_argument("--no-build", action="store_true", help="Use existing build artifacts")
     parser.add_argument("--no-bootloader", action="store_true", help="Do not write bootloader.bin")
     parser.add_argument("--no-partitions", action="store_true", help="Do not write partitions.bin")
@@ -258,7 +258,12 @@ def main() -> int:
         if not args.no_partitions:
             add_flash_item(args.partition_offset, partitions_bin, "partition_table")
         if not args.no_boot_app0 and boot_app0:
-            boot_app0_offset = parse_int(args.boot_app0_offset) if args.boot_app0_offset else int(ota_slots[0]["offset"]) - 0x2000
+            if args.boot_app0_offset:
+                boot_app0_offset = parse_int(args.boot_app0_offset)
+            elif otadata:
+                boot_app0_offset = int(otadata["offset"])
+            else:
+                boot_app0_offset = int(ota_slots[0]["offset"]) - 0x2000
             if args.clear_otadata and otadata and ranges_overlap(
                 boot_app0_offset,
                 boot_app0.stat().st_size,

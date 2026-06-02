@@ -130,6 +130,10 @@ def check_faucet_recovery(tmp: Path, errors: list[str]) -> None:
         errors.append(f"expected exactly one faucet write_flash command, got {len(commands)}")
     elif "0x19000" not in commands[0] or "0x20000" not in commands[0] or "0x180000" not in commands[0]:
         errors.append("faucet write_flash command must include otadata, ota_0, and ota_1 offsets")
+    elif "0x1e000" in commands[0]:
+        errors.append("faucet recovery must not write boot_app0 into the ota_0-adjacent gap")
+    if "boot_app0: skipped because it overlaps otadata being cleared" not in text:
+        errors.append("faucet dry-run must skip boot_app0 when otadata is being cleared")
     if " erase_region " in text:
         errors.append("faucet dry-run must not emit a second erase_region command")
 

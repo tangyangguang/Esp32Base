@@ -4,6 +4,8 @@
 
 #include "WebInternal.h"
 
+#include <time.h>
+
 namespace esp32base_web {
 
 #if ESP32BASE_ENABLE_FS
@@ -11,6 +13,11 @@ static const uint8_t FS_TOP_MAX = 10;
 static const uint16_t FS_TREE_LIST_LIMIT = 128;
 static const uint16_t FS_UPLOAD_DIR_LIMIT = 64;
 static const uint8_t FS_SCAN_MAX_DEPTH = 8;
+#if ESP32BASE_ENABLE_NTP
+static const uint32_t FS_TRUSTED_TIME_MIN_EPOCH = ESP32BASE_NTP_SYNC_MIN_EPOCH;
+#else
+static const uint32_t FS_TRUSTED_TIME_MIN_EPOCH = 1700000000UL;
+#endif
 
 void fsScanYield() {
 #if ESP32BASE_ENABLE_WATCHDOG
@@ -82,9 +89,9 @@ void sendFsPathTooLongRow(const char* dir, const char* name, bool isDir) {
     sendEscapedHtmlChunk(name && name[0] ? name : "-");
     sendChunk("</td><td>");
     sendEscapedHtmlChunk(isDir ? "dir" : "file");
-    sendChunk("</td><td>-</td><td>");
+    sendChunk("</td><td>-</td><td>-</td><td>");
     sendStatusTag(Esp32BaseWeb::UI_WARN, "path too long");
-    sendChunk("</td></tr>");
+    sendChunk("</td><td>-</td></tr>");
 }
 
 #if ESP32BASE_ENABLE_APP_EVENTS
@@ -105,16 +112,53 @@ void sendFsEsp32BaseTag() {
     sendStatusTag(Esp32BaseWeb::UI_INFO, "esp32base managed");
 }
 
-void sendFsFileActions(const char* path, bool manage) {
-    sendChunk("<div class='fsactions'>");
+void fsFormatModifiedTime(uint32_t modifiedEpoch, char* out, size_t len) {
+    if (!out || len == 0) {
+        return;
+    }
+    if (modifiedEpoch < FS_TRUSTED_TIME_MIN_EPOCH) {
+        strlcpy(out, "unknown", len);
+        return;
+    }
+    const time_t raw = static_cast<time_t>(modifiedEpoch);
+    struct tm tmValue;
+    localtime_r(&raw, &tmValue);
+    if (strftime(out, len, "%Y-%m-%d %H:%M:%S", &tmValue) == 0) {
+        strlcpy(out, "unknown", len);
+    }
+}
+
+void sendFsFileStatus(const char* path, bool readable) {
 #if ESP32BASE_ENABLE_APP_EVENTS
     if (appEventsOwnsPath(path)) {
         sendFsAppEventsTag();
     } else
 #endif
+#if ESP32BASE_ENABLE_FILELOG
+    if (fileLogOwnsPath(path)) {
+        sendStatusTag(Esp32BaseWeb::UI_INFO, "filelog");
+    } else
+#endif
     if (esp32BaseOwnsPath(path)) {
         sendFsEsp32BaseTag();
+    } else if (readable) {
+        sendStatusTag(Esp32BaseWeb::UI_OK, "ok");
     }
+    if (!readable) {
+        sendStatusTag(Esp32BaseWeb::UI_WARN, "unreadable");
+    }
+}
+
+void sendFsDirStatus(const char* path) {
+    if (esp32BaseOwnsPath(path)) {
+        sendFsEsp32BaseTag();
+    } else {
+        sendStatusTag(Esp32BaseWeb::UI_OK, "ok");
+    }
+}
+
+void sendFsFileActions(const char* path, bool manage) {
+    sendChunk("<div class='fsactions'>");
     sendFsDownloadForm(path);
     if (manage) {
         sendFsDeleteForm(path);
@@ -124,17 +168,10 @@ void sendFsFileActions(const char* path, bool manage) {
 
 void sendFsUnreadableActions(const char* path, bool manage) {
     sendChunk("<div class='fsactions'>");
-#if ESP32BASE_ENABLE_APP_EVENTS
-    if (appEventsOwnsPath(path)) {
-        sendFsAppEventsTag();
-    } else
-#endif
-    if (esp32BaseOwnsPath(path)) {
-        sendFsEsp32BaseTag();
-    }
-    sendStatusTag(Esp32BaseWeb::UI_WARN, "unreadable");
     if (manage) {
         sendFsDeleteForm(path);
+    } else {
+        sendChunk("-");
     }
     sendChunk("</div>");
 }
@@ -148,8 +185,28 @@ bool fsFileReadableStart(const char* path, size_t size) {
     return Esp32BaseFs::readBytesAt(path, 0, &value, 1, &readLen) && readLen == 1;
 }
 
-void sendFsTreeRow(const char* path, size_t size, bool isDir, bool manage) {
+bool fsFileFullyReadable(const char* path, uint32_t size) {
+    if (size == 0) {
+        return true;
+    }
+    uint8_t buffer[512];
+    uint32_t offset = 0;
+    while (offset < size) {
+        const size_t maxLen = size - offset > sizeof(buffer) ? sizeof(buffer) : static_cast<size_t>(size - offset);
+        size_t readLen = 0;
+        if (!Esp32BaseFs::readBytesAt(path, offset, buffer, maxLen, &readLen) || readLen == 0) {
+            return false;
+        }
+        offset += static_cast<uint32_t>(readLen);
+        fsScanYield();
+    }
+    return offset == size;
+}
+
+void sendFsTreeRow(const char* path, size_t size, bool isDir, uint32_t modifiedEpoch, bool manage) {
     char sizeBuf[48];
+    char modified[32];
+    fsFormatModifiedTime(modifiedEpoch, modified, sizeof(modified));
     sendChunk("<tr><td>");
     sendEscapedHtmlChunk(path && path[0] ? path : "-");
     sendChunk("</td><td>");
@@ -162,9 +219,18 @@ void sendFsTreeRow(const char* path, size_t size, bool isDir, bool manage) {
         sendEscapedHtmlChunk(sizeBuf);
     }
     sendChunk("</td><td>");
+    sendEscapedHtmlChunk(modified);
+    sendChunk("</td><td>");
+    const bool readable = isDir || fsFileReadableStart(path, size);
+    if (isDir) {
+        sendFsDirStatus(path);
+    } else {
+        sendFsFileStatus(path, readable);
+    }
+    sendChunk("</td><td>");
     if (isDir) {
         sendChunk("-");
-    } else if (!fsFileReadableStart(path, size)) {
+    } else if (!readable) {
         sendFsUnreadableActions(path, manage);
     } else {
         sendFsFileActions(path, manage);
@@ -172,49 +238,49 @@ void sendFsTreeRow(const char* path, size_t size, bool isDir, bool manage) {
     sendChunk("</td></tr>");
 }
 
-void fsWalkCallback(const char* name, size_t size, bool isDir, void* user);
+void fsWalkCallback(const Esp32BaseFs::EntryInfo& entry, void* user);
 void fsNoopListCallback(const char*, size_t, bool, void*);
 
 bool fsWalkDir(FsScan& scan, const char* dir, uint8_t depth, bool emitRows, bool manage, uint16_t emitLimit, uint16_t* emittedRows) {
     FsWalkFrame frame = {&scan, dir, depth, emitRows, manage, emitLimit, emittedRows};
-    return Esp32BaseFs::listDir(dir, fsWalkCallback, &frame);
+    return Esp32BaseFs::listDirInfo(dir, fsWalkCallback, &frame);
 }
 
-void fsWalkCallback(const char* name, size_t size, bool isDir, void* user) {
+void fsWalkCallback(const Esp32BaseFs::EntryInfo& entry, void* user) {
     FsWalkFrame* frame = static_cast<FsWalkFrame*>(user);
     if (!frame || !frame->scan) {
         return;
     }
     char path[96];
-    const bool pathOk = fsJoinPath(frame->dir, name, path, sizeof(path));
+    const bool pathOk = fsJoinPath(frame->dir, entry.name, path, sizeof(path));
     frame->scan->entries++;
     if (!pathOk) {
-        if (isDir) {
+        if (entry.isDir) {
             frame->scan->dirs++;
         } else {
             frame->scan->files++;
-            frame->scan->listedSize += size;
+            frame->scan->listedSize += entry.size;
         }
         if (frame->emitRows && frame->emittedRows && *frame->emittedRows < frame->emitLimit) {
-            sendFsPathTooLongRow(frame->dir, name, isDir);
+            sendFsPathTooLongRow(frame->dir, entry.name, entry.isDir);
             (*frame->emittedRows)++;
         }
         fsScanYield();
         return;
     }
-    if (isDir) {
+    if (entry.isDir) {
         frame->scan->dirs++;
     } else {
         frame->scan->files++;
-        frame->scan->listedSize += size;
-        fsAddTopFile(*frame->scan, path, size);
+        frame->scan->listedSize += entry.size;
+        fsAddTopFile(*frame->scan, path, entry.size);
     }
     if (frame->emitRows && frame->emittedRows && *frame->emittedRows < frame->emitLimit) {
-        sendFsTreeRow(path, size, isDir, frame->manage);
+        sendFsTreeRow(path, entry.size, entry.isDir, entry.modifiedEpoch, frame->manage);
         (*frame->emittedRows)++;
     }
     fsScanYield();
-    if (isDir && frame->depth + 1 < FS_SCAN_MAX_DEPTH && (!frame->emitRows || !frame->emittedRows || *frame->emittedRows < frame->emitLimit)) {
+    if (entry.isDir && frame->depth + 1 < FS_SCAN_MAX_DEPTH && (!frame->emitRows || !frame->emittedRows || *frame->emittedRows < frame->emitLimit)) {
         fsWalkDir(*frame->scan, path, static_cast<uint8_t>(frame->depth + 1), frame->emitRows, frame->manage, frame->emitLimit, frame->emittedRows);
     }
 }
@@ -663,13 +729,13 @@ void handleFsPage() {
     }
     sendChunk("</table></div></section>");
 
-    sendChunk("<section class='panel statuspage'><h2>File tree</h2><div class='tablewrap'><table class='part'><tr><th>Path</th><th>Type</th><th>Size</th><th>Action</th></tr>");
+    sendChunk("<section class='panel statuspage'><h2>File tree</h2><div class='tablewrap'><table class='part'><tr><th>Path</th><th>Type</th><th>Size</th><th>Last modified</th><th>Status</th><th>Action</th></tr>");
     FsScan treeScan;
     memset(&treeScan, 0, sizeof(treeScan));
     uint16_t emittedRows = 0;
     fsWalkDir(treeScan, "/", 0, true, manage, FS_TREE_LIST_LIMIT, &emittedRows);
     if (emittedRows == 0) {
-        sendChunk("<tr><td colspan='4'>No files</td></tr>");
+        sendChunk("<tr><td colspan='6'>No files</td></tr>");
     }
     sendChunk("</table></div>");
     if (scan.entries > FS_TREE_LIST_LIMIT) {
@@ -708,12 +774,8 @@ void handleFsDownloadGet() {
     }
     const uint32_t size = static_cast<uint32_t>(fileSize);
 
-    uint8_t buffer[512];
-    size_t firstLen = 0;
-    if (size > 0 &&
-        (!Esp32BaseFs::readBytesAt(path, 0, buffer, size > sizeof(buffer) ? sizeof(buffer) : size, &firstLen) ||
-         firstLen == 0)) {
-        ESP32BASE_LOG_W("web", "fs_download_read_failed path=%s offset=0", path);
+    if (!fsFileFullyReadable(path, size)) {
+        ESP32BASE_LOG_W("web", "fs_download_read_failed path=%s stage=preflight", path);
         g_server.send(500, "text/plain", "File read failed");
         return;
     }
@@ -726,11 +788,8 @@ void handleFsDownloadGet() {
         return;
     }
 
+    uint8_t buffer[512];
     size_t sent = 0;
-    if (firstLen > 0) {
-        sendChunk(reinterpret_cast<const char*>(buffer), firstLen);
-        sent = firstLen;
-    }
     while (sent < size && !g_responseBroken) {
         const size_t maxLen = size - sent > sizeof(buffer) ? sizeof(buffer) : size - sent;
         size_t readLen = 0;

@@ -178,7 +178,7 @@ Update.end(true) -> compare SHA256
 
 ## 6. 双 OTA 串口恢复
 
-双 OTA 设备通过 Web OTA 成功启动过 `ota_1` 后，`otadata` 可能仍指向 `ota_1`。此时普通串口 `pio run -t upload` 通常只写 `board_upload.offset_address` 指向的固定 app 槽，例如 `ota_0`；它不会自动覆盖当前运行槽，也不会修改 `otadata`，设备仍可能继续从 `ota_1` 启动旧固件。串口日志中的 `ELF file SHA256` 也会继续显示旧固件值。
+双 OTA 设备通过 Web OTA 成功启动过 `ota_1` 后，`otadata` 可能仍指向 `ota_1`。此时普通串口 `pio run -t upload` 是否会重新选择 `ota_0` 取决于 flash plan：仓库标准分区 `otadata=0xe000`，PlatformIO/Arduino 串口上传会同时写 `0xe000 boot_app0.bin` 和 `0x10000 firmware.bin`，通常会把 OTA data 初始化回 `ota_0`；但业务自定义分区如果把 `otadata` 移到其他偏移，串口上传可能只覆盖固定 app 槽而不更新当前启动槽，设备仍可能继续从 `ota_1` 启动旧固件。串口日志中的 `ELF file SHA256` 也会继续显示旧固件值。
 
 启用 OTA 的固件启动时会输出一条 INFO 级 `boot_summary`，包含 `running_partition`、`configured_boot_partition`、`next_update_partition`、分区地址和当前 ELF SHA256。排查“烧录后仍运行旧程序”时，先看 `running_partition` 是否仍是旧槽，再看 `configured_boot_partition` 是否指向预期槽；两者不一致时日志会额外输出 `boot_partition_mismatch` 警告。
 
@@ -193,7 +193,7 @@ python path/to/Esp32Base/scripts/esp32base_serial_recover_ota.py \
   --port /dev/ttyUSB0
 ```
 
-脚本会先构建目标 PlatformIO env，读取 `board_build.partitions` 对应 CSV，定位 `data/ota`、`ota_0`、`ota_1`，写入 bootloader、partition table、boot_app0 和当前 `firmware.bin`，默认把同一固件写入所有 OTA app 槽。`otadata` 清理不会再作为第二条 `erase_region` 命令执行；脚本会生成一个与 `data/ota` 分区等长的全 `0xFF` 临时镜像，并随其他镜像一起放进同一次 `write_flash`，避免写完 app 槽后因板子未重新进入下载模式而清理失败。部分 Arduino/ESP32 分区表中 `boot_app0` 默认偏移与 `otadata` 相同；此时脚本会跳过 `boot_app0`，以清理 `otadata` 为准，避免同一条命令重复写同一地址。恢复前可先加 `--dry-run` 查看完整 `esptool.py` 命令、写入槽位和 `otadata` 处理方式；特殊板型可用 `--bootloader-offset`、`--partition-offset`、`--boot-app0-offset` 显式覆盖偏移。
+脚本会先构建目标 PlatformIO env，读取 `board_build.partitions` 对应 CSV，定位 `data/ota`、`ota_0`、`ota_1`，写入 bootloader、partition table 和当前 `firmware.bin`，默认把同一固件写入所有 OTA app 槽。`otadata` 清理不会再作为第二条 `erase_region` 命令执行；脚本会生成一个与 `data/ota` 分区等长的全 `0xFF` 临时镜像，并随其他镜像一起放进同一次 `write_flash`，避免写完 app 槽后因板子未重新进入下载模式而清理失败。`boot_app0` 默认跟随 `data/ota` 偏移；清理 `otadata` 时脚本会跳过 `boot_app0`，以清理结果为准，避免同一条命令重复写同一地址或写到 `ota_0` 前的无语义空洞。恢复前可先加 `--dry-run` 查看完整 `esptool.py` 命令、写入槽位和 `otadata` 处理方式；特殊板型可用 `--bootloader-offset`、`--partition-offset`、`--boot-app0-offset` 显式覆盖偏移。
 
 恢复脚本独占串口。执行前先关闭 `pio device monitor`、IDE 串口监视器和其他占用同一 `/dev/cu.*` 或 `/dev/tty.*` 端口的程序；脚本在 macOS/Linux 上会尽量用 `lsof` 提前报告占用者。部分 CH340/CP210x 板子在 460800 下可能进入 stub 后传输中断，可用 `--baud 115200` 降速恢复；如果仍停在 `Connecting...`，需要按住 BOOT 并复位，让设备重新进入下载模式。
 

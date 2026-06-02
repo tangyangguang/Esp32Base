@@ -9,6 +9,7 @@
 #include <LittleFS.h>
 
 #include <string.h>
+#include <time.h>
 
 namespace {
 bool g_fsReady = false;
@@ -187,6 +188,19 @@ bool writeMode(const char* path, const uint8_t* data, size_t len, const char* mo
     }
     const uint64_t verifyOffset = expectedSize - 1U;
     return verifyReadableByte(path, verifyOffset);
+}
+
+struct LegacyListDirFrame {
+    Esp32BaseFs::ListCallback cb;
+    void* user;
+};
+
+void legacyListDirCallback(const Esp32BaseFs::EntryInfo& entry, void* user) {
+    LegacyListDirFrame* frame = static_cast<LegacyListDirFrame*>(user);
+    if (!frame || !frame->cb) {
+        return;
+    }
+    frame->cb(entry.name, entry.size, entry.isDir, frame->user);
 }
 }
 
@@ -424,6 +438,11 @@ int64_t Esp32BaseFs::fileSize(const char* path) {
 }
 
 bool Esp32BaseFs::listDir(const char* path, ListCallback cb, void* user) {
+    LegacyListDirFrame frame = {cb, user};
+    return listDirInfo(path, legacyListDirCallback, &frame);
+}
+
+bool Esp32BaseFs::listDirInfo(const char* path, ListInfoCallback cb, void* user) {
     if (!g_fsReady || !validPath(path) || !cb) {
         return false;
     }
@@ -438,7 +457,14 @@ bool Esp32BaseFs::listDir(const char* path, ListCallback cb, void* user) {
     }
     File file = root.openNextFile();
     while (file) {
-        cb(file.name(), file.size(), file.isDirectory(), user);
+        const time_t lastWrite = file.getLastWrite();
+        EntryInfo entry = {
+            file.name(),
+            file.size(),
+            file.isDirectory(),
+            lastWrite > 0 ? static_cast<uint32_t>(lastWrite) : 0
+        };
+        cb(entry, user);
         file.close();
         Esp32BaseLongOperation::service();
         file = root.openNextFile();
