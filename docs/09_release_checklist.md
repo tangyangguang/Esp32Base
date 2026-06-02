@@ -46,8 +46,9 @@
 
 - `platformio pkg pack .` 成功。
 - 发布包包含可选模块 `.inc` 实现文件，以及 `src/web/*.cpp`、`src/web/internal/*.h/.cpp` Web 多编译单元实现。
-- 发布包包含 `partitions/` 推荐分区表。
+- 发布包包含推荐分区表：`partitions/esp32-4mb-ota-balanced.csv`、`partitions/esp32-4mb-ota-large-app.csv`、`partitions/esp32-c3-4mb-ota-balanced.csv`、`partitions/esp32-s3-8mb-ota-balanced.csv`。
 - 推荐分区表的 `app0` 偏移必须和 PlatformIO / Arduino 上传地址一致；默认应为 `0x10000`。
+- 使用 `partitions/esp32-4mb-ota-large-app.csv` 的项目必须设置 `board_upload.offset_address = 0x20000`。
 - 发布包包含示例依赖哨兵 `examples/basic/src/deps_*.cpp`。
 - 发布包包含独立 PIO 示例 `examples/full_demo`、`examples/web_ui_gallery`、`examples/web_logs_ota`、`examples/net_runtime`。
 - 发布包不包含历史设计、评审、评估等过程文件。
@@ -160,9 +161,9 @@
 
 必须通过：
 
-- auto-format 默认关闭。
+- 任何启动路径都不得自动格式化 LittleFS。
 - 首次挂载失败不 halt。
-- 开启 auto-format 后可格式化。
+- 格式化 LittleFS 只能来自明确维护动作，例如 Web System 页 POST 或显式调用 `Esp32BaseFs::format()`。
 - 读写删文件正常。
 - 二进制读写正常。
 - append 正常。

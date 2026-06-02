@@ -195,6 +195,8 @@ public:
 
 `isEnabled()` 表示当前运行期是否还在写系统诊断日志；`mode()` 表示配置模式。FS 满、文件损坏或底层写失败时，FileLog 会进入运行期故障保护：`faulted()` 返回 true，`mode()` 仍保留用户配置，`isEnabled()` 返回 false，避免后续 WARN/ERROR 继续冲击异常文件系统。Web 显示为 `write fault`，表示新日志写入已停，不表示已有日志一定不可读取。若 `mode()!=OFF`、`isEnabled()==false` 且 `faulted()==false`，Web 显示为 `unavailable`，表示系统日志配置开启但 FS 未 ready、路径/容量前置条件或初始化状态暂时不满足；`disabled` 只表示模式为 OFF。清理/格式化文件系统或重新保存 FileLog 模式后可重试启用。
 
+LittleFS mount failed 时不会自动格式化；`Esp32BaseFs::begin()` 只返回 false，不 halt。格式化会删除该分区全部文件，只允许通过明确的维护动作调用 `Esp32BaseFs::format()` 或 Web System 页格式化入口触发，启动路径不得隐式清空业务记录、校准数据或用户上传文件。
+
 最小可运行示例：
 
 ```cpp

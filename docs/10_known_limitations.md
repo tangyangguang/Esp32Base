@@ -57,7 +57,7 @@
 - NVS 写满时 set API 返回 false，库不自动删除业务数据。
 - `clearLibraryNamespaces()` 只清理 `eb_` 前缀的库 namespace。
 - 应用不得使用 `eb_` 前缀作为自己的 NVS namespace。
-- LittleFS 默认不自动格式化；首次空分区 mount failed 不会 halt。
+- LittleFS 默认不自动格式化；首次空分区 mount failed 不会 halt。格式化 LittleFS 只能来自明确维护动作，因为该操作会清空当前 LittleFS 分区全部文件。
 
 App Events 边界：
 
