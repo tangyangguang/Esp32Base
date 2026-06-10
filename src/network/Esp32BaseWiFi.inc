@@ -131,11 +131,27 @@ void loadStaSafeBootState() {
     }
 }
 
+bool persistBoolIfNonDefault(const char* key, bool value) {
+    const bool stored = Esp32BaseConfig::getBool(WIFI_NS, key, false);
+    if (!value && !stored) {
+        return true;
+    }
+    return Esp32BaseConfig::setBool(WIFI_NS, key, value);
+}
+
+bool persistIntIfNonDefault(const char* key, uint8_t value) {
+    const int32_t stored = Esp32BaseConfig::getInt(WIFI_NS, key, 0);
+    if (value == 0 && stored == 0) {
+        return true;
+    }
+    return Esp32BaseConfig::setInt(WIFI_NS, key, value);
+}
+
 bool persistStaSafeBootState() {
     bool ok = true;
-    ok = Esp32BaseConfig::setBool(WIFI_NS, WIFI_KEY_STA_GUARD, g_staGuardActive) && ok;
-    ok = Esp32BaseConfig::setInt(WIFI_NS, WIFI_KEY_STA_RESET_COUNT, g_staGuardedResetCount) && ok;
-    ok = Esp32BaseConfig::setBool(WIFI_NS, WIFI_KEY_STA_PAUSE, g_staCredentialsPaused) && ok;
+    ok = persistBoolIfNonDefault(WIFI_KEY_STA_GUARD, g_staGuardActive) && ok;
+    ok = persistIntIfNonDefault(WIFI_KEY_STA_RESET_COUNT, g_staGuardedResetCount) && ok;
+    ok = persistBoolIfNonDefault(WIFI_KEY_STA_PAUSE, g_staCredentialsPaused) && ok;
     if (!ok) {
         ESP32BASE_LOG_W("wifi", "sta_safe_boot_state_save_failed guard=%s resets=%u paused=%s",
                         g_staGuardActive ? "yes" : "no",
@@ -147,9 +163,9 @@ bool persistStaSafeBootState() {
 
 bool persistWiFiInitSafeBootState() {
     bool ok = true;
-    ok = Esp32BaseConfig::setBool(WIFI_NS, WIFI_KEY_INIT_GUARD, g_wifiInitGuardActive) && ok;
-    ok = Esp32BaseConfig::setInt(WIFI_NS, WIFI_KEY_INIT_RESET_COUNT, g_wifiInitGuardedResetCount) && ok;
-    ok = Esp32BaseConfig::setBool(WIFI_NS, WIFI_KEY_INIT_PAUSE, g_wifiInitPaused) && ok;
+    ok = persistBoolIfNonDefault(WIFI_KEY_INIT_GUARD, g_wifiInitGuardActive) && ok;
+    ok = persistIntIfNonDefault(WIFI_KEY_INIT_RESET_COUNT, g_wifiInitGuardedResetCount) && ok;
+    ok = persistBoolIfNonDefault(WIFI_KEY_INIT_PAUSE, g_wifiInitPaused) && ok;
     if (!ok) {
         ESP32BASE_LOG_W("wifi", "wifi_init_safe_boot_state_save_failed guard=%s resets=%u paused=%s",
                         g_wifiInitGuardActive ? "yes" : "no",

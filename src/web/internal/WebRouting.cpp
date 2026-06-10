@@ -192,6 +192,21 @@ void applyStoredAuth(const char* user, const char* pass) {
     g_authLoadedFromStorage = true;
 }
 
+bool readStoredAuth(Preferences& prefs, char* user, size_t userLen, char* pass, size_t passLen) {
+    if (!user || userLen == 0 || !pass || passLen == 0) {
+        return false;
+    }
+    user[0] = '\0';
+    pass[0] = '\0';
+    const bool hasUser = prefs.isKey("auth_user");
+    const bool hasPass = prefs.isKey("auth_pass");
+    if (!hasUser || !hasPass) {
+        return false;
+    }
+    return prefs.getString("auth_user", user, userLen) > 0 &&
+           prefs.getString("auth_pass", pass, passLen) > 0;
+}
+
 bool loadStoredAuth() {
     char user[32];
     char pass[64];
@@ -199,16 +214,9 @@ bool loadStoredAuth() {
     if (!prefs.begin("eb_web", true)) {
         return false;
     }
-    const bool hasUser = prefs.isKey("auth_user");
-    const bool hasPass = prefs.isKey("auth_pass");
-    if (!hasUser || !hasPass) {
-        prefs.end();
-        return false;
-    }
-    const size_t userLen = prefs.getString("auth_user", user, sizeof(user));
-    const size_t passLen = prefs.getString("auth_pass", pass, sizeof(pass));
+    const bool readOk = readStoredAuth(prefs, user, sizeof(user), pass, sizeof(pass));
     prefs.end();
-    if (userLen == 0 || passLen == 0) {
+    if (!readOk) {
         return false;
     }
     if (!validAuthUser(user) || !validAuthPass(pass)) {
@@ -220,13 +228,33 @@ bool loadStoredAuth() {
     return true;
 }
 
+bool storedAuthMatches(const char* storedUser, const char* storedPass, const char* user, const char* pass) {
+    return storedUser && storedPass && user && pass &&
+           strcmp(storedUser, user) == 0 && strcmp(storedPass, pass) == 0;
+}
+
+bool writeAuthKeyIfChanged(Preferences& prefs, const char* key, const char* stored, const char* value) {
+    if (stored && value && strcmp(stored, value) == 0) {
+        return true;
+    }
+    return value && prefs.putString(key, value) > 0;
+}
+
 bool saveStoredAuth(const char* user, const char* pass) {
     Preferences prefs;
     if (!prefs.begin("eb_web", false)) {
         return false;
     }
-    const bool ok = prefs.putString("auth_user", user) > 0 &&
-                    prefs.putString("auth_pass", pass) > 0;
+
+    char storedUser[32];
+    char storedPass[64];
+    const bool hasStored = readStoredAuth(prefs, storedUser, sizeof(storedUser), storedPass, sizeof(storedPass));
+    if (hasStored && storedAuthMatches(storedUser, storedPass, user, pass)) {
+        prefs.end();
+        return true;
+    }
+    const bool ok = writeAuthKeyIfChanged(prefs, "auth_user", hasStored ? storedUser : nullptr, user) &&
+                    writeAuthKeyIfChanged(prefs, "auth_pass", hasStored ? storedPass : nullptr, pass);
     if (!ok) {
         prefs.remove("auth_user");
         prefs.remove("auth_pass");

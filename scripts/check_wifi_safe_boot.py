@@ -26,6 +26,8 @@ source_checks = [
     ("ESP_RST_SW", "missing software reset classification for guarded WiFi init failures"),
     ("sta_safe_boot_pause", "missing explicit safe boot pause log"),
     ("wifi_init_safe_boot_pause", "missing explicit WiFi init safe boot pause log"),
+    ("persistBoolIfNonDefault", "safe boot bool state should not create default false NVS keys"),
+    ("persistIntIfNonDefault", "safe boot int state should not create default zero NVS keys"),
     ("疑似 WiFi/RF 启动瞬时电流导致供电跌落", "missing Chinese WiFi init power sag diagnostic"),
     ("sta_safe_boot_resume", "missing explicit safe boot resume log"),
     ("sta_safe_boot_auto_resume", "missing safe boot auto resume log"),

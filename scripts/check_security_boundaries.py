@@ -70,6 +70,16 @@ if '_option("esp32base_webota_user", "admin")' in webota or '_option("esp32base_
     errors.append("scripts/esp32base_webota.py: webota must not default Basic Auth to admin/admin")
 if "Web OTA auth is required" not in webota:
     errors.append("scripts/esp32base_webota.py: webota must fail with a clear message when auth is not configured")
+for needle in (
+    "storedAuthMatches",
+    "readStoredAuth",
+    "writeAuthKeyIfChanged",
+    "hasStored && storedAuthMatches(storedUser, storedPass, user, pass)",
+    'writeAuthKeyIfChanged(prefs, "auth_user"',
+    'writeAuthKeyIfChanged(prefs, "auth_pass"',
+):
+    if needle not in web_routing:
+        errors.append(f"src/web/internal/WebRouting.cpp: missing unchanged auth save guard {needle!r}")
 for forbidden in [
     'strlcpy(currentUser, g_server.arg("current_user").c_str()',
     'strlcpy(currentPass, g_server.arg("current_pass").c_str()',
