@@ -253,11 +253,14 @@ bool saveStoredAuth(const char* user, const char* pass) {
         prefs.end();
         return true;
     }
-    const bool ok = writeAuthKeyIfChanged(prefs, "auth_user", hasStored ? storedUser : nullptr, user) &&
-                    writeAuthKeyIfChanged(prefs, "auth_pass", hasStored ? storedPass : nullptr, pass);
-    if (!ok) {
-        prefs.remove("auth_user");
-        prefs.remove("auth_pass");
+    bool ok = writeAuthKeyIfChanged(prefs, "auth_pass", hasStored ? storedPass : nullptr, pass) &&
+              writeAuthKeyIfChanged(prefs, "auth_user", hasStored ? storedUser : nullptr, user);
+    if (ok) {
+        char verifyUser[32];
+        char verifyPass[64];
+        ok = readStoredAuth(prefs, verifyUser, sizeof(verifyUser), verifyPass, sizeof(verifyPass)) &&
+             strcmp(verifyUser, user) == 0 &&
+             strcmp(verifyPass, pass) == 0;
     }
     prefs.end();
     return ok;

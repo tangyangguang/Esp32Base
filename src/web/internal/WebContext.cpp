@@ -51,6 +51,7 @@ WebContext::WebContext()
       fsUploadOverwrite(false),
       fsUploadBytes(0),
       fsUploadPath{""},
+      fsUploadTempPath{""},
       fsUploadError{""}
 #endif
 #if ESP32BASE_ENABLE_APP_CONFIG
@@ -119,6 +120,7 @@ bool& g_fsUploadActive = ctx().fsUploadActive;
 bool& g_fsUploadOverwrite = ctx().fsUploadOverwrite;
 size_t& g_fsUploadBytes = ctx().fsUploadBytes;
 char (&g_fsUploadPath)[96] = ctx().fsUploadPath;
+char (&g_fsUploadTempPath)[96] = ctx().fsUploadTempPath;
 char (&g_fsUploadError)[96] = ctx().fsUploadError;
 #endif
 

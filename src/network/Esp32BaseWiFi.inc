@@ -430,15 +430,27 @@ bool beginSta() {
 void scheduleRetry(uint32_t now, const char* reason) {
     g_wifiState = Esp32BaseWiFi::RETRY_BACKOFF;
     const uint32_t delayMs = retryDelayMs();
+    const bool slowBackoff = g_wifiRetryCount >= ESP32BASE_WIFI_RETRY_FAST_COUNT;
     g_wifiNextRetryMs = now + delayMs;
-    ESP32BASE_LOG_W("wifi", "%s attempt=%u retry_in=%lu ms mode=%s status=%s status_code=%u rssi=%ld",
-                    reason,
-                    static_cast<unsigned>(g_wifiRetryCount + 1),
-                    static_cast<unsigned long>(delayMs),
-                    g_wifiRetryCount < ESP32BASE_WIFI_RETRY_FAST_COUNT ? "fast" : "slow",
-                    wlStatusName(WiFi.status()),
-                    static_cast<unsigned>(WiFi.status()),
-                    static_cast<long>(WiFi.RSSI()));
+    if (slowBackoff) {
+        ESP32BASE_LOG_I("wifi", "%s attempt=%u retry_in=%lu ms mode=%s status=%s status_code=%u rssi=%ld",
+                        reason,
+                        static_cast<unsigned>(g_wifiRetryCount + 1),
+                        static_cast<unsigned long>(delayMs),
+                        "slow",
+                        wlStatusName(WiFi.status()),
+                        static_cast<unsigned>(WiFi.status()),
+                        static_cast<long>(WiFi.RSSI()));
+    } else {
+        ESP32BASE_LOG_W("wifi", "%s attempt=%u retry_in=%lu ms mode=%s status=%s status_code=%u rssi=%ld",
+                        reason,
+                        static_cast<unsigned>(g_wifiRetryCount + 1),
+                        static_cast<unsigned long>(delayMs),
+                        "fast",
+                        wlStatusName(WiFi.status()),
+                        static_cast<unsigned>(WiFi.status()),
+                        static_cast<long>(WiFi.RSSI()));
+    }
     publish(Esp32BaseWiFi::EVENT_RETRY);
 }
 
@@ -506,12 +518,22 @@ void Esp32BaseWiFi::handle() {
     }
     if (g_wifiState == CONNECTING && status != WL_CONNECTED &&
         static_cast<int32_t>(now - g_wifiAttemptStartMs) >= ESP32BASE_WIFI_CONNECT_TIMEOUT_MS) {
-        ESP32BASE_LOG_W("wifi", "station_connect_timeout ssid=%s status=%s status_code=%u elapsed=%lu ms rssi=%ld",
-                        g_wifiSsid,
-                        wlStatusName(status),
-                        static_cast<unsigned>(status),
-                        static_cast<unsigned long>(now - g_wifiAttemptStartMs),
-                        static_cast<long>(WiFi.RSSI()));
+        const bool slowBackoff = g_wifiRetryCount >= ESP32BASE_WIFI_RETRY_FAST_COUNT;
+        if (slowBackoff) {
+            ESP32BASE_LOG_I("wifi", "station_connect_timeout ssid=%s status=%s status_code=%u elapsed=%lu ms rssi=%ld retry_phase=slow",
+                            g_wifiSsid,
+                            wlStatusName(status),
+                            static_cast<unsigned>(status),
+                            static_cast<unsigned long>(now - g_wifiAttemptStartMs),
+                            static_cast<long>(WiFi.RSSI()));
+        } else {
+            ESP32BASE_LOG_W("wifi", "station_connect_timeout ssid=%s status=%s status_code=%u elapsed=%lu ms rssi=%ld retry_phase=fast",
+                            g_wifiSsid,
+                            wlStatusName(status),
+                            static_cast<unsigned>(status),
+                            static_cast<unsigned long>(now - g_wifiAttemptStartMs),
+                            static_cast<long>(WiFi.RSSI()));
+        }
         scheduleRetry(now, "connect timeout");
         return;
     }
@@ -540,9 +562,17 @@ bool Esp32BaseWiFi::connect(const char* ssidValue, const char* passwordValue, bo
     }
     if (persist) {
         // Explicit credential saves stay synchronous so a reboot right after the form submit keeps the new WiFi config.
-        if (!Esp32BaseConfig::setStr(WIFI_NS, WIFI_KEY_SSID, ssidValue) ||
-            !Esp32BaseConfig::setStr(WIFI_NS, WIFI_KEY_PASS, passwordValue)) {
+        if (!Esp32BaseConfig::setStr(WIFI_NS, WIFI_KEY_PASS, passwordValue) ||
+            !Esp32BaseConfig::setStr(WIFI_NS, WIFI_KEY_SSID, ssidValue)) {
             ESP32BASE_LOG_E("wifi", "credential save failed");
+            return false;
+        }
+        char verifySsid[33] = "";
+        char verifyPassword[65] = "";
+        Esp32BaseConfig::getStr(WIFI_NS, WIFI_KEY_SSID, verifySsid, sizeof(verifySsid), "");
+        Esp32BaseConfig::getStr(WIFI_NS, WIFI_KEY_PASS, verifyPassword, sizeof(verifyPassword), "");
+        if (strcmp(verifySsid, ssidValue) != 0 || strcmp(verifyPassword, passwordValue) != 0) {
+            ESP32BASE_LOG_E("wifi", "credential save verify failed");
             return false;
         }
     }

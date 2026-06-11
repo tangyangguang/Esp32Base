@@ -160,7 +160,7 @@ Esp32BaseFileLog::setMode(Esp32BaseFileLog::WARN);
 
 ### 3.4 Esp32BaseFileLog
 
-`Esp32BaseFileLog` 是系统诊断日志的实现/API 名称，面向开发、维护和运维排障，不是应用业务事件接口。仅在 `ESP32BASE_ENABLE_FILELOG=1` 时可用，依赖 `Esp32BaseFs`。默认文件为 `/esp32base/logs/system.log`，默认 Web 标签为 `System Logs`，`4 × 32KB` 轮转，默认模式 WARN。运行时系统诊断日志模式只支持 OFF、ERROR、WARN、INFO；DEBUG/VERBOSE 不作为文件日志模式。INFO 模式使用 1KB / 2s 缓存，不做节流。
+`Esp32BaseFileLog` 是系统诊断日志的实现/API 名称，面向开发、维护和运维排障，不是应用业务事件接口。仅在 `ESP32BASE_ENABLE_FILELOG=1` 时可用，依赖 `Esp32BaseFs`。默认文件为 `/esp32base/logs/system.log`，默认 Web 标签为 `System Logs`，`4 × 32KB` 轮转，默认模式 WARN。运行时系统诊断日志模式只支持 OFF、ERROR、WARN、INFO；DEBUG/VERBOSE 不作为文件日志模式。INFO 模式使用 1KB / 2s 缓存，不做节流，会把启动、联网、OTA、性能提示和维护动作等低优先级日志写入 LittleFS，适合调试和短期现场排查，不建议作为长期量产默认。
 
 ```cpp
 class Esp32BaseFileLog {
@@ -350,6 +350,7 @@ public:
 - `readStoreInfo()` / `readStoreRecords()` 是事件日志内置页面使用的存储级读取能力。它按当前 header 的事件环范围读取底层槽位，只要 record 字节能读出就返回，并标记 `ok/crc_mismatch/invalid_magic/invalid_level/uncommitted/empty/read_failed`、slot、offset、stored/calculated crc、magic/level/crc/commit 布尔状态。该能力用于查看事件日志文件内容和存储状态，不作为业务事件列表的默认数据源。
 - FS 未 ready、空间不足、读写失败或记录跳过时通过 `lastError()` 暴露原因；读路径遇到不可读 I/O 会返回 `false`，但不会自动清空。
 - `clear()` 重建空文件，默认保留递增 `nextId()`；业务恢复出厂或清空业务记录时可显式调用。
+- 每次 `append()` 会写入一个 188 bytes record，再提交一个 64 bytes header 副本并做读回校验。该模式适合低频关键业务事件，不适合传感器采样、流水明细、统计累积或秒级状态上报；这些场景应由业务使用自己的批量、环形或聚合存储模型。
 
 两套使用方向：
 
@@ -392,6 +393,7 @@ Esp32BaseAppEventLog::append(event);
 - namespace 已表达库和模块归属，key 不重复模块前缀，例如 `eb_wifi.ssid`、`eb_wifi.pass`、`eb_sys.rst_cnt`、`eb_sys.wdt_cnt`、`eb_sys.wdt_trip_base`、`eb_sys.wdt_trip_time`、`eb_log.mode`、`eb_web.auth_user`、`eb_web.auth_pass`、`eb_ui.footer_mode`。
 - 应用不得使用 `eb_` 前缀，避免被库维护 API 清理。
 - `Esp32BaseConfig` 不是跨任务线程安全 API；推荐和 `Esp32Base::begin()` / `handle()`、Web、Bus 固定在同一个 loop/system task 中调用，其他任务通过队列投递配置变更。
+- 单个 NVS key 写入依赖 NVS 自身的断电保护；多个 key 组成的业务动作不是事务。App Config 多字段提交会逐字段写入，某字段失败后停止继续写后续字段并返回 partial；需要强一致的一组业务配置应合并为单个 POD/blob 或使用业务自定义提交模型。
 
 建议 API：
 
@@ -618,7 +620,7 @@ public:
 
 `wakeReason()` 只表示从 sleep 唤醒的来源，例如 `timer`、`ext0`、`gpio`；普通上电或普通复位没有 sleep 唤醒来源，因此返回 `undefined` 是正常状态。`wakeReasonText()` 返回对应中文说明，其中 `undefined` 对应 `非睡眠唤醒`。
 
-`restartLogCount()` 返回库维护的重启/休眠生命周期日志计数，存储在 `eb_sys.rst_cnt`，最大饱和为 255。库内部保留最近 4 条 reason 作为诊断环。
+`restartLogCount()` 返回库维护的重启/休眠生命周期日志计数，存储在 `eb_sys.rst_cnt`，最大饱和为 255。库内部保留最近 4 条 reason 作为诊断环。`Esp32BaseSystem::restart()`、`Esp32BaseSleep::deepSleep*()` 和 OTA rollback 进入重启/休眠前会写入该 lifecycle reason；秒级 deep sleep 设备如果长期调用库 sleep API，会产生对应 NVS 写入。是否跳过 deep sleep lifecycle log 属于诊断语义变化，不能为了 Flash 寿命默认改变。
 
 ## 6. Esp32BaseBus
 
@@ -709,6 +711,7 @@ WiFi 凭证和重连策略：
 - 有已保存凭证但连接失败时，不自动进入 AP/config portal，而是持续重连。
 - 单次 STA 连接尝试有非阻塞超时，默认 `ESP32BASE_WIFI_CONNECT_TIMEOUT_MS=15000`。
 - 前几次重连使用短间隔，连续失败后进入长间隔 backoff；backoff 必须非阻塞，不影响 `handle()`、Watchdog feed 和必要休眠。
+- 初期连接失败和短间隔重试保留 WARN，便于默认系统日志捕获首次故障；进入慢速 backoff 后，重复的连接超时和重试排程日志降为 INFO，避免长期离线设备在默认 WARN FileLog 下持续写 Flash。
 - WiFi 初始化安全启动保护：`begin()` 在任何 Arduino `WiFi.*` 初始化/模式调用前写入 `eb_wifi.init_guard`。如果下一次启动发现该标记仍存在，且 reset reason 是 `brownout`、`panic`、watchdog 类复位或 WiFi 初始化期常见的 `software` 复位，则累计 `eb_wifi.init_rst`；连续达到 `ESP32BASE_WIFI_SAFE_BOOT_MAX_RESETS` 后设置 `eb_wifi.init_pause=true`，本轮跳过 `WiFi.persistent()`、`WiFi.setSleep()`、`WiFi.mode()`、`WiFi.begin()` 和 AP 初始化，让系统至少进入无 WiFi 诊断状态。
 - `init_pause=true` 时，如果后续启动 reset reason 仍属危险复位，`begin()` 继续跳过 WiFi，并输出中文醒目提醒：疑似 WiFi/RF 启动瞬时电流导致供电跌落，应检查电源、USB 线、稳压器余量和接线，并考虑在板端 VIN/5V 与 GND 间增加低 ESR 储能电容。该日志是供电风险诊断建议，不把电容不足判定为唯一原因，也不会关闭 brownout detector。
 - STA 安全启动保护：有已保存凭证并准备进入 STA 时，库会在 `eb_wifi.sta_guard` 写入 guarded 启动标记；成功连接后清除 `sta_guard`、`sta_rst` 和 `sta_pause`。如果下一次启动发现 guarded 标记仍存在，且本次 reset reason 是 `brownout`、`panic` 或 watchdog 类复位，则累计 `eb_wifi.sta_rst`；连续达到 `ESP32BASE_WIFI_SAFE_BOOT_MAX_RESETS`（默认 3）后设置 `eb_wifi.sta_pause=true`，保留 `ssid/pass`，暂停 STA 并进入 AP/config portal。
@@ -1020,7 +1023,7 @@ Route 缓冲机制：
 - `/esp32base/fs/download?path=/file` 下载一个已存在且可读取的文件，复用 Basic Auth 和路径校验，目录、缺失文件和非法路径不会下载；如果文件声明有大小但无法读取首块，返回 `500 File read failed`。
 - `/esp32base/fs?manage=1` 进入单文件删除和受限上传管理模式；`POST /esp32base/fs/delete` 只接受一个已存在文件路径，复用 Basic Auth、同源检查和 `POST -> 303 -> GET`，不提供目录删除、批量删除、编辑或任意路径输入。不可读文件仍允许删除，便于清理损坏文件；删除不以文件内容可读为前提。App Events 启用时，`/esp32base/app-events/events.bin` 是基础库内部 store，FS 管理页会显示 `app events store` 作为提醒；普通上传或删除仍允许用于测试和维护实验，上传或删除后会重新加载 App Events 运行态。
 - `/esp32base/fs/check?dir=/data&name=records.bin` 是上传前检查接口，复用 Basic Auth，按“已有目录 + 本地文件名”计算目标路径，返回目标是否存在、是否是目录以及是否允许上传；路径拼接如果超过内部路径上限会直接拒绝，不截断成另一个目标。
-- `POST /esp32base/fs/upload` 是 multipart 上传接口，复用 Basic Auth 和同源检查；上传保留本地文件名，可以写入任何已有目录，不创建目录。目标文件存在时必须传 `overwrite=1` 才会覆盖；上传到 FileLog 路径前会先 flush，上传结束后重新加载 FileLog 运行态；上传到 `/esp32base/app-events/events.bin` 后会重新加载 App Events 运行态。没有 multipart 文件的 POST 会返回 `No upload received`，不会复用上一笔上传状态；FileLog 或 App Events reload 失败会返回上传错误；如果上传已经截断/修改这些运行态敏感文件但随后失败或中止，也会先刷新对应运行态。其他 `/esp32base/**` 路径只在文件树中标记为 `esp32base managed` 作为提醒，不作为通用上传或删除禁区，便于测试和维护实验。上传完成后会校验最终文件大小和末端可读性；上传只负责写入 LittleFS，不校验业务数据语义、索引、NVS 状态或运行时缓存。
+- `POST /esp32base/fs/upload` 是 multipart 上传接口，复用 Basic Auth 和同源检查；上传保留本地文件名，可以写入任何已有目录，不创建目录。目标文件存在时必须传 `overwrite=1` 才会覆盖；上传先写同目录唯一临时文件，校验大小和末端可读后再替换目标，避免上传中断时先清空旧文件；如果目标路径过长导致临时路径无法构造，上传会被拒绝。断电遗留的临时文件不会阻塞下一次上传，可由管理入口显式删除。上传到 FileLog 路径前会先 flush，上传结束后重新加载 FileLog 运行态；上传到 `/esp32base/app-events/events.bin` 后会重新加载 App Events 运行态。没有 multipart 文件的 POST 会返回 `No upload received`，不会复用上一笔上传状态；FileLog 或 App Events reload 失败会返回上传错误；如果最终替换已经修改这些运行态敏感文件但随后失败，也会先刷新对应运行态。其他 `/esp32base/**` 路径只在文件树中标记为 `esp32base managed` 作为提醒，不作为通用上传或删除禁区，便于测试和维护实验。上传完成后会校验最终文件大小和末端可读性；上传只负责写入 LittleFS，不校验业务数据语义、索引、NVS 状态或运行时缓存。
 - `/esp32base/tools` System 页承载低频维护入口和操作，App Config 启用时作为首个入口显示，后面是 WiFi Setup、Web Auth、Firmware OTA、File system 直达入口、hostname 保存、Watchdog trip reset、重启设备；启用 FS 的 profile 还提供手动格式化 LittleFS 操作，会清除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth 或 NVS 配置。格式化后会重新 mount FS、reload FileLog，并在 App Events 启用时重新创建 `/esp32base/app-events/events.bin`。
 - `/esp32base/auth` 是内置认证管理页面，受当前 Basic Auth 保护，提交成功后新账号密码立即生效。
 - Web Auth 认证优先级为：已保存认证 > 应用默认认证。未设置应用默认认证且没有已保存认证时，Web 服务不会启动。
@@ -1033,7 +1036,7 @@ Route 缓冲机制：
 - `checkAuth()` 用于业务页面复用基础库 Basic Auth；返回 `false` 时已发送认证挑战，业务 handler 应直接 return。
 - `checkPostAllowed(context)` 用于业务 POST/危险操作复用基础库 Web Auth、POST method 和 Origin/Referer 同源检查；非 POST 返回 `405 Method Not Allowed`，认证失败发送认证挑战，同源失败返回 `403 Forbidden`。返回 `false` 时业务 handler 应直接 return。`context` 只用于安全审计日志。
 - `verifyAuth(user, pass)` 校验显式传入的账号密码；无参 `verifyAuth()` 仍表示当前请求是否已认证。
-- `saveAuth(user, pass)` 保存 Web Auth 到 `eb_web.auth_user`、`eb_web.auth_pass`，并立即切换为新认证。
+- `saveAuth(user, pass)` 保存 Web Auth 到 `eb_web.auth_user`、`eb_web.auth_pass`，保存后读回校验，并在保存成功后立即切换为新认证；保存失败不会主动清空旧认证。
 - `resetAuth()` 清除 `eb_web` 持久化 Auth，并恢复应用默认认证；没有应用默认认证时返回 false，Web 进入无默认认证的锁定状态，除非开发固件显式启用 `ESP32BASE_WEB_ALLOW_INSECURE_DEFAULT_AUTH=1`。
 - Web Auth 明文密码会持久化到 `eb_web.auth_pass`，并在 INFO 日志中随用户名明文输出，用于业务接入和现场调试；HTML、JSON 和 API 响应仍不输出 Web Auth 密码。明文存储和明文日志是项目选择，不作为缺陷或待修风险评估；`authPassword()` 仅供本地 C++ 集成使用。
 - `METHOD_ANY` 用于同一路径 GET/POST 复用；应用 handler 内可用 `currentMethod()`、`isMethod()` 或 `currentMethodName()` 判断当前请求方法。

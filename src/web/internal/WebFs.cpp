@@ -373,6 +373,60 @@ bool fsBuildUploadPath(const char* dir, const char* name, char* out, size_t len)
     return validFsFilePath(out);
 }
 
+bool fsBuildUploadTempPath(const char* target, char* out, size_t len) {
+    if (!out || len == 0 || !validFsFilePath(target)) {
+        return false;
+    }
+    char dir[96];
+    strlcpy(dir, target, sizeof(dir));
+    char* slash = strrchr(dir, '/');
+    if (!slash) {
+        out[0] = '\0';
+        return false;
+    }
+    if (slash == dir) {
+        dir[1] = '\0';
+    } else {
+        *slash = '\0';
+    }
+
+    const uint32_t seed = millis();
+    for (uint8_t attempt = 0; attempt < 16; ++attempt) {
+        const uint32_t token = seed + attempt;
+        int written = 0;
+        if (strcmp(dir, "/") == 0) {
+            written = snprintf(out, len, "/.u%08lx%02x", static_cast<unsigned long>(token), static_cast<unsigned>(attempt));
+        } else {
+            written = snprintf(out, len, "%s/.u%08lx%02x", dir, static_cast<unsigned long>(token), static_cast<unsigned>(attempt));
+        }
+        if (written > 0 && static_cast<size_t>(written) < len && validFsFilePath(out) && !Esp32BaseFs::exists(out)) {
+            return true;
+        }
+    }
+    out[0] = '\0';
+    return false;
+}
+
+bool fsRemoveUploadTempIfPresent(const char* tempPath) {
+    if (!tempPath || !tempPath[0] || !Esp32BaseFs::exists(tempPath)) {
+        return true;
+    }
+    return Esp32BaseFs::removeFileWithRecovery(tempPath) != Esp32BaseFs::REMOVE_FILE_FAILED;
+}
+
+bool fsCommitUploadedTemp(const char* tempPath, const char* targetPath, bool overwrite) {
+    if (!validFsFilePath(tempPath) || !validFsFilePath(targetPath) || strcmp(tempPath, targetPath) == 0) {
+        return false;
+    }
+    if (!Esp32BaseFs::exists(tempPath)) {
+        return false;
+    }
+    if (Esp32BaseFs::exists(targetPath) && !overwrite) {
+        return false;
+    }
+    return Esp32BaseFs::rename(tempPath, targetPath);
+}
+
 void fsSetUploadError(const char* message) {
     strlcpy(g_fsUploadError, message && message[0] ? message : "upload failed", sizeof(g_fsUploadError));
 }
@@ -393,6 +447,7 @@ void fsResetUploadState() {
     g_fsUploadOverwrite = false;
     g_fsUploadBytes = 0;
     g_fsUploadPath[0] = '\0';
+    g_fsUploadTempPath[0] = '\0';
     g_fsUploadError[0] = '\0';
 }
 
@@ -847,13 +902,14 @@ void handleFsUploadDone() {
     const bool forbidden = g_fsUploadForbidden;
     const bool startFailed = g_fsUploadStartFailed;
     const bool overwrite = g_fsUploadOverwrite;
-    const bool uploadModified = g_fsUploadModified;
     const bool uploadAppEventsTarget = g_fsUploadAppEventsTarget;
     const bool uploadFileLogTarget = g_fsUploadFileLogTarget;
     const size_t uploadBytes = g_fsUploadBytes;
     char uploadPath[96];
+    char uploadTempPath[96];
     char uploadError[96];
     strlcpy(uploadPath, g_fsUploadPath, sizeof(uploadPath));
+    strlcpy(uploadTempPath, g_fsUploadTempPath, sizeof(uploadTempPath));
     strlcpy(uploadError, g_fsUploadError, sizeof(uploadError));
     fsCloseUploadFile();
     if (forbidden || !requestSameOrigin()) {
@@ -864,7 +920,8 @@ void handleFsUploadDone() {
     }
     if (startFailed || uploadError[0]) {
         ESP32BASE_LOG_W("web", "fs_upload_rejected path=%s error=%s", uploadPath[0] ? uploadPath : "-", uploadError[0] ? uploadError : "upload rejected");
-        fsRecoverModifiedUploadRuntime(uploadPath, uploadModified, uploadAppEventsTarget, uploadFileLogTarget);
+        fsRemoveUploadTempIfPresent(uploadTempPath);
+        fsRecoverModifiedUploadRuntime(uploadPath, false, uploadAppEventsTarget, uploadFileLogTarget);
         fsResetUploadState();
         fsSendUploadJson(400, false, uploadError[0] ? uploadError : "upload rejected", uploadPath);
         return;
@@ -875,13 +932,21 @@ void handleFsUploadDone() {
         fsSendUploadJson(400, false, "No upload received", nullptr);
         return;
     }
-    const int64_t actualSize = uploadPath[0] ? Esp32BaseFs::fileSize(uploadPath) : -1;
+    const int64_t actualSize = uploadTempPath[0] ? Esp32BaseFs::fileSize(uploadTempPath) : -1;
     if (actualSize < 0 ||
         static_cast<uint64_t>(actualSize) != uploadBytes ||
-        !fsUploadFileReadableEnd(uploadPath, static_cast<uint64_t>(actualSize))) {
-        fsRecoverModifiedUploadRuntime(uploadPath, uploadModified, uploadAppEventsTarget, uploadFileLogTarget);
+        !fsUploadFileReadableEnd(uploadTempPath, static_cast<uint64_t>(actualSize))) {
+        fsRemoveUploadTempIfPresent(uploadTempPath);
+        fsRecoverModifiedUploadRuntime(uploadPath, false, uploadAppEventsTarget, uploadFileLogTarget);
         fsResetUploadState();
         fsSendUploadJson(500, false, "Upload verification failed", uploadPath);
+        return;
+    }
+    if (!fsCommitUploadedTemp(uploadTempPath, uploadPath, overwrite)) {
+        fsRemoveUploadTempIfPresent(uploadTempPath);
+        fsRecoverModifiedUploadRuntime(uploadPath, false, uploadAppEventsTarget, uploadFileLogTarget);
+        fsResetUploadState();
+        fsSendUploadJson(500, false, "Upload commit failed", uploadPath);
         return;
     }
     const char* reloadError = nullptr;
@@ -963,6 +1028,11 @@ void handleFsUpload() {
             fsSetUploadError("Target is a directory");
             return;
         }
+        if (!fsBuildUploadTempPath(g_fsUploadPath, g_fsUploadTempPath, sizeof(g_fsUploadTempPath))) {
+            g_fsUploadStartFailed = true;
+            fsSetUploadError("Could not allocate upload temp file");
+            return;
+        }
 #if ESP32BASE_ENABLE_FILELOG
         if (g_fsUploadFileLogTarget && Esp32BaseFileLog::isEnabled()) {
             Esp32BaseFileLog::flush();
@@ -975,9 +1045,9 @@ void handleFsUpload() {
             return;
         }
         g_fsUploadModified = true;
-        if (!Esp32BaseFs::writeBytes(g_fsUploadPath, nullptr, 0)) {
+        if (!Esp32BaseFs::writeBytes(g_fsUploadTempPath, nullptr, 0)) {
             g_fsUploadStartFailed = true;
-            fsSetUploadError("Could not open target file");
+            fsSetUploadError("Could not open upload temp file");
             return;
         }
         g_fsUploadActive = true;
@@ -985,7 +1055,7 @@ void handleFsUpload() {
         if (g_fsUploadForbidden || g_fsUploadStartFailed || !g_fsUploadActive) {
             return;
         }
-        if (!Esp32BaseFs::appendBytes(g_fsUploadPath, upload.buf, upload.currentSize)) {
+        if (!Esp32BaseFs::appendBytes(g_fsUploadTempPath, upload.buf, upload.currentSize)) {
             g_fsUploadStartFailed = true;
             fsSetUploadError("File write failed");
             fsCloseUploadFile();

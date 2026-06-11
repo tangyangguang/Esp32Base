@@ -139,6 +139,7 @@
 - 满容量环形覆盖时，模拟 record 已写入但 header 未提交的重启；恢复后不得进入 fault，未提交槽应不可见，后续 append 仍可继续。
 - Watchdog 启用后，在 setup、Web handler 或业务回调里同步 append/clear 不应因为 LittleFS flush 较慢触发 loopTask WDT。
 - Esp32BaseFs 大块读写必须通过库内分块 I/O 和长操作 service 覆盖；业务一次保存 12KB 以上二进制数据、Web FS 上传/下载和 App Events/FileLog 写入都不应因为单次 LittleFS 同步 I/O 触发 task WDT。
+- Web FS 覆盖上传中断或写入失败时，旧目标文件不应在上传阶段被先清空；失败后最多遗留可删除的同目录临时文件。断电遗留的临时文件不应阻塞下一次上传。
 - 双 header 损坏、文件尺寸错误、写后校验失败等结构性问题进入 fault，不自动清空；单条记录 `crc16` 错误应跳过、暴露 `record_skipped`，完整扫描后 `count()` 应收敛到可读取记录数，并继续允许 append。
 - clear 幂等，清空后可继续写入；业务恢复出厂或清空业务记录时可显式调用。
 - System 页格式化 LittleFS 成功并重新 mount 后，App Events store 必须重新创建并清理旧运行态；FS 管理页上传、覆盖或删除 `/esp32base/app-events/events.bin` 后必须重新加载 App Events 运行态。
@@ -196,6 +197,7 @@ CI 应覆盖核心矩阵，release 前执行完整矩阵。
 - WiFi 配置页空 SSID 拒绝提交，空密码允许提交。
 - WiFi 配置页超长 SSID / 密码拒绝提交。
 - WiFi 配置页回显 SSID，不回显密码；空密码字段保留已保存密码，显式清空用于开放 WiFi。
+- WiFi 凭据保存失败时不启动新的运行中连接尝试；保存成功路径需要读回校验 SSID/password。
 - 重启按钮二次确认。
 - OTA 上传进度显示。
 - 路由器掉电 5 分钟后恢复。
@@ -267,10 +269,10 @@ CI 应覆盖核心矩阵，release 前执行完整矩阵。
 - NTP profile 启动时复用系统 boot count 作为 `bootId`，日志输出 `time_boot_session boot_id=N source=boot_count`；NTP 不再为 boot session 额外写启动期 NVS。deep sleep 唤醒沿用上一次非 sleep 重启计数；业务离线事件应同时保存 bootId 和 uptimeSec，不要把 bootId 当作每次 deep sleep 唤醒的唯一会话号。
 - 日志和人工页面中的字节数只显示 KB/MB/B 人性化值；状态/API JSON 可保留 raw `bytes` 并附带 `human`。
 - NTP 对时成功后输出实际时间、当前 uptime、推算 boot wall time，并让 `TimeSnapshot.synced`、Status 页 NTP time 行和日志绝对时间切换共享同一可信同步语义。
-- WiFi 连接、断开、重连 backoff、进入/退出 config portal 都必须有清晰日志。
+- WiFi 连接、断开、重连 backoff、进入/退出 config portal 都必须有清晰日志。慢速 backoff 阶段的重复 WiFi 重试日志使用 INFO，避免长期离线设备在默认 WARN FileLog 下持续写 Flash；首次故障和短间隔重试仍保留 WARN。
 - WiFi 初始化安全启动保护必须输出可诊断日志：`wifi_init_safe_boot_guard_set` 表示已在任何 Arduino WiFi 初始化调用前建立 guard，`wifi_init_safe_boot_guarded_reset` 表示检测到连续 WiFi 初始化期 brownout/panic/watchdog/software reset 但仍未达到阈值，`wifi_init_safe_boot_pause` 表示已暂停 WiFi 初始化并进入无 WiFi 诊断状态，`wifi_init_safe_boot_paused` 表示危险复位后仍保持暂停，`wifi_init_safe_boot_auto_resume` 表示后续非危险复位自动恢复一次 WiFi 初始化。触发暂停时必须输出中文供电风险提示，说明疑似 WiFi/RF 启动瞬时电流导致供电跌落，并建议检查电源、USB 线、稳压器余量、接线和板端 VIN/5V-GND 低 ESR 储能电容。
 - WiFi STA 安全启动保护必须输出可诊断日志：`sta_safe_boot_guard_set` 表示已进入 guarded STA 尝试，`sta_safe_boot_guarded_reset` 表示检测到连续 guarded brownout/panic/watchdog 复位但仍未达到阈值，`sta_safe_boot_pause` 表示已暂停凭据并回退 AP 配网，`sta_safe_boot_paused` 表示危险复位后仍保持暂停，`sta_safe_boot_auto_resume` 表示后续非危险复位自动恢复已保存 STA 尝试，`sta_safe_boot_resume` 表示用户重新提交凭据或点击重试后恢复 STA 尝试，`sta_safe_boot_cleared` 表示连接成功、凭据清除或恢复重试后保护状态已清空。
-- 系统诊断日志默认 WARN；量产极简现场记录可通过 Web System 页或 `Esp32BaseFileLog::setMode(Esp32BaseFileLog::ERROR)` 只记录 ERROR；现场调试可切到 INFO，方便通过 System Logs 页面观察。
+- 系统诊断日志默认 WARN；量产极简现场记录可通过 Web System 页或 `Esp32BaseFileLog::setMode(Esp32BaseFileLog::ERROR)` 只记录 ERROR；现场调试可切到 INFO，方便通过 System Logs 页面观察。INFO 模式会把启动、联网、OTA、性能提示和维护动作等低优先级日志写入 LittleFS，不做节流，不建议作为长期量产默认。
 - FileLog 模式变更必须输出 WARN 级审计日志，包含上一次模式和新模式。
 - Serial 日志和 FileLog 必须可独立控制；量产设备可通过 `Esp32BaseLog::setSerialLevel(Esp32BaseLog::NONE)` 关闭串口，同时保持 FileLog WARN/ERROR 或 INFO 正常写入。
 - `ESP32BASE_LOG_LEVEL` 是编译期上限；如果编译为 `ESP32BASE_LOG_NONE`，日志宏被移除，FileLog 也不会收到日志。

@@ -111,7 +111,7 @@ bool sendRawChunkedContent(const char* data, size_t len) {
 void markResponseClientDisconnected() {
     if (!g_responseBroken) {
         g_responseBroken = true;
-        ESP32BASE_LOG_W("web", "response_client_disconnected uri=%s", g_activeUri[0] ? g_activeUri : "-");
+        ESP32BASE_LOG_I("web", "response_client_disconnected uri=%s", g_activeUri[0] ? g_activeUri : "-");
     }
 }
 

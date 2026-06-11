@@ -196,6 +196,7 @@ struct WebContext {
     bool fsUploadOverwrite;
     size_t fsUploadBytes;
     char fsUploadPath[96];
+    char fsUploadTempPath[96];
     char fsUploadError[96];
 #endif
 #if ESP32BASE_ENABLE_APP_CONFIG
@@ -261,6 +262,7 @@ extern bool& g_fsUploadActive;
 extern bool& g_fsUploadOverwrite;
 extern size_t& g_fsUploadBytes;
 extern char (&g_fsUploadPath)[96];
+extern char (&g_fsUploadTempPath)[96];
 extern char (&g_fsUploadError)[96];
 #endif
 

@@ -71,10 +71,11 @@ DNS 拦截策略：
 - 仅显式启用 `ESP32BASE_WEB_ALLOW_INSECURE_DEFAULT_AUTH=1` 的受控开发固件会使用库内置 `admin/admin` 兜底，并输出 WARN 审计日志。
 - 业务项目需要允许用户修改认证账号/密码时，优先链接内置 `/esp32base/auth` 认证管理页面。
 - 业务自建配置页时，应先 `checkAuth()`，再用 `verifyAuth(currentUser, currentPass)` 验证当前凭据，最后调用 `saveAuth(newUser, newPass)`。
-- 更新 Web Auth 后立即生效；浏览器缓存旧 Basic Auth 时，后续请求会重新触发认证。
+- 更新 Web Auth 会写入后读回校验，保存成功后立即生效；浏览器缓存旧 Basic Auth 时，后续请求会重新触发认证。保存失败不会主动清空旧认证。
 - Web Auth 持久化使用 `eb_web.auth_user`、`eb_web.auth_pass`，并在 INFO 日志中输出明文用户名和密码，便于业务接入和现场调试。
 - Basic Auth 请求日志每个 HTTP 请求最多输出 1 条，避免 OTA 上传分块反复校验时刷屏。
 - WiFi 密码字段不会回显已保存密码。留空表示保持已保存密码；需要切换开放网络时必须显式勾选清除密码。
+- WiFi 凭据保存会写入后读回校验；保存失败时不会切换运行中连接尝试。
 
 OTA 规则：
 
@@ -309,7 +310,7 @@ App Events 页面：
 - Runtime Health 显示 heap free/min/max alloc/total、Watchdog、NTP time、last reset 和 last wake；heap 与 Watchdog 的多值信息使用紧凑子指标展示，避免逗号串联造成阅读困难。
 - Storage & Logs 显示 FS used/free/total、Details 入口、文件/目录数量、已统计文件大小、other/overhead、FileLog enabled/disabled/unavailable/write fault、日志级别、当前文件大小、日志总占用/上限和路径；File details 入口并入 FS 行，FileLog level/current/used/limit 合并为一行子指标，避免右侧卡片明显高于 Runtime Health；Top 文件列表只放在 `/esp32base/fs` 详情页，避免状态页被低频诊断明细撑高；Hardware 显示芯片型号、revision、CPU、SDK、Flash、PSRAM 和 eFuse MAC。
 - `/esp32base/fs` 默认是只读 LittleFS 详情页，显示 Summary、Top 10 最大文件和最多 128 项文件树；文件树展示 Path、Type、Size、Last modified、Status 和 Action。Last modified 来自 LittleFS 最后修改时间，不是创建时间；当时间明显不可信时显示 `unknown`。Status 独立显示 `ok`、`unreadable`、`filelog`、`app events store` 或 `esp32base managed` 等维护标签，Action 只保留下载和管理模式删除。文件树提供单文件下载；当文件声明有大小但首块无法读取时，Status 显示 `unreadable`，下载路由返回 `500 File read failed`，避免浏览器保存 0 字节伪成功文件；当 FS used 明显大于可见文件合计时显示内部/历史占用告警，提示删除可见文件不一定释放全部空间。业务侧如果使用 `Esp32BaseFs` 读写文件，也必须检查返回值；逻辑大小存在不代表内容块一定可读。
-- `/esp32base/fs?manage=1` 增加单文件删除和受限上传，不提供目录删除、批量删除、编辑、重命名、移动或任意路径输入；删除必须通过 `POST /esp32base/fs/delete -> 303 -> GET`，格式化仍只在 System 页危险操作区。上传流程是“选择已有设备目录 + 选择本地文件”，上传保留本地文件名，不创建目录，可选择任何已有目录；同名文件由 `/esp32base/fs/check` 触发浏览器确认后再带 `overwrite=1` 上传；路径过长会拒绝，不截断，目录选择器会提示过长目录不可选。没有 multipart 文件的上传 POST 会返回 `No upload received`；上传完成会校验最终文件大小和末端可读性；上传到 FileLog 路径前会先 flush，上传结束后重新加载 FileLog 运行态，reload 失败会作为上传错误返回。App Events 启用时，`/esp32base/app-events/events.bin` 显示为 `app events store`；其他 `/esp32base/**` 文件显示为 `esp32base managed`。这些标签只作为基础库命名空间提醒，不作为通用上传或删除禁区，便于测试和维护实验；上传或删除后会重新加载 App Events 运行态，reload 失败会作为维护错误返回；如果上传已经截断/修改 App Events store 或 FileLog 文件但随后失败或中止，也会先刷新对应运行态再返回上传错误。不可读文件在管理模式仍显示删除入口，因为删除只依赖路径存在且是文件，不要求内容块可读。底层删除失败后会尝试截断文件为 0；删除或清理成功后若 FileLog 之前处于 `write fault`，会重新加载当前 FileLog 模式以便恢复写入。
+- `/esp32base/fs?manage=1` 增加单文件删除和受限上传，不提供目录删除、批量删除、编辑、重命名、移动或任意路径输入；删除必须通过 `POST /esp32base/fs/delete -> 303 -> GET`，格式化仍只在 System 页危险操作区。上传流程是“选择已有设备目录 + 选择本地文件”，上传保留本地文件名，不创建目录，可选择任何已有目录；同名文件由 `/esp32base/fs/check` 触发浏览器确认后再带 `overwrite=1` 上传；路径过长会拒绝，不截断，目录选择器会提示过长目录不可选。覆盖上传先写同目录唯一临时文件并在校验后替换目标；断电遗留的临时文件不会阻塞下一次上传，可由管理入口显式删除。没有 multipart 文件的上传 POST 会返回 `No upload received`；上传完成会校验最终文件大小和末端可读性；上传到 FileLog 路径前会先 flush，上传结束后重新加载 FileLog 运行态，reload 失败会作为上传错误返回。App Events 启用时，`/esp32base/app-events/events.bin` 显示为 `app events store`；其他 `/esp32base/**` 文件显示为 `esp32base managed`。这些标签只作为基础库命名空间提醒，不作为通用上传或删除禁区，便于测试和维护实验；上传或删除后会重新加载 App Events 运行态，reload 失败会作为维护错误返回；如果最终替换已经修改 App Events store 或 FileLog 文件但随后失败，也会先刷新对应运行态再返回上传错误。不可读文件在管理模式仍显示删除入口，因为删除只依赖路径存在且是文件，不要求内容块可读。底层删除失败后会尝试截断文件为 0；删除或清理成功后若 FileLog 之前处于 `write fault`，会重新加载当前 FileLog 模式以便恢复写入。
 - Firmware & OTA 显示当前固件大小、运行 app slot、下一 OTA slot、Max OTA upload、OTA headroom、rollback 状态，以及仅在存在错误时显示的 Last OTA error；`OTA headroom` 表示 `target slot - current sketch`，Max OTA upload 才是上传硬上限。
 - 启用 Watchdog 时显示 `enabled, lifetime resets N, trip resets M` 或 invalid baseline 和 trip reset time；Reset Trip 保存时间使用和页面 NTP time 行一致的可信 epoch 判断，无可用时间则显示 `unknown (time unavailable)`。
 - Partition Table 使用运行时分区表展示 Name、Type、SubType、Offset、Size、Role；Role 用于标识 running app、next OTA、app data、NVS config、OTA state、coredump 等。
@@ -498,7 +499,7 @@ void handleBusinessPage() {
 
 表单和命令提交默认仍应保留 `POST -> 303 -> GET`。行内编辑和小表单弹层可以在同一个 endpoint 中通过 `isAjaxRequest()` 返回 JSON 局部结果：成功用 `sendAjaxReplace()` 替换目标片段，失败用 `sendAjaxError()` 在当前行或弹层内显示错误。前端局部刷新只改善体验，服务端仍必须重新校验认证、同源、参数、状态和权限。
 
-不默认局部刷新的操作包括重启、格式化、清日志、OTA、文件上传/下载/删除和 Auth 修改；这些操作应保留明确确认、进度页或整页结果，避免用户误判设备状态。
+不默认局部刷新的操作包括重启、格式化、清日志、OTA、文件上传/下载/删除和 Auth 修改；这些操作应保留明确确认、进度页或整页结果，避免用户误判设备状态。FS 上传覆盖先写唯一临时文件并在校验后替换目标，上传中断不应先清空旧文件；遗留临时文件不会阻塞下一次上传，可由管理入口显式删除。
 
 ### 8.1 Skinning
 
@@ -625,7 +626,7 @@ Arduino `WebServer` 是同步模型。
 
 - 基础库不对每个 HTTP 请求强制下发 `setNoDelay(true)`；实机回归显示该设置在弱链路下会降低 512 B chunked 响应吞吐。
 - `sendChunk()` / `sendProgmem()` 共用 512 B 静态 chunk buffer；响应头仍由 Arduino `WebServer` 生成，正文 data chunk 由基础库无堆分配 writer 写出标准 chunked 帧，避免每个 chunk 触发 `WebServer::sendContent()` 内部 `malloc/free`，同时避免 PROGMEM CSS/JS 被拆成大量 128 B 小 chunk。
-- `sendResponseContent()` 只在发送前检查客户端是否已经断开，发送后不再用 `client().connected()` 判定失败；`endResponse()` 在响应未标记断开时总是尝试发送最终 0-length chunk，避免同步 WebServer 下 curl/浏览器等待 chunked 响应结束直到超时。
+- `sendResponseContent()` 只在发送前检查客户端是否已经断开，发送后不再用 `client().connected()` 判定失败；`endResponse()` 在响应未标记断开时总是尝试发送最终 0-length chunk，避免同步 WebServer 下 curl/浏览器等待 chunked 响应结束直到超时。客户端主动刷新、断网或取消下载导致的 `response_client_disconnected` 记录为 INFO，不进入默认 WARN FileLog。
 - 长 HTML/JSON/CSV 响应在每个 data chunk 前后喂 watchdog；业务长页面仍处在同步 `WebServer::handleClient()` 内时，不再只依赖 `Esp32Base::handle()` 返回后的统一喂狗。
 - 小 JSON 如果已经完整生成，使用 `sendJson()` 一次性返回固定 `Content-Length`；只有需要流式拼接或响应体较大时才使用 `beginResponse()` / `sendChunk()` / `endResponse()`。
 - `sendHeader()` 不再把基础 CSS 内联进每个 HTML 页面，而是引用 `/esp32base/ui.css`；该资源使用固定 `Content-Length` 和 `Cache-Control: public, max-age=86400`，减少业务页面重复下载 9KB 级样式内容。业务 `setHeadExtraCallback()` 只作用于应用页面和自定义页面，内置 `/esp32base` 页面不承载业务 CSS 字节。

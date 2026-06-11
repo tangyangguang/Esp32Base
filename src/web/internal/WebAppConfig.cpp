@@ -806,7 +806,9 @@ void handleAppConfigSubmit() {
     }
     Esp32BaseAppConfig::SaveSummary summary = {};
     for (uint8_t i = 0; i < g_appConfigFieldCount; ++i) {
-        writeSubmittedField(g_appConfigFields[i], i, summary);
+        if (!writeSubmittedField(g_appConfigFields[i], i, summary)) {
+            break;
+        }
     }
     if (summary.savedCount > 0) {
         g_appConfigRevision++;
