@@ -49,14 +49,20 @@ void runLifecycleHooks(esp32base_internal::PreLifecycleHook* hooks) {
 void runPreRestartHooks() {
     runLifecycleHooks(g_preRestartHooks);
 }
+
+bool shouldIncrementBootCount(esp_reset_reason_t resetReason) {
+    return resetReason != ESP_RST_DEEPSLEEP;
+}
 }
 
 bool Esp32BaseSystem::begin() {
     Preferences prefs;
     if (prefs.begin("eb_sys", false)) {
         const uint32_t previousBootCount = prefs.getUInt("boot_cnt", 0);
-        g_bootCount = previousBootCount + 1U;
-        if (prefs.putUInt("boot_cnt", g_bootCount) == 0) {
+        const esp_reset_reason_t resetReason = esp_reset_reason();
+        const bool incrementBootCount = shouldIncrementBootCount(resetReason);
+        g_bootCount = incrementBootCount ? previousBootCount + 1U : previousBootCount;
+        if (incrementBootCount && prefs.putUInt("boot_cnt", g_bootCount) == 0) {
             ESP32BASE_LOG_W("system", "boot_count save failed");
         }
         prefs.end();

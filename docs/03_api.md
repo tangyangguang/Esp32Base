@@ -612,7 +612,7 @@ public:
 };
 ```
 
-`bootCount()` 返回无符号启动会话计数，存储在 `eb_sys.boot_cnt`，使用 `uint32_t` 语义每次固件启动加 1。上电、手动复位、`ESP.restart()`、Watchdog、OTA 重启、deep sleep 唤醒都会计入；具体启动原因通过 `resetReason()` / `wakeReason()` 判断。
+`bootCount()` 返回无符号重启计数，存储在 `eb_sys.boot_cnt`，使用 `uint32_t` 语义在上电、手动复位、`ESP.restart()`、Watchdog、OTA 重启等会清除普通内存的非 sleep 重启后加 1。deep sleep 唤醒不会增加该计数，也不会为 `boot_cnt` 写 NVS；具体启动原因通过 `resetReason()` / `wakeReason()` 判断。
 
 `resetReason()` 表示芯片本次为什么复位或重新启动，例如 `poweron`、`software`、`task_wdt`、`deep_sleep`。`resetReasonText()` 返回对应中文说明，例如 `上电启动`、`软件重启`、`看门狗复位`。
 
@@ -784,7 +784,7 @@ NTP 默认使用 UTC+8，即 `ESP32BASE_NTP_GMT_OFFSET_SEC=(8L * 3600L)`、`ESP3
 - `uptimeSec` 和 `bootId` 在未同步时也可用，用于记录“本次开机 +N 秒”的业务事件；`uptimeSec` 来自 ESP-IDF 64-bit 运行时间计数源，不受 Arduino `millis()` 约 49.7 天回卷影响。
 - `bootStartEpochSec` 仅在本次 boot 已同步后有效，值为 `epochSec - uptimeSec`。
 
-`Esp32Base::begin()` 会在系统模块初始化后调用 `initBootSession()`，`bootId` 复用 `Esp32BaseSystem::bootCount()`，不为 NTP 额外写启动期 NVS。`bootId=0` 保留为未知；正常启动使用非零 boot count。业务项目不需要手动调用 `initBootSession()`，除非绕过 `Esp32Base::begin()` 直接使用 NTP 模块。
+`Esp32Base::begin()` 会在系统模块初始化后调用 `initBootSession()`，`bootId` 复用 `Esp32BaseSystem::bootCount()`，不为 NTP 额外写启动期 NVS。`bootId=0` 保留为未知；正常非 sleep 重启使用非零 boot count，deep sleep 唤醒沿用上一次非 sleep 重启计数。业务项目不需要手动调用 `initBootSession()`，除非绕过 `Esp32Base::begin()` 直接使用 NTP 模块。
 
 `onTimeSynced(callback)` 注册一个轻量单回调；如果注册时当前 boot 已同步，会立即回调一次。回调参数是同步瞬间的 `TimeSnapshot`，业务可据此扫描自己的日志，把同一 `bootId` 的相对 `uptimeSec` 事件回填为真实时间。基础库不理解也不改写业务日志结构。
 

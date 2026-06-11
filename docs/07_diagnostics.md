@@ -255,7 +255,7 @@ CI 应覆盖核心矩阵，release 前执行完整矩阵。
 日志要求：
 
 - FileLog 初始化后必须输出 boot session 诊断块，使用 `boot` tag，包含 `boot_count`、reset/wake reason 及中文说明、固件、版本、build、profile、hostname、heap、flash；字段必须拆成多条短日志，避免单行超过日志缓冲导致截断。
-- `boot_count` 是 `uint32_t` 启动会话计数，上电、手动复位、`ESP.restart()`、Watchdog、OTA 重启、deep sleep 唤醒都计入；不能把它解释为单纯上电次数。
+- `boot_count` 是 `uint32_t` 重启计数，上电、手动复位、`ESP.restart()`、Watchdog、OTA 重启等会清除普通内存的非 sleep 重启计入；deep sleep 唤醒不增加 boot_count，也不为 `boot_cnt` 写 NVS；不能把它解释为单纯上电次数或每次唤醒次数。
 - `reset_reason` 表示本次复位/启动来源；`wake_reason` 仅表示 sleep 唤醒来源，普通上电或普通复位时为 `undefined` 是正常状态；`reset_desc` / `wake_desc` 输出中文简明解释。
 - restart/deep sleep 生命周期 reason 仍由 `Esp32BaseSystem::appendRestartLog()` / `restartLogCount()` 记录，与 `boot_count` 分开看。
 - 启动日志按 begin 顺序输出，便于定位失败模块。
@@ -264,7 +264,7 @@ CI 应覆盖核心矩阵，release 前执行完整矩阵。
 - NTP 默认按 UTC+8 输出本地时间，应用可通过 `ESP32BASE_NTP_GMT_OFFSET_SEC` / `ESP32BASE_NTP_DAYLIGHT_OFFSET_SEC` 覆盖。
 - NTP 同步判断默认要求 epoch >= `ESP32BASE_NTP_SYNC_MIN_EPOCH`，默认值为 `1700000000UL`；本 boot 首次可信同步后会锁存时间映射，后续不要求 SNTP status 持续保持 completed。
 - NTP 未同步状态不输出周期性 WARN/DEBUG；只有明确的单次同步失败事件才应输出 WARN。
-- NTP profile 启动时复用系统 boot count 作为 `bootId`，日志输出 `time_boot_session boot_id=N source=boot_count`；NTP 不再为 boot session 额外写启动期 NVS。业务离线事件应保存该 bootId 和 uptimeSec，避免跨 boot 混淆。
+- NTP profile 启动时复用系统 boot count 作为 `bootId`，日志输出 `time_boot_session boot_id=N source=boot_count`；NTP 不再为 boot session 额外写启动期 NVS。deep sleep 唤醒沿用上一次非 sleep 重启计数；业务离线事件应同时保存 bootId 和 uptimeSec，不要把 bootId 当作每次 deep sleep 唤醒的唯一会话号。
 - 日志和人工页面中的字节数只显示 KB/MB/B 人性化值；状态/API JSON 可保留 raw `bytes` 并附带 `human`。
 - NTP 对时成功后输出实际时间、当前 uptime、推算 boot wall time，并让 `TimeSnapshot.synced`、Status 页 NTP time 行和日志绝对时间切换共享同一可信同步语义。
 - WiFi 连接、断开、重连 backoff、进入/退出 config portal 都必须有清晰日志。
