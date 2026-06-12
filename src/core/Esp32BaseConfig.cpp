@@ -143,6 +143,70 @@ bool readStoredBlob(const char* ns, const char* key, void* out, size_t len, size
     return true;
 }
 
+bool readStoredInt(const char* ns, const char* key, int32_t* out, bool* found) {
+    if (found) {
+        *found = false;
+    }
+    if (!out) {
+        return false;
+    }
+    nvs_handle_t handle = 0;
+    const esp_err_t openErr = nvs_open(ns, NVS_READONLY, &handle);
+    if (openErr == ESP_ERR_NVS_NOT_FOUND) {
+        return true;
+    }
+    if (openErr != ESP_OK) {
+        return false;
+    }
+
+    int32_t value = 0;
+    const esp_err_t err = nvs_get_i32(handle, key, &value);
+    nvs_close(handle);
+    if (err == ESP_ERR_NVS_NOT_FOUND) {
+        return true;
+    }
+    if (err != ESP_OK) {
+        return false;
+    }
+    *out = value;
+    if (found) {
+        *found = true;
+    }
+    return true;
+}
+
+bool readStoredBool(const char* ns, const char* key, bool* out, bool* found) {
+    if (found) {
+        *found = false;
+    }
+    if (!out) {
+        return false;
+    }
+    nvs_handle_t handle = 0;
+    const esp_err_t openErr = nvs_open(ns, NVS_READONLY, &handle);
+    if (openErr == ESP_ERR_NVS_NOT_FOUND) {
+        return true;
+    }
+    if (openErr != ESP_OK) {
+        return false;
+    }
+
+    uint8_t value = 0;
+    const esp_err_t err = nvs_get_u8(handle, key, &value);
+    nvs_close(handle);
+    if (err == ESP_ERR_NVS_NOT_FOUND) {
+        return true;
+    }
+    if (err != ESP_OK) {
+        return false;
+    }
+    *out = value != 0;
+    if (found) {
+        *found = true;
+    }
+    return true;
+}
+
 int findPending(const char* ns, const char* key) {
     for (uint8_t i = 0; i < ESP32BASE_CONFIG_PENDING_MAX; ++i) {
         if (g_pending[i].type != PENDING_EMPTY && strcmp(g_pending[i].ns, ns) == 0 && strcmp(g_pending[i].key, key) == 0) {
@@ -392,6 +456,27 @@ bool Esp32BaseConfig::setIntDeferred(const char* ns, const char* key, int32_t va
     if (!validName(ns) || !validName(key)) {
         return false;
     }
+    const int existing = findPending(ns, key);
+    if (existing >= 0 && g_pending[existing].type == PENDING_INT && g_pending[existing].intValue == value) {
+        if (g_auditEnabled) {
+            ESP32BASE_LOG_D("config", "audit op=setIntDeferred ns=%s key=%s value=%ld changed=no result=skipped_pending",
+                            ns, key, static_cast<long>(value));
+        }
+        return true;
+    }
+
+    bool hadOld = false;
+    int32_t oldValue = 0;
+    const bool readOk = readStoredInt(ns, key, &oldValue, &hadOld);
+    if (readOk && hadOld && oldValue == value) {
+        if (g_auditEnabled) {
+            ESP32BASE_LOG_D("config", "audit op=setIntDeferred ns=%s key=%s value=%ld changed=no result=skipped",
+                            ns, key, static_cast<long>(value));
+        }
+        clearPendingKey(ns, key);
+        return true;
+    }
+
     const int slot = allocPending(ns, key);
     if (slot < 0) {
         return false;
@@ -468,6 +553,27 @@ bool Esp32BaseConfig::setBoolDeferred(const char* ns, const char* key, bool valu
     if (!validName(ns) || !validName(key)) {
         return false;
     }
+    const int existing = findPending(ns, key);
+    if (existing >= 0 && g_pending[existing].type == PENDING_BOOL && g_pending[existing].boolValue == value) {
+        if (g_auditEnabled) {
+            ESP32BASE_LOG_D("config", "audit op=setBoolDeferred ns=%s key=%s value=%u changed=no result=skipped_pending",
+                            ns, key, value ? 1U : 0U);
+        }
+        return true;
+    }
+
+    bool hadOld = false;
+    bool oldValue = false;
+    const bool readOk = readStoredBool(ns, key, &oldValue, &hadOld);
+    if (readOk && hadOld && oldValue == value) {
+        if (g_auditEnabled) {
+            ESP32BASE_LOG_D("config", "audit op=setBoolDeferred ns=%s key=%s value=%u changed=no result=skipped",
+                            ns, key, value ? 1U : 0U);
+        }
+        clearPendingKey(ns, key);
+        return true;
+    }
+
     const int slot = allocPending(ns, key);
     if (slot < 0) {
         return false;
@@ -487,11 +593,36 @@ bool Esp32BaseConfig::setStrDeferred(const char* ns, const char* key, const char
     if (!validName(ns) || !validName(key) || !value || strlen(value) > 3999) {
         return false;
     }
+    const size_t valueLen = strlen(value);
+    const int existing = findPending(ns, key);
+    if (existing >= 0 && g_pending[existing].type == PENDING_STR &&
+        strcmp(g_pending[existing].strValue ? g_pending[existing].strValue : "", value) == 0) {
+        if (g_auditEnabled) {
+            char lenBuf[24];
+            Esp32BaseLog::formatBytes(valueLen, lenBuf, sizeof(lenBuf));
+            ESP32BASE_LOG_D("config", "audit op=setStrDeferred ns=%s key=%s len=%s changed=no result=skipped_pending",
+                            ns, key, lenBuf);
+        }
+        return true;
+    }
+
+    bool hadOld = false;
+    const bool readOk = readStoredString(ns, key, g_stringScratch, sizeof(g_stringScratch), &hadOld);
+    if (readOk && hadOld && strcmp(g_stringScratch, value) == 0) {
+        if (g_auditEnabled) {
+            char lenBuf[24];
+            Esp32BaseLog::formatBytes(valueLen, lenBuf, sizeof(lenBuf));
+            ESP32BASE_LOG_D("config", "audit op=setStrDeferred ns=%s key=%s len=%s changed=no result=skipped",
+                            ns, key, lenBuf);
+        }
+        clearPendingKey(ns, key);
+        return true;
+    }
+
     const int slot = allocPending(ns, key);
     if (slot < 0) {
         return false;
     }
-    const size_t valueLen = strlen(value);
     char* copy = static_cast<char*>(malloc(valueLen + 1));
     if (!copy) {
         return false;

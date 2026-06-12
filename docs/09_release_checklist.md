@@ -118,6 +118,7 @@
 - deferred delay。
 - `flushAll()`。
 - deferred 写后立即读返回 pending 新值。
+- deferred pending/NVS 同值去重，不重复推迟 flush 或产生 NVS 写入。
 - restart 前全部落盘。
 - NVS 写满返回 false。
 - `factoryReset()` 清理 `eb_wifi`、`eb_web`、`eb_log`、`eb_ui` 和 `eb_sys.hostname`。

@@ -467,6 +467,7 @@ deferred 语义：
 - NVS 读取必须先判断 key 是否存在，避免 Arduino `Preferences` 在缺 key 时输出底层 `NOT_FOUND` 噪音。
 - 字符串读取和写前比较使用固定 scratch buffer，不使用 Arduino `String` 拼接或读取，减少配置高频读取造成的 heap 碎片风险。
 - 同一 namespace/key 的 pending 写入会合并为最新值，不重复占用多条 pending。
+- `setXxxDeferred()` 如果 pending 中已有相同值，会返回 true 并保留原 pending/due 时间；如果 NVS 旧值已经相同，会返回 true、清除同 key pending 并跳过新的 NVS 写入。
 - deferred 到期判断使用 `millis()` 差值比较，覆盖正常延迟窗口内的 49 天回绕；不要把 deferred delay 设置为接近或超过 `INT32_MAX` ms 的长期定时任务。
 - OTA 上传期间只暂停 deferred flush；`getXxx()`、`pendingCount()`、`flushAll()` 和 `clearLibraryNamespaces()` 仍按各自语义工作。
 - `factoryReset()` 只清理基础库 NVS 配置，不重启、不格式化 LittleFS、不删除 FileLog 日志文件内容、不清理业务 namespace，不清理 boot/restart/watchdog 统计诊断资产。
@@ -507,7 +508,7 @@ blob / POD 语义：
 - `setBlob()` / `setBlobDeferred()` 的 `data` 不能为 `nullptr`，`len` 必须在 `1..256`；非法 namespace、key、data 或 len 返回 false。
 - `getBlob()` 要求调用方传入准确的固定大小；NVS 中不存在 key、读取失败或存储长度与 `len` 不一致时返回 false。
 - `setBlob()` 写入前会读取旧值；旧值长度和内容完全相同时返回 true 并跳过 NVS 写入，同时清除同 key pending。
-- `setBlobDeferred()` 如果 pending 中已有相同 blob，或 NVS 旧值已经相同，会返回 true 并跳过新的 NVS 写入；否则入队并由 `handle()` / `flushAll()` 落盘。
+- `setBlobDeferred()` 复用统一 deferred 去重语义：pending 或 NVS 旧值已经相同会返回 true 并跳过新的 NVS 写入；否则入队并由 `handle()` / `flushAll()` 落盘。
 - `getBlob()` 和 `getPod()` 与其他 `getXxx()` 一样先读 pending，同 key deferred 写入后立即可见。
 - `setPod()` / `getPod()` / `setPodDeferred()` 是 blob API 的模板薄封装，只接受 trivially copyable 且 standard-layout 的固定布局结构；不要保存含指针、虚函数、`String`、容器或跨固件版本布局不稳定的类型。
 - 如果 POD 结构未来需要改变布局，业务应自己在结构中放 `version` 字段并按应用策略迁移；Config 不替业务解释 blob 内容。
