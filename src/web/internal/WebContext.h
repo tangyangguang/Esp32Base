@@ -63,6 +63,16 @@ struct NavItem {
     char title[24];
 };
 
+struct StaticAsset {
+    char path[48];
+    const char* contentType;
+    const uint8_t* data;
+    size_t len;
+    uint32_t cacheMaxAgeSec;
+    bool authRequired;
+    bool registered;
+};
+
 #if ESP32BASE_ENABLE_FS
 struct FsTopEntry {
     char path[96];
@@ -156,6 +166,7 @@ struct WebContext {
     WebServer server;
     Route routes[ESP32BASE_WEB_MAX_ROUTES];
     NavItem navItems[ESP32BASE_WEB_MAX_NAV_ITEMS];
+    StaticAsset staticAssets[ESP32BASE_WEB_MAX_STATIC_ASSETS];
     const char* headerKeys[7];
     bool webReady;
     bool startLocked;
@@ -221,6 +232,7 @@ WebContext& ctx();
 extern WebServer& g_server;
 extern Route (&g_routes)[ESP32BASE_WEB_MAX_ROUTES];
 extern NavItem (&g_navItems)[ESP32BASE_WEB_MAX_NAV_ITEMS];
+extern StaticAsset (&g_staticAssets)[ESP32BASE_WEB_MAX_STATIC_ASSETS];
 extern const char* (&g_headerKeys)[7];
 extern bool& g_webReady;
 extern bool& g_startLocked;

@@ -43,6 +43,55 @@ static void routedHandler() {
     Esp32BaseWeb::sendText(200, "routed");
 }
 
+void test_native_static_asset_serves_cached_content() {
+    Esp32BaseWeb::nativeTestReset();
+    static const uint8_t asset[] = "body{color:#123}";
+
+    TEST_ASSERT_TRUE(Esp32BaseWeb::addStaticAsset("/assets/app.css",
+                                                  "text/css; charset=utf-8",
+                                                  asset,
+                                                  sizeof(asset) - 1,
+                                                  3600,
+                                                  true));
+
+    TEST_ASSERT_TRUE(Esp32BaseWeb::nativeTestDispatch("/assets/app.css", Esp32BaseWeb::METHOD_GET));
+
+    const Esp32BaseWeb::NativeTestResponse& response = Esp32BaseWeb::nativeTestResponse();
+    TEST_ASSERT_EQUAL(200, response.code);
+    TEST_ASSERT_EQUAL_STRING("text/css; charset=utf-8", response.contentType.c_str());
+    TEST_ASSERT_EQUAL_STRING("body{color:#123}", response.body.c_str());
+    TEST_ASSERT_EQUAL_STRING("private, max-age=3600", Esp32BaseWeb::nativeTestResponseHeader("Cache-Control"));
+    TEST_ASSERT_EQUAL_STRING("nosniff", Esp32BaseWeb::nativeTestResponseHeader("X-Content-Type-Options"));
+}
+
+void test_native_static_asset_respects_auth_when_required() {
+    Esp32BaseWeb::nativeTestReset();
+    static const uint8_t asset[] = "secret";
+
+    TEST_ASSERT_TRUE(Esp32BaseWeb::addStaticAsset("/assets/secret.js",
+                                                  "application/javascript; charset=utf-8",
+                                                  asset,
+                                                  sizeof(asset) - 1,
+                                                  0,
+                                                  true));
+    Esp32BaseWeb::nativeTestBeginRequest(Esp32BaseWeb::METHOD_GET, "/assets/secret.js");
+    Esp32BaseWeb::nativeTestSetAuthenticated(false);
+
+    TEST_ASSERT_TRUE(Esp32BaseWeb::nativeTestDispatch("/assets/secret.js", Esp32BaseWeb::METHOD_GET));
+
+    TEST_ASSERT_EQUAL(401, Esp32BaseWeb::nativeTestResponse().code);
+}
+
+void test_native_static_asset_rejects_invalid_registration() {
+    Esp32BaseWeb::nativeTestReset();
+    static const uint8_t asset[] = "x";
+
+    TEST_ASSERT_FALSE(Esp32BaseWeb::addStaticAsset("assets/app.css", "text/css", asset, 1));
+    TEST_ASSERT_FALSE(Esp32BaseWeb::addStaticAsset("/assets/app.css", "", asset, 1));
+    TEST_ASSERT_FALSE(Esp32BaseWeb::addStaticAsset("/assets/app.css", "text/css", nullptr, 1));
+    TEST_ASSERT_FALSE(Esp32BaseWeb::addStaticAsset("/assets/app.css", "text/css", asset, 0));
+}
+
 void test_native_request_inputs_and_json_response() {
     Esp32BaseWeb::nativeTestReset();
     Esp32BaseWeb::nativeTestBeginRequest(Esp32BaseWeb::METHOD_POST, "/api/run");
@@ -130,5 +179,8 @@ int main(int, char**) {
     RUN_TEST(test_native_post_guard_captures_method_auth_and_origin_failures);
     RUN_TEST(test_native_redirect_see_other_is_captured);
     RUN_TEST(test_native_dispatch_runs_registered_route_without_losing_request_inputs);
+    RUN_TEST(test_native_static_asset_serves_cached_content);
+    RUN_TEST(test_native_static_asset_respects_auth_when_required);
+    RUN_TEST(test_native_static_asset_rejects_invalid_registration);
     return UNITY_END();
 }

@@ -59,7 +59,7 @@ Web/API 保存的 hostname 存储在 `eb_sys.hostname`，重启后覆盖构建�
 
 底部横条可在 System 页面配置为 Off、Status only 或 Links + status。该设置保存到 `eb_ui.footer_mode`，用于控制 `sendFooter()` 输出的紧凑系统入口和运行摘要。
 
-Web 应用路由默认容量统一为 24。该上限只覆盖业务 `addRoute()` / `addPage()` / `addApi()` 注册的静态路由表；内置 Web 路由不占用此表。route 较少且需要节省静态 RAM 的应用，可在完成 route 数量核算后通过构建参数显式调小 `ESP32BASE_WEB_MAX_ROUTES`。
+Web 应用路由默认容量统一为 24。该上限只覆盖业务 `addRoute()` / `addPage()` / `addApi()` 注册的静态路由表；内置 Web 路由不占用此表。route 较少且需要节省静态 RAM 的应用，可在完成 route 数量核算后通过构建参数显式调小 `ESP32BASE_WEB_MAX_ROUTES`。业务 CSS/JS/图片等固定内容应优先用 `Esp32BaseWeb::addStaticAsset()` 注册到基础库 WebServer；该能力不占用应用 route 表，默认带 Basic Auth、固定 `Content-Length`、`nosniff` 和可配置浏览器缓存，避免业务项目绕开 WebServer 或复制静态资源发送逻辑。
 
 应用项目需要在 native 单元测试中直接执行 Web handler 时，可启用 `ESP32BASE_WEB_NATIVE_TEST=1` 使用测试 harness 设置 method、path、参数、body、认证/同源结果，并捕获状态码、headers、重定向和响应体；该接口只在非 ESP32 native 测试构建可用，详见 [Web 与配网](docs/04_web.md) 和 [API 契约](docs/03_api.md)。
 
@@ -67,7 +67,7 @@ Web/Auth 不再内置启用 admin/admin。启用 Web 的业务必须在 `Esp32Ba
 
 业务首页推荐注册为 `/index`。在 `HOME_APP` 或 `HOME_COMBINED` 下，如果没有显式 `setHomePath()` 且存在 `/index` 业务页，裸 `/` 会跳转到 `/index`；如果应用确实需要直接渲染裸根路径，可显式 `setHomePath("/")` 并注册 GET `/` 业务页。`/esp32base` 始终保留为基础库系统入口。
 
-启用 FS 的 profile 会默认启用系统诊断日志。它的实现/API 名称仍是 `Esp32BaseFileLog`，默认写入 `/esp32base/logs/system.log`，Web 默认入口显示为 `System Logs`，URL 仍是 `/esp32base/logs`。系统诊断日志面向开发、维护和运维排障，记录设备运行过程中的技术事实和内部链路，例如启动、reset reason、WiFi、NTP、OTA、LittleFS、FileLog 写入保护和基础库健康状态。默认容量 `4 × 32KB`，模式 WARN；运行时可配置为 OFF、ERROR、WARN、INFO。慢 Web 操作和慢 loop 诊断属于 INFO 性能提示，默认 WARN 系统日志不记录，现场排查时可切到 INFO 查看。长期离线或路由器不可用时，WiFi 慢速 backoff 的重复重试日志降为 INFO，避免默认 WARN 系统日志每分钟写 Flash；现场排查可临时切到 INFO 查看完整重试链路。INFO 模式会让启动、联网、OTA、性能提示和维护操作等低优先级日志进入 LittleFS，适合调试和短期现场排查，不建议作为长期量产默认。System Logs 的 GET 页面只读取已落盘快照，不主动 flush 或写 LittleFS；缓存中的低优先级日志会按常规 flush interval 落盘。如果 FS 满或文件损坏导致写入失败，Web 会显示 FileLog 运行态为 `write fault`，表示配置仍开启、已有日志可能仍可读取，但新日志写入已被保护停写。`unavailable` 表示模式开启但当前 FS/init 状态无法启用系统日志；`disabled` 表示模式为 OFF，新日志不会写入。示例通过构建参数把默认模式改为 INFO：
+启用 FS 的 profile 会默认启用系统诊断日志。它的实现/API 名称仍是 `Esp32BaseFileLog`，默认写入 `/esp32base/logs/system.log`，Web 默认入口显示为 `System Logs`，URL 仍是 `/esp32base/logs`。系统诊断日志面向开发、维护和运维排障，记录设备运行过程中的技术事实和内部链路，例如启动、reset reason、WiFi、NTP、OTA、LittleFS、FileLog 写入保护和基础库健康状态。默认容量 `4 × 32KB`，模式 WARN；运行时可配置为 OFF、ERROR、WARN、INFO。慢 Web 操作和慢 loop 诊断属于 INFO 性能提示，默认 WARN 系统日志不记录，现场排查时可切到 INFO 查看。长期离线或路由器不可用时，WiFi 慢速 backoff 的重复重试日志降为 INFO，避免默认 WARN 系统日志每分钟写 Flash；现场排查可临时切到 INFO 查看完整重试链路。INFO 模式会让启动、联网、OTA、性能提示和维护操作等低优先级日志进入 LittleFS，适合调试和短期现场排查，不建议作为长期量产默认。Status 页只显示 LittleFS 容量和 FileLog 已知段大小，不做全量文件树扫描；完整文件数量、目录数量、top files 和可读性检查位于 `/esp32base/fs`。System Logs 的 GET 页面只读取已落盘快照，不主动 flush 或写 LittleFS；缓存中的低优先级日志会按常规 flush interval 落盘。如果 FS 满或文件损坏导致写入失败，Web 会显示 FileLog 运行态为 `write fault`，表示配置仍开启、已有日志可能仍可读取，但新日志写入已被保护停写。`unavailable` 表示模式开启但当前 FS/init 状态无法启用系统日志；`disabled` 表示模式为 OFF，新日志不会写入。示例通过构建参数把默认模式改为 INFO：
 
 ```ini
 build_flags =

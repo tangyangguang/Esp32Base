@@ -28,6 +28,15 @@ struct NativeTestRoute {
     bool appPage;
 };
 
+struct NativeTestStaticAsset {
+    std::string path;
+    std::string contentType;
+    const uint8_t* data;
+    size_t len;
+    uint32_t cacheMaxAgeSec;
+    bool authRequired;
+};
+
 struct NativeTestState {
     Esp32BaseWeb::Method method = Esp32BaseWeb::METHOD_UNKNOWN;
     std::string path;
@@ -45,6 +54,7 @@ struct NativeTestState {
     Esp32BaseWeb::SystemNavMode systemNavMode = Esp32BaseWeb::SYSTEM_NAV_SECTION;
     Esp32BaseWeb::FooterBarMode footerBarMode = Esp32BaseWeb::FOOTER_BAR_FULL;
     std::vector<NativeTestRoute> routes;
+    std::vector<NativeTestStaticAsset> staticAssets;
     std::vector<Esp32BaseWeb::NativeTestHeader> navItems;
     Esp32BaseWeb::NativeTestResponse response{0, "", "", {}, false, false};
 };
@@ -136,6 +146,10 @@ bool validRoutePath(const char* path) {
     return path && path[0] == '/' && std::strlen(path) < 48;
 }
 
+bool validContentType(const char* contentType) {
+    return contentType && contentType[0] && std::strlen(contentType) <= 63;
+}
+
 bool routeMatches(Esp32BaseWeb::Method routeMethod, Esp32BaseWeb::Method requestMethod) {
     return routeMethod == Esp32BaseWeb::METHOD_ANY || routeMethod == requestMethod;
 }
@@ -149,6 +163,18 @@ bool addNativeRoute(const char* path, const char* title, Esp32BaseWeb::Method me
     }
     nativeState().routes.push_back({path, title ? title : "", method, handler, appPage});
     return true;
+}
+
+NativeTestStaticAsset* findNativeStaticAsset(const char* path) {
+    if (!path) {
+        return nullptr;
+    }
+    for (NativeTestStaticAsset& asset : nativeState().staticAssets) {
+        if (asset.path == path) {
+            return &asset;
+        }
+    }
+    return nullptr;
 }
 
 void sendEscapedHtmlNative(const char* text);
@@ -308,6 +334,15 @@ bool Esp32BaseWeb::addPage(const char* path, const char* title, Handler handler)
 
 bool Esp32BaseWeb::addApi(const char* path, Handler handler) {
     return addRoute(path, METHOD_ANY, handler);
+}
+
+bool Esp32BaseWeb::addStaticAsset(const char* path, const char* contentType, const uint8_t* data, size_t len,
+                                  uint32_t cacheMaxAgeSec, bool authRequired) {
+    if (!validRoutePath(path) || !validContentType(contentType) || !data || len == 0 || findNativeStaticAsset(path)) {
+        return false;
+    }
+    nativeState().staticAssets.push_back({path, contentType, data, len, cacheMaxAgeSec, authRequired});
+    return true;
 }
 
 bool Esp32BaseWeb::addNavItem(const char* path, const char* title) {
@@ -681,6 +716,7 @@ void Esp32BaseWeb::nativeTestReset() {
     state.systemNavMode = SYSTEM_NAV_SECTION;
     state.footerBarMode = FOOTER_BAR_FULL;
     state.routes.clear();
+    state.staticAssets.clear();
     state.navItems.clear();
     clearResponse();
 }
@@ -743,6 +779,29 @@ bool Esp32BaseWeb::nativeTestDispatch(const char* path, Method method) {
             return true;
         }
     }
+    NativeTestStaticAsset* asset = findNativeStaticAsset(path);
+    if (asset && method == METHOD_GET) {
+        state.method = method;
+        state.path = path && path[0] ? path : "/";
+        state.requestActive = true;
+        clearResponse();
+        if (asset->authRequired && !checkAuth()) {
+            return true;
+        }
+        char cacheControl[40];
+        if (asset->cacheMaxAgeSec > 0) {
+            std::snprintf(cacheControl, sizeof(cacheControl), "%s, max-age=%lu",
+                          asset->authRequired ? "private" : "public",
+                          static_cast<unsigned long>(asset->cacheMaxAgeSec));
+        } else {
+            std::snprintf(cacheControl, sizeof(cacheControl), "no-store");
+        }
+        setResponseHeader("Cache-Control", cacheControl);
+        setResponseHeader("X-Content-Type-Options", "nosniff");
+        setResponse(200, asset->contentType.c_str(), "", true);
+        state.response.body.assign(reinterpret_cast<const char*>(asset->data), asset->len);
+        return true;
+    }
     state.method = method;
     state.path = path && path[0] ? path : "/";
     state.requestActive = true;
@@ -783,6 +842,7 @@ bool Esp32BaseWeb::begin() {
     }
     const uint8_t appRoutes = routeCount(false);
     const uint8_t appPages = routeCount(true);
+    const uint8_t staticAssets = staticAssetCount();
     uint8_t builtinRoutes = 26;
 #if ESP32BASE_ENABLE_FS
     builtinRoutes += 3;
@@ -793,10 +853,11 @@ bool Esp32BaseWeb::begin() {
 #if ESP32BASE_ENABLE_OTA
     builtinRoutes += 3;
 #endif
-    ESP32BASE_LOG_D("web", "server_registering builtin_routes=%u app_routes=%u app_pages=%u",
+    ESP32BASE_LOG_D("web", "server_registering builtin_routes=%u app_routes=%u app_pages=%u static_assets=%u",
                     static_cast<unsigned>(builtinRoutes),
                     static_cast<unsigned>(appRoutes),
-                    static_cast<unsigned>(appPages));
+                    static_cast<unsigned>(appPages),
+                    static_cast<unsigned>(staticAssets));
     if (!loadStoredAuth()) {
         if (!applyDefaultAuth()) {
             g_startLocked = true;
@@ -877,6 +938,11 @@ bool Esp32BaseWeb::begin() {
     for (uint8_t i = 0; i < ESP32BASE_WEB_MAX_ROUTES; ++i) {
         if (g_routes[i].handler && !g_routes[i].registered) {
             registerRoute(g_routes[i]);
+        }
+    }
+    for (uint8_t i = 0; i < ESP32BASE_WEB_MAX_STATIC_ASSETS; ++i) {
+        if (g_staticAssets[i].path[0] && !g_staticAssets[i].registered) {
+            registerStaticAsset(g_staticAssets[i]);
         }
     }
     g_server.onNotFound(handleNotFound);
@@ -1058,6 +1124,36 @@ bool Esp32BaseWeb::addPage(const char* path, const char* title, Handler handler)
 
 bool Esp32BaseWeb::addApi(const char* path, Handler handler) {
     return addRoute(path, METHOD_ANY, handler);
+}
+
+bool Esp32BaseWeb::addStaticAsset(const char* path, const char* contentType, const uint8_t* data, size_t len,
+                                  uint32_t cacheMaxAgeSec, bool authRequired) {
+    if (!path || path[0] != '/' || strlen(path) >= sizeof(g_staticAssets[0].path) ||
+        !validHeaderValue(contentType, 63) || !data || len == 0 ||
+        isBuiltinWebPath(path) || findStaticAsset(path) || findRoute(path, METHOD_GET) || findRoute(path, METHOD_ANY)) {
+        return false;
+    }
+    for (uint8_t i = 0; i < ESP32BASE_WEB_MAX_STATIC_ASSETS; ++i) {
+        if (!g_staticAssets[i].path[0]) {
+            strlcpy(g_staticAssets[i].path, path, sizeof(g_staticAssets[i].path));
+            g_staticAssets[i].contentType = contentType;
+            g_staticAssets[i].data = data;
+            g_staticAssets[i].len = len;
+            g_staticAssets[i].cacheMaxAgeSec = cacheMaxAgeSec;
+            g_staticAssets[i].authRequired = authRequired;
+            g_staticAssets[i].registered = false;
+            if (g_webReady) {
+                registerStaticAsset(g_staticAssets[i]);
+            }
+            ESP32BASE_LOG_D("web", "static_asset_registered path=%s bytes=%lu cache=%lu auth=%s",
+                            g_staticAssets[i].path,
+                            static_cast<unsigned long>(len),
+                            static_cast<unsigned long>(cacheMaxAgeSec),
+                            authRequired ? "yes" : "no");
+            return true;
+        }
+    }
+    return false;
 }
 
 bool Esp32BaseWeb::addNavItem(const char* path, const char* title) {

@@ -917,6 +917,8 @@ public:
     static bool addRoute(const char* path, Method method, Handler handler);
     static bool addPage(const char* path, const char* title, Handler handler);
     static bool addApi(const char* path, Handler handler);
+    static bool addStaticAsset(const char* path, const char* contentType, const uint8_t* data, size_t len,
+                               uint32_t cacheMaxAgeSec = 86400, bool authRequired = true);
     static bool addNavItem(const char* path, const char* title);
 
     static bool setDeviceName(const char* name);
@@ -1008,6 +1010,7 @@ Route 缓冲机制：
 - `addPage(path, title, handler)` 必须由应用显式提供短标题，例如 `Fan`、`Config`。
 - title 最大可见长度为 23 字节；空 title 返回 false。
 - `addRoute()` 和 `addApi()` 不进入业务入口列表，避免 API 或隐藏路由污染导航。
+- `addStaticAsset()` 注册业务 CSS/JS/图片等固件内固定资源，使用独立固定容量表，不消耗应用 route 表；path 必须以 `/` 开头且最大可见长度为 47 字节，不能位于 `/esp32base/**` 内置命名空间，content type 最大 63 字节，data 指针和 content type 字符串必须在固件生命周期内有效。默认 `authRequired=true`，响应包含固定 `Content-Length`、`X-Content-Type-Options: nosniff` 和 `Cache-Control`；受保护资源使用 `private, max-age=...`，公开资源使用 `public, max-age=...`，`cacheMaxAgeSec=0` 时发送 `no-store`。业务静态资源应优先用该 API 注册，不应绕开 Esp32Base WebServer。
 - `setDeviceName()` 设置导航品牌和默认标题；`setHomePath()` 设置业务首页路径。
 - `setHomeMode(HOME_ESP32BASE)` 保持基础库首页默认行为，`/` 跳转 `/esp32base`；`HOME_APP` 和 `HOME_COMBINED` 让 `/` 进入业务首页，并保留 `/esp32base` 系统入口。未显式 `setHomePath()` 时优先使用已注册的 `/index` 业务页作为首页；显式 `setHomePath("/")` 且注册 GET `/` 业务页时，裸 `/` 直接调用业务 handler，不产生自跳转。
 - `setSystemNavMode()` 控制系统入口位置：顶部、底部或底部紧凑系统工具区；默认使用 `SYSTEM_NAV_SECTION`，把 Status、System Logs、System 作为小字链接与 `Free heap`、`Up`、`RSSI` 放在同一 footer 区域，窄屏可自然换行；启用 App Config 或 App Events 时系统入口同时显示对应直达链接。System Logs 是 `/esp32base/logs` 的默认用户标签，底层枚举仍是 `BUILTIN_LOGS`。
@@ -1018,7 +1021,7 @@ Route 缓冲机制：
 - 带 `data-eb-ajax` 的 helper 表单会在浏览器支持 `fetch` 时携带 `X-Esp32Base-Ajax: 1` 和 `Accept: application/json` 局部提交；服务端用 `isAjaxRequest()` 判断后返回 `sendAjaxReplace(targetId, html, noticeTitle)` 或 `sendAjaxError(code, error)`。未携带 AJAX header 时，同一 POST endpoint 仍应保留 `POST -> 303 -> GET` fallback。
 - `UiTone` 仅表达语义色：neutral、ok、warn、danger、info。业务项目不得把危险、警告、成功语义当作普通装饰色复用。
 - 导航会给当前匹配项输出 `active` class；匹配规则为 path 完全相等，或当前路径以 `path + "/"` 开头，多个匹配时选择最长 path。`SYSTEM_NAV_SECTION` 下 WiFi/Auth/OTA 二级页会把底部 System 入口标记为 active；App Config 页面在启用时使用自己的底部入口标记 active。
-- `/esp32base` Status 页是只读设备体检页，采用诊断优先结构：不额外显示和相邻详细区重复的 `System Overview` 预览块，而是按 Device、Network、Runtime Health、Storage & Logs、Firmware & OTA、Hardware、Partition Table 排序展示 hostname、固件/profile、uptime/boot count、WiFi/IP/RSSI、STA/AP/eFuse MAC、heap、max alloc、Watchdog lifetime/trip resets、NTP time、last reset/wake、FS/File inventory/FileLog/OTA headroom 和运行时分区表；File details 入口并入 FS 行，FileLog level/current/used/limit 合并为一行子指标，Top 文件列表只放在 `/esp32base/fs` 详情页，页面容量值只显示 KB/MB/B 人性化格式，`OTA headroom` 表示 `target slot - current sketch`，Max OTA upload 才是上传硬上限。
+- `/esp32base` Status 页是只读设备体检页，采用诊断优先结构：不额外显示和相邻详细区重复的 `System Overview` 预览块，而是按 Device、Network、Runtime Health、Storage & Logs、Firmware & OTA、Hardware、Partition Table 排序展示 hostname、固件/profile、uptime/boot count、WiFi/IP/RSSI、STA/AP/eFuse MAC、heap、max alloc、Watchdog lifetime/trip resets、NTP time、last reset/wake、FS 容量摘要/FileLog/OTA headroom 和运行时分区表；Status 页不做 LittleFS 全量文件树扫描、文件可读性检查或 top files 统计，File details 入口并入 FS 行，完整 File inventory 只放在 `/esp32base/fs` 详情页。FileLog level/current/used/limit 合并为一行子指标，页面容量值只显示 KB/MB/B 人性化格式，`OTA headroom` 表示 `target slot - current sketch`，Max OTA upload 才是上传硬上限。
 - `/esp32base/logs` 和 `/esp32base/logs/raw` 是只读系统诊断日志查看入口，只读取已经落盘的 FileLog segment 快照；GET 读取不得主动 `flush()`、创建、清空、重建文件或改变 FileLog fault 状态。INFO 缓存中的新日志按常规 flush interval 落盘，清空/格式化/重启等维护副作用必须通过 POST 路径。
 - `/esp32base/fs` 是启用 FS profile 时注册的 LittleFS 诊断页，默认只读，显示 Summary、Top 10 最大文件和最多 128 项文件树；文件树展示 Path、Type、Size、Last modified、Status 和 Action。Last modified 来自 LittleFS 最后修改时间，不是创建时间，时间明显不可信时显示 `unknown`；Status 展示 `ok`、`unreadable`、`filelog`、`app events store` 或 `esp32base managed` 等维护标签。文件树提供单文件下载；当文件声明有大小但首块无法读取时，Status 显示 `unreadable`，不再给出会生成空文件的下载按钮；当 `FS used` 明显大于可见文件合计时提示内部/历史占用异常。
 - `/esp32base/fs/download?path=/file` 下载一个已存在且可读取的文件，复用 Basic Auth 和路径校验，目录、缺失文件和非法路径不会下载；如果文件声明有大小但无法读取首块，返回 `500 File read failed`。
@@ -1058,7 +1061,7 @@ Native Web handler 测试：
 - `ESP32BASE_WEB_NATIVE_TEST=1` 只用于非 ESP32 的 native 单元测试构建；如果在 ESP32/Arduino 目标上启用会编译失败，避免测试 harness 进入固件运行时代码体积。
 - native harness 不启动 Arduino `WebServer`，而是在 `Esp32BaseWeb` helper 层模拟当前请求并捕获响应。业务 handler 仍按真实代码写法调用 `currentMethod()`、`hasParam()`、`getParam()`、`getRequestBody()`、`checkAuth()`、`checkPostAllowed()`、`sendJson()`、`redirectSeeOther()`、`beginResponse()`、`sendChunk()`、`sendBytes()` 和 `endResponse()`。
 - `nativeTestBeginRequest(method, path)` 设置当前请求 method/path 并清空本次参数、body 和响应；随后用 `nativeTestSetParam()`、`nativeTestSetBody()`、`nativeTestSetAuthenticated()`、`nativeTestSetSameOrigin()` 设置请求输入和安全检查结果。
-- `nativeTestRun(handler)` 直接执行一个 handler；`nativeTestDispatch(path, method)` 会从 native harness 内的 `addRoute()` / `addPage()` / `addApi()` 注册表查找并执行匹配 handler，未匹配时捕获 `404 Not found`。
+- `nativeTestRun(handler)` 直接执行一个 handler；`nativeTestDispatch(path, method)` 会从 native harness 内的 `addRoute()` / `addPage()` / `addApi()` / `addStaticAsset()` 注册表查找并执行匹配 handler 或静态资源，未匹配时捕获 `404 Not found`。
 - `nativeTestResponse()` 返回最近一次响应的状态码、content type、body、headers 和 started/ended 状态；`nativeTestResponseHeader(name)` 按大小写不敏感方式读取捕获的响应头。
 - native harness 只验证 handler 在 Esp32Base Web helper 层的行为，不模拟浏览器、TCP、chunked wire framing、multipart 上传、ESP32 WiFi、NVS、LittleFS 或 OTA 副作用；这些仍需要 ESP32 示例构建、集成测试或实机验证。
 

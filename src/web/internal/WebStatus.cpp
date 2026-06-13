@@ -663,12 +663,7 @@ void handleRoot() {
     sendStatusSectionStart("Storage & Logs");
 #if ESP32BASE_ENABLE_FS
     if (Esp32BaseFs::isReady()) {
-        FsScan fsScan;
-        if (scanFs(fsScan)) {
-            sendFsSummaryRows(fsScan);
-        } else {
-            sendTaggedInfoRow("FS", "scan failed", Esp32BaseWeb::UI_WARN);
-        }
+        sendFsQuickSummaryRows();
     } else {
         sendTaggedInfoRow("FS", "unavailable", Esp32BaseWeb::UI_WARN);
     }

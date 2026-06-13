@@ -10,6 +10,7 @@ WebContext::WebContext()
     : server(80),
       routes{},
       navItems{},
+      staticAssets{},
       headerKeys{"Authorization", "X-Sha256", "X-Firmware-Size", "Host", "Origin", "Referer", "X-Esp32Base-Ajax"},
       webReady(false),
       startLocked(false),
@@ -79,6 +80,7 @@ WebContext& ctx() {
 WebServer& g_server = ctx().server;
 Route (&g_routes)[ESP32BASE_WEB_MAX_ROUTES] = ctx().routes;
 NavItem (&g_navItems)[ESP32BASE_WEB_MAX_NAV_ITEMS] = ctx().navItems;
+StaticAsset (&g_staticAssets)[ESP32BASE_WEB_MAX_STATIC_ASSETS] = ctx().staticAssets;
 const char* (&g_headerKeys)[7] = ctx().headerKeys;
 bool& g_webReady = ctx().webReady;
 bool& g_startLocked = ctx().startLocked;

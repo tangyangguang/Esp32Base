@@ -107,12 +107,14 @@ OTA 规则：
 - 应用路由可在 Web 启动前注册。
 - Web 已启动后注册的路由应立即生效。
 - route path 必须以 `/` 开头，最大可见长度为 47 字节。
+- 应用静态资源使用独立固定容量表，不消耗应用 route 容量；默认容量为 `ESP32BASE_WEB_MAX_STATIC_ASSETS=8`。
 
 机制：
 
 - `Esp32BaseWeb::addRoute()` 写入静态路由表。
 - Web 启动时把缓存路由注册到 `WebServer`。
 - Web 已 ready 时，新增路由立即注册。
+- `Esp32BaseWeb::addStaticAsset()` 注册应用 CSS/JS/图片等固件内固定资源；资源通过基础库 `WebServer` 输出固定 `Content-Length`、`X-Content-Type-Options: nosniff` 和 `Cache-Control`，默认要求 Web Basic Auth，业务资源不能注册到 `/esp32base/**` 内置命名空间，业务不应绕开 WebServer 或复制静态资源发送逻辑。
 - `METHOD_ANY` 路由进入应用 handler 前会先建立请求上下文，应用不需要直接访问底层 `WebServer`。
 - handler 内 `Esp32BaseWeb::currentMethod()` 可区分 `METHOD_GET` / `METHOD_POST`；handler 外返回 `METHOD_UNKNOWN`。
 - `addPage()` 注册业务页面并进入业务导航；`addNavItem()` 只注册导航项，不注册路由。
@@ -132,6 +134,19 @@ OTA 规则：
 ```
 
 该默认值覆盖常见业务页面/API 增长，不要求业务项目一开始就为 route 表单独调参。route 较少且需要节省静态 RAM 的应用，可以在构建参数中显式调小 `ESP32BASE_WEB_MAX_ROUTES`；页面/API 继续增长时也可以按项目显式调大。
+
+静态资源注册示例：
+
+```cpp
+static const uint8_t APP_CSS[] PROGMEM = "body{--brand:#176b7a}";
+
+Esp32BaseWeb::addStaticAsset("/assets/app.css",
+                             "text/css; charset=utf-8",
+                             APP_CSS,
+                             sizeof(APP_CSS) - 1,
+                             86400,
+                             true);
+```
 
 ## 6. 内置路径
 
@@ -231,6 +246,7 @@ Status 页：
 
 - `/esp32base` 默认作为只读设备体检页，不承载配置保存和危险操作。
 - 第一屏不再额外做 `System Overview` 预览块，避免和相邻详细分区重复；常用信息直接按 Device、Network、Runtime Health、Storage & Logs、Firmware & OTA、Hardware 排序。
+- Status 页不做 LittleFS 全量文件树扫描、文件可读性检查或 top files 统计；Storage & Logs 只显示 O(1) 容量摘要和 FileLog 已知段大小，完整 FS inventory 位于 `/esp32base/fs`。
 - 同一数据不应在相邻分区同名同值重复展示；需要高频查看的信息应前置为正式分区，而不是再做一层摘要。
 - Partition Table 作为最后的低频详细表。
 - 系统诊断日志（`Esp32BaseFileLog`）属于 Storage & Logs，不作为健康摘要项；日志级别、当前文件大小和路径应拆开显示，避免把 WARN/INFO 等日志级别误读为健康状态。
@@ -360,9 +376,10 @@ void handleCsvApi() {
 
 - `beginResponse(code, contentType, filename)` 可输出 CSV、JSONL、HTML 片段或二进制下载等自定义响应；文本用 `sendChunk()`，二进制块用 `sendBytes()`。
 - `contentType` 必须非空且不超过 63 字节；`filename` 仅允许字母、数字、`.`、`_`、`-`，非法时返回 false。
-- 需要给业务 CSS/JS/下载资源设置缓存、nosniff 等响应头时，先调用 `sendResponseHeader(name, value)`，再调用 `beginResponse()` 或 `sendJson()` 等实际发送函数。
+- 固件内固定 CSS/JS/图片优先使用 `addStaticAsset()`，让基础库统一输出固定长度和缓存头；动态下载或一次性导出需要自定义头时，先调用 `sendResponseHeader(name, value)`，再调用 `beginResponse()` 或 `sendJson()` 等实际发送函数。
 - handler 外调用 begin/end chunked 响应会安全失败或 no-op，并记录 WARN。
 - 长响应发送会在每次实际写入客户端后主动 `yield()`；客户端已断开时停止继续输出，避免大 HTML/CSS 页面长期占住 Web 处理。
+- 当前仍使用 Arduino 同步 `WebServer`，单个大 HTML/JSON/CSV 响应发送期间会占用 `handleClient()`，新连接需等待当前 handler 返回；业务长任务采用“启动任务 -> 返回 task id -> 轮询状态”，大历史数据优先分页、缩短默认 range 或异步加载。
 - JSON 可继续使用 `sendJson()` 一次性输出，或使用 `beginJson()` / `sendChunk()` / `writeJsonEscaped()` / `endJson()` 分块输出。
 
 native handler 测试：
@@ -630,5 +647,6 @@ Arduino `WebServer` 是同步模型。
 - 长 HTML/JSON/CSV 响应在每个 data chunk 前后喂 watchdog；业务长页面仍处在同步 `WebServer::handleClient()` 内时，不再只依赖 `Esp32Base::handle()` 返回后的统一喂狗。
 - 小 JSON 如果已经完整生成，使用 `sendJson()` 一次性返回固定 `Content-Length`；只有需要流式拼接或响应体较大时才使用 `beginResponse()` / `sendChunk()` / `endResponse()`。
 - `sendHeader()` 不再把基础 CSS 内联进每个 HTML 页面，而是引用 `/esp32base/ui.css`；该资源使用固定 `Content-Length` 和 `Cache-Control: public, max-age=86400`，减少业务页面重复下载 9KB 级样式内容。业务 `setHeadExtraCallback()` 只作用于应用页面和自定义页面，内置 `/esp32base` 页面不承载业务 CSS 字节。
+- `addStaticAsset()` 注册的应用静态资源不使用 chunked 响应，按固定长度直接写客户端，适合小型 CSS/JS/图片；资源表只保存指针，应用传入的数据和 content type 字符串必须在固件生命周期内有效。受保护资源使用 private cache，公开资源使用 public cache。
 - WiFi modem sleep 默认关闭，避免按 DTIM 周期唤醒；电池业务可调用 `Esp32BaseWiFi::setPowerSave(true)` 显式恢复 modem sleep。
 - 内置基础 CSS 不再包含 App Config 专用样式；启用 `ESP32BASE_ENABLE_APP_CONFIG` 时 App Config 页会按需注入额外 `<style>`，其他页面不下发这部分字节。

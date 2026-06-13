@@ -720,6 +720,29 @@ void sendFsSummaryRows(const FsScan& scan) {
     sendFsInventoryValue(scan, fsUsed);
     sendInfoRowEnd();
 }
+
+void sendFsQuickSummaryRows() {
+    char used[48];
+    char total[48];
+    char freeBytes[48];
+    const size_t fsUsed = Esp32BaseFs::usedBytes();
+    const size_t fsFree = Esp32BaseFs::freeBytes();
+    formatReadableBytes(fsUsed, used, sizeof(used));
+    formatReadableBytes(Esp32BaseFs::totalBytes(), total, sizeof(total));
+    formatReadableBytes(fsFree, freeBytes, sizeof(freeBytes));
+    sendInfoRowStart("FS");
+    sendStatusTag(fsFree == 0 ? Esp32BaseWeb::UI_WARN : Esp32BaseWeb::UI_OK, fsFree == 0 ? "full" : "ready");
+    sendChunk("<a class='btnlink compact' href='/esp32base/fs'>Details</a>");
+    sendSubmetricsStart();
+    sendSubmetric("Used", used);
+    sendSubmetric("Free", freeBytes);
+    sendSubmetric("Total", total);
+    sendSubmetricsEnd();
+    sendInfoRowEnd();
+    sendInfoRowStart("File inventory");
+    sendChunk("<span class='info'>Open FS details for file count, directory count and top files.</span>");
+    sendInfoRowEnd();
+}
 #endif
 
 #if ESP32BASE_ENABLE_FS

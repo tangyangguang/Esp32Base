@@ -45,6 +45,16 @@ uint8_t routeCount(bool appPageOnly) {
     return count;
 }
 
+uint8_t staticAssetCount() {
+    uint8_t count = 0;
+    for (uint8_t i = 0; i < ESP32BASE_WEB_MAX_STATIC_ASSETS; ++i) {
+        if (g_staticAssets[i].path[0]) {
+            ++count;
+        }
+    }
+    return count;
+}
+
 bool routeMatchesMethod(const Route& route, Esp32BaseWeb::Method method) {
     return route.method == Esp32BaseWeb::METHOD_ANY || route.method == method;
 }
@@ -56,6 +66,18 @@ Route* findRoute(const char* path, Esp32BaseWeb::Method method) {
     for (uint8_t i = 0; i < ESP32BASE_WEB_MAX_ROUTES; ++i) {
         if (g_routes[i].handler && strcmp(g_routes[i].path, path) == 0 && routeMatchesMethod(g_routes[i], method)) {
             return &g_routes[i];
+        }
+    }
+    return nullptr;
+}
+
+StaticAsset* findStaticAsset(const char* path) {
+    if (!path || !path[0]) {
+        return nullptr;
+    }
+    for (uint8_t i = 0; i < ESP32BASE_WEB_MAX_STATIC_ASSETS; ++i) {
+        if (g_staticAssets[i].path[0] && strcmp(g_staticAssets[i].path, path) == 0) {
+            return &g_staticAssets[i];
         }
     }
     return nullptr;
@@ -656,6 +678,49 @@ void registerRoute(Route& route) {
         dispatchRoute(*routePtr);
     });
     route.registered = true;
+}
+
+void dispatchStaticAsset(StaticAsset& asset) {
+    g_requestContextActive = true;
+    markRequest();
+    if (asset.authRequired && !ensureAuth()) {
+        g_requestContextActive = false;
+        g_currentMethod = Esp32BaseWeb::METHOD_UNKNOWN;
+        return;
+    }
+    if (!asset.data || asset.len == 0 || !asset.contentType || !asset.contentType[0]) {
+        g_server.send(404, "text/plain", "Not found");
+        g_requestContextActive = false;
+        g_currentMethod = Esp32BaseWeb::METHOD_UNKNOWN;
+        return;
+    }
+    char cacheControl[40];
+    if (asset.cacheMaxAgeSec > 0) {
+        snprintf(cacheControl, sizeof(cacheControl), "%s, max-age=%lu",
+                 asset.authRequired ? "private" : "public",
+                 static_cast<unsigned long>(asset.cacheMaxAgeSec));
+    } else {
+        strlcpy(cacheControl, "no-store", sizeof(cacheControl));
+    }
+    g_server.sendHeader("Cache-Control", cacheControl);
+    g_server.sendHeader("X-Content-Type-Options", "nosniff");
+    g_server.setContentLength(asset.len);
+    g_server.send(200, asset.contentType, "");
+    WiFiClient client = g_server.client();
+    writeClientBytes(client, reinterpret_cast<const char*>(asset.data), asset.len);
+    g_requestContextActive = false;
+    g_currentMethod = Esp32BaseWeb::METHOD_UNKNOWN;
+}
+
+void registerStaticAsset(StaticAsset& asset) {
+    if (!asset.path[0]) {
+        return;
+    }
+    StaticAsset* assetPtr = &asset;
+    g_server.on(asset.path, HTTP_GET, [assetPtr]() {
+        dispatchStaticAsset(*assetPtr);
+    });
+    asset.registered = true;
 }
 
 void handleCaptiveProbe() {

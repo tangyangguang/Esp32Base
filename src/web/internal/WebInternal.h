@@ -42,6 +42,8 @@ bool ensureAuth();
 uint8_t routeCount(bool appPageOnly);
 bool routeMatchesMethod(const Route& route, Esp32BaseWeb::Method method);
 Route* findRoute(const char* path, Esp32BaseWeb::Method method);
+uint8_t staticAssetCount();
+StaticAsset* findStaticAsset(const char* path);
 bool validAuthUser(const char* value);
 bool validAuthPass(const char* value);
 bool parseBasicAuth(char* user, size_t userLen, char* pass, size_t passLen);
@@ -130,6 +132,7 @@ void sendFsInventoryValue(const FsScan& scan, uint64_t fsUsed);
 void sendFsSummaryCell(const char* label, const char* value);
 void sendFsSummaryTable(const FsScan& scan);
 void sendFsSummaryRows(const FsScan& scan);
+void sendFsQuickSummaryRows();
 #endif
 #if ESP32BASE_ENABLE_WATCHDOG
 WatchdogTripState readWatchdogTripState();
@@ -158,6 +161,8 @@ void sendProgmem(const char* p);
 bool isAuthenticated();
 void dispatchRoute(Route& route);
 void registerRoute(Route& route);
+void dispatchStaticAsset(StaticAsset& asset);
+void registerStaticAsset(StaticAsset& asset);
 bool responseClientConnected();
 void feedWatchdogDuringSend();
 bool writeClientBytes(WiFiClient& client, const char* data, size_t len);
