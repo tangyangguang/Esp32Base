@@ -133,6 +133,8 @@ if "fsResetUploadState()" not in source:
     errors.append("src/web/internal Web modules: upload request state must be reset after each completed upload request")
 if "fsReloadUploadRuntime(" not in source:
     errors.append("src/web/internal Web modules: upload must use one runtime reload helper for modified App Events/FileLog targets")
+if "label for='fsufile'>File</label><input id='fsufile' type='file'" in source and "<div class='field full'><label for='fsufile'>File</label>" not in source:
+    errors.append("src/web/internal/WebFs.cpp: FS upload file picker must use a full-width field so it cannot overlap the directory picker")
 
 web_fs = read("src/web/internal/WebFs.cpp")
 upload_done = function_body(web_fs, "void handleFsUploadDone()")

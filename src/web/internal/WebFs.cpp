@@ -595,7 +595,7 @@ void sendFsUploadPanel() {
     uint16_t emitted = 1;
     bool pathTooLong = false;
     sendFsUploadDirectoryOptionsFor("/", 0, &emitted, &pathTooLong);
-    sendChunk("</select></div><div class='field long'><label for='fsufile'>File</label><input id='fsufile' type='file' name='file' required></div><div class='field full'><small>Uses local filename; directory must exist.");
+    sendChunk("</select></div><div class='field full'><label for='fsufile'>File</label><input id='fsufile' type='file' name='file' required></div><div class='field full'><small>Uses local filename; directory must exist.");
     if (pathTooLong) {
         sendChunk(" Some directories are hidden because their paths are too long.");
     }

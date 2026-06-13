@@ -191,7 +191,7 @@ custom_esp32base_webota_password = <current-web-auth-password>
 pio run -t webota
 ```
 
-`espota` 是 ArduinoOTA 标准协议；`webota` 是 Esp32Base 提供的 HTTP 上传方式，默认较大分块并在上传前预检认证，通常更适合反复快速烧录，但要求设备 Web OTA 可访问。
+`espota` 是 ArduinoOTA 标准协议；`webota` 是 Esp32Base 提供的 HTTP 上传方式，默认使用 `/esp32base/ota/raw` 和 4096B 分块，并在上传前预检认证；这个默认值优先保证同步 WebServer + flash 写入路径的 backpressure 稳定性。强 WiFi/有线环境可通过 `esp32base_webota_chunk_size` 实测调大；弱网或大固件保持默认更稳。详细配置见 `docs/05_ota.md`。
 
 双 OTA 设备如果已经通过 Web OTA 切换到另一个槽位，串口 `pio run -t upload` 的行为取决于分区表和 PlatformIO/Arduino flash plan。仓库标准分区中 `otadata=0xe000`，串口上传会把 `boot_app0.bin` 写到同一位置，通常会把启动选择重新初始化到 `ota_0`；但自定义分区如果把 `otadata` 移到其他偏移，串口上传可能只覆盖固定 app 槽而不更新当前启动槽，设备仍可能继续从旧的 `ota_1` 启动。串口恢复优先使用基础库脚本，它会按分区表写入两个 OTA app 槽，并在同一次 `write_flash` 里写入全 `0xFF` 的 `otadata` 镜像完成清理；清理 `otadata` 时脚本会跳过 `boot_app0`，以避免重复或错误写入：
 

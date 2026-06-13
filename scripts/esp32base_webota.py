@@ -433,7 +433,7 @@ def _run_webota(target, source, env):
         env.Exit(1)
     verify_tls = _as_bool(_option("esp32base_webota_verify_tls"), False)
     try:
-        chunk_size = _as_int(_option("esp32base_webota_chunk_size"), 64 * 1024)
+        chunk_size = _as_int(_option("esp32base_webota_chunk_size"), 4 * 1024)
     except ValueError as exc:
         print("Error: %s" % exc, file=sys.stderr)
         env.Exit(1)

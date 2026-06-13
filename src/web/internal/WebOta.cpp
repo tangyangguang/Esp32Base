@@ -46,6 +46,20 @@ bool parseSizeHeader(const String& value, size_t& out, char* error, size_t error
     return true;
 }
 
+void formatOtaAbortReason(const char* endpoint, const char* reason, char* out, size_t outLen) {
+    if (!out || outLen == 0) {
+        return;
+    }
+    snprintf(out,
+             outLen,
+             "%s endpoint=%s bytes=%lu total=%lu progress=%u%%",
+             reason && reason[0] ? reason : "client aborted ota upload",
+             endpoint && endpoint[0] ? endpoint : "unknown",
+             static_cast<unsigned long>(Esp32BaseOta::bytesProcessed()),
+             static_cast<unsigned long>(Esp32BaseOta::totalSize()),
+             static_cast<unsigned>(Esp32BaseOta::progress()));
+}
+
 void handleOtaPage() {
     markRequest();
     if (!ensureAuth()) {
@@ -183,7 +197,9 @@ void handleOtaUpload() {
         }
         Esp32BaseOta::finishUpload();
     } else if (upload.status == UPLOAD_FILE_ABORTED) {
-        Esp32BaseOta::abortUpload("client aborted");
+        char reason[96];
+        formatOtaAbortReason("/esp32base/ota", "client aborted multipart upload", reason, sizeof(reason));
+        Esp32BaseOta::abortUpload(reason);
     }
 }
 
@@ -234,7 +250,9 @@ void handleOtaRawUpload() {
         }
         Esp32BaseOta::finishUpload();
     } else if (raw.status == RAW_ABORTED) {
-        Esp32BaseOta::abortUpload("client aborted raw upload");
+        char reason[96];
+        formatOtaAbortReason("/esp32base/ota/raw", "client aborted raw upload", reason, sizeof(reason));
+        Esp32BaseOta::abortUpload(reason);
     }
 }
 

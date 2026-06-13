@@ -120,17 +120,25 @@ uint32_t partitionAddressOrZero(const esp_partition_t* partition) {
     return partition ? partition->address : 0;
 }
 
+void formatOtaBytes(size_t bytes, char* out, size_t len);
+
 void setOtaStage(const char* stage) {
     strlcpy(g_otaStage, stage && stage[0] ? stage : "unknown", sizeof(g_otaStage));
 }
 
 void setError(const char* message) {
     strlcpy(g_otaLastError, message ? message : "", sizeof(g_otaLastError));
-    ESP32BASE_LOG_E("ota", "stage=%s error=%s target=%s address=0x%lx progress=%u%%",
+    char processedBuf[32];
+    char totalBuf[32];
+    formatOtaBytes(g_otaProcessed, processedBuf, sizeof(processedBuf));
+    formatOtaBytes(g_otaTotal, totalBuf, sizeof(totalBuf));
+    ESP32BASE_LOG_E("ota", "stage=%s error=%s target=%s address=0x%lx bytes=%s total=%s progress=%u%%",
                     g_otaStage[0] ? g_otaStage : "unknown",
                     g_otaLastError,
                     g_otaTargetPartitionLabel[0] ? g_otaTargetPartitionLabel : "unknown",
                     static_cast<unsigned long>(g_otaTargetPartitionAddress),
+                    processedBuf,
+                    totalBuf,
                     static_cast<unsigned>(Esp32BaseOta::progress()));
 #if ESP32BASE_ENABLE_BUS
     Esp32BaseBus::publish(Esp32BaseOta::EVENT_FAILED, g_otaLastError);

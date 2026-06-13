@@ -67,7 +67,7 @@ pio run -t webota
 - `esp32base_webota_sha256`：默认 `auto`，可设为 `off` 或 64 字符 SHA256。
 - `esp32base_webota_timeout`：默认 `120` 秒，用于预检和普通请求。
 - `esp32base_webota_upload_timeout`：默认 `90` 秒，用于实际固件上传，弱网或大固件可单独调大。
-- `esp32base_webota_chunk_size`：默认 `65536` 字节；HTTP 上传默认使用较大分块以提高反复烧录效率。
+- `esp32base_webota_chunk_size`：默认 `4096` 字节；raw endpoint 默认使用 4096B 小分块，匹配 ESP32 同步 WebServer 接收和 flash 写入节奏，避免客户端过快写满 TCP 链路导致早期 Broken pipe。稳定有线/强 WiFi 环境可按实测调大；弱网、RSSI 低或大固件应保持默认或继续降低上传速度。
 - `esp32base_webota_preflight`：默认 `true`，上传前通过状态接口快速校验连接和认证，避免错误密码时传完整包。
 - `esp32base_webota_status_path`：默认 `/esp32base/api/ota`，用于预检。
 
@@ -76,9 +76,10 @@ pio run -t webota
 使用边界：
 
 - `espota` 是 ArduinoOTA 标准协议，兼容 PlatformIO/ArduinoOTA 常规工具链。
-- `webota` 是 Esp32Base 提供的 HTTP 上传方式，默认 64 KB 分块并使用 raw binary endpoint，通常比 espota 和浏览器 multipart Web OTA 快；要求设备 Web 服务和 `/esp32base/ota/raw` 可访问。
+- `webota` 是 Esp32Base 提供的 HTTP 上传方式，默认 4096B 分块并使用 raw binary endpoint，通常比 espota 快且比浏览器 multipart 更适合命令行自动化；要求设备 Web 服务和 `/esp32base/ota/raw` 可访问。
 - 两者都不影响浏览器 Web OTA 页面。
 - `webota` 命令行日志会显示友好容量单位、开始时间、结束时间、上传前 3 次 RSSI 取样、完成时 RSSI、客户端写入 socket 用时、等待设备响应用时、端到端用时和平均速度，并按约 5% 粒度输出固定字段进度。上传进度表示客户端已写入 socket 的字节数，不等同于设备已完成 flash 写入。
+- raw Web OTA 的设备端接收由 Arduino ESP32 `WebServer` 的 `HTTPRaw` 小 buffer 驱动，写入 flash 期间会自然形成 backpressure。脚本端大分块只改变客户端 `send()` 粒度，不能扩大设备端接收 buffer；现场若看到客户端 Broken pipe 且设备 `/esp32base/api/ota` 的 `lastError` 类似 `client aborted raw upload endpoint=/esp32base/ota/raw bytes=<n> total=<n> progress=<n>%`，优先保持 4096B 默认分块、确认 RSSI/供电/路由器稳定性，再考虑切到 `/esp32base/ota` multipart 或调小上传节奏。
 - 设备端会在 Web OTA 开始前检查下一 OTA 分区容量；固件大于可写 app slot 时直接失败。上传过程中实际写入字节数也不得超过声明总大小。
 - `Update.begin()` 失败时会把底层 Update 错误字符串写入 `lastError()`，便于区分空间、flash 或 Update 状态问题。
 - Web OTA 写入成功后会读取 `esp_ota_get_boot_partition()` 二次确认下一启动分区已经切到本次写入目标；确认失败时返回 OTA 失败，不进入自动重启。
