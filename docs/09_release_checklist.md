@@ -137,7 +137,7 @@
 
 必须通过：
 
-- FS profile 默认启用 WARN 系统诊断日志（实现/API 名称 `Esp32BaseFileLog`）。
+- FS profile 默认启用 ERROR 系统诊断日志（实现/API 名称 `Esp32BaseFileLog`）。
 - 非 FS profile 不强行启用 FileLog。
 - 默认路径为 `/esp32base/logs/system.log`。
 - 默认轮转为 `4 × 32KB`。
@@ -256,7 +256,7 @@
 - `examples/web_logs_ota` 可在自身目录 `pio run`。
 - `examples/net_runtime` 可在自身目录 `pio run`。
 - `examples/app_events_demo` 可在自身目录 `pio run`，并演示 App Events 写入、分页查看、JSON/CSV 和 POST 写入。
-- 所有启用 FS 的示例通过 `ESP32BASE_EB_FILELOG_DEFAULT_MODE=ESP32BASE_FILELOG_MODE_INFO` 将系统诊断日志默认模式设为 INFO。
+- 所有启用 FS 的示例不应通过构建参数覆盖系统诊断日志默认模式；默认保持 ERROR，现场排查时再显式切到 WARN/INFO。
 
 ## 14. Soak 检查
 

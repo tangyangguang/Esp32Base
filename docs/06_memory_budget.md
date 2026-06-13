@@ -68,7 +68,7 @@ ESP32 full_demo 对照构建中，24 route 相比 16 route 让 `g_routes` 增加
 
 ### 3.4 FileLog
 
-系统诊断日志仅在 FS profile 中启用，底层实现/API 名称是 `Esp32BaseFileLog`。默认路径为 `/esp32base/logs/system.log`，默认 `4 × 32KB = 128KB`，低优先级缓存 1KB，flush interval 2s。量产推荐 WARN 模式；示例使用 INFO 默认模式方便观察。Core 和默认 NET 不链接 LittleFS，也不产生 FileLog 静态状态。
+系统诊断日志仅在 FS profile 中启用，底层实现/API 名称是 `Esp32BaseFileLog`。默认路径为 `/esp32base/logs/system.log`，默认 `4 × 32KB = 128KB`，低优先级缓存 1KB，flush interval 2s。默认模式 ERROR，用于让全功能固件在无业务数据、应用事件或显式调试需求时保持很低的 Flash 写入量；现场排查可显式切到 WARN 或 INFO。Core 和默认 NET 不链接 LittleFS，也不产生 FileLog 静态状态。
 
 ### 3.5 App Events
 

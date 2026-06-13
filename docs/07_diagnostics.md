@@ -117,9 +117,9 @@
 
 验证：
 
-- FS profile 默认启用 WARN 系统诊断日志。
+- FS profile 默认启用 ERROR 系统诊断日志。
 - 默认系统诊断日志路径为 `/esp32base/logs/system.log`，轮转段继续使用同名前缀加 `.1`、`.2`、`.3`。
-- 示例中 INFO 系统诊断日志生效。
+- 现场排查时显式切到 INFO 后，INFO 系统诊断日志生效。
 - 默认 `4 × 32KB` 轮转正确。
 - ERROR 仅在 FileLog 模式为 ERROR/WARN/INFO 后写文件；WARN 仅在 WARN/INFO 后写文件；INFO 仅在 INFO 后写文件；DEBUG/VERBOSE 不作为系统诊断日志模式。
 - INFO 使用 `1KB / 2s` 缓存。
@@ -270,12 +270,12 @@ CI 应覆盖核心矩阵，release 前执行完整矩阵。
 - NTP profile 启动时复用系统 boot count 作为 `bootId`，日志输出 `time_boot_session boot_id=N source=boot_count`；NTP 不再为 boot session 额外写启动期 NVS。deep sleep 唤醒沿用上一次非 sleep 重启计数；业务离线事件应同时保存 bootId 和 uptimeSec，不要把 bootId 当作每次 deep sleep 唤醒的唯一会话号。
 - 日志和人工页面中的字节数只显示 KB/MB/B 人性化值；状态/API JSON 可保留 raw `bytes` 并附带 `human`。
 - NTP 对时成功后输出实际时间、当前 uptime、推算 boot wall time，并让 `TimeSnapshot.synced`、Status 页 NTP time 行和日志绝对时间切换共享同一可信同步语义。
-- WiFi 连接、断开、重连 backoff、进入/退出 config portal 都必须有清晰日志。慢速 backoff 阶段的重复 WiFi 重试日志使用 INFO，避免长期离线设备在默认 WARN FileLog 下持续写 Flash；首次故障和短间隔重试仍保留 WARN。
+- WiFi 连接、断开、重连 backoff、进入/退出 config portal 都必须有清晰日志。慢速 backoff 阶段的重复 WiFi 重试日志使用 INFO，避免长期离线设备在默认 ERROR FileLog 下持续写 Flash；首次故障和短间隔重试仍保留 WARN，供现场排查切到 WARN/INFO 时查看。
 - WiFi 初始化安全启动保护必须输出可诊断日志：`wifi_init_safe_boot_guard_set` 表示已在任何 Arduino WiFi 初始化调用前建立 guard，`wifi_init_safe_boot_guarded_reset` 表示检测到连续 WiFi 初始化期 brownout/panic/watchdog/software reset 但仍未达到阈值，`wifi_init_safe_boot_pause` 表示已暂停 WiFi 初始化并进入无 WiFi 诊断状态，`wifi_init_safe_boot_paused` 表示危险复位后仍保持暂停，`wifi_init_safe_boot_auto_resume` 表示后续非危险复位自动恢复一次 WiFi 初始化。触发暂停时必须输出中文供电风险提示，说明疑似 WiFi/RF 启动瞬时电流导致供电跌落，并建议检查电源、USB 线、稳压器余量、接线和板端 VIN/5V-GND 低 ESR 储能电容。
 - WiFi STA 安全启动保护必须输出可诊断日志：`sta_safe_boot_guard_set` 表示已进入 guarded STA 尝试，`sta_safe_boot_guarded_reset` 表示检测到连续 guarded brownout/panic/watchdog 复位但仍未达到阈值，`sta_safe_boot_pause` 表示已暂停凭据并回退 AP 配网，`sta_safe_boot_paused` 表示危险复位后仍保持暂停，`sta_safe_boot_auto_resume` 表示后续非危险复位自动恢复已保存 STA 尝试，`sta_safe_boot_resume` 表示用户重新提交凭据或点击重试后恢复 STA 尝试，`sta_safe_boot_cleared` 表示连接成功、凭据清除或恢复重试后保护状态已清空。
-- 系统诊断日志默认 WARN；量产极简现场记录可通过 Web System 页或 `Esp32BaseFileLog::setMode(Esp32BaseFileLog::ERROR)` 只记录 ERROR；现场调试可切到 INFO，方便通过 System Logs 页面观察。INFO 模式会把启动、联网、OTA、性能提示和维护动作等低优先级日志写入 LittleFS，不做节流，不建议作为长期量产默认。
+- 系统诊断日志默认 ERROR，作为全功能默认固件的低 Flash 磨损策略；现场调试可通过 Web System 页或 `Esp32BaseFileLog::setMode()` 临时切到 WARN/INFO，方便通过 System Logs 页面观察。INFO 模式会把启动、联网、OTA、性能提示和维护动作等低优先级日志写入 LittleFS，不做节流，不建议作为长期量产默认。
 - FileLog 模式变更必须输出 WARN 级审计日志，包含上一次模式和新模式。
-- Serial 日志和 FileLog 必须可独立控制；量产设备可通过 `Esp32BaseLog::setSerialLevel(Esp32BaseLog::NONE)` 关闭串口，同时保持 FileLog WARN/ERROR 或 INFO 正常写入。
+- Serial 日志和 FileLog 必须可独立控制；量产设备可通过 `Esp32BaseLog::setSerialLevel(Esp32BaseLog::NONE)` 关闭串口，同时保持 FileLog ERROR 或显式配置的 WARN/INFO 正常写入。
 - `ESP32BASE_LOG_LEVEL` 是编译期上限；如果编译为 `ESP32BASE_LOG_NONE`，日志宏被移除，FileLog 也不会收到日志。
 - 普通页面 GET 慢请求、认证成功、路由注册和配置审计 skipped/read/deferred 属于 DEBUG 诊断；POST 等操作慢请求和健康慢循环属于 INFO 性能提示；配置实际写入、flush、启动认证加载、WiFi/OTA/NTP/mDNS 状态、格式化、重启和认证失败应保留 INFO/WARN/ERROR。
 - Config audit 可在 `Esp32Base::begin()` 前开启；begin 前开启可覆盖基础库初始化读写，begin 后开启只覆盖后续业务运行期访问。read audit 噪声较大，且多数为 DEBUG。

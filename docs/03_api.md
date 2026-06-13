@@ -135,7 +135,7 @@ public:
 
 ```cpp
 Esp32BaseLog::setSerialLevel(Esp32BaseLog::NONE);
-Esp32BaseFileLog::setMode(Esp32BaseFileLog::WARN);
+Esp32BaseFileLog::setMode(Esp32BaseFileLog::ERROR);
 ```
 
 如果 `ESP32BASE_LOG_LEVEL=ESP32BASE_LOG_NONE`，日志宏会在编译期变为空语句，Serial、sink 和 FileLog 都不会收到日志。
@@ -160,7 +160,7 @@ Esp32BaseFileLog::setMode(Esp32BaseFileLog::WARN);
 
 ### 3.4 Esp32BaseFileLog
 
-`Esp32BaseFileLog` 是系统诊断日志的实现/API 名称，面向开发、维护和运维排障，不是应用业务事件接口。仅在 `ESP32BASE_ENABLE_FILELOG=1` 时可用，依赖 `Esp32BaseFs`。默认文件为 `/esp32base/logs/system.log`，默认 Web 标签为 `System Logs`，`4 × 32KB` 轮转，默认模式 WARN。运行时系统诊断日志模式只支持 OFF、ERROR、WARN、INFO；DEBUG/VERBOSE 不作为文件日志模式。INFO 模式使用 1KB / 2s 缓存，不做节流，会把启动、联网、OTA、性能提示和维护动作等低优先级日志写入 LittleFS，适合调试和短期现场排查，不建议作为长期量产默认。
+`Esp32BaseFileLog` 是系统诊断日志的实现/API 名称，面向开发、维护和运维排障，不是应用业务事件接口。仅在 `ESP32BASE_ENABLE_FILELOG=1` 时可用，依赖 `Esp32BaseFs`。默认文件为 `/esp32base/logs/system.log`，默认 Web 标签为 `System Logs`，`4 × 32KB` 轮转，默认模式 ERROR。默认 ERROR 是低 Flash 磨损策略：全功能固件在没有业务数据、应用事件或显式调试日志需求时，只把错误级系统诊断写入 LittleFS。运行时系统诊断日志模式只支持 OFF、ERROR、WARN、INFO；DEBUG/VERBOSE 不作为文件日志模式。WARN/INFO 适合现场排查时显式开启；INFO 模式使用 1KB / 2s 缓存，不做节流，会把启动、联网、OTA、性能提示和维护动作等低优先级日志写入 LittleFS，不建议作为长期量产默认。
 
 ```cpp
 class Esp32BaseFileLog {
@@ -712,7 +712,7 @@ WiFi 凭证和重连策略：
 - 有已保存凭证但连接失败时，不自动进入 AP/config portal，而是持续重连。
 - 单次 STA 连接尝试有非阻塞超时，默认 `ESP32BASE_WIFI_CONNECT_TIMEOUT_MS=15000`。
 - 前几次重连使用短间隔，连续失败后进入长间隔 backoff；backoff 必须非阻塞，不影响 `handle()`、Watchdog feed 和必要休眠。
-- 初期连接失败和短间隔重试保留 WARN，便于默认系统日志捕获首次故障；进入慢速 backoff 后，重复的连接超时和重试排程日志降为 INFO，避免长期离线设备在默认 WARN FileLog 下持续写 Flash。
+- 初期连接失败和短间隔重试保留 WARN，便于现场排查切到 WARN 时捕获首次故障；进入慢速 backoff 后，重复的连接超时和重试排程日志降为 INFO，避免长期离线设备在默认 ERROR FileLog 下持续写 Flash。
 - WiFi 初始化安全启动保护：`begin()` 在任何 Arduino `WiFi.*` 初始化/模式调用前写入 `eb_wifi.init_guard`。如果下一次启动发现该标记仍存在，且 reset reason 是 `brownout`、`panic`、watchdog 类复位或 WiFi 初始化期常见的 `software` 复位，则累计 `eb_wifi.init_rst`；连续达到 `ESP32BASE_WIFI_SAFE_BOOT_MAX_RESETS` 后设置 `eb_wifi.init_pause=true`，本轮跳过 `WiFi.persistent()`、`WiFi.setSleep()`、`WiFi.mode()`、`WiFi.begin()` 和 AP 初始化，让系统至少进入无 WiFi 诊断状态。
 - `init_pause=true` 时，如果后续启动 reset reason 仍属危险复位，`begin()` 继续跳过 WiFi，并输出中文醒目提醒：疑似 WiFi/RF 启动瞬时电流导致供电跌落，应检查电源、USB 线、稳压器余量和接线，并考虑在板端 VIN/5V 与 GND 间增加低 ESR 储能电容。该日志是供电风险诊断建议，不把电容不足判定为唯一原因，也不会关闭 brownout detector。
 - STA 安全启动保护：有已保存凭证并准备进入 STA 时，库会在 `eb_wifi.sta_guard` 写入 guarded 启动标记；成功连接后清除 `sta_guard`、`sta_rst` 和 `sta_pause`。如果下一次启动发现 guarded 标记仍存在，且本次 reset reason 是 `brownout`、`panic` 或 watchdog 类复位，则累计 `eb_wifi.sta_rst`；连续达到 `ESP32BASE_WIFI_SAFE_BOOT_MAX_RESETS`（默认 3）后设置 `eb_wifi.sta_pause=true`，保留 `ssid/pass`，暂停 STA 并进入 AP/config portal。

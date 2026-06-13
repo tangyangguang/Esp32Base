@@ -49,6 +49,11 @@ checks = [
         "default mode validator does not allow ERROR",
     ),
     (
+        "src/runtime/Esp32BaseFileLog.h",
+        "#define ESP32BASE_EB_FILELOG_DEFAULT_MODE ESP32BASE_FILELOG_MODE_ERROR",
+        "FileLog default mode must be ERROR to minimize default Flash writes",
+    ),
+    (
         "src/runtime/Esp32BaseFileLog.inc",
         "case Esp32BaseFileLog::ERROR: return \"ERROR\";",
         "modeName() does not expose ERROR",
@@ -137,15 +142,20 @@ for path, needle, message in checks:
         errors.append(f"{path}: {message}")
 
 docs = {
-    "docs/03_api.md": "运行时系统诊断日志模式只支持 OFF、ERROR、WARN、INFO",
+    "docs/03_api.md": "默认模式 ERROR",
     "docs/04_web.md": "模式设置只接受 OFF、ERROR、WARN、INFO",
-    "docs/07_diagnostics.md": "ERROR/WARN/INFO",
-    "docs/09_release_checklist.md": "ERROR 仅在 FileLog 模式为 ERROR",
+    "docs/07_diagnostics.md": "FS profile 默认启用 ERROR 系统诊断日志",
+    "docs/09_release_checklist.md": "FS profile 默认启用 ERROR 系统诊断日志",
 }
 
 for path, needle in docs.items():
     if needle not in read(path):
         errors.append(f"{path}: missing documentation marker {needle!r}")
+
+for path in (ROOT / "examples").glob("**/platformio.ini"):
+    text = path.read_text(encoding="utf-8")
+    if "ESP32BASE_EB_FILELOG_DEFAULT_MODE=ESP32BASE_FILELOG_MODE_INFO" in text:
+        errors.append(f"{path.relative_to(ROOT)}: examples must not override FileLog default mode to INFO")
 
 if errors:
     for error in errors:

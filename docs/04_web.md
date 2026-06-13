@@ -237,7 +237,7 @@ System 维护页：
 - 系统诊断日志默认文件为 `/esp32base/logs/system.log`，App Events store 默认文件为 `/esp32base/app-events/events.bin`；二者都位于 `/esp32base/**` 基础库管理命名空间。
 - 启用 App Events 的 profile 显示 `Clear App Events` 危险操作；它只清空 `/esp32base/app-events/events.bin` 应用业务事件日志，不清系统诊断日志、WiFi、Web Auth、NVS 配置或其他 LittleFS 文件。
 - 格式化 FS 是显式 POST 操作；执行前 flush 系统诊断日志，成功后重新 mount FS、重新加载 FileLog 模式，并在 App Events 启用时重新创建 `/esp32base/app-events/events.bin`；成功提示应明确显示在 System 页面，同时输出 WARN 级维护日志记录请求、format/mount/FileLog reload/App Events recreate 结果。重启请求同样输出 WARN 级维护日志。
-- 普通 `GET` 页面慢请求只输出 DEBUG；`POST` 等操作慢请求输出 INFO，默认 WARN 系统日志不记录，现场排查时可切到 INFO 查看。
+- 普通 `GET` 页面慢请求只输出 DEBUG；`POST` 等操作慢请求输出 INFO，默认 ERROR 系统日志不记录，现场排查时可切到 INFO 查看。
 - API 层仍建议要求 POST，不使用 GET 触发重启。
 - 内置危险 POST 包括 WiFi 保存/清除、App Config 保存、Hostname 保存、Auth 保存、重启、System 操作、System Logs clear、Web OTA upload/done；跨站 `Origin` 或 `Referer` 会被拒绝。
 - 业务自定义 POST 或危险操作应优先调用 `Esp32BaseWeb::checkPostAllowed(context)`，不要只做 `checkAuth()`；即使业务误把危险 handler 注册为 `METHOD_ANY`，该 helper 也会拒绝非 POST 请求。
@@ -643,7 +643,7 @@ Arduino `WebServer` 是同步模型。
 
 - 基础库不对每个 HTTP 请求强制下发 `setNoDelay(true)`；实机回归显示该设置在弱链路下会降低 512 B chunked 响应吞吐。
 - `sendChunk()` / `sendProgmem()` 共用 512 B 静态 chunk buffer；响应头仍由 Arduino `WebServer` 生成，正文 data chunk 由基础库无堆分配 writer 写出标准 chunked 帧，避免每个 chunk 触发 `WebServer::sendContent()` 内部 `malloc/free`，同时避免 PROGMEM CSS/JS 被拆成大量 128 B 小 chunk。
-- `sendResponseContent()` 只在发送前检查客户端是否已经断开，发送后不再用 `client().connected()` 判定失败；`endResponse()` 在响应未标记断开时总是尝试发送最终 0-length chunk，避免同步 WebServer 下 curl/浏览器等待 chunked 响应结束直到超时。客户端主动刷新、断网或取消下载导致的 `response_client_disconnected` 记录为 INFO，不进入默认 WARN FileLog。
+- `sendResponseContent()` 只在发送前检查客户端是否已经断开，发送后不再用 `client().connected()` 判定失败；`endResponse()` 在响应未标记断开时总是尝试发送最终 0-length chunk，避免同步 WebServer 下 curl/浏览器等待 chunked 响应结束直到超时。客户端主动刷新、断网或取消下载导致的 `response_client_disconnected` 记录为 INFO，不进入默认 ERROR FileLog。
 - 长 HTML/JSON/CSV 响应在每个 data chunk 前后喂 watchdog；业务长页面仍处在同步 `WebServer::handleClient()` 内时，不再只依赖 `Esp32Base::handle()` 返回后的统一喂狗。
 - 小 JSON 如果已经完整生成，使用 `sendJson()` 一次性返回固定 `Content-Length`；只有需要流式拼接或响应体较大时才使用 `beginResponse()` / `sendChunk()` / `endResponse()`。
 - `sendHeader()` 不再把基础 CSS 内联进每个 HTML 页面，而是引用 `/esp32base/ui.css`；该资源使用固定 `Content-Length` 和 `Cache-Control: public, max-age=86400`，减少业务页面重复下载 9KB 级样式内容。业务 `setHeadExtraCallback()` 只作用于应用页面和自定义页面，内置 `/esp32base` 页面不承载业务 CSS 字节。
