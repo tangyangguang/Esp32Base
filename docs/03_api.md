@@ -1021,7 +1021,7 @@ Route 缓冲机制：
 - 带 `data-eb-ajax` 的 helper 表单会在浏览器支持 `fetch` 时携带 `X-Esp32Base-Ajax: 1` 和 `Accept: application/json` 局部提交；服务端用 `isAjaxRequest()` 判断后返回 `sendAjaxReplace(targetId, html, noticeTitle)` 或 `sendAjaxError(code, error)`。未携带 AJAX header 时，同一 POST endpoint 仍应保留 `POST -> 303 -> GET` fallback。
 - `UiTone` 仅表达语义色：neutral、ok、warn、danger、info。业务项目不得把危险、警告、成功语义当作普通装饰色复用。
 - 导航会给当前匹配项输出 `active` class；匹配规则为 path 完全相等，或当前路径以 `path + "/"` 开头，多个匹配时选择最长 path。`SYSTEM_NAV_SECTION` 下 WiFi/Auth/OTA 二级页会把底部 System 入口标记为 active；App Config 页面在启用时使用自己的底部入口标记 active。
-- `/esp32base` Status 页是只读设备体检页，采用诊断优先结构：不额外显示和相邻详细区重复的 `System Overview` 预览块，而是按 Device、Network、Runtime Health、Storage & Logs、Firmware & OTA、Hardware、Partition Table 排序展示 hostname、固件/profile、uptime/boot count、WiFi/IP/RSSI、STA/AP/eFuse MAC、heap、max alloc、Watchdog lifetime/trip resets、NTP time、last reset/wake、FS 容量摘要/FileLog/OTA headroom 和运行时分区表；Status 页不做 LittleFS 全量文件树扫描、文件可读性检查或 top files 统计，File details 入口并入 FS 行，完整 File inventory 只放在 `/esp32base/fs` 详情页。FileLog level/current/used/limit 合并为一行子指标，页面容量值只显示 KB/MB/B 人性化格式，`OTA headroom` 表示 `target slot - current sketch`，Max OTA upload 才是上传硬上限。
+- `/esp32base` Status 页是只读设备体检页，采用诊断优先结构：不额外显示和相邻详细区重复的 `System Overview` 预览块，而是按 Device、Network、Runtime Health、Storage & Logs、Firmware & OTA、Hardware 排序展示 hostname、固件/profile、uptime/boot count、WiFi/IP/RSSI、STA/AP/eFuse MAC、heap、max alloc、Watchdog lifetime/trip resets、NTP time、last reset/wake、FS 容量摘要、FileLog 配置摘要和 OTA slot 摘要；Status 页默认不做 LittleFS 全量文件树扫描、文件可读性检查、top files 统计、FileLog 段文件大小统计、当前镜像 size 校验、运行 ELF SHA 计算或运行时分区表枚举，File details 入口并入 FS 行，完整 File inventory 只放在 `/esp32base/fs` 详情页。FileLog level/files/limit 合并为一行子指标，页面容量值只显示 KB/MB/B 人性化格式，Max OTA upload 是下一 OTA slot 的上传硬上限。低频 `Running ELF SHA256` 和 Partition Table 只在 `/esp32base?details=1` 显示。
 - `/esp32base/logs` 和 `/esp32base/logs/raw` 是只读系统诊断日志查看入口，只读取已经落盘的 FileLog segment 快照；GET 读取不得主动 `flush()`、创建、清空、重建文件或改变 FileLog fault 状态。INFO 缓存中的新日志按常规 flush interval 落盘，清空/格式化/重启等维护副作用必须通过 POST 路径。
 - `/esp32base/fs` 是启用 FS profile 时注册的 LittleFS 诊断页，默认只读，显示 Summary、Top 10 最大文件和最多 128 项文件树；文件树展示 Path、Type、Size、Last modified、Status 和 Action。Last modified 来自 LittleFS 最后修改时间，不是创建时间，时间明显不可信时显示 `unknown`；Status 展示 `ok`、`unreadable`、`filelog`、`app events store` 或 `esp32base managed` 等维护标签。文件树提供单文件下载；当文件声明有大小但首块无法读取时，Status 显示 `unreadable`，不再给出会生成空文件的下载按钮；当 `FS used` 明显大于可见文件合计时提示内部/历史占用异常。
 - `/esp32base/fs/download?path=/file` 下载一个已存在且可读取的文件，复用 Basic Auth 和路径校验，目录、缺失文件和非法路径不会下载；如果文件声明有大小但无法读取首块，返回 `500 File read failed`。
@@ -1297,6 +1297,7 @@ public:
     static size_t totalBytes();
     static size_t usedBytes();
     static size_t freeBytes();
+    static bool storageInfo(size_t& total, size_t& used);
 };
 
 class Esp32BaseHealth {
@@ -1312,7 +1313,7 @@ public:
 
 `format()` 会格式化 LittleFS 分区并清除已有文件；基础库默认 `begin()` 不自动格式化，避免误删业务数据。示例工程可在确认是首次调试或可丢弃文件内容时显式调用。
 
-FS 未成功 `begin()` 时，文件和目录操作返回失败，容量查询返回 0，不隐式格式化文件系统。
+FS 未成功 `begin()` 时，文件和目录操作返回失败，容量查询返回 0，`storageInfo(total, used)` 返回 false 并把输出置 0，不隐式格式化文件系统。需要同时读取总容量和已用容量时优先使用 `storageInfo(total, used)`；它用一次底层 LittleFS 信息查询返回两个值，避免状态页或业务摘要分别调用 `totalBytes()` / `usedBytes()` 时重复查询。
 
 `listDirInfo()` 遍历目录时返回文件名、大小、目录标记和 `modifiedEpoch`。`modifiedEpoch` 来自 Arduino `File::getLastWrite()` / LittleFS 最后修改时间，不是创建时间；只有文件写入时设备系统时间可信时才代表真实日期。`listDir()` 是保留给只需要 name/size/isDir 的轻量回调，会复用同一枚举路径。目录遍历在每次 callback 后显式关闭当前 `File`，避免长目录遍历时积累底层句柄。
 

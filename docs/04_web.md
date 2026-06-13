@@ -246,10 +246,10 @@ Status 页：
 
 - `/esp32base` 默认作为只读设备体检页，不承载配置保存和危险操作。
 - 第一屏不再额外做 `System Overview` 预览块，避免和相邻详细分区重复；常用信息直接按 Device、Network、Runtime Health、Storage & Logs、Firmware & OTA、Hardware 排序。
-- Status 页不做 LittleFS 全量文件树扫描、文件可读性检查或 top files 统计；Storage & Logs 只显示 O(1) 容量摘要和 FileLog 已知段大小，完整 FS inventory 位于 `/esp32base/fs`。
+- Status 页不做 LittleFS 全量文件树扫描、文件可读性检查或 top files 统计；Storage & Logs 只显示一次 LittleFS 信息查询得到的 O(1) 容量摘要和 FileLog 配置摘要，不打开 FileLog 段文件统计已用大小，完整 FS inventory 位于 `/esp32base/fs`。
 - 同一数据不应在相邻分区同名同值重复展示；需要高频查看的信息应前置为正式分区，而不是再做一层摘要。
-- Partition Table 作为最后的低频详细表。
-- 系统诊断日志（`Esp32BaseFileLog`）属于 Storage & Logs，不作为健康摘要项；日志级别、当前文件大小和路径应拆开显示，避免把 WARN/INFO 等日志级别误读为健康状态。
+- Partition Table 属于低频详细信息，只在 `/esp32base?details=1` 显示。
+- 系统诊断日志（`Esp32BaseFileLog`）属于 Storage & Logs，不作为健康摘要项；状态页默认显示日志级别、轮转文件数、容量上限和路径，不打开段文件统计当前大小，避免慢 FS 文件打开拖慢首屏。
 
 App Config 页面：
 
@@ -321,15 +321,15 @@ App Events 页面：
 
 系统首页：
 
-- `/esp32base` 是只读设备体检页，采用诊断优先结构：按 Device、Network、Runtime Health、Storage & Logs、Firmware & OTA、Hardware、Partition Table 展示调试信息，不额外显示相邻重复的总览预览块。
+- `/esp32base` 是只读设备体检页，采用诊断优先结构：默认按 Device、Network、Runtime Health、Storage & Logs、Firmware & OTA、Hardware 展示调试信息，不额外显示相邻重复的总览预览块；低频分区表和运行 ELF SHA 位于 `/esp32base?details=1`。
 - Device 显示名称、hostname、固件、profile、uptime 和 boot count；Network 显示 WiFi/IP/RSSI、power save、STA MAC 和 AP MAC。
 - Runtime Health 显示 heap free/min/max alloc/total、Watchdog、NTP time、last reset 和 last wake；heap 与 Watchdog 的多值信息使用紧凑子指标展示，避免逗号串联造成阅读困难。
-- Storage & Logs 显示 FS used/free/total、Details 入口、文件/目录数量、已统计文件大小、other/overhead、FileLog enabled/disabled/unavailable/write fault、日志级别、当前文件大小、日志总占用/上限和路径；File details 入口并入 FS 行，FileLog level/current/used/limit 合并为一行子指标，避免右侧卡片明显高于 Runtime Health；Top 文件列表只放在 `/esp32base/fs` 详情页，避免状态页被低频诊断明细撑高；Hardware 显示芯片型号、revision、CPU、SDK、Flash、PSRAM 和 eFuse MAC。
+- Storage & Logs 显示 FS used/free/total、Details 入口、FileLog enabled/disabled/unavailable/write fault、日志级别、轮转文件数、容量上限和路径；File details 入口并入 FS 行，FileLog level/files/limit 合并为一行子指标，避免状态页打开日志段文件；文件/目录数量、已统计文件大小、other/overhead 和 Top 文件列表只放在 `/esp32base/fs` 详情页，避免状态页被低频诊断明细撑高；Hardware 显示芯片型号、revision、CPU、SDK、Flash、PSRAM 和 eFuse MAC。
 - `/esp32base/fs` 默认是只读 LittleFS 详情页，显示 Summary、Top 10 最大文件和最多 128 项文件树；文件树展示 Path、Type、Size、Last modified、Status 和 Action。Last modified 来自 LittleFS 最后修改时间，不是创建时间；当时间明显不可信时显示 `unknown`。Status 独立显示 `ok`、`unreadable`、`filelog`、`app events store` 或 `esp32base managed` 等维护标签，Action 只保留下载和管理模式删除。文件树提供单文件下载；当文件声明有大小但首块无法读取时，Status 显示 `unreadable`，下载路由返回 `500 File read failed`，避免浏览器保存 0 字节伪成功文件；当 FS used 明显大于可见文件合计时显示内部/历史占用告警，提示删除可见文件不一定释放全部空间。业务侧如果使用 `Esp32BaseFs` 读写文件，也必须检查返回值；逻辑大小存在不代表内容块一定可读。
 - `/esp32base/fs?manage=1` 增加单文件删除和受限上传，不提供目录删除、批量删除、编辑、重命名、移动或任意路径输入；删除必须通过 `POST /esp32base/fs/delete -> 303 -> GET`，格式化仍只在 System 页危险操作区。上传流程是“选择已有设备目录 + 选择本地文件”，上传保留本地文件名，不创建目录，可选择任何已有目录；同名文件由 `/esp32base/fs/check` 触发浏览器确认后再带 `overwrite=1` 上传；路径过长会拒绝，不截断，目录选择器会提示过长目录不可选。覆盖上传先写同目录唯一临时文件并在校验后替换目标；断电遗留的临时文件不会阻塞下一次上传，可由管理入口显式删除。没有 multipart 文件的上传 POST 会返回 `No upload received`；上传完成会校验最终文件大小和末端可读性；上传到 FileLog 路径前会先 flush，上传结束后重新加载 FileLog 运行态，reload 失败会作为上传错误返回。App Events 启用时，`/esp32base/app-events/events.bin` 显示为 `app events store`；其他 `/esp32base/**` 文件显示为 `esp32base managed`。这些标签只作为基础库命名空间提醒，不作为通用上传或删除禁区，便于测试和维护实验；上传或删除后会重新加载 App Events 运行态，reload 失败会作为维护错误返回；如果最终替换已经修改 App Events store 或 FileLog 文件但随后失败，也会先刷新对应运行态再返回上传错误。不可读文件在管理模式仍显示删除入口，因为删除只依赖路径存在且是文件，不要求内容块可读。底层删除失败后会尝试截断文件为 0；删除或清理成功后若 FileLog 之前处于 `write fault`，会重新加载当前 FileLog 模式以便恢复写入。
-- Firmware & OTA 显示当前固件大小、运行 app slot、下一 OTA slot、Max OTA upload、OTA headroom、rollback 状态，以及仅在存在错误时显示的 Last OTA error；`OTA headroom` 表示 `target slot - current sketch`，Max OTA upload 才是上传硬上限。
+- Firmware & OTA 默认显示运行 app slot、下一 OTA slot、Max OTA upload、rollback 状态，以及仅在存在错误时显示的 Last OTA error；默认状态页不调用当前镜像 size 校验，也不计算 `OTA headroom`。Max OTA upload 是下一 OTA slot 的上传硬上限。
 - 启用 Watchdog 时显示 `enabled, lifetime resets N, trip resets M` 或 invalid baseline 和 trip reset time；Reset Trip 保存时间使用和页面 NTP time 行一致的可信 epoch 判断，无可用时间则显示 `unknown (time unavailable)`。
-- Partition Table 使用运行时分区表展示 Name、Type、SubType、Offset、Size、Role；Role 用于标识 running app、next OTA、app data、NVS config、OTA state、coredump 等。
+- `/esp32base?details=1` 使用运行时分区表展示 Name、Type、SubType、Offset、Size、Role；Role 用于标识 running app、next OTA、app data、NVS config、OTA state、coredump 等。
 - 未启用的模块不显示对应行，避免非 FULL profile 引入额外依赖。
 
 页面风格：
@@ -446,7 +446,7 @@ Esp32BaseWeb::addPage("/config", "配置", handleConfigPage);
 - `SYSTEM_NAV_SECTION` 会在页面底部以小字系统入口与 `Free heap`、`Up`、`RSSI` 同行展示；窄屏下系统入口和状态摘要可自然换行，避免遮挡和横向滚动。
 - Footer bar 可在 System 页面运行时切换 Off、Status only、Links + status；关闭底部横条时系统页面仍可通过直达 URL 访问。
 - 基础库页面复用同一套导航框架，业务页和系统页保持一致入口结构。
-- `/esp32base` 系统页按 Device、Network、Runtime Health、Storage & Logs、Firmware & OTA、Hardware、Partition Table 展示设备调试信息，包括 STA/AP/eFuse MAC、OTA headroom、last reset/wake 和运行时分区表。
+- `/esp32base` 系统页按 Device、Network、Runtime Health、Storage & Logs、Firmware & OTA、Hardware 展示设备调试信息，包括 STA/AP/eFuse MAC、last reset/wake 和 OTA slot 摘要；运行 ELF SHA 与运行时分区表只在 `/esp32base?details=1` 显示。
 - `/esp32base/api/status` 保留 `resetReason` / `wakeReason` 原始字段，并提供 `resetReasonText` / `wakeReasonText` 中文说明字段；`wifi.rssi` 返回当前 WiFi RSSI，未连接时为 `0`。
 - `/esp32base/api/hostname` 返回 `currentHostname`、`defaultHostname`、`storedHostname`、`storedValid`、`restartRequired` 和校验规则；POST 参数 `hostname` 必须符合 1-32 位小写字母、数字和短横线规则，不能首尾短横线，不能包含 `.local`。
 

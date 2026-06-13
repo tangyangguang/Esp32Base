@@ -136,7 +136,7 @@ Web 发送 buffer：
 - Web 内部已拆为多 `.cpp` 模块，但运行时仍共享同一个 `WebContext` 和 512 B chunk buffer；拆分只改变维护边界，不引入每请求堆分配、页面对象层级或额外响应 buffer。
 - 不再为每页面下发 App Config 专用 CSS（~700 B），只在 App Config 页注入；其他 6 个内置页和业务页首屏均受益。
 - `setHeadExtraCallback()` 的业务 head 注入不会作用到 `/esp32base` 内置页面，业务项目的大段应用 CSS 不会增加 Status、System Logs、System 等内置页首屏字节数。
-- `/esp32base` Status 页不做 LittleFS 全量文件树扫描，只读取 used/free/total 和 FileLog 已知段大小；完整 inventory、top files 和可读性检查保留在 `/esp32base/fs`。
+- `/esp32base` Status 页不做 LittleFS 全量文件树扫描，只用一次 LittleFS 信息查询读取 used/free/total，并只显示 FileLog 配置摘要；完整 inventory、top files、FileLog 段文件大小和可读性检查保留在 `/esp32base/fs` 或 `/esp32base/logs` 等低频详情页。
 - 应用静态资源使用 `ESP32BASE_WEB_MAX_STATIC_ASSETS` 固定表保存 path、content type、数据指针、长度和缓存策略，默认 8 项；响应按固定 `Content-Length` 直接写客户端，不占用 512 B chunk buffer，也不消耗应用 route 表容量。
 
 ## 5. PSRAM

@@ -284,6 +284,10 @@ const char* partitionRole(const esp_partition_t* partition, const esp_partition_
     return "-";
 }
 
+bool statusDetailsMode() {
+    return g_server.hasArg("details") && g_server.arg("details") != "0";
+}
+
 void sendPartitionTable() {
     const esp_partition_t* running = esp_ota_get_running_partition();
     const esp_partition_t* boot = esp_ota_get_boot_partition();
@@ -315,6 +319,12 @@ void sendPartitionTable() {
     }
     esp_partition_iterator_release(it);
     sendChunk("</table></div></section>");
+}
+
+void sendFirmwareOtaDetails() {
+    char runningElfSha[65] = "";
+    esp_ota_get_app_elf_sha256(runningElfSha, sizeof(runningElfSha));
+    sendInfoRow("Running ELF SHA256", runningElfSha[0] ? runningElfSha : "unavailable");
 }
 
 void handleStatus() {
@@ -518,25 +528,21 @@ void handleRoot() {
     char minHeap[48];
     char maxAllocHeap[48];
     char totalHeap[48];
-    char sketch[48];
     char otaTargetSize[48] = "unavailable";
-    char otaHeadroom[48] = "unknown";
     char runningSlot[80] = "unknown";
     char bootSlot[80] = "unknown";
-    char runningElfSha[65] = "";
     char otaTargetSlot[80] = "unavailable";
     char flash[48];
+    const bool details = statusDetailsMode();
     Esp32BaseLog::formatUptime(Esp32BaseSystem::uptimeMs(), uptime, sizeof(uptime));
     formatReadableBytes(Esp32BaseSystem::freeHeap(), freeHeap, sizeof(freeHeap));
     formatReadableBytes(Esp32BaseSystem::minFreeHeap(), minHeap, sizeof(minHeap));
     formatReadableBytes(ESP.getMaxAllocHeap(), maxAllocHeap, sizeof(maxAllocHeap));
     formatReadableBytes(Esp32BaseSystem::totalHeap(), totalHeap, sizeof(totalHeap));
-    formatReadableBytes(ESP.getSketchSize(), sketch, sizeof(sketch));
     formatReadableBytes(Esp32BaseSystem::flashSize(), flash, sizeof(flash));
     const esp_partition_t* runningPartition = esp_ota_get_running_partition();
     const esp_partition_t* bootPartition = esp_ota_get_boot_partition();
     const esp_partition_t* nextPartition = esp_ota_get_next_update_partition(nullptr);
-    esp_ota_get_app_elf_sha256(runningElfSha, sizeof(runningElfSha));
     if (runningPartition) {
         char runningSize[48];
         formatReadableBytes(runningPartition->size, runningSize, sizeof(runningSize));
@@ -550,11 +556,6 @@ void handleRoot() {
     if (nextPartition) {
         formatReadableBytes(nextPartition->size, otaTargetSize, sizeof(otaTargetSize));
         snprintf(otaTargetSlot, sizeof(otaTargetSlot), "%s / %s", nextPartition->label, otaTargetSize);
-        if (nextPartition->size >= ESP.getSketchSize()) {
-            formatReadableBytes(nextPartition->size - ESP.getSketchSize(), otaHeadroom, sizeof(otaHeadroom));
-        } else {
-            strlcpy(otaHeadroom, "0 B", sizeof(otaHeadroom));
-        }
     }
     sendChunk("<div class='statusgrid'>");
 
@@ -672,20 +673,13 @@ void handleRoot() {
     sendInfoRowStart("System logs");
     sendFileLogRuntimeStateTag();
     if (fileLogHasRuntimeDetails()) {
-        char sizeBuf[48];
-        formatReadableBytes(Esp32BaseFileLog::size(), sizeBuf, sizeof(sizeBuf));
-        uint64_t logUsedBytes = 0;
-        for (uint8_t i = 0; i < Esp32BaseFileLog::rotateFiles(); ++i) {
-            logUsedBytes += Esp32BaseFileLog::segmentSize(i);
-        }
-        char logUsed[48];
         char logLimit[48];
-        formatReadableBytes(logUsedBytes, logUsed, sizeof(logUsed));
+        char rotateFiles[12];
         formatReadableBytes(static_cast<uint64_t>(Esp32BaseFileLog::maxBytes()) * Esp32BaseFileLog::rotateFiles(), logLimit, sizeof(logLimit));
+        snprintf(rotateFiles, sizeof(rotateFiles), "%u", static_cast<unsigned>(Esp32BaseFileLog::rotateFiles()));
         sendSubmetricsStart();
         sendSubmetric("Log level", Esp32BaseFileLog::modeName());
-        sendSubmetric("Current file", sizeBuf);
-        sendSubmetric("Used", logUsed);
+        sendSubmetric("Files", rotateFiles);
         sendSubmetric("Limit", logLimit);
         sendSubmetricsEnd();
     }
@@ -698,22 +692,22 @@ void handleRoot() {
 #endif
 
     sendStatusSectionStart("Firmware & OTA");
-    sendInfoRow("Current firmware", sketch);
     sendInfoRow("Running slot", runningSlot);
     sendInfoRow("Boot slot", bootSlot);
     sendInfoRow("OTA target slot", otaTargetSlot);
-    sendInfoRow("Running ELF SHA256", runningElfSha[0] ? runningElfSha : "unavailable");
     sendInfoRow("Max OTA upload", otaTargetSize);
-    sendInfoRowStart("OTA headroom");
-    sendEscapedHtmlChunk(otaHeadroom);
-    sendChunk("<br><span class='info'>target slot - current sketch</span>");
-    sendInfoRowEnd();
 #if ESP32BASE_ENABLE_OTA
     sendInfoRow("Rollback", Esp32BaseOta::isRollbackPossible() ? "possible" : "not possible");
     if (Esp32BaseOta::lastError()[0]) {
         sendInfoRow("Last OTA error", Esp32BaseOta::lastError());
     }
 #endif
+    sendInfoRowStart("OTA & partition details");
+    sendChunk(details ? "<a class='btnlink secondary' href='/esp32base'>Hide OTA &amp; partition details</a>" : "<a class='btnlink info' href='/esp32base?details=1'>Show OTA &amp; partition details</a>");
+    sendInfoRowEnd();
+    if (details) {
+        sendFirmwareOtaDetails();
+    }
     sendStatusSectionEnd();
 
     char mac[18];
@@ -744,7 +738,9 @@ void handleRoot() {
         sendChunk("</section>");
     }
 
-    sendPartitionTable();
+    if (details) {
+        sendPartitionTable();
+    }
     Esp32BaseWeb::sendFooter();
 }
 

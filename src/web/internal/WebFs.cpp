@@ -295,7 +295,11 @@ bool fsManageMode() {
 }
 
 bool fsInternalUsageHigh(const FsScan& scan) {
-    const uint64_t used = Esp32BaseFs::usedBytes();
+    size_t total = 0;
+    size_t used = 0;
+    if (!Esp32BaseFs::storageInfo(total, used)) {
+        return false;
+    }
     if (used <= scan.listedSize) {
         return false;
     }
@@ -673,10 +677,12 @@ void sendFsSummaryTable(const FsScan& scan) {
     char dirs[16];
     char listed[48];
     char other[48];
-    const size_t fsUsed = Esp32BaseFs::usedBytes();
-    const size_t fsFree = Esp32BaseFs::freeBytes();
+    size_t fsTotal = 0;
+    size_t fsUsed = 0;
+    const bool infoOk = Esp32BaseFs::storageInfo(fsTotal, fsUsed);
+    const size_t fsFree = infoOk && fsTotal > fsUsed ? fsTotal - fsUsed : 0;
     formatReadableBytes(fsUsed, used, sizeof(used));
-    formatReadableBytes(Esp32BaseFs::totalBytes(), total, sizeof(total));
+    formatReadableBytes(fsTotal, total, sizeof(total));
     formatReadableBytes(fsFree, freeBytes, sizeof(freeBytes));
     fsFormatCount(scan.files, files, sizeof(files));
     fsFormatCount(scan.dirs, dirs, sizeof(dirs));
@@ -685,7 +691,8 @@ void sendFsSummaryTable(const FsScan& scan) {
     formatReadableBytes(overheadBytes, other, sizeof(other));
 
     sendChunk("<table class='fsummary'><tr><th>FS</th><td>");
-    sendStatusTag(fsFree == 0 ? Esp32BaseWeb::UI_WARN : Esp32BaseWeb::UI_OK, fsFree == 0 ? "full" : "ready");
+    sendStatusTag(!infoOk || fsFree == 0 ? Esp32BaseWeb::UI_WARN : Esp32BaseWeb::UI_OK,
+                  !infoOk ? "info failed" : (fsFree == 0 ? "full" : "ready"));
     sendChunk("</td>");
     sendFsSummaryCell("Used", used);
     sendFsSummaryCell("Free", freeBytes);
@@ -702,13 +709,16 @@ void sendFsSummaryRows(const FsScan& scan) {
     char used[48];
     char total[48];
     char freeBytes[48];
-    const size_t fsUsed = Esp32BaseFs::usedBytes();
-    const size_t fsFree = Esp32BaseFs::freeBytes();
+    size_t fsTotal = 0;
+    size_t fsUsed = 0;
+    const bool infoOk = Esp32BaseFs::storageInfo(fsTotal, fsUsed);
+    const size_t fsFree = infoOk && fsTotal > fsUsed ? fsTotal - fsUsed : 0;
     formatReadableBytes(fsUsed, used, sizeof(used));
-    formatReadableBytes(Esp32BaseFs::totalBytes(), total, sizeof(total));
+    formatReadableBytes(fsTotal, total, sizeof(total));
     formatReadableBytes(fsFree, freeBytes, sizeof(freeBytes));
     sendInfoRowStart("FS");
-    sendStatusTag(fsFree == 0 ? Esp32BaseWeb::UI_WARN : Esp32BaseWeb::UI_OK, fsFree == 0 ? "full" : "ready");
+    sendStatusTag(!infoOk || fsFree == 0 ? Esp32BaseWeb::UI_WARN : Esp32BaseWeb::UI_OK,
+                  !infoOk ? "info failed" : (fsFree == 0 ? "full" : "ready"));
     sendChunk("<a class='btnlink compact' href='/esp32base/fs'>Details</a>");
     sendSubmetricsStart();
     sendSubmetric("Used", used);
@@ -725,13 +735,16 @@ void sendFsQuickSummaryRows() {
     char used[48];
     char total[48];
     char freeBytes[48];
-    const size_t fsUsed = Esp32BaseFs::usedBytes();
-    const size_t fsFree = Esp32BaseFs::freeBytes();
+    size_t fsTotal = 0;
+    size_t fsUsed = 0;
+    const bool infoOk = Esp32BaseFs::storageInfo(fsTotal, fsUsed);
+    const size_t fsFree = infoOk && fsTotal > fsUsed ? fsTotal - fsUsed : 0;
     formatReadableBytes(fsUsed, used, sizeof(used));
-    formatReadableBytes(Esp32BaseFs::totalBytes(), total, sizeof(total));
+    formatReadableBytes(fsTotal, total, sizeof(total));
     formatReadableBytes(fsFree, freeBytes, sizeof(freeBytes));
     sendInfoRowStart("FS");
-    sendStatusTag(fsFree == 0 ? Esp32BaseWeb::UI_WARN : Esp32BaseWeb::UI_OK, fsFree == 0 ? "full" : "ready");
+    sendStatusTag(!infoOk || fsFree == 0 ? Esp32BaseWeb::UI_WARN : Esp32BaseWeb::UI_OK,
+                  !infoOk ? "info failed" : (fsFree == 0 ? "full" : "ready"));
     sendChunk("<a class='btnlink compact' href='/esp32base/fs'>Details</a>");
     sendSubmetricsStart();
     sendSubmetric("Used", used);

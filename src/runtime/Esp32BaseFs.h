@@ -50,4 +50,5 @@ public:
     static size_t totalBytes();
     static size_t usedBytes();
     static size_t freeBytes();
+    static bool storageInfo(size_t& total, size_t& used);
 };

@@ -7,6 +7,9 @@
 #include "internal/Esp32BaseLongOperation.h"
 
 #include <LittleFS.h>
+extern "C" {
+#include <esp_littlefs.h>
+}
 
 #include <string.h>
 #include <time.h>
@@ -496,17 +499,33 @@ bool Esp32BaseFs::rmdir(const char* path) {
 }
 
 size_t Esp32BaseFs::totalBytes() {
-    return g_fsReady ? LittleFS.totalBytes() : 0;
+    size_t total = 0;
+    size_t used = 0;
+    return storageInfo(total, used) ? total : 0;
 }
 
 size_t Esp32BaseFs::usedBytes() {
-    return g_fsReady ? LittleFS.usedBytes() : 0;
+    size_t total = 0;
+    size_t used = 0;
+    return storageInfo(total, used) ? used : 0;
 }
 
 size_t Esp32BaseFs::freeBytes() {
-    const size_t total = totalBytes();
-    const size_t used = usedBytes();
+    size_t total = 0;
+    size_t used = 0;
+    if (!storageInfo(total, used)) {
+        return 0;
+    }
     return total > used ? total - used : 0;
+}
+
+bool Esp32BaseFs::storageInfo(size_t& total, size_t& used) {
+    total = 0;
+    used = 0;
+    if (!g_fsReady) {
+        return false;
+    }
+    return esp_littlefs_info("spiffs", &total, &used) == ESP_OK;
 }
 
 #endif
