@@ -193,6 +193,7 @@ void sendFileLogRuntimeNotice();
 #endif
 void sendFooterBarModeOption(const char* value, const char* label, Esp32BaseWeb::FooterBarMode mode);
 bool footerBarModeFromArg(const String& raw, Esp32BaseWeb::FooterBarMode& mode);
+void notifyToolsFormatFsSuccess(bool mountSuccess, bool fileLogReloadSuccess);
 #if ESP32BASE_ENABLE_WATCHDOG
 void sendWatchdogPanel();
 #endif

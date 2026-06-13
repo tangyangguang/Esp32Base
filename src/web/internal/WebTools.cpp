@@ -375,6 +375,9 @@ void handleToolsFormatFsPost() {
                     mounted ? "success" : "failed",
                     fileLogReloaded ? "success" : "skipped",
                     appEventsRecreated ? "success" : "skipped");
+    if (formatted) {
+        notifyToolsFormatFsSuccess(mounted, fileLogReloaded);
+    }
     if (formatted && mounted
 #if ESP32BASE_ENABLE_APP_EVENTS
         && appEventsRecreated

@@ -40,6 +40,7 @@ class Esp32BaseWeb {
 public:
     static constexpr const char* EVENT_READY = "web.ready";
     static constexpr const char* EVENT_STOPPED = "web.stopped";
+    static constexpr const char* EVENT_TOOLS_FORMAT_FS_SUCCESS = "web.tools.format_fs.success";
 
     enum Method : uint8_t {
         METHOD_UNKNOWN,
@@ -101,6 +102,15 @@ public:
         uint32_t total;
     };
 
+    struct FormatFsResult {
+        const char* source;
+        bool formatSuccess;
+        bool mountSuccess;
+        bool fileLogReloadSuccess;
+    };
+
+    using AfterFormatFsCallback = void (*)(const FormatFsResult& result, void* user);
+
 #if ESP32BASE_WEB_NATIVE_TEST
     struct NativeTestHeader {
         std::string name;
@@ -152,6 +162,8 @@ public:
     static const char* footerBarModeName();
     static bool setBuiltinLabel(BuiltinPage page, const char* label);
     static void setHeadExtraCallback(Handler handler);
+    static void setAfterFormatFsCallback(AfterFormatFsCallback cb, void* user = nullptr);
+    static void clearAfterFormatFsCallback();
 
     static Method currentMethod();
     static bool isMethod(Method method);
@@ -218,5 +230,6 @@ public:
     static bool nativeTestDispatch(const char* path, Method method);
     static const NativeTestResponse& nativeTestResponse();
     static const char* nativeTestResponseHeader(const char* name);
+    static void nativeTestNotifyToolsFormatFsSuccess(bool mountSuccess, bool fileLogReloadSuccess);
 #endif
 };

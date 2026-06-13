@@ -4,9 +4,54 @@
 #define ESP32BASE_WEB_NATIVE_TEST 0
 #endif
 
-#if ESP32BASE_WEB_NATIVE_TEST
-
 #include "Esp32BaseWeb.h"
+
+#if ESP32BASE_ENABLE_BUS
+#include "../runtime/Esp32BaseBus.h"
+#endif
+
+#include <stdio.h>
+
+namespace {
+Esp32BaseWeb::AfterFormatFsCallback g_afterFormatFsCallback = nullptr;
+void* g_afterFormatFsCallbackUser = nullptr;
+
+void dispatchToolsFormatFsSuccess(bool mountSuccess, bool fileLogReloadSuccess, bool publishEvent) {
+    Esp32BaseWeb::FormatFsResult result = {
+        "tools",
+        true,
+        mountSuccess,
+        fileLogReloadSuccess
+    };
+    if (g_afterFormatFsCallback) {
+        g_afterFormatFsCallback(result, g_afterFormatFsCallbackUser);
+    }
+#if ESP32BASE_ENABLE_BUS
+    if (publishEvent) {
+        char data[112];
+        snprintf(data,
+                 sizeof(data),
+                 "{\"source\":\"tools\",\"formatSuccess\":true,\"mountSuccess\":%s,\"fileLogReloadSuccess\":%s}",
+                 mountSuccess ? "true" : "false",
+                 fileLogReloadSuccess ? "true" : "false");
+        Esp32BaseBus::publish(Esp32BaseWeb::EVENT_TOOLS_FORMAT_FS_SUCCESS, data);
+    }
+#else
+    (void)publishEvent;
+#endif
+}
+}
+
+void Esp32BaseWeb::setAfterFormatFsCallback(AfterFormatFsCallback cb, void* user) {
+    g_afterFormatFsCallback = cb;
+    g_afterFormatFsCallbackUser = cb ? user : nullptr;
+}
+
+void Esp32BaseWeb::clearAfterFormatFsCallback() {
+    setAfterFormatFsCallback(nullptr, nullptr);
+}
+
+#if ESP32BASE_WEB_NATIVE_TEST
 
 #include <algorithm>
 #include <cctype>
@@ -699,6 +744,7 @@ void Esp32BaseWeb::endJson() {
 }
 
 void Esp32BaseWeb::nativeTestReset() {
+    clearAfterFormatFsCallback();
     NativeTestState& state = nativeState();
     state.method = METHOD_UNKNOWN;
     state.path.clear();
@@ -827,11 +873,21 @@ const char* Esp32BaseWeb::nativeTestResponseHeader(const char* name) {
     return empty;
 }
 
+void Esp32BaseWeb::nativeTestNotifyToolsFormatFsSuccess(bool mountSuccess, bool fileLogReloadSuccess) {
+    dispatchToolsFormatFsSuccess(mountSuccess, fileLogReloadSuccess, false);
+}
+
 #elif ESP32BASE_ENABLE_WEB
 
 #include "internal/WebInternal.h"
 
 using namespace esp32base_web;
+
+namespace esp32base_web {
+void notifyToolsFormatFsSuccess(bool mountSuccess, bool fileLogReloadSuccess) {
+    dispatchToolsFormatFsSuccess(mountSuccess, fileLogReloadSuccess, true);
+}
+}
 
 bool Esp32BaseWeb::begin() {
     if (g_webReady) {

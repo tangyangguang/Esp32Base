@@ -43,6 +43,20 @@ static void routedHandler() {
     Esp32BaseWeb::sendText(200, "routed");
 }
 
+struct AfterFormatState {
+    uint8_t calls;
+    Esp32BaseWeb::FormatFsResult last;
+    void* userSeen;
+};
+
+static void afterFormatCallback(const Esp32BaseWeb::FormatFsResult& result, void* user) {
+    AfterFormatState* state = static_cast<AfterFormatState*>(user);
+    TEST_ASSERT_NOT_NULL(state);
+    state->calls++;
+    state->last = result;
+    state->userSeen = user;
+}
+
 void test_native_static_asset_serves_cached_content() {
     Esp32BaseWeb::nativeTestReset();
     static const uint8_t asset[] = "body{color:#123}";
@@ -172,6 +186,26 @@ void test_native_dispatch_runs_registered_route_without_losing_request_inputs() 
     TEST_ASSERT_EQUAL_STRING("routed", Esp32BaseWeb::nativeTestResponse().body.c_str());
 }
 
+void test_native_after_format_callback_reports_tools_success_details() {
+    Esp32BaseWeb::nativeTestReset();
+    AfterFormatState state = {};
+
+    Esp32BaseWeb::setAfterFormatFsCallback(afterFormatCallback, &state);
+    Esp32BaseWeb::nativeTestNotifyToolsFormatFsSuccess(true, false);
+
+    TEST_ASSERT_EQUAL_UINT8(1, state.calls);
+    TEST_ASSERT_EQUAL_PTR(&state, state.userSeen);
+    TEST_ASSERT_EQUAL_STRING("tools", state.last.source);
+    TEST_ASSERT_TRUE(state.last.formatSuccess);
+    TEST_ASSERT_TRUE(state.last.mountSuccess);
+    TEST_ASSERT_FALSE(state.last.fileLogReloadSuccess);
+
+    Esp32BaseWeb::clearAfterFormatFsCallback();
+    Esp32BaseWeb::nativeTestNotifyToolsFormatFsSuccess(true, true);
+
+    TEST_ASSERT_EQUAL_UINT8(1, state.calls);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_native_request_inputs_and_json_response);
@@ -182,5 +216,6 @@ int main(int, char**) {
     RUN_TEST(test_native_static_asset_serves_cached_content);
     RUN_TEST(test_native_static_asset_respects_auth_when_required);
     RUN_TEST(test_native_static_asset_rejects_invalid_registration);
+    RUN_TEST(test_native_after_format_callback_reports_tools_success_details);
     return UNITY_END();
 }

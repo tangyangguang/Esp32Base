@@ -150,6 +150,7 @@
 - FileLog 模式为 OFF 时，System Logs 和 System 页必须醒目显示 `disabled`，并说明新日志不会写入。
 - FileLog OFF 后 System Logs 页面仍能查看已有历史 segment。
 - `GET /esp32base/logs` 和 `GET /esp32base/logs/raw` 必须只读，不得主动 `flush()`、创建、清空、重建或改变 FileLog fault 状态；需要写入/清理/格式化的维护动作必须走 POST。
+- System 页格式化 LittleFS 成功后必须触发 after-format 回调/事件，信息包含 `source=tools`、`formatSuccess`、`mountSuccess`、`fileLogReloadSuccess`；格式化失败不得触发。
 - System 页格式化 LittleFS 成功并重新 mount 后，启用 App Events 时必须重新创建 `/esp32base/app-events/events.bin`，后续 append/read 不得沿用旧 head/count。
 - `setSerialLevel(NONE)` 后 Serial 不输出，但 FileLog 仍按当前模式写入。
 - `setRuntimeLevel(NONE)` 后 Serial 和 FileLog 都停止。
@@ -165,6 +166,7 @@
 - 任何启动路径都不得自动格式化 LittleFS。
 - 首次挂载失败不 halt。
 - 格式化 LittleFS 只能来自明确维护动作，例如 Web System 页 POST 或显式调用 `Esp32BaseFs::format()`。
+- Web System 页格式化 LittleFS 只清 LittleFS，不清 WiFi、Web Auth、业务 namespace 或任何 NVS；业务统计、文件索引或缓存同步清理由应用 after-format 回调/事件自行处理。
 - 读写删文件正常。
 - 二进制读写正常。
 - append 正常。

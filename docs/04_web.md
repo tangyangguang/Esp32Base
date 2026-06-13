@@ -202,7 +202,7 @@ System:
 - `POST /esp32base/tools/logs-clear`，System 页面主入口，成功后回到 System 页面
 - `POST /esp32base/tools/app-events-clear`，仅 `ESP32BASE_ENABLE_APP_EVENTS=1`，清空事件日志；System 页面危险操作入口，成功后回到 System 页面
 - `POST /esp32base/tools/watchdog-trip-reset`
-- `POST /esp32base/tools/format-fs`
+- `POST /esp32base/tools/format-fs`，仅 `ESP32BASE_ENABLE_FS=1`，只格式化 LittleFS；格式化成功后通知 after-format 回调/事件，不清任何 NVS
 - `POST /esp32base/api/restart`
 
 OTA 路由只在启用 OTA 且认证条件满足时注册。
@@ -232,11 +232,11 @@ System 维护页：
 - `/esp32base/api/restart` 是脚本兼容入口，返回纯文本并立即进入重启流程，不提供 JSON 错误模型。
 - 重启和格式化等危险操作必须分组显示，避免按钮与下一项标题贴得太近。
 - 启用 Watchdog 的 profile 显示 Watchdog lifetime/trip 小计维护；当 `wdt_trip_base` 大于 lifetime 时显示 `invalid baseline`，Reset Watchdog Trip 写入并回读确认 `eb_sys.wdt_trip_base` 和 `eb_sys.wdt_trip_time`，不清 `eb_sys.wdt_cnt`。
-- 启用 FS 的 profile 显示 `Format LittleFS`，该操作会删除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth 或 NVS 配置。
+- 启用 FS 的 profile 显示 `Format LittleFS`，该操作会删除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth、业务 namespace 或任何 NVS 配置。
 - 启用 FileLog 的 profile 显示系统诊断日志模式设置、运行态和 `Clear system logs`；模式设置只接受 OFF、ERROR、WARN、INFO，保存后立即生效并写入 `eb_log.mode`，清空日志只接受 POST，表单使用 `confirm()` 和 `once(form)`，成功后回到 System 页面显示结果。运行态为 `write fault` 时使用 WARN notice，表示配置模式仍开启，但 FileLog 因 FS 写入故障被运行期保护停写；已有日志仍可能可读，不应显示成 `disabled`。运行态为 `unavailable` 时使用 WARN notice，表示配置模式开启但 FS/init 前置条件未满足。运行态为 `disabled` 时使用 INFO notice，明确 FileLog 模式为 OFF，新日志不会写入。
 - 系统诊断日志默认文件为 `/esp32base/logs/system.log`，App Events store 默认文件为 `/esp32base/app-events/events.bin`；二者都位于 `/esp32base/**` 基础库管理命名空间。
 - 启用 App Events 的 profile 显示 `Clear App Events` 危险操作；它只清空 `/esp32base/app-events/events.bin` 应用业务事件日志，不清系统诊断日志、WiFi、Web Auth、NVS 配置或其他 LittleFS 文件。
-- 格式化 FS 是显式 POST 操作；执行前 flush 系统诊断日志，成功后重新 mount FS、重新加载 FileLog 模式，并在 App Events 启用时重新创建 `/esp32base/app-events/events.bin`；成功提示应明确显示在 System 页面，同时输出 WARN 级维护日志记录请求、format/mount/FileLog reload/App Events recreate 结果。重启请求同样输出 WARN 级维护日志。
+- 格式化 FS 是显式 POST 操作；执行前 flush 系统诊断日志，格式化成功后重新 mount FS、重新加载 FileLog 模式，并在 App Events 启用时重新创建 `/esp32base/app-events/events.bin`；成功提示应明确显示在 System 页面，同时输出 WARN 级维护日志记录请求、format/mount/FileLog reload/App Events recreate 结果。只有 `Esp32BaseFs::format()` 成功时才触发 `Esp32BaseWeb::setAfterFormatFsCallback()` 注册的回调和 `EVENT_TOOLS_FORMAT_FS_SUCCESS` 事件；格式化失败、启动挂载失败和其他 FS 维护动作不触发。回调结果包含 `source=tools`、`formatSuccess`、`mountSuccess`、`fileLogReloadSuccess`；业务如需同步清业务统计、文件索引或运行时缓存，应在该回调/事件里自行处理。重启请求同样输出 WARN 级维护日志。
 - 普通 `GET` 页面慢请求只输出 DEBUG；`POST` 等操作慢请求输出 INFO，默认 ERROR 系统日志不记录，现场排查时可切到 INFO 查看。
 - API 层仍建议要求 POST，不使用 GET 触发重启。
 - 内置危险 POST 包括 WiFi 保存/清除、App Config 保存、Hostname 保存、Auth 保存、重启、System 操作、System Logs clear、Web OTA upload/done；跨站 `Origin` 或 `Referer` 会被拒绝。

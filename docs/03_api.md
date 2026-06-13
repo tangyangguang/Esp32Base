@@ -820,6 +820,7 @@ class Esp32BaseWeb {
 public:
     static constexpr const char* EVENT_READY = "web.ready";
     static constexpr const char* EVENT_STOPPED = "web.stopped";
+    static constexpr const char* EVENT_TOOLS_FORMAT_FS_SUCCESS = "web.tools.format_fs.success";
 
     enum Method : uint8_t {
         METHOD_UNKNOWN,
@@ -881,6 +882,15 @@ public:
         uint32_t total;
     };
 
+    struct FormatFsResult {
+        const char* source;
+        bool formatSuccess;
+        bool mountSuccess;
+        bool fileLogReloadSuccess;
+    };
+
+    using AfterFormatFsCallback = void (*)(const FormatFsResult& result, void* user);
+
     // Only available when ESP32BASE_WEB_NATIVE_TEST=1 in a non-ESP32 native test build.
     struct NativeTestHeader {
         std::string name;
@@ -930,6 +940,8 @@ public:
     static const char* footerBarModeName();
     static bool setBuiltinLabel(BuiltinPage page, const char* label);
     static void setHeadExtraCallback(Handler handler);
+    static void setAfterFormatFsCallback(AfterFormatFsCallback cb, void* user = nullptr);
+    static void clearAfterFormatFsCallback();
 
     static Method currentMethod();
     static bool isMethod(Method method);
@@ -996,6 +1008,7 @@ public:
     static bool nativeTestDispatch(const char* path, Method method);
     static const NativeTestResponse& nativeTestResponse();
     static const char* nativeTestResponseHeader(const char* name);
+    static void nativeTestNotifyToolsFormatFsSuccess(bool mountSuccess, bool fileLogReloadSuccess);
 };
 ```
 
@@ -1017,6 +1030,7 @@ Route 缓冲机制：
 - `FooterBarMode` 控制 `sendFooter()` 的底部横条输出：`FOOTER_BAR_OFF` 不显示，`FOOTER_BAR_STATUS_ONLY` 只显示运行摘要，`FOOTER_BAR_FULL` 显示系统入口和运行摘要。默认 `FOOTER_BAR_FULL`，System 页面保存后写入 `eb_ui.footer_mode` 并立即影响后续页面输出。
 - `setBuiltinLabel()` 覆盖内置导航标签，可用于中文本地化；系统工具页统一使用 `BUILTIN_TOOLS`，不提供旧 Reboot 历史别名。
 - `setHeadExtraCallback()` 设置额外 head 输出回调；`sendHeader()` 在默认 `WEB_HEAD` 后、`</head><body>` 和顶部导航前调用它，业务项目可在这里输出 `<style>`，避免页面刷新时先显示基础库默认导航样式。该回调不会注入 `/esp32base` 及其子路径的内置页面，避免业务 CSS 增加内置页体积。
+- `setAfterFormatFsCallback()` 注册内置 System 页 `POST /esp32base/tools/format-fs` 的 after-format 回调；只有显式工具页格式化 LittleFS 成功后触发，格式化失败不触发，启动挂载失败路径不会触发。`FormatFsResult.source` 固定为 `tools`，`formatSuccess` 固定为 true，`mountSuccess` 和 `fileLogReloadSuccess` 反映格式化后的重新挂载和 FileLog reload 结果。启用 Bus 时同一动作还会发布 `EVENT_TOOLS_FORMAT_FS_SUCCESS`，data 为包含 `source`、`formatSuccess`、`mountSuccess`、`fileLogReloadSuccess` 的短 JSON。基础库不会默认清任何业务 NVS；业务如需同步清统计、文件索引或运行时缓存，应在该回调或事件订阅里自行处理。
 - Web UI helper 只负责轻量 HTML 结构和统一样式，不接管业务数据模型：`sendPageTitle()` 输出页面标题区，`beginPanel()` / `endPanel()` 输出内容分组，`sendNotice()` / `sendResultNotice()` 输出横向状态反馈，`beginMetricGrid()` / `sendMetric()` / `endMetricGrid()` 输出状态和统计摘要，`sendInfoRowCompact*()` 输出紧凑信息行和单动作，`sendInfoRowInlineEdit()` 输出单字段行内编辑，`sendInfoRowDialogForm()` 输出 1-3 字段小表单弹层，`sendPagination()` 输出页码型分页、每页条数和跳页表单。分页 `perPage=0` 时默认 10 条，每页选项为 10、15、20、30、50。`sendInfoRowCompactLink()`、`sendInfoRowCompactForm()`、行内编辑和弹层入口都会按 `UiTone` 输出轻量按钮；页面级明确保存/执行按钮仍可直接使用普通 submit 按钮。
 - 带 `data-eb-ajax` 的 helper 表单会在浏览器支持 `fetch` 时携带 `X-Esp32Base-Ajax: 1` 和 `Accept: application/json` 局部提交；服务端用 `isAjaxRequest()` 判断后返回 `sendAjaxReplace(targetId, html, noticeTitle)` 或 `sendAjaxError(code, error)`。未携带 AJAX header 时，同一 POST endpoint 仍应保留 `POST -> 303 -> GET` fallback。
 - `UiTone` 仅表达语义色：neutral、ok、warn、danger、info。业务项目不得把危险、警告、成功语义当作普通装饰色复用。
@@ -1028,7 +1042,7 @@ Route 缓冲机制：
 - `/esp32base/fs?manage=1` 进入单文件删除和受限上传管理模式；`POST /esp32base/fs/delete` 只接受一个已存在文件路径，复用 Basic Auth、同源检查和 `POST -> 303 -> GET`，不提供目录删除、批量删除、编辑或任意路径输入。不可读文件仍允许删除，便于清理损坏文件；删除不以文件内容可读为前提。App Events 启用时，`/esp32base/app-events/events.bin` 是基础库内部 store，FS 管理页会显示 `app events store` 作为提醒；普通上传或删除仍允许用于测试和维护实验，上传或删除后会重新加载 App Events 运行态。
 - `/esp32base/fs/check?dir=/data&name=records.bin` 是上传前检查接口，复用 Basic Auth，按“已有目录 + 本地文件名”计算目标路径，返回目标是否存在、是否是目录以及是否允许上传；路径拼接如果超过内部路径上限会直接拒绝，不截断成另一个目标。
 - `POST /esp32base/fs/upload` 是 multipart 上传接口，复用 Basic Auth 和同源检查；上传保留本地文件名，可以写入任何已有目录，不创建目录。目标文件存在时必须传 `overwrite=1` 才会覆盖；上传先写同目录唯一临时文件，校验大小和末端可读后再替换目标，避免上传中断时先清空旧文件；如果目标路径过长导致临时路径无法构造，上传会被拒绝。断电遗留的临时文件不会阻塞下一次上传，可由管理入口显式删除。上传到 FileLog 路径前会先 flush，上传结束后重新加载 FileLog 运行态；上传到 `/esp32base/app-events/events.bin` 后会重新加载 App Events 运行态。没有 multipart 文件的 POST 会返回 `No upload received`，不会复用上一笔上传状态；FileLog 或 App Events reload 失败会返回上传错误；如果最终替换已经修改这些运行态敏感文件但随后失败，也会先刷新对应运行态。其他 `/esp32base/**` 路径只在文件树中标记为 `esp32base managed` 作为提醒，不作为通用上传或删除禁区，便于测试和维护实验。上传完成后会校验最终文件大小和末端可读性；上传只负责写入 LittleFS，不校验业务数据语义、索引、NVS 状态或运行时缓存。
-- `/esp32base/tools` System 页承载低频维护入口和操作，App Config 启用时作为首个入口显示，后面是 WiFi Setup、Web Auth、Firmware OTA、File system 直达入口、hostname 保存、Watchdog trip reset、重启设备；启用 FS 的 profile 还提供手动格式化 LittleFS 操作，会清除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth 或 NVS 配置。格式化后会重新 mount FS、reload FileLog，并在 App Events 启用时重新创建 `/esp32base/app-events/events.bin`。
+- `/esp32base/tools` System 页承载低频维护入口和操作，App Config 启用时作为首个入口显示，后面是 WiFi Setup、Web Auth、Firmware OTA、File system 直达入口、hostname 保存、Watchdog trip reset、重启设备；启用 FS 的 profile 还提供手动格式化 LittleFS 操作，会清除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth、业务 namespace 或任何 NVS 配置。格式化成功后会重新 mount FS、reload FileLog，并在 App Events 启用时重新创建 `/esp32base/app-events/events.bin`；业务如需同步清业务统计、文件索引或缓存，应注册 `setAfterFormatFsCallback()` 或订阅 `EVENT_TOOLS_FORMAT_FS_SUCCESS` 自行处理。
 - `/esp32base/auth` 是内置认证管理页面，受当前 Basic Auth 保护，提交成功后新账号密码立即生效。
 - Web Auth 认证优先级为：已保存认证 > 应用默认认证。未设置应用默认认证且没有已保存认证时，Web 服务不会启动。
 - 内置 Web 不提供首次登录强制改密；量产或可被他人访问的设备必须在业务启动时调用 `setDefaultAuth()`，或通过业务流程先保存认证。

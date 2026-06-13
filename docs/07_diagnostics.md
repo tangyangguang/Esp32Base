@@ -143,6 +143,7 @@
 - Web FS 覆盖上传中断或写入失败时，旧目标文件不应在上传阶段被先清空；失败后最多遗留可删除的同目录临时文件。断电遗留的临时文件不应阻塞下一次上传。
 - 双 header 损坏、文件尺寸错误、写后校验失败等结构性问题进入 fault，不自动清空；单条记录 `crc16` 错误应跳过、暴露 `record_skipped`，完整扫描后 `count()` 应收敛到可读取记录数，并继续允许 append。
 - clear 幂等，清空后可继续写入；业务恢复出厂或清空业务记录时可显式调用。
+- System 页格式化 LittleFS 成功后必须通知 Web after-format 回调/事件，payload 包含 `source=tools`、`formatSuccess`、`mountSuccess` 和 `fileLogReloadSuccess`；格式化失败、启动挂载失败和其他 FS 维护动作不得触发。基础库不自动清业务 NVS，业务统计、文件索引或缓存需要应用在回调/事件里自行处理。
 - System 页格式化 LittleFS 成功并重新 mount 后，App Events store 必须重新创建并清理旧运行态；FS 管理页上传、覆盖或删除 `/esp32base/app-events/events.bin` 后必须重新加载 App Events 运行态。
 - Web 页面支持等级、时间类型、来源、类型、原因和关键词筛选；JSON API 和 CSV 导出必须和页面使用同一筛选语义，并避免筛选请求为了 total 重复全量扫描；超长或非法的精确筛选参数必须返回 `400 invalid_filter`，不得截断后匹配。
 - `epochSec` 或当前 boot 可解析时显示真实时间；不可解析时显示 `uptime N ms` 和 `boot N`，不得伪造日期。
