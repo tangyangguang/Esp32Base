@@ -417,6 +417,32 @@ def _send_multipart(connection, parsed, firmware_path, firmware_size, headers, c
     stats["client_send_finished_at"] = time.time()
 
 
+def _configure_raw_socket(connection):
+    sock = getattr(connection, "sock", None)
+    if not sock:
+        return
+    try:
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+    except OSError:
+        pass
+
+
+def _send_raw_aligned(connection, data, stats):
+    carry = stats.get("raw_send_carry", b"")
+    if carry:
+        data = carry + data
+        stats["raw_send_carry"] = b""
+    offset = 0
+    total = (len(data) // HTTP_RAW_BUFLEN) * HTTP_RAW_BUFLEN
+    while offset < total:
+        end = min(offset + HTTP_RAW_BUFLEN, total)
+        connection.send(data[offset:end])
+        stats["raw_socket_writes"] = int(stats.get("raw_socket_writes", 0)) + 1
+        offset = end
+    if total < len(data):
+        stats["raw_send_carry"] = data[total:]
+
+
 def _send_raw(connection, parsed, firmware_path, firmware_size, headers, chunk_size, stats):
     padded_size = _raw_padded_size(firmware_size)
     padding_size = padded_size - firmware_size
@@ -428,6 +454,7 @@ def _send_raw(connection, parsed, firmware_path, firmware_size, headers, chunk_s
     for key, value in request_headers.items():
         connection.putheader(key, value)
     connection.endheaders()
+    _configure_raw_socket(connection)
 
     stats["sent_bytes"] = 0
     stats["upload_started_at"] = time.time()
@@ -437,7 +464,7 @@ def _send_raw(connection, parsed, firmware_path, firmware_size, headers, chunk_s
             chunk = fh.read(chunk_size)
             if not chunk:
                 break
-            connection.send(chunk)
+            _send_raw_aligned(connection, chunk, stats)
             stats["sent_bytes"] += len(chunk)
             sent = stats["sent_bytes"]
             percent = _upload_percent(sent, firmware_size)
@@ -447,8 +474,10 @@ def _send_raw(connection, parsed, firmware_path, firmware_size, headers, chunk_s
                 stats["last_percent"] = percent
                 next_percent += 5
     if padding_size:
-        connection.send(b"\0" * padding_size)
+        _send_raw_aligned(connection, b"\0" * padding_size, stats)
         stats["raw_padding_bytes"] = padding_size
+    if stats.get("raw_send_carry"):
+        raise RuntimeError("raw upload internal alignment error")
     stats["client_send_finished_at"] = time.time()
 
 

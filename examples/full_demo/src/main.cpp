@@ -82,6 +82,12 @@ void onAppConfigSave(const Esp32BaseAppConfig::SaveSummary& summary) {
 #define ESP32BASE_FULL_DEMO_SELFTEST 0
 #endif
 
+#if defined(ESP32BASE_FULL_DEMO_WIFI_SSID) && defined(ESP32BASE_FULL_DEMO_WIFI_PASS)
+#define ESP32BASE_FULL_DEMO_HAS_WIFI_CREDENTIALS 1
+#else
+#define ESP32BASE_FULL_DEMO_HAS_WIFI_CREDENTIALS 0
+#endif
+
 #if ESP32BASE_FULL_DEMO_SELFTEST
 static bool g_selfTestDone = false;
 
@@ -888,6 +894,9 @@ void setup() {
     Esp32BaseAppConfig::addDecimal({"advanced", APP_NS, APP_KEY_MIN_RAW, "Raw minimum", INT32_MIN, INT32_MIN, INT32_MIN, 1, 0, nullptr,
                                     "Scale 0 INT32_MIN parser boundary.", false, nullptr});
     Esp32Base::begin();
+#if ESP32BASE_FULL_DEMO_HAS_WIFI_CREDENTIALS
+    Esp32BaseWiFi::connect(ESP32BASE_FULL_DEMO_WIFI_SSID, ESP32BASE_FULL_DEMO_WIFI_PASS, true);
+#endif
 #if ESP32BASE_ENABLE_FILELOG
     if (!Esp32BaseFileLog::isEnabled()) {
 #if ESP32BASE_ENABLE_FS
