@@ -68,7 +68,7 @@ pio run -t webota
 - `esp32base_webota_timeout`：默认 `120` 秒，用于预检和普通请求。
 - `esp32base_webota_upload_timeout`：默认 `90` 秒，用于实际固件上传，弱网或大固件可单独调大。
 - `esp32base_webota_chunk_size`：默认 `65536` 字节；脚本默认 raw endpoint 使用 65536 字节分块，在 ESP32_Faucet 1.3MB FULL 固件实测中比 multipart 64KB 略快。弱网、RSSI 低或仍出现早期 Broken pipe 时可显式降到 32768/16384 后复测。
-- `esp32base_webota_preflight`：默认 `true`，上传前通过状态接口快速校验连接和认证，避免错误密码时传完整包。
+- `esp32base_webota_preflight`：默认 `true`，上传前通过状态接口快速校验连接和认证；预检还会比较本地固件大小和设备下一 OTA 分区容量，超出时不会发送固件 body，避免错误密码或固件过大时传完整包。
 - `esp32base_webota_status_path`：默认 `/esp32base/api/ota`，用于预检。
 
 配置优先级为当前 `platformio.ini` 环境的 `custom_esp32base_webota_*` 配置、`[esp32base_webota]` 公共段、环境变量。环境变量名使用配置项大写形式，例如 `ESP32BASE_WEBOTA_HOST`。
@@ -81,7 +81,8 @@ pio run -t webota
 - `webota` 命令行日志会显示友好容量单位、开始时间、结束时间、上传前 3 次 RSSI 取样、完成时 RSSI、客户端写入 socket 用时、等待设备响应用时、端到端用时和平均速度，并按约 5% 粒度输出固定字段进度。上传进度表示客户端已写入 socket 的字节数，不等同于设备已完成 flash 写入。
 - raw Web OTA 的设备端接收由 Arduino ESP32 `WebServer` 的 `HTTPRaw` 小 buffer 驱动，写入 flash 期间会自然形成 backpressure。脚本端大分块只改变客户端 `send()` 粒度，不能扩大设备端接收 buffer。为避免 `HTTPRaw` 最后一包短读等待超时，脚本会把 raw HTTP `Content-Length` 补齐到 Arduino raw buffer 的整数倍，并用 `X-Firmware-Size` 声明真实固件大小；设备端只写入真实固件字节，忽略传输 padding。现场若看到客户端 Broken pipe 且设备 `/esp32base/api/ota` 的 `lastError` 类似 `client aborted raw upload endpoint=/esp32base/ota/raw bytes=<n> total=<n> progress=<n>%`，优先在 raw endpoint 下把 `esp32base_webota_chunk_size` 调到 32768/16384 后复测；需要对照表单路径时可临时设为 `/esp32base/ota` multipart。
 - raw padding 依赖当前 Arduino ESP32 `WebServer` 的 `HTTP_RAW_BUFLEN=1436`。该值和 raw parser 行为已按源码核对 Arduino ESP32 `2.0.16`、`2.0.17`、`3.0.0`、`3.0.7`、`3.3.0`；其中 `2.0.x`/`3.0.x` 仍固定按 raw buffer 读取，`3.3.0` 已按剩余长度读取，继续 padding 仍安全。升级 Arduino ESP32 core 或替换 HTTP server 实现时，必须重新核对该常量和 raw parser 是否仍按固定 buffer 读取；如果常量变化，需要同步更新 `scripts/esp32base_webota.py` 的 `HTTP_RAW_BUFLEN`、相关检查脚本和本节说明，否则 raw 默认 64 KB 分块可能重新出现最后短包等待或 raw upload aborted。本项目暂不在上传脚本中动态解析 Arduino core 头文件，避免为该边界引入额外运行时复杂度。该风险只影响 raw endpoint；浏览器表单上传和显式 `/esp32base/ota` multipart 路径不依赖 `HTTPRaw`，仍可作为远程 Web OTA 后备方式。raw 上传失败不会完成 OTA boot 分区切换，设备应保持原固件运行；若 Web 服务仍可访问，可直接改用表单或 multipart 路径远程恢复。
-- 设备端会在 Web OTA 开始前检查下一 OTA 分区容量；固件大于可写 app slot 时直接失败。上传过程中实际写入字节数也不得超过声明总大小。
+- 浏览器 Web OTA 页面会在选择文件后立即显示固件大小，并在发送前用当前 next OTA slot 容量检查所选文件；固件过大时直接在页面提示，不发送上传 body。命令行 `webota` 预检也会读取 `/esp32base/api/ota` 的 `nextUpdatePartition.size.bytes` 并在本地固件超出时停止。
+- 设备端会在 Web OTA 开始前检查 `X-Firmware-Size` 声明的固件大小和下一 OTA 分区容量；固件大于可写 app slot 时直接失败。上传过程中实际写入字节数也不得超过声明总大小。
 - `Update.begin()` 失败时会把底层 Update 错误字符串写入 `lastError()`，便于区分空间、flash 或 Update 状态问题。
 - Web OTA 写入成功后会读取 `esp_ota_get_boot_partition()` 二次确认下一启动分区已经切到本次写入目标；确认失败时返回 OTA 失败，不进入自动重启。
 - `/esp32base/api/ota` 返回当前 running partition、configured boot partition、next update partition、app partition 列表、镜像 SHA256、版本、OTA state、本次上传目标、实际计算 SHA256 和最后错误，便于判断设备当前运行的是哪个槽位和哪个固件。

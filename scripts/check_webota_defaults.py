@@ -38,6 +38,14 @@ def main() -> int:
         errors.append("scripts/esp32base_webota.py: raw upload Content-Length must include padding")
     if "connection.send(b\"\\0\" * padding_size)" not in webota:
         errors.append("scripts/esp32base_webota.py: raw upload must send zero padding bytes")
+    if "_preflight(parsed, headers, timeout, verify_tls, firmware_size)" not in webota:
+        errors.append("scripts/esp32base_webota.py: preflight must receive local firmware size")
+    if "_validate_remote_ota_capacity(payload, firmware_size)" not in webota:
+        errors.append("scripts/esp32base_webota.py: preflight must reject firmware larger than next OTA partition")
+    if "Web OTA blocked before upload" not in webota:
+        errors.append("scripts/esp32base_webota.py: oversize preflight error must clearly say upload was not sent")
+    if "预检还会比较本地固件大小和设备下一 OTA 分区容量，超出时不会发送固件 body" not in ota_docs:
+        errors.append("docs/05_ota.md: webota preflight must document size check before sending firmware body")
     if "raw padding 依赖当前 Arduino ESP32 `WebServer` 的 `HTTP_RAW_BUFLEN=1436`" not in ota_docs:
         errors.append("docs/05_ota.md: raw padding must document Arduino HTTP_RAW_BUFLEN maintenance constraint")
     if "本项目暂不在上传脚本中动态解析 Arduino core 头文件" not in ota_docs:

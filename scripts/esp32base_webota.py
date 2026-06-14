@@ -15,6 +15,10 @@ Import("env")
 HTTP_RAW_BUFLEN = 1436
 
 
+class WebOtaPreflightError(RuntimeError):
+    pass
+
+
 def _config_get(section, key, default=None):
     config = env.GetProjectConfig()
     try:
@@ -222,6 +226,31 @@ def _read_error_body(response):
     return text.strip()
 
 
+def _json_bytes_value(value):
+    if isinstance(value, dict):
+        raw = value.get("bytes")
+        return raw if isinstance(raw, int) else None
+    return value if isinstance(value, int) else None
+
+
+def _validate_remote_ota_capacity(payload, firmware_size):
+    if not isinstance(payload, dict):
+        return
+    partition = payload.get("nextUpdatePartition")
+    if not isinstance(partition, dict):
+        return
+    partition_size = _json_bytes_value(partition.get("size"))
+    if not isinstance(partition_size, int) or partition_size <= 0:
+        return
+    if firmware_size <= partition_size:
+        return
+    label = partition.get("label") if isinstance(partition.get("label"), str) else "next OTA"
+    raise WebOtaPreflightError(
+        "Web OTA blocked before upload: firmware %s exceeds %s slot %s"
+        % (_format_bytes(firmware_size), label, _format_bytes(partition_size))
+    )
+
+
 def _request_json(parsed, path, headers, timeout, verify_tls):
     conn = _open_connection(parsed, timeout, verify_tls)
     try:
@@ -316,7 +345,7 @@ def _print_progress(percent, sent, total, elapsed):
     )
 
 
-def _preflight(parsed, headers, timeout, verify_tls):
+def _preflight(parsed, headers, timeout, verify_tls, firmware_size):
     if not _as_bool(_option("esp32base_webota_preflight", "true"), True):
         return
     conn = _open_connection(parsed, timeout, verify_tls)
@@ -324,13 +353,25 @@ def _preflight(parsed, headers, timeout, verify_tls):
         status_path = _status_path(parsed.path or "/")
         conn.request("GET", status_path, headers={"Authorization": headers["Authorization"]})
         response = conn.getresponse()
-        body_error = _read_error_body(response)
+        data = response.read()
     finally:
         conn.close()
+    text = data.decode("utf-8", "replace") if data else ""
+    body_error = text.strip()
+    payload = None
+    if text:
+        try:
+            parsed_body = json.loads(text)
+            if isinstance(parsed_body, dict):
+                payload = parsed_body
+                body_error = parsed_body.get("error") or parsed_body.get("message") or body_error
+        except Exception:
+            pass
     if response.status in (401, 403):
         raise PermissionError("HTTP %d %s" % (response.status, body_error))
     if response.status < 200 or response.status >= 300:
         raise RuntimeError("HTTP %d: %s" % (response.status, body_error))
+    _validate_remote_ota_capacity(payload, firmware_size)
 
 
 def _send_multipart(connection, parsed, firmware_path, firmware_size, headers, chunk_size, stats):
@@ -464,7 +505,7 @@ def _run_webota(target, source, env):
     print("Web OTA mode: %s" % upload_mode)
 
     try:
-        _preflight(parsed, headers, timeout, verify_tls)
+        _preflight(parsed, headers, timeout, verify_tls, firmware_size)
         for sample_index in range(3):
             sample_before = _sample_device(parsed, headers, timeout, verify_tls)
             print(_format_device_sample("before-send %d/3" % (sample_index + 1), sample_before))
@@ -481,6 +522,10 @@ def _run_webota(target, source, env):
         conn.close()
     except PermissionError as exc:
         print("Error: authentication failed: %s" % exc, file=sys.stderr)
+        _print_failure_summary(stats, firmware_size, started_at)
+        env.Exit(1)
+    except WebOtaPreflightError as exc:
+        print("Error: %s" % exc, file=sys.stderr)
         _print_failure_summary(stats, firmware_size, started_at)
         env.Exit(1)
     except RuntimeError as exc:

@@ -72,6 +72,8 @@ def main() -> int:
     require(web, "processed >= total", "Raw Web OTA must ignore data after declared firmware size", errors)
     require(web, "remaining = total - processed", "Raw Web OTA must cap writes at declared firmware size", errors)
     require(web, "raw.currentSize > remaining", "Raw Web OTA must ignore transport padding beyond firmware size", errors)
+    require(web, "fw.onchange", "Web OTA page must update file size immediately when a firmware file is selected", errors)
+    require(web, "Selected firmware ", "Web OTA page must show selected firmware size before upload starts", errors)
     require(recover, "esp32base_serial_recover_ota", "serial recovery script must exist with a clear program name", errors)
     require(recover, "--clear-otadata", "serial recovery script must support clearing otadata", errors)
     require(recover, "--write-both-ota", "serial recovery script must support writing both OTA slots", errors)

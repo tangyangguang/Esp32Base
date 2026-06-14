@@ -3,47 +3,25 @@
 #if ESP32BASE_ENABLE_WEB && ESP32BASE_ENABLE_OTA
 
 #include "WebInternal.h"
+#include "WebOtaPreflight.h"
 
 namespace esp32base_web {
 
 #if ESP32BASE_ENABLE_OTA
 bool parseSizeHeader(const String& value, size_t& out, char* error, size_t errorLen) {
-    out = 0;
-    if (error && errorLen) {
-        error[0] = '\0';
-    }
-    const char* text = value.c_str();
-    if (!text || !*text) {
-        if (error && errorLen) {
-            strlcpy(error, "missing firmware size", errorLen);
-        }
-        return false;
-    }
-    for (const char* p = text; *p; ++p) {
-        if (!isdigit(static_cast<unsigned char>(*p))) {
-            if (error && errorLen) {
-                strlcpy(error, "invalid firmware size", errorLen);
-            }
-            return false;
-        }
-    }
-    errno = 0;
-    char* end = nullptr;
-    const unsigned long parsed = strtoul(text, &end, 10);
-    if (errno != 0 || !end || *end != '\0' || parsed == 0UL) {
-        if (error && errorLen) {
-            strlcpy(error, "invalid firmware size", errorLen);
-        }
-        return false;
-    }
-    out = static_cast<size_t>(parsed);
-    if (static_cast<unsigned long>(out) != parsed) {
-        if (error && errorLen) {
-            strlcpy(error, "firmware size overflow", errorLen);
-        }
-        return false;
-    }
-    return true;
+    return parseOtaDeclaredSize(value.c_str(), out, error, errorLen);
+}
+
+bool validateDeclaredOtaSizeForCurrentTarget(size_t firmwareSize, char* error, size_t errorLen) {
+    const esp_partition_t* nextPartition = esp_ota_get_next_update_partition(nullptr);
+    return validateOtaDeclaredSize(firmwareSize, nextPartition ? nextPartition->size : 0, error, errorLen);
+}
+
+void serviceRejectedOtaUpload() {
+#if ESP32BASE_ENABLE_WATCHDOG
+    Esp32BaseWatchdog::feed();
+#endif
+    yield();
 }
 
 void formatOtaAbortReason(const char* endpoint, const char* reason, char* out, size_t outLen) {
@@ -73,6 +51,7 @@ void handleOtaPage() {
     char runningText[80] = "unknown";
     char bootText[80] = "unknown";
     char nextText[80] = "unavailable";
+    size_t nextSize = 0;
     if (running) {
         snprintf(runningText, sizeof(runningText), "%s / 0x%06lx", running->label, static_cast<unsigned long>(running->address));
     }
@@ -80,6 +59,7 @@ void handleOtaPage() {
         snprintf(bootText, sizeof(bootText), "%s / 0x%06lx", boot->label, static_cast<unsigned long>(boot->address));
     }
     if (next) {
+        nextSize = next->size;
         snprintf(nextText, sizeof(nextText), "%s / 0x%06lx", next->label, static_cast<unsigned long>(next->address));
     }
     sendChunk("<section class='panel statuspage'><h2>OTA diagnostics</h2><div class='tablewrap'><table class='kv'>");
@@ -93,8 +73,11 @@ void handleOtaPage() {
         return sha[0] ? sha : "unavailable";
     }());
     sendChunk("</table></div></section>");
-    sendChunk("<section class='panel formpanel uploadpanel'><h2>Firmware upload</h2><form id='f' class='editform'><div class='fieldgrid'><div class='field full'><label for='fw'>Firmware file</label><input id='fw' type='file' name='firmware' accept='.bin' required></div><div class='field long'><label for='sha'>SHA256</label><input id='sha' placeholder='Optional 64-character digest' maxlength='64'><small>Optional integrity check for the uploaded firmware.</small></div></div><div class='actions'><input type='submit' value='Upload Firmware'></div></form><progress id='p' value='0' max='100' style='width:100%;display:none'></progress><p id='s' class='statusline muted'></p></section>");
-    sendChunk("<script>function h(n){var u=['B','KB','MB','GB'],i=0,x=n;while(x>=1024&&i<u.length-1){x/=1024;i++;}return (i?x.toFixed(2):Math.round(x))+' '+u[i];}document.getElementById('f').onsubmit=function(e){e.preventDefault();if(this.dataset.busy)return false;this.dataset.busy=1;var f=document.getElementById('fw').files[0],st=document.getElementById('s'),pg=document.getElementById('p'),b=this.querySelector('[type=submit]');if(!f){this.dataset.busy='';return false;}var d=new FormData();d.append('firmware',f,f.name);var x=new XMLHttpRequest();if(b)b.disabled=true;pg.style.display='block';st.textContent='Uploading 0%';x.upload.onprogress=function(ev){if(ev.lengthComputable){var p=Math.floor(ev.loaded*100/ev.total);pg.value=p;st.textContent='Uploading '+p+'% '+h(ev.loaded)+' / '+h(ev.total);}};x.onload=function(){var r={};try{r=JSON.parse(x.responseText||'{}');}catch(e){}if(x.status==200){st.textContent='Upload successful. Restarting...';setTimeout(function(){location.href=r.redirect||'/esp32base';},8000);return;}st.textContent='Upload failed: '+(r.error||('HTTP '+x.status));document.getElementById('f').dataset.busy='';if(b)b.disabled=false;};x.onerror=function(){st.textContent='Upload failed: network error';document.getElementById('f').dataset.busy='';if(b)b.disabled=false;};x.open('POST','/esp32base/ota');x.setRequestHeader('X-Firmware-Size',String(f.size));var s=document.getElementById('sha').value;if(s)x.setRequestHeader('X-Sha256',s);x.send(d);return false;};</script>");
+    char formStart[160];
+    snprintf(formStart, sizeof(formStart), "<section class='panel formpanel uploadpanel'><h2>Firmware upload</h2><form id='f' class='editform' data-max-size='%lu'>", static_cast<unsigned long>(nextSize));
+    sendChunk(formStart);
+    sendChunk("<div class='fieldgrid'><div class='field full'><label for='fw'>Firmware file</label><input id='fw' type='file' name='firmware' accept='.bin' required></div><div class='field long'><label for='sha'>SHA256</label><input id='sha' placeholder='Optional 64-character digest' maxlength='64'><small>Optional integrity check for the uploaded firmware.</small></div></div><div class='actions'><input type='submit' value='Upload Firmware'></div></form><progress id='p' value='0' max='100' style='width:100%;display:none'></progress><p id='s' class='statusline muted'></p></section>");
+    sendChunk("<script>function h(n){var u=['B','KB','MB','GB'],i=0,x=n;while(x>=1024&&i<u.length-1){x/=1024;i++;}return (i?x.toFixed(2):Math.round(x))+' '+u[i];}var form=document.getElementById('f'),fw=document.getElementById('fw'),st=document.getElementById('s');function maxSize(){return parseInt(form.dataset.maxSize||'0',10)||0;}function showFile(){var f=fw.files[0],max=maxSize();if(!f){st.textContent='';return;}st.textContent='Selected firmware '+h(f.size)+(max>0?' / OTA slot '+h(max):'');}fw.onchange=showFile;form.onsubmit=function(e){e.preventDefault();if(this.dataset.busy)return false;this.dataset.busy=1;var f=fw.files[0],pg=document.getElementById('p'),b=this.querySelector('[type=submit]'),max=maxSize();if(!f){this.dataset.busy='';return false;}if(max>0&&f.size>max){st.textContent='Upload blocked: firmware '+h(f.size)+' exceeds OTA slot '+h(max);this.dataset.busy='';return false;}var d=new FormData();d.append('firmware',f,f.name);var x=new XMLHttpRequest();if(b)b.disabled=true;pg.style.display='block';st.textContent='Uploading 0%';x.upload.onprogress=function(ev){if(ev.lengthComputable){var p=Math.floor(ev.loaded*100/ev.total);pg.value=p;st.textContent='Uploading '+p+'% '+h(ev.loaded)+' / '+h(ev.total);}};x.onload=function(){var r={};try{r=JSON.parse(x.responseText||'{}');}catch(e){}if(x.status==200){st.textContent='Upload successful. Restarting...';setTimeout(function(){location.href=r.redirect||'/esp32base';},8000);return;}st.textContent='Upload failed: '+(r.error||('HTTP '+x.status));document.getElementById('f').dataset.busy='';if(b)b.disabled=false;};x.onerror=function(){st.textContent='Upload failed: network error';document.getElementById('f').dataset.busy='';if(b)b.disabled=false;};x.open('POST','/esp32base/ota');x.setRequestHeader('X-Firmware-Size',String(f.size));var s=document.getElementById('sha').value;if(s)x.setRequestHeader('X-Sha256',s);x.send(d);return false;};</script>");
     Esp32BaseWeb::sendFooter();
 }
 
@@ -166,20 +149,19 @@ void handleOtaUpload() {
             return;
         }
         char sha256[65] = "";
-        size_t firmwareSize = upload.totalSize;
+        size_t firmwareSize = 0;
         if (g_server.hasHeader("X-Sha256")) {
             strlcpy(sha256, g_server.header("X-Sha256").c_str(), sizeof(sha256));
         } else if (g_server.hasArg("sha256")) {
             strlcpy(sha256, g_server.arg("sha256").c_str(), sizeof(sha256));
         }
-        if (g_server.hasHeader("X-Firmware-Size")) {
-            char sizeError[48];
-            if (!parseSizeHeader(g_server.header("X-Firmware-Size"), firmwareSize, sizeError, sizeof(sizeError))) {
-                g_otaUploadStartFailed = true;
-                Esp32BaseOta::rejectUpload(sizeError);
-                ESP32BASE_LOG_W("web", "ota_upload_start_rejected error=%s", Esp32BaseOta::lastError());
-                return;
-            }
+        char sizeError[96];
+        if (!parseSizeHeader(g_server.hasHeader("X-Firmware-Size") ? g_server.header("X-Firmware-Size") : String(""), firmwareSize, sizeError, sizeof(sizeError)) ||
+            !validateDeclaredOtaSizeForCurrentTarget(firmwareSize, sizeError, sizeof(sizeError))) {
+            g_otaUploadStartFailed = true;
+            Esp32BaseOta::rejectUpload(sizeError);
+            ESP32BASE_LOG_W("web", "ota_upload_start_rejected error=%s", Esp32BaseOta::lastError());
+            return;
         }
         if (!Esp32BaseOta::startUpload(firmwareSize, sha256[0] ? sha256 : nullptr)) {
             g_otaUploadStartFailed = true;
@@ -188,6 +170,7 @@ void handleOtaUpload() {
         }
     } else if (upload.status == UPLOAD_FILE_WRITE) {
         if (g_otaUploadForbidden || g_otaUploadStartFailed) {
+            serviceRejectedOtaUpload();
             return;
         }
         Esp32BaseOta::writeChunk(upload.buf, upload.currentSize);
@@ -225,14 +208,13 @@ void handleOtaRawUpload() {
         if (g_server.hasHeader("X-Sha256")) {
             strlcpy(sha256, g_server.header("X-Sha256").c_str(), sizeof(sha256));
         }
-        if (g_server.hasHeader("X-Firmware-Size")) {
-            char sizeError[48];
-            if (!parseSizeHeader(g_server.header("X-Firmware-Size"), firmwareSize, sizeError, sizeof(sizeError))) {
-                g_otaUploadStartFailed = true;
-                Esp32BaseOta::rejectUpload(sizeError);
-                ESP32BASE_LOG_W("web", "ota_raw_upload_start_rejected error=%s", Esp32BaseOta::lastError());
-                return;
-            }
+        char sizeError[96];
+        if (!parseSizeHeader(g_server.hasHeader("X-Firmware-Size") ? g_server.header("X-Firmware-Size") : String(""), firmwareSize, sizeError, sizeof(sizeError)) ||
+            !validateDeclaredOtaSizeForCurrentTarget(firmwareSize, sizeError, sizeof(sizeError))) {
+            g_otaUploadStartFailed = true;
+            Esp32BaseOta::rejectUpload(sizeError);
+            ESP32BASE_LOG_W("web", "ota_raw_upload_start_rejected error=%s", Esp32BaseOta::lastError());
+            return;
         }
         if (!Esp32BaseOta::startUpload(firmwareSize, sha256[0] ? sha256 : nullptr)) {
             g_otaUploadStartFailed = true;
@@ -241,6 +223,7 @@ void handleOtaRawUpload() {
         }
     } else if (raw.status == RAW_WRITE) {
         if (g_otaUploadForbidden || g_otaUploadStartFailed) {
+            serviceRejectedOtaUpload();
             return;
         }
         const size_t total = Esp32BaseOta::totalSize();

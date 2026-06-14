@@ -1,6 +1,7 @@
 #include <unity.h>
 
 #include "web/Esp32BaseWeb.h"
+#include "web/internal/WebOtaPreflight.h"
 
 static void jsonHandler() {
     char value[16];
@@ -206,6 +207,37 @@ void test_native_after_format_callback_reports_tools_success_details() {
     TEST_ASSERT_EQUAL_UINT8(1, state.calls);
 }
 
+void test_native_ota_preflight_accepts_size_within_target_partition() {
+    char error[96];
+    size_t declared = 0;
+
+    TEST_ASSERT_TRUE(esp32base_web::parseOtaDeclaredSize("1048576", declared, error, sizeof(error)));
+    TEST_ASSERT_TRUE(esp32base_web::validateOtaDeclaredSize(declared, 0x140000, error, sizeof(error)));
+    TEST_ASSERT_EQUAL_UINT32(1048576, declared);
+    TEST_ASSERT_EQUAL_STRING("", error);
+}
+
+void test_native_ota_preflight_rejects_oversize_before_upload_body() {
+    char error[96];
+    size_t declared = 0;
+
+    TEST_ASSERT_TRUE(esp32base_web::parseOtaDeclaredSize("1327104", declared, error, sizeof(error)));
+    TEST_ASSERT_FALSE(esp32base_web::validateOtaDeclaredSize(declared, 0x140000, error, sizeof(error)));
+    TEST_ASSERT_EQUAL_STRING("ota size too large: firmware=1.27 MB partition=1.25 MB", error);
+}
+
+void test_native_ota_preflight_rejects_missing_or_invalid_declared_size() {
+    char error[96];
+    size_t declared = 123;
+
+    TEST_ASSERT_FALSE(esp32base_web::parseOtaDeclaredSize("", declared, error, sizeof(error)));
+    TEST_ASSERT_EQUAL_UINT32(0, declared);
+    TEST_ASSERT_EQUAL_STRING("missing firmware size", error);
+
+    TEST_ASSERT_FALSE(esp32base_web::parseOtaDeclaredSize("12x", declared, error, sizeof(error)));
+    TEST_ASSERT_EQUAL_STRING("invalid firmware size", error);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_native_request_inputs_and_json_response);
@@ -217,5 +249,8 @@ int main(int, char**) {
     RUN_TEST(test_native_static_asset_respects_auth_when_required);
     RUN_TEST(test_native_static_asset_rejects_invalid_registration);
     RUN_TEST(test_native_after_format_callback_reports_tools_success_details);
+    RUN_TEST(test_native_ota_preflight_accepts_size_within_target_partition);
+    RUN_TEST(test_native_ota_preflight_rejects_oversize_before_upload_body);
+    RUN_TEST(test_native_ota_preflight_rejects_missing_or_invalid_declared_size);
     return UNITY_END();
 }
