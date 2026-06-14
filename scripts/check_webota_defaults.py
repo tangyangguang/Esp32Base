@@ -18,14 +18,36 @@ def main() -> int:
         errors.append("scripts/esp32base_webota.py: default upload timeout must be 90 seconds")
     if "`esp32base_webota_upload_timeout`：默认 `90` 秒" not in ota_docs:
         errors.append("docs/05_ota.md: webota upload timeout default must document 90 seconds")
-    if '_option("esp32base_webota_chunk_size"), 4 * 1024)' not in webota:
-        errors.append("scripts/esp32base_webota.py: default chunk size must be 4096 bytes")
-    if "`esp32base_webota_chunk_size`：默认 `4096` 字节" not in ota_docs:
-        errors.append("docs/05_ota.md: webota chunk size default must document 4096 bytes")
-    if "raw endpoint 默认使用 4096B 小分块" not in ota_docs:
-        errors.append("docs/05_ota.md: raw Web OTA backpressure guidance must be documented")
+    if '_option("esp32base_webota_path", "/esp32base/ota/raw")' not in webota:
+        errors.append("scripts/esp32base_webota.py: default upload path must use raw /esp32base/ota/raw")
+    if '_option("esp32base_webota_chunk_size"), 64 * 1024)' not in webota:
+        errors.append("scripts/esp32base_webota.py: default chunk size must be 65536 bytes")
+    if "`esp32base_webota_path`：默认 `/esp32base/ota/raw`" not in ota_docs:
+        errors.append("docs/05_ota.md: webota default raw path must be documented")
+    if "`esp32base_webota_chunk_size`：默认 `65536` 字节" not in ota_docs:
+        errors.append("docs/05_ota.md: webota chunk size default must document 65536 bytes")
+    if "脚本默认 raw endpoint 使用 65536 字节分块" not in ota_docs:
+        errors.append("docs/05_ota.md: raw Web OTA default chunk guidance must be documented")
     if "auth_header = _auth_header()" not in webota or '"Authorization": auth_header' not in webota:
         errors.append("scripts/esp32base_webota.py: auth header validation must be handled before request headers are built")
+    if "HTTP_RAW_BUFLEN = 1436" not in webota:
+        errors.append("scripts/esp32base_webota.py: raw upload padding must use Arduino WebServer HTTP_RAW_BUFLEN")
+    if "_raw_padded_size(firmware_size)" not in webota:
+        errors.append("scripts/esp32base_webota.py: raw upload must pad Content-Length to avoid final short-read timeout")
+    if "request_headers[\"Content-Length\"] = str(padded_size)" not in webota:
+        errors.append("scripts/esp32base_webota.py: raw upload Content-Length must include padding")
+    if "connection.send(b\"\\0\" * padding_size)" not in webota:
+        errors.append("scripts/esp32base_webota.py: raw upload must send zero padding bytes")
+    if "raw padding 依赖当前 Arduino ESP32 `WebServer` 的 `HTTP_RAW_BUFLEN=1436`" not in ota_docs:
+        errors.append("docs/05_ota.md: raw padding must document Arduino HTTP_RAW_BUFLEN maintenance constraint")
+    if "本项目暂不在上传脚本中动态解析 Arduino core 头文件" not in ota_docs:
+        errors.append("docs/05_ota.md: raw padding must document the intentional fixed-constant strategy")
+    if "已按源码核对 Arduino ESP32 `2.0.16`、`2.0.17`、`3.0.0`、`3.0.7`、`3.3.0`" not in ota_docs:
+        errors.append("docs/05_ota.md: raw padding must document checked Arduino ESP32 core versions")
+    if "该风险只影响 raw endpoint；浏览器表单上传和显式 `/esp32base/ota` multipart 路径不依赖 `HTTPRaw`" not in ota_docs:
+        errors.append("docs/05_ota.md: raw padding risk must document multipart Web OTA fallback")
+    if "raw 上传失败不会完成 OTA boot 分区切换，设备应保持原固件运行" not in ota_docs:
+        errors.append("docs/05_ota.md: raw padding risk must document failed raw OTA boot behavior")
 
     if errors:
         for error in errors:

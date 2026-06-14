@@ -243,7 +243,16 @@ void handleOtaRawUpload() {
         if (g_otaUploadForbidden || g_otaUploadStartFailed) {
             return;
         }
-        Esp32BaseOta::writeChunk(raw.buf, raw.currentSize);
+        const size_t total = Esp32BaseOta::totalSize();
+        const size_t processed = Esp32BaseOta::bytesProcessed();
+        if (processed >= total) {
+            return;
+        }
+        const size_t remaining = total - processed;
+        const size_t writeLen = raw.currentSize > remaining ? remaining : raw.currentSize;
+        if (writeLen > 0) {
+            Esp32BaseOta::writeChunk(raw.buf, writeLen);
+        }
     } else if (raw.status == RAW_END) {
         if (g_otaUploadForbidden || g_otaUploadStartFailed) {
             return;

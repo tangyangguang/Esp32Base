@@ -12,6 +12,8 @@ from urllib.parse import urlparse
 
 Import("env")
 
+HTTP_RAW_BUFLEN = 1436
+
 
 def _config_get(section, key, default=None):
     config = env.GetProjectConfig()
@@ -93,6 +95,13 @@ def _upload_percent(sent_bytes, total_bytes):
     if not total_bytes:
         return 0
     return int(sent_bytes * 100 / total_bytes)
+
+
+def _raw_padded_size(size):
+    remainder = int(size) % HTTP_RAW_BUFLEN
+    if remainder == 0:
+        return int(size)
+    return int(size) + (HTTP_RAW_BUFLEN - remainder)
 
 
 def _network_upload_port():
@@ -368,9 +377,11 @@ def _send_multipart(connection, parsed, firmware_path, firmware_size, headers, c
 
 
 def _send_raw(connection, parsed, firmware_path, firmware_size, headers, chunk_size, stats):
+    padded_size = _raw_padded_size(firmware_size)
+    padding_size = padded_size - firmware_size
     request_headers = dict(headers)
     request_headers["Content-Type"] = "application/octet-stream"
-    request_headers["Content-Length"] = str(firmware_size)
+    request_headers["Content-Length"] = str(padded_size)
 
     connection.putrequest("POST", _request_target(parsed))
     for key, value in request_headers.items():
@@ -394,6 +405,9 @@ def _send_raw(connection, parsed, firmware_path, firmware_size, headers, chunk_s
                 _print_progress(percent, sent, firmware_size, elapsed)
                 stats["last_percent"] = percent
                 next_percent += 5
+    if padding_size:
+        connection.send(b"\0" * padding_size)
+        stats["raw_padding_bytes"] = padding_size
     stats["client_send_finished_at"] = time.time()
 
 
@@ -433,7 +447,7 @@ def _run_webota(target, source, env):
         env.Exit(1)
     verify_tls = _as_bool(_option("esp32base_webota_verify_tls"), False)
     try:
-        chunk_size = _as_int(_option("esp32base_webota_chunk_size"), 4 * 1024)
+        chunk_size = _as_int(_option("esp32base_webota_chunk_size"), 64 * 1024)
     except ValueError as exc:
         print("Error: %s" % exc, file=sys.stderr)
         env.Exit(1)
