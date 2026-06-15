@@ -53,7 +53,7 @@ size_t g_otaProcessed = 0;
 uint8_t g_otaNextProgressLog = 10;
 char g_otaExpected[65] = "";
 char g_otaCalculated[65] = "";
-char g_otaLastError[96] = "";
+char g_otaLastError[160] = "";
 mbedtls_sha256_context g_otaSha;
 bool g_otaShaActive = false;
 bool g_otaPrevPowerSave = true;

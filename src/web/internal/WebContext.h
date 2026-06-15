@@ -47,7 +47,34 @@
 #include <string.h>
 #include <time.h>
 
+#ifndef ESP32BASE_WEB_REQUEST_READ_TIMEOUT_SEC
+#define ESP32BASE_WEB_REQUEST_READ_TIMEOUT_SEC 5
+#endif
+
+#ifndef ESP32BASE_WEB_RAW_NO_PROGRESS_TIMEOUT_MS
+#define ESP32BASE_WEB_RAW_NO_PROGRESS_TIMEOUT_MS 30000UL
+#endif
+
+#if ESP32BASE_WEB_REQUEST_READ_TIMEOUT_SEC < 1
+#error "ESP32BASE_WEB_REQUEST_READ_TIMEOUT_SEC must be at least 1"
+#endif
+
+#if ESP32BASE_WEB_RAW_NO_PROGRESS_TIMEOUT_MS < 1000UL
+#error "ESP32BASE_WEB_RAW_NO_PROGRESS_TIMEOUT_MS must be at least 1000"
+#endif
+
 namespace esp32base_web {
+
+class Esp32BaseWebServer : public WebServer {
+public:
+    explicit Esp32BaseWebServer(int port = 80) : WebServer(port) {}
+
+    void handleClient() override;
+
+private:
+    bool parseRequest(WiFiClient& client);
+    bool parseRawBody(WiFiClient& client);
+};
 
 struct Route {
     char path[48];
@@ -163,7 +190,7 @@ struct AppConfigPendingRestartSlot {
 #endif
 
 struct WebContext {
-    WebServer server;
+    Esp32BaseWebServer server;
     Route routes[ESP32BASE_WEB_MAX_ROUTES];
     NavItem navItems[ESP32BASE_WEB_MAX_NAV_ITEMS];
     StaticAsset staticAssets[ESP32BASE_WEB_MAX_STATIC_ASSETS];

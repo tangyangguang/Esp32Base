@@ -80,11 +80,15 @@ bool validateDeclaredOtaSizeForCurrentTarget(size_t firmwareSize, char* error, s
     return validateOtaDeclaredSize(firmwareSize, nextPartition ? nextPartition->size : 0, error, errorLen);
 }
 
-void serviceRejectedOtaUpload() {
+void serviceOtaUploadRequest() {
 #if ESP32BASE_ENABLE_WATCHDOG
     Esp32BaseWatchdog::feed();
 #endif
     yield();
+}
+
+void serviceRejectedOtaUpload() {
+    serviceOtaUploadRequest();
 }
 
 void formatOtaAbortReason(const char* endpoint, const char* reason, char* out, size_t outLen) {
@@ -98,6 +102,20 @@ void formatOtaAbortReason(const char* endpoint, const char* reason, char* out, s
              endpoint && endpoint[0] ? endpoint : "unknown",
              static_cast<unsigned long>(Esp32BaseOta::bytesProcessed()),
              static_cast<unsigned long>(Esp32BaseOta::totalSize()),
+             static_cast<unsigned>(Esp32BaseOta::progress()));
+}
+
+void formatRawOtaAbortReason(const HTTPRaw& raw, char* out, size_t outLen) {
+    if (!out || outLen == 0) {
+        return;
+    }
+    snprintf(out,
+             outLen,
+             "client aborted raw upload endpoint=/esp32base/ota/raw written=%lu buffered=%lu raw=%lu/%d progress=%u%%",
+             static_cast<unsigned long>(Esp32BaseOta::bytesProcessed()),
+             static_cast<unsigned long>(g_rawOtaWriteBuffered),
+             static_cast<unsigned long>(raw.totalSize),
+             g_server.clientContentLength(),
              static_cast<unsigned>(Esp32BaseOta::progress()));
 }
 
@@ -285,6 +303,7 @@ void handleOtaRawUpload() {
             ESP32BASE_LOG_W("web", "ota_raw_upload_start_rejected error=%s", Esp32BaseOta::lastError());
             return;
         }
+        serviceOtaUploadRequest();
     } else if (raw.status == RAW_WRITE) {
         if (g_otaUploadForbidden || g_otaUploadStartFailed) {
             serviceRejectedOtaUpload();
@@ -293,6 +312,7 @@ void handleOtaRawUpload() {
         const size_t total = Esp32BaseOta::totalSize();
         const size_t accepted = Esp32BaseOta::bytesProcessed() + g_rawOtaWriteBuffered;
         if (accepted >= total) {
+            serviceOtaUploadRequest();
             return;
         }
         const size_t remaining = total - accepted;
@@ -301,6 +321,7 @@ void handleOtaRawUpload() {
             g_otaUploadStartFailed = true;
             resetRawOtaWriteBuffer();
         }
+        serviceOtaUploadRequest();
     } else if (raw.status == RAW_END) {
         if (g_otaUploadForbidden || g_otaUploadStartFailed) {
             resetRawOtaWriteBuffer();
@@ -313,9 +334,16 @@ void handleOtaRawUpload() {
         resetRawOtaWriteBuffer();
         Esp32BaseOta::finishUpload();
     } else if (raw.status == RAW_ABORTED) {
+        char reason[160];
+        formatRawOtaAbortReason(raw, reason, sizeof(reason));
+        ESP32BASE_LOG_W("web",
+                        "ota_raw_aborted written=%lu buffered=%lu raw_total=%lu raw_current=%lu content_length=%d",
+                        static_cast<unsigned long>(Esp32BaseOta::bytesProcessed()),
+                        static_cast<unsigned long>(g_rawOtaWriteBuffered),
+                        static_cast<unsigned long>(raw.totalSize),
+                        static_cast<unsigned long>(raw.currentSize),
+                        g_server.clientContentLength());
         resetRawOtaWriteBuffer();
-        char reason[96];
-        formatOtaAbortReason("/esp32base/ota/raw", "client aborted raw upload", reason, sizeof(reason));
         Esp32BaseOta::abortUpload(reason);
     }
 }

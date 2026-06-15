@@ -13,6 +13,12 @@ from urllib.parse import urlparse
 Import("env")
 
 HTTP_RAW_BUFLEN = 1436
+RAW_RSSI_WEAK_DBM = -70
+RAW_RSSI_VERY_WEAK_DBM = -75
+RAW_WEAK_CHUNK_SIZE = 16 * 1024
+RAW_VERY_WEAK_CHUNK_SIZE = 8 * 1024
+RAW_WEAK_PAUSE_MS = 60.0
+RAW_VERY_WEAK_PAUSE_MS = 120.0
 
 
 class WebOtaPreflightError(RuntimeError):
@@ -28,6 +34,11 @@ def _config_get(section, key, default=None):
 
 
 def _option(name, default=None):
+    value = _configured_option(name)
+    return value if value not in (None, "") else default
+
+
+def _configured_option(name):
     pioenv = env.subst("$PIOENV")
     env_section = "env:%s" % pioenv
     common_section = "esp32base_webota"
@@ -36,7 +47,7 @@ def _option(name, default=None):
         value = _config_get(common_section, name)
     if value is None:
         value = os.environ.get(name.upper())
-    return value if value not in (None, "") else default
+    return value
 
 
 def _as_bool(value, default=False):
@@ -64,6 +75,18 @@ def _as_float(value, default):
         raise ValueError("expected numeric value, got: %s" % value)
     if parsed <= 0:
         raise ValueError("timeout values must be greater than 0")
+    return parsed
+
+
+def _as_non_negative_float(value, default):
+    if value in (None, ""):
+        return default
+    try:
+        parsed = float(str(value).strip())
+    except ValueError:
+        raise ValueError("expected numeric value, got: %s" % value)
+    if parsed < 0:
+        raise ValueError("pacing values must be zero or greater")
     return parsed
 
 
@@ -170,6 +193,60 @@ def _open_connection(parsed, timeout, verify_tls):
     if parsed.scheme == "http":
         return http.client.HTTPConnection(parsed.hostname, parsed.port or 80, timeout=timeout)
     raise ValueError("unsupported URL scheme: %s" % parsed.scheme)
+
+
+def _open_socket(parsed, timeout, verify_tls):
+    if parsed.scheme == "http":
+        sock = socket.create_connection((parsed.hostname, parsed.port or 80), timeout=timeout)
+        _configure_raw_upload_socket(sock)
+        return sock
+    if parsed.scheme == "https":
+        context = ssl.create_default_context() if verify_tls else ssl._create_unverified_context()
+        raw_sock = socket.create_connection((parsed.hostname, parsed.port or 443), timeout=timeout)
+        _configure_raw_upload_socket(raw_sock)
+        try:
+            return context.wrap_socket(raw_sock, server_hostname=parsed.hostname)
+        except Exception:
+            raw_sock.close()
+            raise
+    raise ValueError("unsupported URL scheme: %s" % parsed.scheme)
+
+
+def _configure_raw_upload_socket(sock):
+    try:
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+    except OSError:
+        pass
+    send_buffer = _as_int(_option("esp32base_webota_socket_send_buffer"), 0)
+    if send_buffer <= 0:
+        return
+    try:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, send_buffer)
+    except OSError:
+        pass
+
+
+def _host_header(parsed):
+    host = parsed.hostname or ""
+    if ":" in host and not host.startswith("["):
+        host = "[%s]" % host
+    port = parsed.port
+    if port and not ((parsed.scheme == "http" and port == 80) or (parsed.scheme == "https" and port == 443)):
+        host = "%s:%d" % (host, port)
+    return host
+
+
+def _raw_request_bytes(parsed, headers):
+    lines = [
+        "POST %s HTTP/1.1" % _request_target(parsed),
+        "Host: %s" % _host_header(parsed),
+        "Accept-Encoding: identity",
+    ]
+    for key, value in headers.items():
+        lines.append("%s: %s" % (key, value))
+    lines.append("")
+    lines.append("")
+    return "\r\n".join(lines).encode("latin-1")
 
 
 def _auth_header():
@@ -315,6 +392,74 @@ def _format_device_sample(label, sample):
     return ", ".join(parts)
 
 
+def _sample_min_rssi(samples):
+    values = [sample.get("rssi") for sample in samples if isinstance(sample.get("rssi"), int)]
+    return min(values) if values else None
+
+
+def _resolve_raw_transfer_settings(upload_mode, chunk_size, raw_pause_ms, chunk_size_configured, raw_pause_configured, samples):
+    if upload_mode != "raw":
+        return chunk_size, raw_pause_ms, None
+    min_rssi = _sample_min_rssi(samples)
+    if not isinstance(min_rssi, int):
+        return chunk_size, raw_pause_ms, None
+
+    target_chunk_size = None
+    target_pause_ms = None
+    level = None
+    if min_rssi <= RAW_RSSI_VERY_WEAK_DBM:
+        target_chunk_size = RAW_VERY_WEAK_CHUNK_SIZE
+        target_pause_ms = RAW_VERY_WEAK_PAUSE_MS
+        level = "very-weak"
+    elif min_rssi <= RAW_RSSI_WEAK_DBM:
+        target_chunk_size = RAW_WEAK_CHUNK_SIZE
+        target_pause_ms = RAW_WEAK_PAUSE_MS
+        level = "weak"
+
+    if not level:
+        return chunk_size, raw_pause_ms, None
+
+    adjusted = []
+    if not chunk_size_configured and chunk_size > target_chunk_size:
+        chunk_size = target_chunk_size
+        adjusted.append("chunk")
+    if not raw_pause_configured and raw_pause_ms < target_pause_ms:
+        raw_pause_ms = target_pause_ms
+        adjusted.append("pause")
+    note = {
+        "level": level,
+        "rssi": min_rssi,
+        "adjusted": ",".join(adjusted) if adjusted else "none",
+    }
+    return chunk_size, raw_pause_ms, note
+
+
+def _print_transfer_settings(upload_mode, chunk_size, raw_pause_ms, raw_note):
+    print("Web OTA chunk size: %s (%d bytes)" % (_format_bytes(chunk_size), chunk_size))
+    if upload_mode != "raw":
+        return
+    if raw_note:
+        print(
+            "Web OTA raw pacing: rssiMin=%s level=%s adjusted=%s pause=%.0f ms"
+            % (_format_rssi(raw_note.get("rssi")), raw_note.get("level"), raw_note.get("adjusted"), raw_pause_ms)
+        )
+    elif raw_pause_ms > 0:
+        print("Web OTA raw pacing: pause=%.0f ms" % raw_pause_ms)
+    else:
+        print("Web OTA raw pacing: off")
+
+
+def _print_raw_failure_hint(upload_mode):
+    if upload_mode != "raw":
+        return
+    print(
+        "Hint: raw upload was interrupted. On weak links retry with "
+        "set esp32base_webota_chunk_size, esp32base_webota_raw_pause_ms, "
+        "or esp32base_webota_socket_send_buffer.",
+        file=sys.stderr,
+    )
+
+
 def _print_failure_summary(stats, firmware_size, started_at):
     finished_at = time.time()
     sent = int(stats.get("sent_bytes", 0))
@@ -417,55 +562,25 @@ def _send_multipart(connection, parsed, firmware_path, firmware_size, headers, c
     stats["client_send_finished_at"] = time.time()
 
 
-def _configure_raw_socket(connection):
-    sock = getattr(connection, "sock", None)
-    if not sock:
-        return
-    try:
-        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-    except OSError:
-        pass
-
-
-def _send_raw_aligned(connection, data, stats):
-    carry = stats.get("raw_send_carry", b"")
-    if carry:
-        data = carry + data
-        stats["raw_send_carry"] = b""
-    offset = 0
-    total = (len(data) // HTTP_RAW_BUFLEN) * HTTP_RAW_BUFLEN
-    while offset < total:
-        end = min(offset + HTTP_RAW_BUFLEN, total)
-        connection.send(data[offset:end])
-        stats["raw_socket_writes"] = int(stats.get("raw_socket_writes", 0)) + 1
-        offset = end
-    if total < len(data):
-        stats["raw_send_carry"] = data[total:]
-
-
-def _send_raw(connection, parsed, firmware_path, firmware_size, headers, chunk_size, stats):
+def _send_raw(parsed, firmware_path, firmware_size, headers, chunk_size, raw_pause_ms, stats, timeout, verify_tls):
     padded_size = _raw_padded_size(firmware_size)
     padding_size = padded_size - firmware_size
     request_headers = dict(headers)
     request_headers["Content-Type"] = "application/octet-stream"
     request_headers["Content-Length"] = str(padded_size)
-
-    connection.putrequest("POST", _request_target(parsed))
-    for key, value in request_headers.items():
-        connection.putheader(key, value)
-    connection.endheaders()
-    _configure_raw_socket(connection)
+    request_head = _raw_request_bytes(parsed, request_headers)
+    sock = _open_socket(parsed, timeout, verify_tls)
 
     stats["sent_bytes"] = 0
     stats["upload_started_at"] = time.time()
     next_percent = 0
-    with open(firmware_path, "rb") as fh:
-        while True:
-            chunk = fh.read(chunk_size)
-            if not chunk:
-                break
-            _send_raw_aligned(connection, chunk, stats)
-            stats["sent_bytes"] += len(chunk)
+    try:
+        with open(firmware_path, "rb") as fh:
+            first_chunk = fh.read(chunk_size)
+            sock.sendall(request_head + first_chunk)
+            if raw_pause_ms > 0:
+                time.sleep(raw_pause_ms / 1000.0)
+            stats["sent_bytes"] += len(first_chunk)
             sent = stats["sent_bytes"]
             percent = _upload_percent(sent, firmware_size)
             if percent >= next_percent:
@@ -473,12 +588,56 @@ def _send_raw(connection, parsed, firmware_path, firmware_size, headers, chunk_s
                 _print_progress(percent, sent, firmware_size, elapsed)
                 stats["last_percent"] = percent
                 next_percent += 5
-    if padding_size:
-        _send_raw_aligned(connection, b"\0" * padding_size, stats)
-        stats["raw_padding_bytes"] = padding_size
-    if stats.get("raw_send_carry"):
-        raise RuntimeError("raw upload internal alignment error")
-    stats["client_send_finished_at"] = time.time()
+            while True:
+                chunk = fh.read(chunk_size)
+                if not chunk:
+                    break
+                sock.sendall(chunk)
+                if raw_pause_ms > 0:
+                    time.sleep(raw_pause_ms / 1000.0)
+                stats["sent_bytes"] += len(chunk)
+                sent = stats["sent_bytes"]
+                percent = _upload_percent(sent, firmware_size)
+                if percent >= next_percent:
+                    elapsed = time.time() - stats["upload_started_at"]
+                    _print_progress(percent, sent, firmware_size, elapsed)
+                    stats["last_percent"] = percent
+                    next_percent += 5
+        if padding_size:
+            sock.sendall(b"\0" * padding_size)
+            stats["raw_padding_bytes"] = padding_size
+        stats["client_send_finished_at"] = time.time()
+        stats["response_wait_started_at"] = time.time()
+        response = http.client.HTTPResponse(sock)
+        response.begin()
+        return response
+    except Exception:
+        sock.close()
+        raise
+
+
+def _upload_once(upload_mode, parsed, firmware, firmware_size, headers, chunk_size, raw_pause_ms, stats, upload_timeout, verify_tls):
+    if upload_mode == "multipart":
+        conn = _open_connection(parsed, upload_timeout, verify_tls)
+        try:
+            _send_multipart(conn, parsed, firmware, firmware_size, headers, chunk_size, stats)
+            stats["response_wait_started_at"] = time.time()
+            response = conn.getresponse()
+            stats["response_received_at"] = time.time()
+            return response
+        finally:
+            conn.close()
+    return _send_raw(
+        parsed,
+        firmware,
+        firmware_size,
+        headers,
+        chunk_size,
+        raw_pause_ms,
+        stats,
+        upload_timeout,
+        verify_tls,
+    )
 
 
 def _run_webota(target, source, env):
@@ -516,8 +675,11 @@ def _run_webota(target, source, env):
         print("Error: %s" % exc, file=sys.stderr)
         env.Exit(1)
     verify_tls = _as_bool(_option("esp32base_webota_verify_tls"), False)
+    chunk_size_configured = _configured_option("esp32base_webota_chunk_size") not in (None, "")
+    raw_pause_configured = _configured_option("esp32base_webota_raw_pause_ms") not in (None, "")
     try:
         chunk_size = _as_int(_option("esp32base_webota_chunk_size"), 64 * 1024)
+        raw_pause_ms = _as_non_negative_float(_option("esp32base_webota_raw_pause_ms"), 0.0)
     except ValueError as exc:
         print("Error: %s" % exc, file=sys.stderr)
         env.Exit(1)
@@ -527,7 +689,6 @@ def _run_webota(target, source, env):
     print("Web OTA started: %s" % _format_timestamp(started_at))
     print("Web OTA target: %s" % url)
     print("Web OTA firmware: %s (%s, %d bytes)" % (firmware, _format_bytes(firmware_size), firmware_size))
-    print("Web OTA chunk size: %s (%d bytes)" % (_format_bytes(chunk_size), chunk_size))
     print("Web OTA timeouts: request %.1fs, upload %.1fs" % (timeout, upload_timeout))
     upload_path = (parsed.path or "/").rstrip("/")
     upload_mode = "multipart" if upload_path == "/esp32base/ota" else "raw"
@@ -535,20 +696,35 @@ def _run_webota(target, source, env):
 
     try:
         _preflight(parsed, headers, timeout, verify_tls, firmware_size)
+        samples_before = []
         for sample_index in range(3):
             sample_before = _sample_device(parsed, headers, timeout, verify_tls)
+            samples_before.append(sample_before)
             print(_format_device_sample("before-send %d/3" % (sample_index + 1), sample_before))
             if sample_index < 2:
                 time.sleep(0.25)
-        conn = _open_connection(parsed, upload_timeout, verify_tls)
-        if upload_mode == "multipart":
-            _send_multipart(conn, parsed, firmware, firmware_size, headers, chunk_size, stats)
-        else:
-            _send_raw(conn, parsed, firmware, firmware_size, headers, chunk_size, stats)
-        stats["response_wait_started_at"] = time.time()
-        response = conn.getresponse()
+        chunk_size, raw_pause_ms, raw_note = _resolve_raw_transfer_settings(
+            upload_mode,
+            chunk_size,
+            raw_pause_ms,
+            chunk_size_configured,
+            raw_pause_configured,
+            samples_before,
+        )
+        _print_transfer_settings(upload_mode, chunk_size, raw_pause_ms, raw_note)
+        response = _upload_once(
+            upload_mode,
+            parsed,
+            firmware,
+            firmware_size,
+            headers,
+            chunk_size,
+            raw_pause_ms,
+            stats,
+            upload_timeout,
+            verify_tls,
+        )
         stats["response_received_at"] = time.time()
-        conn.close()
     except PermissionError as exc:
         print("Error: authentication failed: %s" % exc, file=sys.stderr)
         _print_failure_summary(stats, firmware_size, started_at)
@@ -563,10 +739,12 @@ def _run_webota(target, source, env):
         env.Exit(1)
     except (BrokenPipeError, ConnectionResetError, http.client.HTTPException) as exc:
         print("Error: upload interrupted: %s" % exc, file=sys.stderr)
+        _print_raw_failure_hint(upload_mode)
         _print_failure_summary(stats, firmware_size, started_at)
         env.Exit(1)
     except (ConnectionRefusedError, socket.gaierror, TimeoutError, socket.timeout, OSError) as exc:
         print("Error: connection failed: %s" % exc, file=sys.stderr)
+        _print_raw_failure_hint(upload_mode)
         _print_failure_summary(stats, firmware_size, started_at)
         env.Exit(1)
     except ValueError as exc:

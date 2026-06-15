@@ -6,6 +6,300 @@
 
 namespace esp32base_web {
 
+static char* readClientBytesWithTimeout(WiFiClient& client, size_t maxLength, size_t& dataLength, int timeoutMs) {
+    char* buf = nullptr;
+    dataLength = 0;
+    while (dataLength < maxLength) {
+        int tries = timeoutMs;
+        size_t newLength = 0;
+        while (!(newLength = client.available()) && tries--) {
+            delay(1);
+        }
+        if (!newLength) {
+            break;
+        }
+        char* newBuf = static_cast<char*>(buf ? realloc(buf, dataLength + newLength + 1) : malloc(newLength + 1));
+        if (!newBuf) {
+            free(buf);
+            return nullptr;
+        }
+        buf = newBuf;
+        client.readBytes(buf + dataLength, newLength);
+        dataLength += newLength;
+        buf[dataLength] = '\0';
+    }
+    return buf;
+}
+
+static HTTPMethod parseHttpMethod(const String& methodStr) {
+#define ESP32BASE_WEB_HTTP_METHOD(num, name, string) \
+    if (methodStr == F(#string)) {                   \
+        return HTTP_##name;                          \
+    }
+    HTTP_METHOD_MAP(ESP32BASE_WEB_HTTP_METHOD)
+#undef ESP32BASE_WEB_HTTP_METHOD
+    return HTTP_ANY;
+}
+
+static bool requestMayHaveBody(HTTPMethod method) {
+    return method == HTTP_POST || method == HTTP_PUT || method == HTTP_PATCH || method == HTTP_DELETE;
+}
+
+void Esp32BaseWebServer::handleClient() {
+    if (_currentStatus == HC_NONE) {
+        _currentClient = _server.available();
+        if (!_currentClient) {
+            if (_nullDelay) {
+                delay(1);
+            }
+            return;
+        }
+
+        _currentClient.setTimeout(ESP32BASE_WEB_REQUEST_READ_TIMEOUT_SEC);
+        _currentStatus = HC_WAIT_READ;
+        _statusChange = millis();
+    }
+
+    bool keepCurrentClient = false;
+    bool callYield = false;
+
+    if (_currentClient.connected()) {
+        switch (_currentStatus) {
+        case HC_NONE:
+            break;
+        case HC_WAIT_READ:
+            if (_currentClient.available()) {
+                _currentClient.setTimeout(ESP32BASE_WEB_REQUEST_READ_TIMEOUT_SEC);
+                if (parseRequest(_currentClient)) {
+                    _currentClient.setTimeout(HTTP_MAX_SEND_WAIT / 1000);
+                    _contentLength = CONTENT_LENGTH_NOT_SET;
+                    _handleRequest();
+                }
+            } else {
+                if (millis() - _statusChange <= HTTP_MAX_DATA_WAIT) {
+                    keepCurrentClient = true;
+                }
+                callYield = true;
+            }
+            break;
+        case HC_WAIT_CLOSE:
+            if (millis() - _statusChange <= HTTP_MAX_CLOSE_WAIT) {
+                keepCurrentClient = true;
+                callYield = true;
+            }
+        }
+    }
+
+    if (!keepCurrentClient) {
+        _currentClient = WiFiClient();
+        _currentStatus = HC_NONE;
+        _currentUpload.reset();
+        _currentRaw.reset();
+    }
+
+    if (callYield) {
+        yield();
+    }
+}
+
+bool Esp32BaseWebServer::parseRequest(WiFiClient& client) {
+    String req = client.readStringUntil('\r');
+    client.readStringUntil('\n');
+    for (int i = 0; i < _headerKeysCount; ++i) {
+        _currentHeaders[i].value = String();
+    }
+
+    int addrStart = req.indexOf(' ');
+    int addrEnd = req.indexOf(' ', addrStart + 1);
+    if (addrStart == -1 || addrEnd == -1) {
+        ESP32BASE_LOG_W("web", "invalid_http_request line=%s", req.c_str());
+        return false;
+    }
+
+    String methodStr = req.substring(0, addrStart);
+    String url = req.substring(addrStart + 1, addrEnd);
+    String versionEnd = req.substring(addrEnd + 8);
+    _currentVersion = atoi(versionEnd.c_str());
+    String searchStr = "";
+    int hasSearch = url.indexOf('?');
+    if (hasSearch != -1) {
+        searchStr = url.substring(hasSearch + 1);
+        url = url.substring(0, hasSearch);
+    }
+    _currentUri = url;
+    _chunked = false;
+    _clientContentLength = 0;
+
+    HTTPMethod method = parseHttpMethod(methodStr);
+    if (method == HTTP_ANY) {
+        ESP32BASE_LOG_W("web", "unknown_http_method method=%s", methodStr.c_str());
+        return false;
+    }
+    _currentMethod = method;
+
+    RequestHandler* handler = nullptr;
+    for (handler = _firstHandler; handler; handler = handler->next()) {
+        if (handler->canHandle(_currentMethod, _currentUri)) {
+            break;
+        }
+    }
+    _currentHandler = handler;
+
+    if (requestMayHaveBody(method)) {
+        String boundaryStr;
+        String headerName;
+        String headerValue;
+        bool isForm = false;
+        bool isEncoded = false;
+        while (true) {
+            req = client.readStringUntil('\r');
+            client.readStringUntil('\n');
+            if (req == "") {
+                break;
+            }
+            int headerDiv = req.indexOf(':');
+            if (headerDiv == -1) {
+                break;
+            }
+            headerName = req.substring(0, headerDiv);
+            headerValue = req.substring(headerDiv + 1);
+            headerValue.trim();
+            _collectHeader(headerName.c_str(), headerValue.c_str());
+
+            if (headerName.equalsIgnoreCase(F("Content-Type"))) {
+                if (headerValue.startsWith(F("text/plain"))) {
+                    isForm = false;
+                } else if (headerValue.startsWith(F("application/x-www-form-urlencoded"))) {
+                    isForm = false;
+                    isEncoded = true;
+                } else if (headerValue.startsWith(F("multipart/"))) {
+                    boundaryStr = headerValue.substring(headerValue.indexOf('=') + 1);
+                    boundaryStr.replace("\"", "");
+                    isForm = true;
+                }
+            } else if (headerName.equalsIgnoreCase(F("Content-Length"))) {
+                _clientContentLength = headerValue.toInt();
+            } else if (headerName.equalsIgnoreCase(F("Host"))) {
+                _hostHeader = headerValue;
+            }
+        }
+
+        if (!isForm && _currentHandler && _currentHandler->canRaw(_currentUri)) {
+            if (!parseRawBody(client)) {
+                return false;
+            }
+        } else if (!isForm) {
+            size_t plainLength = 0;
+            char* plainBuf = readClientBytesWithTimeout(client, _clientContentLength, plainLength, HTTP_MAX_POST_WAIT);
+            if (plainLength < static_cast<size_t>(_clientContentLength)) {
+                free(plainBuf);
+                return false;
+            }
+            if (_clientContentLength > 0) {
+                if (isEncoded) {
+                    if (searchStr != "") {
+                        searchStr += '&';
+                    }
+                    searchStr += plainBuf;
+                }
+                _parseArguments(searchStr);
+                if (!isEncoded) {
+                    RequestArgument& arg = _currentArgs[_currentArgCount++];
+                    arg.key = F("plain");
+                    arg.value = String(plainBuf);
+                }
+                free(plainBuf);
+            } else {
+                _parseArguments(searchStr);
+            }
+        } else {
+            _parseArguments(searchStr);
+            if (!_parseForm(client, boundaryStr, _clientContentLength)) {
+                return false;
+            }
+        }
+    } else {
+        String headerName;
+        String headerValue;
+        while (true) {
+            req = client.readStringUntil('\r');
+            client.readStringUntil('\n');
+            if (req == "") {
+                break;
+            }
+            int headerDiv = req.indexOf(':');
+            if (headerDiv == -1) {
+                break;
+            }
+            headerName = req.substring(0, headerDiv);
+            headerValue = req.substring(headerDiv + 2);
+            _collectHeader(headerName.c_str(), headerValue.c_str());
+
+            if (headerName.equalsIgnoreCase(F("Host"))) {
+                _hostHeader = headerValue;
+            }
+        }
+        _parseArguments(searchStr);
+    }
+
+    client.flush();
+    return true;
+}
+
+bool Esp32BaseWebServer::parseRawBody(WiFiClient& client) {
+    _currentRaw.reset(new HTTPRaw());
+    _currentRaw->status = RAW_START;
+    _currentRaw->totalSize = 0;
+    _currentRaw->currentSize = 0;
+    _currentHandler->raw(*this, _currentUri, *_currentRaw);
+    _currentRaw->status = RAW_WRITE;
+
+    const size_t contentLength = _clientContentLength > 0 ? static_cast<size_t>(_clientContentLength) : 0;
+    uint32_t lastProgressMs = millis();
+    while (_currentRaw->totalSize < contentLength) {
+        size_t available = client.available();
+        if (!available) {
+            if (!client.connected() || millis() - lastProgressMs > ESP32BASE_WEB_RAW_NO_PROGRESS_TIMEOUT_MS) {
+                _currentRaw->status = RAW_ABORTED;
+                _currentRaw->currentSize = 0;
+                _currentHandler->raw(*this, _currentUri, *_currentRaw);
+                return false;
+            }
+#if ESP32BASE_ENABLE_WATCHDOG
+            Esp32BaseWatchdog::feed();
+#endif
+            delay(2);
+            continue;
+        }
+
+        const size_t remaining = contentLength - _currentRaw->totalSize;
+        size_t wanted = available;
+        if (wanted > HTTP_RAW_BUFLEN) {
+            wanted = HTTP_RAW_BUFLEN;
+        }
+        if (wanted > remaining) {
+            wanted = remaining;
+        }
+        int readBytes = client.read(_currentRaw->buf, wanted);
+        if (readBytes <= 0) {
+#if ESP32BASE_ENABLE_WATCHDOG
+            Esp32BaseWatchdog::feed();
+#endif
+            delay(2);
+            continue;
+        }
+        _currentRaw->currentSize = static_cast<size_t>(readBytes);
+        _currentRaw->totalSize += _currentRaw->currentSize;
+        lastProgressMs = millis();
+        _currentHandler->raw(*this, _currentUri, *_currentRaw);
+    }
+
+    _currentRaw->status = RAW_END;
+    _currentRaw->currentSize = 0;
+    _currentHandler->raw(*this, _currentUri, *_currentRaw);
+    return true;
+}
+
 WebContext::WebContext()
     : server(80),
       routes{},
