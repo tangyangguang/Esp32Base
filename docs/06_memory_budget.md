@@ -193,7 +193,7 @@ ESP32-C3 4MB 要控制 Web/OTA/Fs 组合的体积。
 
 ## 7. 自动构建资源记录
 
-以下数据来自 `examples/basic` 的 PlatformIO release 构建产物。`firmware.bin` 为实际固件镜像大小；`text` 按 `flash.text + iram0.text` 汇总；`data` / `bss` 来自 DRAM section。ESP32 / Core 2.x 的 7 profile 表应作为同批自动 size 表整体更新，避免同一页混用历史数据。
+以下数据来自 `examples/basic` 的 PlatformIO release 构建产物。`firmware.bin` 为实际固件镜像大小；`text` 按 `flash.text + iram0.text` 汇总；`data` / `bss` 来自 DRAM section。ESP32 / Core 2.x 的 7 profile 表必须作为同批自动 size 表整体更新，避免同一页混用不同批次数据。
 
 ### 7.1 ESP32 / Arduino Core 2.x
 
@@ -218,7 +218,7 @@ ESP32-C3 4MB 要控制 Web/OTA/Fs 组合的体积。
 | ESP32 CORE, Core 3.x | 303136 | 206147 | 16977 | 5816 | 144036 | 78572 |
 | ESP32 FULL, Core 3.x | 1177904 | 933335 | 26141 | 37731 | 843500 | 216988 |
 
-ESP32-S3 行和 ESP32 Core 3.x CORE 行仍为历史代表构建；冻结前应由同一自动 size 脚本刷新。ESP32 Core 3.x FULL 当前距 1.25MB app slot 仅剩约 132KB，必须纳入 CI size gate。
+跨芯片和 Arduino Core 版本的代表构建记录必须由同一自动 size 脚本整体刷新。ESP32 Core 3.x FULL 当前距 1.25MB app slot 仅剩约 132KB，必须纳入 CI size gate。
 
 ## 8. 实机资源记录表
 

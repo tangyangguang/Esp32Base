@@ -1,36 +1,46 @@
 # Esp32Base 协作规范
 
-本文件面向 AI coding agent 和维护者。项目当前处于业务项目试用、基础能力快速完善阶段；本文件只规定协作方式和决策原则。具体 API、默认行为、架构方案、页面规范、存储策略、安全边界和验证矩阵，以 `docs/`、`README.md` 及现有代码为准。
+本文件面向 AI coding agent 和维护者，只记录本项目的长期协作规则。通用沟通风格、代码编辑安全和工具使用规则不放在这里。
 
-## 1. 当前阶段
+## 1. 项目定位和依据
 
-- 这是试用阶段，不是兼容维护阶段；不为旧 API、旧 key、旧行为保留迁移层或兼容 fallback。
-- 新需求、bug、优化和业务接入反馈都先整体评估，不默认接受，也不默认推给业务项目。
-- 评估时判断：是否应由 Esp32Base 承担，是否影响架构边界、裁剪、示例、文档、测试或实机体验。
-- 是基础库问题时，按最终清晰设计推进；不是基础库问题时，说明依据、业务侧建议，以及是否需要补充文档/示例。
-- 不做临时补丁、业务侧绕行方案或“先这样以后再说”的实现；最佳方案影响较大时，先说明影响范围和收益。
+- `Esp32Base` 是面向 ESP32 / ESP32-S3 / ESP32-C3、基于 Arduino ESP32 Core 的可裁剪基础库，不是 Web 管理平台、云框架或大型组件系统。
+- 当前仍处于试用和首版定型阶段，不为旧 API、旧 key、旧行为保留迁移层或兼容 fallback。
+- 判断设计和实现时，以 `README.md`、`docs/`、现有代码和示例为准；历史设计、评审记录、临时评估文件和过程流水不作为实现依据。
+- 涉及芯片、Arduino Core、PlatformIO、OTA、分区表、安全/Auth、存储和协议细节时，优先依据项目文档和上游权威资料；无法核实时明确说明不确定性。
 
-## 2. 修改原则
+## 2. 架构边界
 
-- 修改前先读对应模块的现有实现、README 和相关 `docs/`，不要只凭当前代码片段猜设计意图。
-- 方案设计不被旧命名、旧实现或已写文档绑架；如果最佳方案要求调整模型，就同步调整代码、示例和文档。
-- 保持 Core 最小、Runtime/FS/Web/OTA 等能力分层清晰，重能力必须可裁剪；具体边界以文档和现有模块结构为准。
-- 只改完成目标必需的内容，不顺手重构相邻代码，不清理无关历史问题。
-- 遇到基础库能力不足、基础库 bug，或新需求更适合沉淀到基础库时，不在业务项目里临时绕开。
+- 保持 Core 最小：Core 只承担日志、NVS 小配置、系统诊断和生命周期，不引入 WiFi、Web、OTA、LittleFS、Watchdog、Sleep 或业务语义。
+- 依赖方向必须符合 `docs/01_architecture.md`：Application -> Esp32Base -> Update -> Web -> Network -> Runtime -> Core，不允许低层依赖高层、同层强耦合或循环依赖。
+- Profile 和裁剪规则以 `docs/02_profiles.md` 为准；新增能力必须评估是否影响 profile、依赖检查、LDF、示例和 map 符号裁剪。
+- Web、OTA、FS、FileLog、App Events、App Config 等重能力必须保持可裁剪；未启用模块不应编译、链接或初始化。
+- LittleFS 的 `/esp32base/**` 是基础库管理命名空间；业务文件应使用 `/app/**`、`/data/**` 或项目自定义目录。
 
-## 3. 文档
+## 3. 修改原则
 
+- 修改前先读对应模块实现、`README.md` 和相关 `docs/`，不要只凭局部代码猜设计意图。
+- 新需求、bug、优化和业务接入反馈先判断是否应由 Esp32Base 承担；不是基础库问题时，说明依据、业务侧建议，以及是否需要补充文档或示例。
+- 是基础库问题时，按最终清晰设计推进；不要做临时补丁、业务侧绕行方案或“先这样以后再说”的实现。
+- 只改完成目标必需的内容，不顺手重构相邻模块，不清理无关历史问题。
 - 修改 public API、默认行为、profile、Web 页面、日志、存储、OTA/Auth、安全策略或示例接入方式时，同步更新 README、相关 `docs/` 和示例。
-- `CHANGELOG.md` 属于过程性流水文件，不作为项目契约、评估依据或发布内容；如需记录新 API/行为、业务用途、关键边界和推荐接入方式，应写入 README 或对应 `docs/`。
-- 文档不描述旧兼容路径；首版发布前以最终实现为准。
-- 完成业务反馈后，给出可直接转发给反馈项目的简洁回复，并提醒对方查看 README 和对应 `docs/` 获取最新能力边界。
-- 如果本文件再次接近或超过 100 行，优先合并规则、删除具体设计细节，或把细节迁移到对应文档。
+- `CHANGELOG.md` 不作为项目契约；新 API、行为边界、业务用途和推荐接入方式应写入 README 或对应 `docs/`。
 
 ## 4. 验证要求
 
-- 能构建的改动至少运行相关 PlatformIO 示例构建；选择最能覆盖本次改动的示例。
-- 涉及 Web、OTA、WiFi、FileLog、Sleep、Watchdog 的改动，优先做 ESP32 实机验证。
-- 涉及裁剪、profile、依赖或 PlatformIO LDF 的改动，必须验证不会破坏非目标 profile；必要时用外部最小应用验证。
-- 可能影响发布包内容时，运行打包检查并确认应包含和不应包含的文件。
-- 烧录 ESP32 时优先只刷 app 分区保留 NVS/WiFi；不擅自切换电脑 WiFi。
-- 不留下生成 tarball、临时包、串口 monitor、后台 dev server 等干扰物。
+- 能构建的改动至少运行最相关的 PlatformIO 示例构建；选择覆盖本次改动风险最大的 env。
+- 根目录 native harness 可用：
+  - `pio test -e native_web_harness`
+  - `pio test -e native_config_harness`
+- Profile/裁剪/LDF 相关改动优先验证 `examples/basic` 的相关 env；涉及 CORE/NET/WEB/FULL 裁剪时，结合 `scripts/check_trim_symbols.py` 和 `docs/09_release_checklist.md` 检查。
+- Web UI 改动优先验证 `examples/web_ui_gallery`；App Config/完整集成优先验证 `examples/full_demo`；App Events 改动优先验证 `examples/app_events_demo`；OTA 改动优先验证 `examples/web_logs_ota` 或 FULL 示例。
+- 涉及 Web、OTA、WiFi、FileLog、Sleep、Watchdog 的改动，优先做 ESP32 实机验证；无法实机验证时在回复中明确说明缺口和风险。
+- 影响发布包内容时，运行 `platformio pkg pack .`，并结合 `scripts/check_release_hygiene.py`、`docs/09_release_checklist.md` 确认应包含和不应包含的文件。
+- 烧录 ESP32 时优先只刷 app 分区并保留 NVS/WiFi；不要擅自切换电脑 WiFi。
+- 不留下生成 tarball、临时包、串口 monitor、后台 dev server 或其他干扰物。
+
+## 5. 高影响操作
+
+- 删除、覆盖、格式化 LittleFS、清 NVS、出厂重置、串口烧录、OTA、推送、发布、改账号/权限/认证配置前，先说明影响范围并取得确认。
+- 不输出、提交或记录密钥、token、真实 Web Auth 密码、WiFi 密码和隐私配置；发现敏感信息时提醒风险。
+- 完成业务反馈后，给出可直接转发给反馈项目的简洁回复，并提醒对方以 README 和对应 `docs/` 为最新能力边界。

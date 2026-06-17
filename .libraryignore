@@ -1,5 +1,7 @@
 design-history/
+design-history/**
 docs/superpowers/
+docs/superpowers/**
 ESP32BASE_DOCUMENTATION_REVIEW*.md
 bug-ticklish-kitten.md
 .git/
@@ -15,5 +17,9 @@ bug-ticklish-kitten.md
 **/.pioenvs/
 **/.piolibdeps/
 **/.cache/
+**/__pycache__/
+*.py[cod]
 idf_component.yml
 idf_component.yml.orig
+**/idf_component.yml
+**/idf_component.yml.orig

@@ -47,6 +47,9 @@ idf_component.yml.orig
 **/.DS_Store
 Thumbs.db
 *.log
+__pycache__/
+**/__pycache__/
+*.py[cod]
 
 # =====================================
 # 5. 本地过程文件
@@ -56,3 +59,7 @@ CLAUDE.md
 .codex-worklog.md
 .claude/
 .superpowers/
+design-history/
+docs/superpowers/
+ESP32BASE_DOCUMENTATION_REVIEW*.md
+bug-ticklish-kitten.md

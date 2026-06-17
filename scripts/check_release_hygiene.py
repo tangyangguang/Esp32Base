@@ -18,12 +18,17 @@ api_docs = read("docs/03_api.md")
 memory_budget = read("docs/06_memory_budget.md")
 
 for path, text in (
+    (".gitignore", read(".gitignore")),
     ("library.json", library),
     (".libraryignore", libraryignore),
     (".piopmignore", piopmignore),
 ):
     if "docs/superpowers" not in text:
         errors.append(f"{path}: release/export filters must exclude docs/superpowers")
+    if "__pycache__" not in text or "*.py[cod]" not in text:
+        errors.append(f"{path}: release/export filters must exclude Python cache files")
+    if "idf_component.yml" not in text:
+        errors.append(f"{path}: release/export filters must exclude generated idf_component.yml files")
 
 if "#if ESP32BASE_PROFILE == ESP32BASE_PROFILE_NET" not in profiles:
     errors.append("docs/02_profiles.md: profile example must use numeric ESP32BASE_PROFILE comparison")

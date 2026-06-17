@@ -20,12 +20,6 @@ uint32_t loadLifetimeResetCount() {
     if (stored >= 0) {
         return static_cast<uint32_t>(stored);
     }
-    const int32_t fallback = Esp32BaseConfig::getInt("eb_sys", "wdt_total_cnt", -1);
-    if (fallback >= 0) {
-        const uint32_t value = static_cast<uint32_t>(fallback);
-        Esp32BaseConfig::setInt("eb_sys", "wdt_cnt", static_cast<int32_t>(value));
-        return value;
-    }
     return 0;
 }
 

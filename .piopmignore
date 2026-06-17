@@ -17,6 +17,8 @@ bug-ticklish-kitten.md
 **/.pioenvs/
 **/.piolibdeps/
 **/.cache/
+**/__pycache__/
+*.py[cod]
 idf_component.yml
 idf_component.yml.orig
 **/idf_component.yml

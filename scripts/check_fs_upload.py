@@ -123,10 +123,12 @@ for path, needles in checks.items():
         if needle not in text:
             errors.append(f"{path}: missing {needle!r}")
 
-if "Esp32BaseFs::appendBytes(g_fsUploadPath, upload.buf, upload.currentSize)" not in source:
-    errors.append("src/web/internal Web modules: upload chunks must stream through Esp32BaseFs appendBytes")
-if "Esp32BaseFs::writeBytes(g_fsUploadPath, nullptr, 0)" not in source:
-    errors.append("src/web/internal Web modules: upload must create or truncate the target before streaming chunks")
+if "Esp32BaseFs::appendBytes(g_fsUploadTempPath, upload.buf, upload.currentSize)" not in source:
+    errors.append("src/web/internal Web modules: upload chunks must stream through a temporary file")
+if "fsCommitUploadedTemp(uploadTempPath, uploadPath, overwrite)" not in source:
+    errors.append("src/web/internal Web modules: upload must commit the verified temporary file")
+if "fsRemoveUploadTempIfPresent(uploadTempPath)" not in source:
+    errors.append("src/web/internal Web modules: failed uploads must remove temporary files when possible")
 if "Target is reserved for App Events" in source:
     errors.append("src/web/internal Web modules: App Events store upload should warn/reload, not reject")
 if "fsResetUploadState()" not in source:
@@ -149,8 +151,8 @@ if "Esp32BaseAppEventLog::reload()" in upload_done and "App Events store reload 
     errors.append("src/web/internal/WebFs.cpp: App Events store upload reload failure must be returned to the client")
 if "Esp32BaseFileLog::begin()" in upload_done and "FileLog reload failed" not in upload_done:
     errors.append("src/web/internal/WebFs.cpp: FileLog upload reload failure must be returned to the client")
-if "uploadModified" not in upload_done or "uploadAppEventsTarget" not in upload_done or "uploadFileLogTarget" not in upload_done:
-    errors.append("src/web/internal/WebFs.cpp: upload completion must snapshot modified sensitive target state")
+if "uploadAppEventsTarget" not in upload_done or "uploadFileLogTarget" not in upload_done:
+    errors.append("src/web/internal/WebFs.cpp: upload completion must snapshot sensitive target state")
 if upload_done.find("fsRecoverModifiedUploadRuntime(") > upload_done.find("fsSendUploadJson(400"):
     errors.append("src/web/internal/WebFs.cpp: failed uploads that modified sensitive targets must reload runtime before returning upload errors")
 verification_block = block_after(upload_done, "if (actualSize < 0")
@@ -158,24 +160,16 @@ if "fsRecoverModifiedUploadRuntime(" not in verification_block:
     errors.append("src/web/internal/WebFs.cpp: verification failure branch must reload modified sensitive targets")
 elif verification_block.find("fsRecoverModifiedUploadRuntime(") > verification_block.find("fsSendUploadJson(500"):
     errors.append("src/web/internal/WebFs.cpp: verification failure branch must reload before returning the 500 upload error")
-if "g_fsUploadModified = true;" not in upload_write:
-    errors.append("src/web/internal/WebFs.cpp: upload start must mark the target modified after truncating/opening it")
 if "g_fsUploadAppEventsTarget" not in upload_write or "g_fsUploadFileLogTarget" not in upload_write:
-    errors.append("src/web/internal/WebFs.cpp: upload start must classify App Events/FileLog targets before writes can fail")
+    errors.append("src/web/internal/WebFs.cpp: upload start must classify App Events/FileLog targets before temp writes can fail")
 target_marker = "g_fsUploadAppEventsTarget = appEventsOwnsPath(g_fsUploadPath);"
-write_marker = "Esp32BaseFs::writeBytes(g_fsUploadPath, nullptr, 0)"
-modified_marker = "g_fsUploadModified = true;"
+write_marker = "Esp32BaseFs::appendBytes(g_fsUploadTempPath, upload.buf, upload.currentSize)"
 target_pos = upload_write.find(target_marker)
 write_pos = upload_write.find(write_marker)
-modified_pos = upload_write.find(modified_marker)
 if target_pos < 0 or write_pos < 0:
-    errors.append("src/web/internal/WebFs.cpp: upload start must classify sensitive targets before opening/truncating")
+    errors.append("src/web/internal/WebFs.cpp: upload start must classify sensitive targets before streaming temp chunks")
 elif target_pos > write_pos:
-    errors.append("src/web/internal/WebFs.cpp: upload start must classify sensitive targets before the truncate/create attempt")
-if write_pos >= 0 and (modified_pos < 0 or modified_pos > write_pos):
-    failure_block = block_after(upload_write, f"if (!{write_marker})")
-    if "fsRecoverModifiedUploadRuntime(" not in failure_block:
-        errors.append("src/web/internal/WebFs.cpp: upload truncate/create attempt must mark sensitive targets modified before failure can return")
+    errors.append("src/web/internal/WebFs.cpp: upload start must classify sensitive targets before writing temp chunks")
 if 'strlcpy(path, g_server.arg' in upload_done + upload_write or 'strlcpy(dir, g_server.arg' in upload_done + upload_write:
     errors.append("src/web/internal/WebFs.cpp: upload path args must not be copied from g_server.arg before length checks")
 if "fsUploadReceived(false)" not in read("src/web/internal/WebContext.cpp"):
@@ -194,7 +188,7 @@ for forbidden in [
 for path in ["README.md", "docs/03_api.md", "docs/04_web.md", "docs/11_web_ui_baseline.md"]:
     text = read(path)
     for forbidden in ["受保护", "不能作为上传目标", "不能选择"]:
-        if forbidden in text and "/esp32base/fs" in text:
+        if f"/esp32base/fs {forbidden}" in text or f"/esp32base/fs` {forbidden}" in text:
             errors.append(f"{path}: upload docs still contain restriction marker {forbidden!r}")
 
 if errors:

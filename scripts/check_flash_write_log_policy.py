@@ -51,7 +51,7 @@ for needle, message in web_checks:
         errors.append(f"src/web/internal/WebResponse.cpp: {message}")
 
 docs = {
-    "README.md": "长期离线或路由器不可用时，WiFi 慢速 backoff 的重复重试日志降为 INFO",
+    "README.md": "长期离线或路由器不可用时，WiFi 慢速 backoff 的重复重试日志使用 INFO",
     "docs/03_api.md": "进入慢速 backoff 后，重复的连接超时和重试排程日志降为 INFO",
     "docs/07_diagnostics.md": "慢速 backoff 阶段的重复 WiFi 重试日志使用 INFO",
 }

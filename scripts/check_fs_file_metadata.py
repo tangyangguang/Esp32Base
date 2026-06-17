@@ -46,7 +46,7 @@ checks = [
     ),
     (
         source,
-        "legacyListDirCallback",
+        "listDirAdapterCallback",
         "src/runtime/Esp32BaseFs.inc: listDir should delegate through metadata enumeration",
     ),
     (

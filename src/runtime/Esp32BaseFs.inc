@@ -193,13 +193,13 @@ bool writeMode(const char* path, const uint8_t* data, size_t len, const char* mo
     return verifyReadableByte(path, verifyOffset);
 }
 
-struct LegacyListDirFrame {
+struct ListDirAdapterFrame {
     Esp32BaseFs::ListCallback cb;
     void* user;
 };
 
-void legacyListDirCallback(const Esp32BaseFs::EntryInfo& entry, void* user) {
-    LegacyListDirFrame* frame = static_cast<LegacyListDirFrame*>(user);
+void listDirAdapterCallback(const Esp32BaseFs::EntryInfo& entry, void* user) {
+    ListDirAdapterFrame* frame = static_cast<ListDirAdapterFrame*>(user);
     if (!frame || !frame->cb) {
         return;
     }
@@ -441,8 +441,8 @@ int64_t Esp32BaseFs::fileSize(const char* path) {
 }
 
 bool Esp32BaseFs::listDir(const char* path, ListCallback cb, void* user) {
-    LegacyListDirFrame frame = {cb, user};
-    return listDirInfo(path, legacyListDirCallback, &frame);
+    ListDirAdapterFrame frame = {cb, user};
+    return listDirInfo(path, listDirAdapterCallback, &frame);
 }
 
 bool Esp32BaseFs::listDirInfo(const char* path, ListInfoCallback cb, void* user) {
