@@ -170,7 +170,8 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/ui-config?saved=1", nullptr, true, 200, "保存成功");
     RUN_SELFTEST("GET", "/ui-config", nullptr, true, 200, "data-eb-inline-edit");
     RUN_SELFTEST("GET", "/ui-config", nullptr, true, 200, "data-eb-dialog");
-    RUN_SELFTEST("GET", "/ui-config", nullptr, true, 200, "<dialog id='native-confirm' class='panel eb-modal'>");
+    RUN_SELFTEST("GET", "/ui-config", nullptr, true, 200, "id='native-confirm'");
+    RUN_SELFTEST("GET", "/ui-config", nullptr, true, 200, "class='panel eb-modal'");
     RUN_SELFTEST("GET", "/ui-config", nullptr, true, 200, "id='row-plan'");
     RUN_CROSS_ORIGIN_SELFTEST("POST", "/ui-config/name", "name=blocked", true, 403, "Forbidden");
     RUN_SELFTEST("POST", "/ui-config/name", "name=flower", true, 303, "Location: /ui-config?saved=1");
@@ -178,13 +179,17 @@ void runSelfTest() {
     RUN_AJAX_SELFTEST("POST", "/ui-config/name", "name=", true, 400, "\"ok\":false");
     RUN_AJAX_SELFTEST("POST", "/ui-config/dialog", "limit=42&mode=manual", true, 200, "\"ok\":true");
     RUN_SELFTEST("GET", "/ui-action", nullptr, true, 200, "操作命令");
-    RUN_SELFTEST("GET", "/ui-action", nullptr, true, 200, "<input type='submit' class='btnlink info' value='开始'>");
+    RUN_SELFTEST("GET", "/ui-action", nullptr, true, 200, "btnlink info");
+    RUN_SELFTEST("GET", "/ui-action", nullptr, true, 200, "value='开始'");
     RUN_CROSS_ORIGIN_SELFTEST("POST", "/ui-action/run", "run=1", true, 403, "Forbidden");
     RUN_SELFTEST("POST", "/ui-action/run", "run=1", true, 303, "Location: /ui-action?done=1");
     RUN_SELFTEST("GET", "/ui-config/flow?saved=1", nullptr, true, 200, "流程向导");
     RUN_SELFTEST("GET", "/ui-status/maintenance", nullptr, true, 200, "诊断维护");
-    RUN_SELFTEST("GET", "/ui-status/maintenance", nullptr, true, 200, "class='uactions readonly'><span class='uvalue'>正常</span>");
-    RUN_SELFTEST("GET", "/ui-status/maintenance", nullptr, true, 200, "class='uactions'><span class='uvalue'>空闲</span><a class='btnlink info' href='/esp32base/tools'>查看</a>");
+    RUN_SELFTEST("GET", "/ui-status/maintenance", nullptr, true, 200, "uactions readonly");
+    RUN_SELFTEST("GET", "/ui-status/maintenance", nullptr, true, 200, "正常");
+    RUN_SELFTEST("GET", "/ui-status/maintenance", nullptr, true, 200, "class='uactions'");
+    RUN_SELFTEST("GET", "/ui-status/maintenance", nullptr, true, 200, "空闲");
+    RUN_SELFTEST("GET", "/ui-status/maintenance", nullptr, true, 200, "href='/esp32base/tools'");
     RUN_SELFTEST("GET", "/ui-status/access", nullptr, false, 200, "访问控制");
     RUN_SELFTEST("GET", "/ui-config/confirm", nullptr, true, 200, "确认保护");
     RUN_SELFTEST("POST", "/ui-confirm/run", "confirm=1", true, 303, "Location: /ui-config/confirm?done=1");
@@ -195,7 +200,9 @@ void runSelfTest() {
     RUN_SELFTEST("GET", "/esp32base/app-config", nullptr, true, 200, "Device title");
     RUN_SELFTEST("GET", "/esp32base/logs", nullptr, true, 200, "System logs unavailable");
     RUN_SELFTEST("GET", "/esp32base/logs?error=unavailable", nullptr, true, 200, "System logs action failed");
-    RUN_SELFTEST("GET", "/ui-status", nullptr, true, 200, "<footer class='footerbar'><span class='syslinks'><a href='/esp32base'>Status</a><a href='/esp32base/logs'>System Logs</a><a href='/esp32base/app-config'>App Config</a>");
+    RUN_SELFTEST("GET", "/ui-status", nullptr, true, 200, "footerbar");
+    RUN_SELFTEST("GET", "/ui-status", nullptr, true, 200, "syslinks");
+    RUN_SELFTEST("GET", "/ui-status", nullptr, true, 200, "href='/esp32base/app-config'>App Config</a>");
 #undef RUN_SELFTEST
 #undef RUN_AJAX_SELFTEST
 #undef RUN_CROSS_ORIGIN_SELFTEST

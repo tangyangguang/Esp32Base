@@ -13,6 +13,8 @@ web = read("src/web/Esp32BaseWeb.cpp")
 ota = read("src/web/internal/WebOta.cpp")
 docs = read("docs/11_web_ui_baseline.md")
 gallery = read("examples/web_ui_gallery/src/main.cpp")
+gallery_selftest = gallery.split("#undef RUN_SELFTEST", 1)[0]
+full_demo = read("examples/full_demo/src/main.cpp")
 
 checks = [
     (
@@ -119,6 +121,37 @@ if override_pos < 0:
 
 if gallery.count('RUN_SELFTEST("GET", "/esp32base/ui.css"') > 7:
     errors.append("web_ui_gallery selftest must not lock detailed CSS implementation strings.")
+if "<header class='pagehead'><h1>Full Demo</h1></header><div class='statusgrid'>" in full_demo:
+    errors.append("full_demo selftest must not lock adjacent pagehead/statusgrid HTML ordering.")
+if "<section class='panel statuspage'><h2>OTA diagnostics</h2><div class='tablewrap'><table class='kv'>" in full_demo:
+    errors.append("full_demo selftest must not lock OTA diagnostics wrapper ordering.")
+for locked in (
+    "<div class='tablewrap'><table class='kv'>",
+    "<th>System logs</th><td><span class='tag ok'>enabled</span>",
+    "<section class='panel dangerpanel'><h2>Clear WiFi</h2>",
+    "<section class='panel logpanel'><div class='tablewrap'><table class='logmeta'>",
+    "<th>Max per file</th><td>32.00 KB",
+    "class='active' href='/esp32base/logs?segment=0'><span class='segname'>current-0",
+    "<section class='panel dangerpanel'><h2>Restart device</h2>",
+    "id='acbox' class='confirmbox' aria-hidden='true'><h2>Confirm changes</h2>",
+    "<section class='panel formpanel wifipanel'><h2>Credentials</h2><form class='editform'",
+    "<section class='panel formpanel authpanel'><h2>Credentials</h2><form class='editform'",
+    "<section class='panel formpanel uploadpanel'><h2>Firmware upload</h2>",
+    "<section class='panel actionpanel'><h2>System settings</h2>",
+    "<section class='panel formpanel hostpanel'><h2>Hostname</h2>",
+    "<footer class='footerbar'><span class='syslinks'>",
+):
+    if locked in full_demo:
+        errors.append("full_demo selftest must not lock adjacent helper HTML ordering.")
+for locked in (
+    "<dialog id='native-confirm' class='panel eb-modal'>",
+    "<input type='submit' class='btnlink info' value='开始'>",
+    "class='uactions readonly'><span class='uvalue'>正常</span>",
+    "class='uactions'><span class='uvalue'>空闲</span><a class='btnlink info' href='/esp32base/tools'>查看</a>",
+    "<footer class='footerbar'><span class='syslinks'><a href='/esp32base'>Status</a><a href='/esp32base/logs'>System Logs</a><a href='/esp32base/app-config'>App Config</a>",
+):
+    if locked in gallery_selftest:
+        errors.append("web_ui_gallery selftest must not lock adjacent helper HTML ordering.")
 
 if errors:
     for error in errors:
