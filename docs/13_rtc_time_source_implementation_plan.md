@@ -4,7 +4,7 @@
 
 **Goal:** Add optional DS3231/PCF8563 RTC support as a trusted time source without turning Esp32Base into a full RTC peripheral framework.
 
-**Architecture:** Add `Esp32BaseTime` as the common source of truth for real time and boot time mapping, then add `Esp32BaseRtc` as an optional I2C RTC backend selected by compile-time configuration. Existing NTP, App Events, logs, Web Status, and event resolution move to `Esp32BaseTime` so the common logic stays `NTP > RTC > uptime`.
+**Architecture:** Add `Esp32BaseTime` as the common source of truth for real time and boot time mapping, then add `Esp32BaseRtc` as an optional I2C RTC backend selected by compile-time configuration. A build selects exactly one RTC driver: DS3231 or PCF8563. Existing NTP, App Events, logs, Web Status, and event resolution move to `Esp32BaseTime` so the common logic stays `NTP > RTC > uptime`.
 
 **Tech Stack:** Arduino ESP32 Core, PlatformIO, Unity native harness, ESP-IDF time primitives, Arduino `Wire` / `TwoWire`, existing `.h` + `.inc` Esp32Base module pattern.
 
@@ -25,7 +25,7 @@
   Public RTC facade: driver/status enums, `configure`, `begin`, `refresh`, `readEpoch`, `setEpoch`, cached status, driver name.
 
 - Create: `src/runtime/Esp32BaseRtc.inc`
-  Common RTC implementation, selected driver binding, I2C ownership, write-back threshold handling.
+  Common RTC implementation, single selected driver binding, I2C ownership, write-back threshold handling.
 
 - Create: `src/runtime/internal/Esp32BaseRtcDrivers.h`
   Internal driver contract and chip-specific helpers shared by tests and `Esp32BaseRtc.inc`.
@@ -779,18 +779,21 @@ Append to `test/test_native_time_harness/test_main.cpp`:
 void test_rtc_defaults_to_driver_address_when_configured_address_zero() {
     resetTimeHarness();
     Wire.devices.clear();
-    Wire.devices[0x68] = std::vector<uint8_t>(32, 0);
 
     TEST_ASSERT_TRUE(Esp32BaseRtc::configure(Wire, 0));
     TEST_ASSERT_FALSE(Esp32BaseRtc::isAvailable());
+#if ESP32BASE_RTC_DRIVER == ESP32BASE_RTC_DRIVER_PCF8563
+    TEST_ASSERT_EQUAL_STRING("pcf8563", Esp32BaseRtc::driverName());
+#else
     TEST_ASSERT_EQUAL_STRING("ds3231", Esp32BaseRtc::driverName());
+#endif
 }
 
 void test_rtc_missing_is_nonfatal_status() {
     resetTimeHarness();
     Wire.devices.clear();
 
-    TEST_ASSERT_TRUE(Esp32BaseRtc::configure(Wire, 0x68));
+    TEST_ASSERT_TRUE(Esp32BaseRtc::configure(Wire, 0));
     TEST_ASSERT_TRUE(Esp32BaseRtc::begin());
     TEST_ASSERT_FALSE(Esp32BaseRtc::isAvailable());
     TEST_ASSERT_EQUAL(Esp32BaseRtc::STATUS_MISSING, Esp32BaseRtc::status());
@@ -826,8 +829,20 @@ Modify `src/Esp32BaseProfile.h`:
 #define ESP32BASE_RTC_DRIVER ESP32BASE_RTC_DRIVER_DS3231
 #endif
 
+#ifndef ESP32BASE_RTC_I2C_ADDR
+#define ESP32BASE_RTC_I2C_ADDR 0
+#endif
 #ifndef ESP32BASE_RTC_AUTO_WIRE_BEGIN
 #define ESP32BASE_RTC_AUTO_WIRE_BEGIN 0
+#endif
+#ifndef ESP32BASE_RTC_SDA
+#define ESP32BASE_RTC_SDA -1
+#endif
+#ifndef ESP32BASE_RTC_SCL
+#define ESP32BASE_RTC_SCL -1
+#endif
+#ifndef ESP32BASE_RTC_I2C_CLOCK_HZ
+#define ESP32BASE_RTC_I2C_CLOCK_HZ 100000
 #endif
 #ifndef ESP32BASE_RTC_NTP_WRITEBACK
 #define ESP32BASE_RTC_NTP_WRITEBACK 1
@@ -852,6 +867,15 @@ Modify `src/Esp32BaseProfile.h`:
 #endif
 #if ESP32BASE_RTC_AUTO_WIRE_BEGIN != 0 && ESP32BASE_RTC_AUTO_WIRE_BEGIN != 1
 #error "ESP32BASE_RTC_AUTO_WIRE_BEGIN must be 0 or 1"
+#endif
+#if ESP32BASE_RTC_I2C_ADDR < 0 || ESP32BASE_RTC_I2C_ADDR > 0x7F
+#error "ESP32BASE_RTC_I2C_ADDR must be 0 or a 7-bit I2C address"
+#endif
+#if ESP32BASE_RTC_AUTO_WIRE_BEGIN && ((ESP32BASE_RTC_SDA < 0) != (ESP32BASE_RTC_SCL < 0))
+#error "ESP32BASE_RTC_SDA and ESP32BASE_RTC_SCL must be configured together"
+#endif
+#if ESP32BASE_RTC_I2C_CLOCK_HZ <= 0
+#error "ESP32BASE_RTC_I2C_CLOCK_HZ must be > 0"
 #endif
 #if ESP32BASE_RTC_NTP_WRITEBACK != 0 && ESP32BASE_RTC_NTP_WRITEBACK != 1
 #error "ESP32BASE_RTC_NTP_WRITEBACK must be 0 or 1"
@@ -946,7 +970,7 @@ extern TwoWire Wire;
 
 namespace {
 TwoWire* g_rtcWire = &Wire;
-uint8_t g_rtcAddress = 0;
+uint8_t g_rtcAddress = ESP32BASE_RTC_I2C_ADDR;
 Esp32BaseRtc::Status g_rtcStatus = Esp32BaseRtc::STATUS_NOT_STARTED;
 uint32_t g_rtcLastEpoch = 0;
 uint32_t g_rtcLastSyncUptimeSec = 0;
@@ -968,21 +992,23 @@ bool rtcStubWrite(TwoWire&, uint8_t, uint32_t, Esp32BaseRtc::Status* status) {
     return false;
 }
 
-const Esp32BaseRtcDriverOps kRtcMissingDs3231Ops = {
-    "ds3231",
-    0x68,
-    rtcStubProbe,
-    rtcStubRead,
-    rtcStubWrite
-};
-
-const Esp32BaseRtcDriverOps kRtcMissingPcf8563Ops = {
+#if ESP32BASE_RTC_DRIVER == ESP32BASE_RTC_DRIVER_PCF8563
+const Esp32BaseRtcDriverOps kRtcMissingOps = {
     "pcf8563",
     0x51,
     rtcStubProbe,
     rtcStubRead,
     rtcStubWrite
 };
+#else
+const Esp32BaseRtcDriverOps kRtcMissingOps = {
+    "ds3231",
+    0x68,
+    rtcStubProbe,
+    rtcStubRead,
+    rtcStubWrite
+};
+#endif
 
 uint32_t rtcUptimeSec() {
     return Esp32BaseTime::snapshot().uptimeSec;
@@ -1005,7 +1031,11 @@ bool Esp32BaseRtc::begin() {
         g_rtcAddress = ops->defaultAddress;
     }
 #if ESP32BASE_RTC_AUTO_WIRE_BEGIN
+#if ESP32BASE_RTC_SDA >= 0 && ESP32BASE_RTC_SCL >= 0
+    g_rtcWire->begin(ESP32BASE_RTC_SDA, ESP32BASE_RTC_SCL, ESP32BASE_RTC_I2C_CLOCK_HZ);
+#else
     g_rtcWire->begin();
+#endif
 #endif
     return refresh();
 }
@@ -1109,11 +1139,7 @@ Add the initial binding at the end of the same file:
 #if ESP32BASE_ENABLE_RTC
 namespace {
 const Esp32BaseRtcDriverOps* rtcDriverOps() {
-#if ESP32BASE_RTC_DRIVER == ESP32BASE_RTC_DRIVER_PCF8563
-    return &kRtcMissingPcf8563Ops;
-#else
-    return &kRtcMissingDs3231Ops;
-#endif
+    return &kRtcMissingOps;
 }
 }
 #endif
@@ -1487,7 +1513,7 @@ const Esp32BaseRtcDriverOps kDs3231Ops = {
 
 - [ ] **Step 5: Replace temporary binding with DS3231 driver binding**
 
-Modify `src/runtime/Esp32BaseRtc.inc` by removing the temporary `kRtcMissingDs3231Ops` / `kRtcMissingPcf8563Ops` binding and adding:
+Modify `src/runtime/Esp32BaseRtc.inc` by removing the temporary `kRtcMissingOps` binding and adding the selected driver binding:
 
 ```cpp
 #if ESP32BASE_RTC_DRIVER == ESP32BASE_RTC_DRIVER_DS3231
@@ -1544,6 +1570,8 @@ build_flags =
   -D ESP32BASE_RTC_DRIVER=ESP32BASE_RTC_DRIVER_PCF8563
 test_filter = test_native_time_harness
 ```
+
+This creates a separate PCF8563 build of the same tests. It does not mean one firmware uses both DS3231 and PCF8563.
 
 - [ ] **Step 2: Add failing PCF8563 tests**
 
@@ -1688,10 +1716,12 @@ const Esp32BaseRtcDriverOps kPcf8563Ops = {
 
 - [ ] **Step 5: Bind PCF8563 driver**
 
-Modify `src/runtime/Esp32BaseRtc.inc`:
+Modify `src/runtime/Esp32BaseRtc.inc` so only one chip driver is included in any build:
 
 ```cpp
-#if ESP32BASE_RTC_DRIVER == ESP32BASE_RTC_DRIVER_PCF8563
+#if ESP32BASE_RTC_DRIVER == ESP32BASE_RTC_DRIVER_DS3231
+#include "internal/Esp32BaseRtcDs3231.inc"
+#elif ESP32BASE_RTC_DRIVER == ESP32BASE_RTC_DRIVER_PCF8563
 #include "internal/Esp32BaseRtcPcf8563.inc"
 #endif
 ```
@@ -2216,6 +2246,8 @@ RTC support is optional. Enable it only for boards with a battery-backed DS3231 
     #define ESP32BASE_ENABLE_RTC 1
     #define ESP32BASE_RTC_DRIVER ESP32BASE_RTC_DRIVER_DS3231
 
+`ESP32BASE_RTC_DRIVER` is a board-level compile-time selector. A firmware uses either DS3231 or PCF8563, never both.
+
 Time authority is `NTP > RTC > uptime`. Esp32Base uses RTC only for trusted wall-clock time and NTP write-back; applications may still use I2C directly for alarms and INT/SQW.
 ```
 
@@ -2229,6 +2261,7 @@ In `docs/10_known_limitations.md`, add:
 
 ```markdown
 - RTC support does not auto-detect chips. Applications must configure DS3231 or PCF8563 at build time.
+- DS3231 and PCF8563 are mutually exclusive firmware choices. Runtime chip switching and mixed-chip RTC operation are intentionally unsupported.
 - RTC support does not own alarm, INT/SQW, timer, temperature, or calibration features.
 - RTC status is cached by default; periodic polling is opt-in with `ESP32BASE_RTC_STATUS_REFRESH_MS`.
 ```
@@ -2298,7 +2331,18 @@ python scripts/check_trim_symbols.py examples/basic/.pio/build/esp32_core/firmwa
 
 Expected: script exits 0 and reports no forbidden RTC symbols in `esp32_core`.
 
-- [ ] **Step 4: Build high-risk examples**
+- [ ] **Step 4: Check selected RTC driver symbols are mutually exclusive**
+
+Run:
+
+```bash
+python scripts/check_trim_symbols.py examples/rtc_time_source/.pio/build/esp32_ds3231/firmware.elf --forbid pcf8563 Pcf8563
+python scripts/check_trim_symbols.py examples/rtc_time_source/.pio/build/esp32_pcf8563/firmware.elf --forbid ds3231 Ds3231
+```
+
+Expected: DS3231 firmware contains no PCF8563 driver symbols, and PCF8563 firmware contains no DS3231 driver symbols.
+
+- [ ] **Step 5: Build high-risk examples**
 
 Run:
 
@@ -2310,7 +2354,7 @@ pio run -d examples/app_events_demo -e esp32_full
 
 Expected: all builds pass.
 
-- [ ] **Step 5: Commit release-checklist updates if made**
+- [ ] **Step 6: Commit release-checklist updates if made**
 
 If `scripts/check_trim_symbols.py` or `docs/09_release_checklist.md` changed:
 

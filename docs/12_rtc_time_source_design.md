@@ -4,7 +4,7 @@ Date: 2026-06-20
 
 ## Summary
 
-Esp32Base will add an optional RTC-backed trusted time source for devices that must keep real wall-clock time after power loss and offline startup. The first implementation supports DS3231 and PCF8563 through explicit compile-time configuration. It does not auto-detect RTC chips.
+Esp32Base will add an optional RTC-backed trusted time source for devices that must keep real wall-clock time after power loss and offline startup. The first implementation supports DS3231 and PCF8563 through explicit compile-time configuration. A board firmware selects exactly one RTC driver at build time; the two chips are not used together and there is no runtime chip switching or auto-detection.
 
 The feature is a time-source integration, not a full RTC peripheral framework. Esp32Base owns only the system time semantics: trusted epoch, boot time mapping, logs, App Events, Web Status, and NTP write-back. Application projects keep direct control of chip-specific peripheral features such as alarms, INT/SQW pins, timer outputs, temperature reads, and calibration.
 
@@ -13,7 +13,7 @@ The feature is a time-source integration, not a full RTC peripheral framework. E
 - Provide real time after power loss for boards with a battery-backed RTC.
 - Keep RTC support optional and trimmed out by default.
 - Support DS3231 and PCF8563 in the first version.
-- Select the RTC chip by project configuration, not runtime probing.
+- Select exactly one RTC chip by project configuration, not runtime probing.
 - Keep common time behavior independent of the chosen RTC chip.
 - Let devices boot normally when the configured RTC is missing, invalid, not powered by battery, or not connected.
 - Use NTP as the highest-trust source when available, write NTP time back to RTC, and use RTC on later offline boots.
@@ -114,9 +114,13 @@ Defaults:
 - `ESP32BASE_ENABLE_RTC=0`.
 - `ESP32BASE_TIME_SYNC_MIN_EPOCH` defaults to `ESP32BASE_NTP_SYNC_MIN_EPOCH` when that macro exists, otherwise `1700000000UL`.
 - If RTC is enabled and no driver is selected, default to DS3231.
+- `ESP32BASE_RTC_DRIVER` is a single-value selector, not a bitmask. Only the selected chip driver is compiled into the final RTC-enabled firmware.
 - DS3231 default I2C address: `0x68`.
 - PCF8563 default I2C address: `0x51`.
+- `ESP32BASE_RTC_I2C_ADDR=0`, meaning use the selected driver's default address unless the application calls `Esp32BaseRtc::configure(...)` with a nonzero address.
 - `ESP32BASE_RTC_AUTO_WIRE_BEGIN=0`.
+- `ESP32BASE_RTC_SDA=-1` and `ESP32BASE_RTC_SCL=-1`, meaning use Arduino `Wire.begin()` defaults when auto begin is enabled.
+- `ESP32BASE_RTC_I2C_CLOCK_HZ=100000`.
 - `ESP32BASE_RTC_NTP_WRITEBACK=1`.
 - `ESP32BASE_RTC_WRITEBACK_THRESHOLD_SEC=2`.
 - `ESP32BASE_RTC_STATUS_REFRESH_MS=0`, meaning no periodic RTC polling by default.
@@ -136,6 +140,7 @@ I2C ownership rule:
 - By default, application code initializes `Wire`.
 - By default, Esp32Base uses Arduino `Wire`.
 - Esp32Base only calls `Wire.begin(...)` when `ESP32BASE_RTC_AUTO_WIRE_BEGIN=1`.
+- If both `ESP32BASE_RTC_SDA` and `ESP32BASE_RTC_SCL` are configured, auto begin uses those pins and `ESP32BASE_RTC_I2C_CLOCK_HZ`; otherwise it calls default `Wire.begin()`.
 - Esp32Base does not scan the bus and does not touch unrelated I2C devices.
 - If an application uses another `TwoWire` instance, it must call `Esp32BaseRtc::configure(...)` before `Esp32Base::begin()`.
 
@@ -212,7 +217,7 @@ public:
 
 Existing `Esp32BaseNtp::snapshot()` will remain as a compatibility helper when NTP is enabled and delegate to `Esp32BaseTime::snapshot()`. New code should use `Esp32BaseTime::snapshot()` directly.
 
-`Esp32BaseRtc::configure(...)` is optional. Passing `address=0` means "use the selected driver's default address". It must not call `Wire.begin()` by itself; it only records the bus and address for later `begin()`.
+`Esp32BaseRtc::configure(...)` is optional. If it is never called, Esp32Base uses Arduino `Wire` plus `ESP32BASE_RTC_I2C_ADDR`, falling back to the selected driver's default address when the macro is `0`. Passing `address=0` to `configure(...)` explicitly means "use the selected driver's default address"; passing a nonzero address overrides the macro. `configure(...)` must not call `Wire.begin()` by itself; it only records the bus and address for later `begin()`.
 
 `Esp32BaseRtc::refresh()` performs one bounded RTC read, updates cached RTC status, and asks `Esp32BaseTime` to accept RTC time only when no higher-priority NTP time is active. It exists for maintenance pages or applications that changed RTC time directly.
 
@@ -231,6 +236,18 @@ struct Esp32BaseRtcDriverOps {
 ```
 
 The implementation can use static functions selected by preprocessor instead of virtual classes. This keeps code size predictable and avoids dynamic allocation.
+
+Exactly one chip driver is bound in a compiled firmware:
+
+```cpp
+#if ESP32BASE_RTC_DRIVER == ESP32BASE_RTC_DRIVER_DS3231
+#include "internal/Esp32BaseRtcDs3231.inc"
+#elif ESP32BASE_RTC_DRIVER == ESP32BASE_RTC_DRIVER_PCF8563
+#include "internal/Esp32BaseRtcPcf8563.inc"
+#endif
+```
+
+The DS3231 and PCF8563 implementation files may both exist in the library package, but only the selected one should be included by `Esp32BaseRtc.inc` for a given application build.
 
 This project currently compiles optional runtime/network modules through headers and `.inc` files included by `src/Esp32Base.cpp`; `library.json` does not compile `src/runtime/*.cpp` or `src/network/*.cpp` directly. The RTC implementation should follow the existing `.h` + `.inc` pattern, or explicitly update `library.json` and all examples if standalone driver `.cpp` files are introduced.
 
@@ -392,7 +409,7 @@ Add or update:
 - Native harness tests for time authority selection, event resolution, and NTP write-back decision logic.
 - Unit tests for UTC epoch to RTC calendar conversion and RTC calendar to epoch conversion.
 - Tests covering `Esp32BaseRtc::configure(...)` with custom address and default-address behavior.
-- Compile checks for RTC disabled, DS3231 selected, and PCF8563 selected.
+- Compile checks for RTC disabled, DS3231 selected, and PCF8563 selected. DS3231 and PCF8563 checks are separate build environments, not one firmware using both chips.
 - Trim-symbol checks ensuring RTC code is absent when disabled.
 - Documentation examples showing `Wire.begin()` ownership and `ESP32BASE_RTC_AUTO_WIRE_BEGIN`.
 
@@ -404,12 +421,13 @@ Hardware validation:
 - PCF8563 board present and valid time.
 - PCF8563 missing while firmware enables PCF8563.
 - PCF8563 low-voltage/clock integrity invalid condition.
-- NTP write-back to both chips.
+- NTP write-back to the selected chip in separate DS3231 and PCF8563 validation firmware builds.
 
 ## Acceptance Criteria
 
 - RTC disabled builds behave as before except for documented Time facade additions.
 - RTC-enabled firmware boots successfully when the configured RTC chip is absent.
+- RTC-enabled firmware binds exactly one configured chip driver; DS3231 and PCF8563 are never runtime co-resident time sources.
 - DS3231 can provide trusted time on offline startup after prior setting.
 - PCF8563 can provide trusted time on offline startup after prior setting.
 - NTP overrides RTC when available and writes back to RTC only when drift exceeds threshold.
@@ -419,6 +437,7 @@ Hardware validation:
 - Web Status reports time source and RTC status clearly.
 - Business code can still use RTC alarms/INT/SQW directly without Esp32Base overwriting those settings.
 - `ESP32BASE_ENABLE_RTC=0` excludes DS3231/PCF8563 driver code from the linked image.
+- A DS3231-selected build excludes PCF8563 driver symbols, and a PCF8563-selected build excludes DS3231 driver symbols, aside from documentation/test names and shared helper names.
 - Custom `TwoWire` and custom address configuration works when called before `Esp32Base::begin()`.
 
 ## Implementation Decisions
