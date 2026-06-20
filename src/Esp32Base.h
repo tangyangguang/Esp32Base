@@ -27,6 +27,9 @@
 #if ESP32BASE_ENABLE_FILELOG
 #include "runtime/Esp32BaseFileLog.h"
 #endif
+#if ESP32BASE_ENABLE_TIME
+#include "runtime/Esp32BaseTime.h"
+#endif
 #if ESP32BASE_ENABLE_HEALTH
 #include "runtime/Esp32BaseHealth.h"
 #endif

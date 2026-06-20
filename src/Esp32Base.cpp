@@ -159,6 +159,9 @@ bool Esp32Base::begin() {
     }
     ESP32BASE_LOG_D("base", "module_ready name=ota_boot");
 #endif
+#if ESP32BASE_ENABLE_TIME
+    Esp32BaseTime::initBootSession();
+#endif
 #if ESP32BASE_ENABLE_NTP
     Esp32BaseNtp::initBootSession();
 #endif
@@ -414,6 +417,9 @@ void Esp32Base::logResources() {
 #endif
 #if ESP32BASE_ENABLE_FILELOG
 #include "runtime/Esp32BaseFileLog.inc"
+#endif
+#if ESP32BASE_ENABLE_TIME
+#include "runtime/Esp32BaseTime.inc"
 #endif
 #if ESP32BASE_ENABLE_HEALTH
 #include "runtime/Esp32BaseHealth.inc"
