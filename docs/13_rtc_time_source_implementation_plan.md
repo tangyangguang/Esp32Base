@@ -33,8 +33,14 @@
 - Create: `src/runtime/internal/Esp32BaseRtcInternal.h`
   Internal RTC write-back hook used by NTP integration without exposing it as public API.
 
+- Create: `src/runtime/internal/Esp32BaseRtcCalendar.h`
+  Shared UTC calendar conversion and BCD helpers used by both RTC drivers and native tests.
+
+- Create: `src/runtime/internal/Esp32BaseRtcBus.h`
+  Shared bounded I2C register read/write helpers used by both RTC drivers.
+
 - Create: `src/runtime/internal/Esp32BaseRtcDs3231.inc`
-  DS3231 driver implementation only: BCD calendar read/write, OSF mapping, status bit preservation.
+  DS3231 driver implementation only: calendar register read/write, OSF mapping, status bit preservation.
 
 - Create: `src/runtime/internal/Esp32BaseRtcPcf8563.inc`
   PCF8563 driver implementation only: BCD calendar read/write, VL/clock integrity mapping, status bit preservation.
@@ -50,9 +56,6 @@
 
 - Create: `test/test_native_time_harness/stubs/esp_timer.h`
   Native `esp_timer_get_time()` stub driven by test-controlled uptime.
-
-- Create: `test/test_native_time_harness/stubs/sys/time.h`
-  Native `settimeofday` stub used by `Esp32BaseTime` tests when accepting RTC/NTP epoch updates.
 
 - Create: `examples/rtc_time_source/src/main.cpp`
   Minimal RTC example showing DS3231 and PCF8563 compile-time selection and `Wire.begin()` ownership.
@@ -166,21 +169,6 @@ inline int64_t esp_timer_get_time() {
 }
 ```
 
-Create `test/test_native_time_harness/stubs/sys/time.h`:
-
-```cpp
-#pragma once
-
-#include_next <sys/time.h>
-
-extern long g_nativeSettimeofdaySec;
-
-inline int settimeofday(const struct timeval* tv, const struct timezone*) {
-    g_nativeSettimeofdaySec = tv ? static_cast<long>(tv->tv_sec) : 0;
-    return 0;
-}
-```
-
 - [ ] **Step 3: Write the first failing Time test**
 
 Create `test/test_native_time_harness/test_main.cpp`:
@@ -194,13 +182,11 @@ Create `test/test_native_time_harness/test_main.cpp`:
 
 uint32_t g_nativeMillis = 0;
 int64_t g_nativeEspTimerUs = 0;
-long g_nativeSettimeofdaySec = 0;
 NativeSerial Serial;
 
 static void resetTimeHarness() {
     g_nativeMillis = 0;
     g_nativeEspTimerUs = 0;
-    g_nativeSettimeofdaySec = 0;
     esp32base_internal::timeNativeReset();
 }
 
@@ -274,6 +260,7 @@ void test_rtc_time_establishes_boot_mapping() {
     TEST_ASSERT_EQUAL_UINT32(1700000105UL, snap.epochSec);
     TEST_ASSERT_EQUAL_UINT32(5, snap.uptimeSec);
     TEST_ASSERT_EQUAL_UINT32(1700000100UL, snap.bootStartEpochSec);
+    TEST_ASSERT_EQUAL_UINT32(1700000105UL, esp32base_internal::timeNativeLastSystemEpoch());
 }
 
 void test_ntp_overrides_rtc_time() {
@@ -289,6 +276,7 @@ void test_ntp_overrides_rtc_time() {
     TEST_ASSERT_EQUAL(Esp32BaseTime::SOURCE_NTP, snap.source);
     TEST_ASSERT_EQUAL_UINT32(1700000210UL, snap.epochSec);
     TEST_ASSERT_EQUAL_UINT32(1700000200UL, snap.bootStartEpochSec);
+    TEST_ASSERT_EQUAL_UINT32(1700000210UL, esp32base_internal::timeNativeLastSystemEpoch());
 }
 
 void test_resolve_current_boot_event_uses_active_mapping() {
@@ -333,7 +321,11 @@ Modify `src/Esp32BaseProfile.h` after the `ESP32BASE_ENABLE_NTP` default block:
 #endif
 
 #ifndef ESP32BASE_TIME_SYNC_MIN_EPOCH
+#ifdef ESP32BASE_NTP_SYNC_MIN_EPOCH
+#define ESP32BASE_TIME_SYNC_MIN_EPOCH ESP32BASE_NTP_SYNC_MIN_EPOCH
+#else
 #define ESP32BASE_TIME_SYNC_MIN_EPOCH 1700000000UL
+#endif
 #endif
 
 #ifndef ESP32BASE_ENABLE_TIME
@@ -408,6 +400,7 @@ bool timeAcceptNtpEpoch(uint32_t epochSec);
 
 #if defined(ESP32BASE_TIME_NATIVE_TEST)
 void timeNativeReset();
+uint32_t timeNativeLastSystemEpoch();
 #endif
 
 }
@@ -428,6 +421,7 @@ Create `src/runtime/Esp32BaseTime.inc`:
 #include "../core/Esp32BaseSystem.h"
 
 #include <esp_timer.h>
+#include <sys/time.h>
 #include <time.h>
 
 namespace {
@@ -445,6 +439,20 @@ bool timeTrustedEpoch(uint32_t epochSec) {
     return epochSec >= ESP32BASE_TIME_SYNC_MIN_EPOCH;
 }
 
+#if defined(ESP32BASE_TIME_NATIVE_TEST)
+uint32_t g_lastSystemEpoch = 0;
+#endif
+
+void timeSetSystemEpoch(uint32_t epochSec) {
+#if defined(ESP32BASE_TIME_NATIVE_TEST)
+    g_lastSystemEpoch = epochSec;
+#else
+    struct timeval tv = {};
+    tv.tv_sec = static_cast<time_t>(epochSec);
+    settimeofday(&tv, nullptr);
+#endif
+}
+
 bool timeAcceptEpoch(Esp32BaseTime::Source source, uint32_t epochSec) {
     if (!timeTrustedEpoch(epochSec)) {
         return false;
@@ -460,6 +468,7 @@ bool timeAcceptEpoch(Esp32BaseTime::Source source, uint32_t epochSec) {
     }
     const Esp32BaseTime::Source oldSource = g_source;
     g_source = source;
+    timeSetSystemEpoch(epochSec);
     Esp32BaseLog::setTimeProvider(Esp32BaseTime::logTimeString);
     if (g_callback && oldSource != g_source) {
         g_callback(Esp32BaseTime::snapshot());
@@ -563,12 +572,17 @@ bool timeAcceptNtpEpoch(uint32_t epochSec) {
 }
 
 #if defined(ESP32BASE_TIME_NATIVE_TEST)
+uint32_t timeNativeLastSystemEpoch() {
+    return g_lastSystemEpoch;
+}
+
 void timeNativeReset() {
     g_bootSessionReady = false;
     g_bootId = 0;
     g_bootStartEpochSec = 0;
     g_source = Esp32BaseTime::SOURCE_UPTIME;
     g_callback = nullptr;
+    g_lastSystemEpoch = 0;
 }
 #endif
 }
@@ -591,7 +605,8 @@ In `Esp32Base::begin()`, replace the NTP-only boot session block:
 ```cpp
 #if ESP32BASE_ENABLE_TIME
     Esp32BaseTime::initBootSession();
-#elif ESP32BASE_ENABLE_NTP
+#endif
+#if ESP32BASE_ENABLE_NTP
     Esp32BaseNtp::initBootSession();
 #endif
 ```
@@ -832,6 +847,21 @@ Modify `src/Esp32BaseProfile.h`:
 #if ESP32BASE_ENABLE_RTC && !ESP32BASE_ENABLE_TIME
 #error "ESP32BASE_ENABLE_RTC requires ESP32BASE_ENABLE_TIME"
 #endif
+#if ESP32BASE_ENABLE_NTP && !ESP32BASE_ENABLE_TIME
+#error "ESP32BASE_ENABLE_NTP requires ESP32BASE_ENABLE_TIME"
+#endif
+#if ESP32BASE_RTC_AUTO_WIRE_BEGIN != 0 && ESP32BASE_RTC_AUTO_WIRE_BEGIN != 1
+#error "ESP32BASE_RTC_AUTO_WIRE_BEGIN must be 0 or 1"
+#endif
+#if ESP32BASE_RTC_NTP_WRITEBACK != 0 && ESP32BASE_RTC_NTP_WRITEBACK != 1
+#error "ESP32BASE_RTC_NTP_WRITEBACK must be 0 or 1"
+#endif
+#if ESP32BASE_RTC_WRITEBACK_THRESHOLD_SEC < 0
+#error "ESP32BASE_RTC_WRITEBACK_THRESHOLD_SEC must be >= 0"
+#endif
+#if ESP32BASE_RTC_STATUS_REFRESH_MS < 0
+#error "ESP32BASE_RTC_STATUS_REFRESH_MS must be >= 0"
+#endif
 ```
 
 - [ ] **Step 4: Add RTC public header**
@@ -920,6 +950,7 @@ uint8_t g_rtcAddress = 0;
 Esp32BaseRtc::Status g_rtcStatus = Esp32BaseRtc::STATUS_NOT_STARTED;
 uint32_t g_rtcLastEpoch = 0;
 uint32_t g_rtcLastSyncUptimeSec = 0;
+uint32_t g_rtcLastRefreshMs = 0;
 
 const Esp32BaseRtcDriverOps* rtcDriverOps();
 
@@ -973,10 +1004,20 @@ bool Esp32BaseRtc::begin() {
     if (g_rtcAddress == 0) {
         g_rtcAddress = ops->defaultAddress;
     }
+#if ESP32BASE_RTC_AUTO_WIRE_BEGIN
+    g_rtcWire->begin();
+#endif
     return refresh();
 }
 
 void Esp32BaseRtc::handle() {
+#if ESP32BASE_RTC_STATUS_REFRESH_MS > 0
+    const uint32_t now = millis();
+    if (now - g_rtcLastRefreshMs >= ESP32BASE_RTC_STATUS_REFRESH_MS) {
+        g_rtcLastRefreshMs = now;
+        refresh();
+    }
+#endif
 }
 
 bool Esp32BaseRtc::refresh() {
@@ -1101,6 +1142,14 @@ Modify `src/Esp32Base.cpp` after Time init and before App Events provider setup:
 #endif
 ```
 
+Modify `Esp32Base::handle()` after core runtime maintenance and before deferred network starts:
+
+```cpp
+#if ESP32BASE_ENABLE_RTC
+    Esp32BaseRtc::handle();
+#endif
+```
+
 Add bottom include:
 
 ```cpp
@@ -1131,6 +1180,8 @@ git commit -m "feat: add rtc time source facade"
 ### Task 5: DS3231 Driver
 
 **Files:**
+- Create: `src/runtime/internal/Esp32BaseRtcCalendar.h`
+- Create: `src/runtime/internal/Esp32BaseRtcBus.h`
 - Create: `src/runtime/internal/Esp32BaseRtcDs3231.inc`
 - Modify: `src/runtime/Esp32BaseRtc.inc`
 - Modify: `test/test_native_time_harness/test_main.cpp`
@@ -1144,8 +1195,7 @@ static uint8_t bcd(uint8_t value) {
     return static_cast<uint8_t>(((value / 10) << 4) | (value % 10));
 }
 
-static void loadDs3231Time(uint32_t epoch20240102030405) {
-    (void)epoch20240102030405;
+static void loadDs3231Time() {
     Wire.devices[0x68] = std::vector<uint8_t>(32, 0);
     Wire.devices[0x68][0x00] = bcd(5);
     Wire.devices[0x68][0x01] = bcd(4);
@@ -1158,27 +1208,31 @@ static void loadDs3231Time(uint32_t epoch20240102030405) {
 }
 
 void test_ds3231_reads_valid_epoch() {
+#if ESP32BASE_RTC_DRIVER == ESP32BASE_RTC_DRIVER_DS3231
     resetTimeHarness();
     Wire.devices.clear();
-    loadDs3231Time(0);
+    loadDs3231Time();
 
     TEST_ASSERT_TRUE(Esp32BaseRtc::configure(Wire, 0x68));
     uint32_t epoch = 0;
     TEST_ASSERT_TRUE(Esp32BaseRtc::readEpoch(&epoch));
     TEST_ASSERT_EQUAL(Esp32BaseRtc::STATUS_OK, Esp32BaseRtc::status());
     TEST_ASSERT_EQUAL_UINT32(1704164645UL, epoch);
+#endif
 }
 
 void test_ds3231_osf_marks_clock_stopped() {
+#if ESP32BASE_RTC_DRIVER == ESP32BASE_RTC_DRIVER_DS3231
     resetTimeHarness();
     Wire.devices.clear();
-    loadDs3231Time(0);
+    loadDs3231Time();
     Wire.devices[0x68][0x0F] = 0x80;
 
     TEST_ASSERT_TRUE(Esp32BaseRtc::configure(Wire, 0x68));
     uint32_t epoch = 0;
     TEST_ASSERT_FALSE(Esp32BaseRtc::readEpoch(&epoch));
     TEST_ASSERT_EQUAL(Esp32BaseRtc::STATUS_CLOCK_STOPPED, Esp32BaseRtc::status());
+#endif
 }
 ```
 
@@ -1199,17 +1253,22 @@ pio test -e native_time_harness
 
 Expected: DS3231 tests fail because the temporary driver binding returns `STATUS_MISSING`.
 
-- [ ] **Step 3: Implement DS3231 driver**
+- [ ] **Step 3: Add shared RTC calendar and I2C helpers**
 
-Create `src/runtime/internal/Esp32BaseRtcDs3231.inc`:
+Create `src/runtime/internal/Esp32BaseRtcCalendar.h`:
 
 ```cpp
-namespace {
-uint8_t rtcToBcd(uint8_t value) {
+#pragma once
+
+#include <stdint.h>
+
+namespace esp32base_internal {
+
+inline uint8_t rtcToBcd(uint8_t value) {
     return static_cast<uint8_t>(((value / 10U) << 4U) | (value % 10U));
 }
 
-bool rtcFromBcd(uint8_t bcdValue, uint8_t maxValue, uint8_t* out) {
+inline bool rtcFromBcd(uint8_t bcdValue, uint8_t maxValue, uint8_t* out) {
     const uint8_t hi = (bcdValue >> 4U) & 0x0FU;
     const uint8_t lo = bcdValue & 0x0FU;
     if (hi > 9 || lo > 9) {
@@ -1223,7 +1282,90 @@ bool rtcFromBcd(uint8_t bcdValue, uint8_t maxValue, uint8_t* out) {
     return true;
 }
 
-bool rtcReadRegs(TwoWire& wire, uint8_t address, uint8_t reg, uint8_t* data, uint8_t len) {
+inline bool rtcLeapYear(uint16_t year) {
+    return (year % 4U == 0U && year % 100U != 0U) || (year % 400U == 0U);
+}
+
+inline uint8_t rtcDaysInMonth(uint16_t year, uint8_t month) {
+    static const uint8_t days[] = {31,28,31,30,31,30,31,31,30,31,30,31};
+    if (month < 1 || month > 12) {
+        return 0;
+    }
+    if (month == 2 && rtcLeapYear(year)) {
+        return 29;
+    }
+    return days[month - 1];
+}
+
+inline bool epochFromUtcFields(uint16_t year, uint8_t month, uint8_t day, uint8_t hour, uint8_t minute, uint8_t second, uint32_t* epoch) {
+    if (!epoch || year < 2000 || year > 2099 || hour > 23 || minute > 59 || second > 59) {
+        return false;
+    }
+    const uint8_t maxDay = rtcDaysInMonth(year, month);
+    if (day < 1 || day > maxDay) {
+        return false;
+    }
+    uint32_t days = 0;
+    for (uint16_t y = 1970; y < year; ++y) {
+        days += rtcLeapYear(y) ? 366UL : 365UL;
+    }
+    for (uint8_t m = 1; m < month; ++m) {
+        days += rtcDaysInMonth(year, m);
+    }
+    days += static_cast<uint32_t>(day - 1);
+    *epoch = days * 86400UL + static_cast<uint32_t>(hour) * 3600UL + static_cast<uint32_t>(minute) * 60UL + second;
+    return true;
+}
+
+inline bool utcFieldsFromEpoch(uint32_t epoch, uint16_t* year, uint8_t* month, uint8_t* day, uint8_t* hour, uint8_t* minute, uint8_t* second) {
+    if (!year || !month || !day || !hour || !minute || !second) {
+        return false;
+    }
+    uint32_t days = epoch / 86400UL;
+    uint32_t rem = epoch % 86400UL;
+    *hour = static_cast<uint8_t>(rem / 3600UL);
+    rem %= 3600UL;
+    *minute = static_cast<uint8_t>(rem / 60UL);
+    *second = static_cast<uint8_t>(rem % 60UL);
+
+    uint16_t y = 1970;
+    while (true) {
+        const uint16_t yd = rtcLeapYear(y) ? 366U : 365U;
+        if (days < yd) {
+            break;
+        }
+        days -= yd;
+        ++y;
+    }
+    uint8_t m = 1;
+    while (true) {
+        const uint8_t md = rtcDaysInMonth(y, m);
+        if (days < md) {
+            break;
+        }
+        days -= md;
+        ++m;
+    }
+    *year = y;
+    *month = m;
+    *day = static_cast<uint8_t>(days + 1U);
+    return y >= 2000 && y <= 2099;
+}
+
+}
+```
+
+Create `src/runtime/internal/Esp32BaseRtcBus.h`:
+
+```cpp
+#pragma once
+
+#include <stdint.h>
+#include <Wire.h>
+
+namespace esp32base_internal {
+
+inline bool rtcReadRegs(TwoWire& wire, uint8_t address, uint8_t reg, uint8_t* data, uint8_t len) {
     wire.beginTransmission(address);
     wire.write(reg);
     if (wire.endTransmission() != 0) {
@@ -1242,7 +1384,7 @@ bool rtcReadRegs(TwoWire& wire, uint8_t address, uint8_t reg, uint8_t* data, uin
     return true;
 }
 
-bool rtcWriteRegs(TwoWire& wire, uint8_t address, uint8_t reg, const uint8_t* data, uint8_t len) {
+inline bool rtcWriteRegs(TwoWire& wire, uint8_t address, uint8_t reg, const uint8_t* data, uint8_t len) {
     wire.beginTransmission(address);
     wire.write(reg);
     for (uint8_t i = 0; i < len; ++i) {
@@ -1251,8 +1393,24 @@ bool rtcWriteRegs(TwoWire& wire, uint8_t address, uint8_t reg, const uint8_t* da
     return wire.endTransmission() == 0;
 }
 
-bool epochFromUtcFields(uint16_t year, uint8_t month, uint8_t day, uint8_t hour, uint8_t minute, uint8_t second, uint32_t* epoch);
-bool utcFieldsFromEpoch(uint32_t epoch, uint16_t* year, uint8_t* month, uint8_t* day, uint8_t* hour, uint8_t* minute, uint8_t* second);
+}
+```
+
+- [ ] **Step 4: Implement DS3231 driver**
+
+Create `src/runtime/internal/Esp32BaseRtcDs3231.inc`:
+
+```cpp
+#include "Esp32BaseRtcBus.h"
+#include "Esp32BaseRtcCalendar.h"
+
+namespace {
+using esp32base_internal::epochFromUtcFields;
+using esp32base_internal::rtcFromBcd;
+using esp32base_internal::rtcReadRegs;
+using esp32base_internal::rtcToBcd;
+using esp32base_internal::rtcWriteRegs;
+using esp32base_internal::utcFieldsFromEpoch;
 
 bool ds3231Probe(TwoWire& wire, uint8_t address) {
     uint8_t status = 0;
@@ -1327,7 +1485,7 @@ const Esp32BaseRtcDriverOps kDs3231Ops = {
 }
 ```
 
-- [ ] **Step 4: Replace temporary binding with DS3231 driver binding**
+- [ ] **Step 5: Replace temporary binding with DS3231 driver binding**
 
 Modify `src/runtime/Esp32BaseRtc.inc` by removing the temporary `kRtcMissingDs3231Ops` / `kRtcMissingPcf8563Ops` binding and adding:
 
@@ -1347,7 +1505,7 @@ const Esp32BaseRtcDriverOps* rtcDriverOps() {
 }
 ```
 
-- [ ] **Step 5: Run DS3231 tests**
+- [ ] **Step 6: Run DS3231 tests**
 
 Run:
 
@@ -1357,10 +1515,10 @@ pio test -e native_time_harness
 
 Expected: DS3231 read and OSF tests pass.
 
-- [ ] **Step 6: Commit DS3231 support**
+- [ ] **Step 7: Commit DS3231 support**
 
 ```bash
-git add src/runtime/internal/Esp32BaseRtcDs3231.inc src/runtime/Esp32BaseRtc.inc test/test_native_time_harness/test_main.cpp
+git add src/runtime/internal/Esp32BaseRtcCalendar.h src/runtime/internal/Esp32BaseRtcBus.h src/runtime/internal/Esp32BaseRtcDs3231.inc src/runtime/Esp32BaseRtc.inc test/test_native_time_harness/test_main.cpp
 git commit -m "feat: add ds3231 rtc driver"
 ```
 
@@ -1454,7 +1612,17 @@ Expected: PCF8563 tests fail because the driver is not implemented or not bound.
 Create `src/runtime/internal/Esp32BaseRtcPcf8563.inc`:
 
 ```cpp
+#include "Esp32BaseRtcBus.h"
+#include "Esp32BaseRtcCalendar.h"
+
 namespace {
+using esp32base_internal::epochFromUtcFields;
+using esp32base_internal::rtcFromBcd;
+using esp32base_internal::rtcReadRegs;
+using esp32base_internal::rtcToBcd;
+using esp32base_internal::rtcWriteRegs;
+using esp32base_internal::utcFieldsFromEpoch;
+
 bool pcf8563Probe(TwoWire& wire, uint8_t address) {
     uint8_t control = 0;
     return rtcReadRegs(wire, address, 0x00, &control, 1);
@@ -1562,14 +1730,12 @@ git commit -m "feat: add pcf8563 rtc driver"
 
 ---
 
-### Task 7: UTC Conversion and Time Validity Hardening
+### Task 7: RTC Calendar Edge-Case Regression Tests
 
 **Files:**
-- Modify: `src/runtime/internal/Esp32BaseRtcDs3231.inc`
-- Modify: `src/runtime/internal/Esp32BaseRtcPcf8563.inc`
 - Modify: `test/test_native_time_harness/test_main.cpp`
 
-- [ ] **Step 1: Add failing conversion tests**
+- [ ] **Step 1: Add conversion regression tests**
 
 Append:
 
@@ -1578,7 +1744,7 @@ void test_rtc_rejects_impossible_calendar_date() {
     resetTimeHarness();
     Wire.devices.clear();
 #if ESP32BASE_RTC_DRIVER == ESP32BASE_RTC_DRIVER_DS3231
-    loadDs3231Time(0);
+    loadDs3231Time();
     Wire.devices[0x68][0x04] = bcd(31);
     Wire.devices[0x68][0x05] = bcd(2);
     TEST_ASSERT_TRUE(Esp32BaseRtc::configure(Wire, 0x68));
@@ -1592,15 +1758,33 @@ void test_rtc_rejects_impossible_calendar_date() {
     TEST_ASSERT_FALSE(Esp32BaseRtc::readEpoch(&epoch));
     TEST_ASSERT_EQUAL(Esp32BaseRtc::STATUS_TIME_INVALID, Esp32BaseRtc::status());
 }
+
+void test_rtc_set_epoch_round_trips_selected_driver() {
+    resetTimeHarness();
+    Wire.devices.clear();
+#if ESP32BASE_RTC_DRIVER == ESP32BASE_RTC_DRIVER_DS3231
+    loadDs3231Time();
+    TEST_ASSERT_TRUE(Esp32BaseRtc::configure(Wire, 0x68));
+#else
+    loadPcf8563Time();
+    TEST_ASSERT_TRUE(Esp32BaseRtc::configure(Wire, 0x51));
+#endif
+    TEST_ASSERT_TRUE(Esp32BaseRtc::setEpoch(1709251199UL));
+
+    uint32_t epoch = 0;
+    TEST_ASSERT_TRUE(Esp32BaseRtc::readEpoch(&epoch));
+    TEST_ASSERT_EQUAL_UINT32(1709251199UL, epoch);
+}
 ```
 
 Add to `main()`:
 
 ```cpp
 RUN_TEST(test_rtc_rejects_impossible_calendar_date);
+RUN_TEST(test_rtc_set_epoch_round_trips_selected_driver);
 ```
 
-- [ ] **Step 2: Run both RTC harnesses and verify failure**
+- [ ] **Step 2: Run both RTC harnesses**
 
 Run:
 
@@ -1609,100 +1793,13 @@ pio test -e native_time_harness
 pio test -e native_time_pcf8563_harness
 ```
 
-Expected: the impossible-date test fails until UTC conversion validates dates.
+Expected: both pass; impossible dates are rejected and `setEpoch()` round-trips through the selected chip driver.
 
-- [ ] **Step 3: Implement UTC conversion helpers**
-
-Add shared helper code in the DS3231 driver file before chip-specific functions, and keep PCF8563 including it through the common `.inc` order:
-
-```cpp
-bool rtcLeapYear(uint16_t year) {
-    return (year % 4U == 0U && year % 100U != 0U) || (year % 400U == 0U);
-}
-
-uint8_t rtcDaysInMonth(uint16_t year, uint8_t month) {
-    static const uint8_t days[] = {31,28,31,30,31,30,31,31,30,31,30,31};
-    if (month < 1 || month > 12) {
-        return 0;
-    }
-    if (month == 2 && rtcLeapYear(year)) {
-        return 29;
-    }
-    return days[month - 1];
-}
-
-bool epochFromUtcFields(uint16_t year, uint8_t month, uint8_t day, uint8_t hour, uint8_t minute, uint8_t second, uint32_t* epoch) {
-    if (!epoch || year < 2000 || year > 2099 || hour > 23 || minute > 59 || second > 59) {
-        return false;
-    }
-    const uint8_t maxDay = rtcDaysInMonth(year, month);
-    if (day < 1 || day > maxDay) {
-        return false;
-    }
-    uint32_t days = 0;
-    for (uint16_t y = 1970; y < year; ++y) {
-        days += rtcLeapYear(y) ? 366UL : 365UL;
-    }
-    for (uint8_t m = 1; m < month; ++m) {
-        days += rtcDaysInMonth(year, m);
-    }
-    days += static_cast<uint32_t>(day - 1);
-    *epoch = days * 86400UL + static_cast<uint32_t>(hour) * 3600UL + static_cast<uint32_t>(minute) * 60UL + second;
-    return true;
-}
-
-bool utcFieldsFromEpoch(uint32_t epoch, uint16_t* year, uint8_t* month, uint8_t* day, uint8_t* hour, uint8_t* minute, uint8_t* second) {
-    if (!year || !month || !day || !hour || !minute || !second) {
-        return false;
-    }
-    uint32_t days = epoch / 86400UL;
-    uint32_t rem = epoch % 86400UL;
-    *hour = static_cast<uint8_t>(rem / 3600UL);
-    rem %= 3600UL;
-    *minute = static_cast<uint8_t>(rem / 60UL);
-    *second = static_cast<uint8_t>(rem % 60UL);
-
-    uint16_t y = 1970;
-    while (true) {
-        const uint16_t yd = rtcLeapYear(y) ? 366U : 365U;
-        if (days < yd) {
-            break;
-        }
-        days -= yd;
-        ++y;
-    }
-    uint8_t m = 1;
-    while (true) {
-        const uint8_t md = rtcDaysInMonth(y, m);
-        if (days < md) {
-            break;
-        }
-        days -= md;
-        ++m;
-    }
-    *year = y;
-    *month = m;
-    *day = static_cast<uint8_t>(days + 1U);
-    return y >= 2000 && y <= 2099;
-}
-```
-
-- [ ] **Step 4: Run both RTC harnesses**
-
-Run:
+- [ ] **Step 3: Commit conversion regression tests**
 
 ```bash
-pio test -e native_time_harness
-pio test -e native_time_pcf8563_harness
-```
-
-Expected: all tests pass.
-
-- [ ] **Step 5: Commit conversion hardening**
-
-```bash
-git add src/runtime/internal/Esp32BaseRtcDs3231.inc src/runtime/internal/Esp32BaseRtcPcf8563.inc test/test_native_time_harness/test_main.cpp
-git commit -m "test: harden rtc utc conversion"
+git add test/test_native_time_harness/test_main.cpp
+git commit -m "test: cover rtc calendar edge cases"
 ```
 
 ---
@@ -1724,8 +1821,13 @@ Append:
 void test_ntp_writeback_updates_rtc_when_drift_exceeds_threshold() {
     resetTimeHarness();
     Wire.devices.clear();
-    loadDs3231Time(0);
+#if ESP32BASE_RTC_DRIVER == ESP32BASE_RTC_DRIVER_DS3231
+    loadDs3231Time();
     TEST_ASSERT_TRUE(Esp32BaseRtc::configure(Wire, 0x68));
+#else
+    loadPcf8563Time();
+    TEST_ASSERT_TRUE(Esp32BaseRtc::configure(Wire, 0x51));
+#endif
     TEST_ASSERT_TRUE(Esp32BaseRtc::begin());
 
     TEST_ASSERT_TRUE(esp32base_internal::timeAcceptNtpEpoch(1704164655UL));
@@ -1743,12 +1845,13 @@ Add to `main()`:
 RUN_TEST(test_ntp_writeback_updates_rtc_when_drift_exceeds_threshold);
 ```
 
-- [ ] **Step 2: Run failing test**
+- [ ] **Step 2: Run failing tests**
 
 Run:
 
 ```bash
 pio test -e native_time_harness
+pio test -e native_time_pcf8563_harness
 ```
 
 Expected: compile fails because `rtcWriteBackFromNtp` does not exist.
@@ -1758,6 +1861,10 @@ Expected: compile fails because `rtcWriteBackFromNtp` does not exist.
 Create `src/runtime/internal/Esp32BaseRtcInternal.h`:
 
 ```cpp
+#pragma once
+
+#include <stdint.h>
+
 namespace esp32base_internal {
 bool rtcWriteBackFromNtp(uint32_t ntpEpochSec);
 }
@@ -1788,18 +1895,37 @@ bool rtcWriteBackFromNtp(uint32_t ntpEpochSec) {
 
 - [ ] **Step 4: Route NTP trusted sync into Time**
 
+In `src/network/Esp32BaseNtp.inc`, include the internal hooks:
+
+```cpp
+#include "../runtime/Esp32BaseTime.h"
+#include "../runtime/internal/Esp32BaseTimeInternal.h"
+#if ESP32BASE_ENABLE_RTC
+#include "../runtime/internal/Esp32BaseRtcInternal.h"
+#endif
+```
+
 In `src/network/Esp32BaseNtp.inc`, when SNTP completes and `now` is trusted, replace direct boot mapping state update with:
 
 ```cpp
+Esp32BaseTime::initBootSession();
 esp32base_internal::timeAcceptNtpEpoch(now);
 #if ESP32BASE_ENABLE_RTC
 esp32base_internal::rtcWriteBackFromNtp(now);
 #endif
 ```
 
-Keep existing NTP logging, but derive boot wall time from `Esp32BaseTime::snapshot()` instead of NTP-private `g_bootStartEpochSec`.
+Keep existing NTP logging and `g_timeSyncCallback`, but derive boot wall time from `Esp32BaseTime::snapshot()` instead of NTP-private `g_bootStartEpochSec`. After accepting NTP time, set `g_loggedSync = true` and call `g_timeSyncCallback(snapshot())` as before so existing business callbacks still run. Remove NTP-private boot mapping state (`g_bootSessionReady`, `g_bootId`, `g_bootStartEpochSec`) after the compatibility methods below delegate to `Esp32BaseTime`.
 
 - [ ] **Step 5: Keep compatibility APIs**
+
+Update `Esp32BaseNtp::initBootSession()`:
+
+```cpp
+bool Esp32BaseNtp::initBootSession() {
+    return Esp32BaseTime::initBootSession();
+}
+```
 
 Update `Esp32BaseNtp::snapshot()`:
 
@@ -1818,6 +1944,20 @@ Esp32BaseNtp::TimeSnapshot Esp32BaseNtp::snapshot() {
 
 Update `Esp32BaseNtp::resolveCurrentBootEvent(...)` to call `Esp32BaseTime::resolveCurrentBootEvent(...)`.
 
+Update `Esp32BaseNtp::isCurrentBootEvent(...)` and `Esp32BaseNtp::canResolveCurrentBootEvent(...)`:
+
+```cpp
+bool Esp32BaseNtp::isCurrentBootEvent(uint32_t bootId) {
+    const Esp32BaseTime::Snapshot time = Esp32BaseTime::snapshot();
+    return bootId != 0 && bootId == time.bootId;
+}
+
+bool Esp32BaseNtp::canResolveCurrentBootEvent(uint32_t bootId) {
+    const Esp32BaseTime::Snapshot time = Esp32BaseTime::snapshot();
+    return bootId != 0 && bootId == time.bootId && time.synced && time.bootStartEpochSec != 0;
+}
+```
+
 - [ ] **Step 6: Run native time tests**
 
 Run:
@@ -1832,7 +1972,7 @@ Expected: both pass.
 - [ ] **Step 7: Commit NTP integration**
 
 ```bash
-git add src/network/Esp32BaseNtp.h src/network/Esp32BaseNtp.inc src/runtime/Esp32BaseRtc.inc src/runtime/internal test/test_native_time_harness/test_main.cpp
+git add src/network/Esp32BaseNtp.h src/network/Esp32BaseNtp.inc src/runtime/Esp32BaseRtc.inc src/runtime/internal/Esp32BaseRtcInternal.h test/test_native_time_harness/test_main.cpp
 git commit -m "feat: route ntp through trusted time"
 ```
 

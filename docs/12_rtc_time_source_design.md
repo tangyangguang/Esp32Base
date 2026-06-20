@@ -31,10 +31,10 @@ The feature is a time-source integration, not a full RTC peripheral framework. E
 
 ## External References
 
-- DS3231: Analog Devices DS3231 temperature-compensated I2C RTC.
-  https://www.analog.com/en/products/ds3231.html
-- PCF8563: NXP PCF8563 low-power I2C RTC/calendar.
-  https://www.nxp.com/products/analog-and-mixed-signal/real-time-clocks/real-time-clock-calendar:PCF8563
+- DS3231: Analog Devices official datasheet.
+  https://www.analog.com/media/en/technical-documentation/data-sheets/ds3231.pdf
+- PCF8563: NXP official datasheet.
+  https://www.nxp.com/docs/en/data-sheet/PCF8563.pdf
 - ESP-IDF System Time: system time, RTC timer, and SNTP concepts.
   https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/system_time.html
 
@@ -85,7 +85,7 @@ When RTC or NTP provides trusted epoch, `Esp32BaseTime` records:
 - `bootId`: existing system boot count semantics.
 - `bootStartEpochSec`: `epochSec - uptimeSec`, when real time is trusted.
 
-`Esp32BaseTime` should also update ESP32 system time when accepting RTC time so `time()` and existing formatting paths remain coherent.
+`Esp32BaseTime` must update ESP32 system time when accepting RTC or NTP time so `time()` and existing formatting paths remain coherent. The implementation should isolate this behind an internal helper so native tests can verify the requested epoch without replacing libc time functions.
 
 ## RTC Storage Convention
 
@@ -112,6 +112,7 @@ Defaults:
 
 - `ESP32BASE_ENABLE_TIME=1` automatically when `ESP32BASE_ENABLE_NTP=1`, `ESP32BASE_ENABLE_RTC=1`, `ESP32BASE_ENABLE_APP_EVENTS=1`, or `ESP32BASE_ENABLE_WEB=1`; otherwise `0`.
 - `ESP32BASE_ENABLE_RTC=0`.
+- `ESP32BASE_TIME_SYNC_MIN_EPOCH` defaults to `ESP32BASE_NTP_SYNC_MIN_EPOCH` when that macro exists, otherwise `1700000000UL`.
 - If RTC is enabled and no driver is selected, default to DS3231.
 - DS3231 default I2C address: `0x68`.
 - PCF8563 default I2C address: `0x51`.
@@ -343,6 +344,7 @@ The following areas currently depend on NTP as the only real-time source and mus
 
 - Own boot session state, source priority, trusted epoch acceptance, current-boot event resolution, and log time string formatting.
 - Use ESP-IDF monotonic uptime for all boot mapping math.
+- Update ESP32 system epoch through an internal helper whenever RTC or NTP time is accepted.
 - Accept RTC time only when no NTP-derived mapping is already active.
 - Accept NTP time even when RTC time was already active, and notify callbacks when the active source upgrades.
 - Convert RTC register fields using UTC (`gmtime_r` or equivalent) and reserve `localtime_r` for display.
@@ -379,7 +381,7 @@ Update:
 - `docs/03_api.md`: add `Esp32BaseTime` and `Esp32BaseRtc`; update NTP time wording.
 - `docs/04_web.md`: update Status and App Events wording.
 - `docs/07_diagnostics.md`: update log timestamp and event time semantics.
-- `docs/08_arduino_core_compat.md`: document Wire/I2C and system time assumptions if needed.
+- `docs/08_arduino_core_compat.md`: document Wire/I2C ownership and ESP32 system time assumptions.
 - `docs/10_known_limitations.md`: note no RTC auto-detect and no alarm/SQW ownership.
 
 ### Examples and Tests
