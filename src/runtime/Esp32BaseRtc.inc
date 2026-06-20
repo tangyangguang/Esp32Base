@@ -9,6 +9,8 @@
 
 #if ESP32BASE_RTC_DRIVER == ESP32BASE_RTC_DRIVER_DS3231
 #include "internal/Esp32BaseRtcDs3231.inc"
+#elif ESP32BASE_RTC_DRIVER == ESP32BASE_RTC_DRIVER_PCF8563
+#include "internal/Esp32BaseRtcPcf8563.inc"
 #endif
 
 extern TwoWire Wire;
@@ -179,6 +181,8 @@ namespace {
 const Esp32BaseRtcDriverOps* rtcDriverOps() {
 #if ESP32BASE_RTC_DRIVER == ESP32BASE_RTC_DRIVER_DS3231
     return &kDs3231Ops;
+#elif ESP32BASE_RTC_DRIVER == ESP32BASE_RTC_DRIVER_PCF8563
+    return &kPcf8563Ops;
 #else
     return &kRtcMissingOps;
 #endif
