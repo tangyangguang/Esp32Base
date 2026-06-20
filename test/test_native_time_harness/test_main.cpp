@@ -156,6 +156,21 @@ void test_ds3231_osf_marks_clock_stopped() {
 #endif
 }
 
+void test_ds3231_reads_12_hour_pm_when_selected() {
+#if ESP32BASE_RTC_DRIVER == ESP32BASE_RTC_DRIVER_DS3231
+    resetTimeHarness();
+    Wire.devices.clear();
+    loadDs3231Time();
+    Wire.devices[0x68][0x02] = static_cast<uint8_t>(0x40 | 0x20 | bcd(3));
+
+    TEST_ASSERT_TRUE(Esp32BaseRtc::configure(Wire, 0x68));
+    uint32_t epoch = 0;
+    TEST_ASSERT_TRUE(Esp32BaseRtc::readEpoch(&epoch));
+    TEST_ASSERT_EQUAL(Esp32BaseRtc::STATUS_OK, Esp32BaseRtc::status());
+    TEST_ASSERT_EQUAL_UINT32(1704207845UL, epoch);
+#endif
+}
+
 void test_pcf8563_reads_valid_epoch_when_selected() {
 #if ESP32BASE_RTC_DRIVER == ESP32BASE_RTC_DRIVER_PCF8563
     resetTimeHarness();
@@ -234,6 +249,7 @@ int main(int, char**) {
     RUN_TEST(test_rtc_missing_is_nonfatal_status);
     RUN_TEST(test_ds3231_reads_valid_epoch);
     RUN_TEST(test_ds3231_osf_marks_clock_stopped);
+    RUN_TEST(test_ds3231_reads_12_hour_pm_when_selected);
     RUN_TEST(test_pcf8563_reads_valid_epoch_when_selected);
     RUN_TEST(test_pcf8563_vl_marks_clock_stopped_when_selected);
     RUN_TEST(test_rtc_rejects_impossible_calendar_date);

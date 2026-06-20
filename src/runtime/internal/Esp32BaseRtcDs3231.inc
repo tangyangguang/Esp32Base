@@ -29,13 +29,23 @@ bool ds3231ReadEpoch(TwoWire& wire, uint8_t address, uint32_t* epoch, Esp32BaseR
         *status = Esp32BaseRtc::STATUS_CLOCK_STOPPED;
         return false;
     }
-    uint8_t second, minute, hour, day, month, year2;
+    uint8_t second, minute, hour = 0, day, month, year2;
     if (!rtcFromBcd(regs[0] & 0x7F, 59, &second) ||
         !rtcFromBcd(regs[1] & 0x7F, 59, &minute) ||
-        !rtcFromBcd(regs[2] & 0x3F, 23, &hour) ||
         !rtcFromBcd(regs[4] & 0x3F, 31, &day) ||
         !rtcFromBcd(regs[5] & 0x1F, 12, &month) ||
         !rtcFromBcd(regs[6], 99, &year2)) {
+        *status = Esp32BaseRtc::STATUS_TIME_INVALID;
+        return false;
+    }
+    if (regs[2] & 0x40U) {
+        uint8_t hour12 = 0;
+        if (!rtcFromBcd(regs[2] & 0x1F, 12, &hour12) || hour12 < 1) {
+            *status = Esp32BaseRtc::STATUS_TIME_INVALID;
+            return false;
+        }
+        hour = static_cast<uint8_t>((hour12 % 12U) + ((regs[2] & 0x20U) ? 12U : 0U));
+    } else if (!rtcFromBcd(regs[2] & 0x3F, 23, &hour)) {
         *status = Esp32BaseRtc::STATUS_TIME_INVALID;
         return false;
     }
