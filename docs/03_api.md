@@ -1288,6 +1288,10 @@ public:
     static size_t bytesProcessed();
     static size_t totalSize();
     static const char* lastError();
+    static const char* runningOtaState();
+    static bool waitingForMarkValid();
+    static uint32_t markValidElapsedMs();
+    static uint32_t markValidTimeoutMs();
 
     static bool markCurrentValid();
     static bool isRollbackPossible();
@@ -1296,6 +1300,8 @@ public:
 ```
 
 `begin()` 只初始化 OTA boot 诊断和 rollback/mark-valid 状态，应在系统启动早期执行；`beginNetworkServices()` 在 Web/Auth ready 后启动 ArduinoOTA/espota 网络入口。普通业务通常不需要直接调用这两个函数，由 `Esp32Base` 统一调度。
+
+`runningOtaState()` 返回当前 running partition 的 OTA state 字符串：`valid`、`pending_verify`、`aborted`、`invalid`、`undefined`、`new`、`unknown` 或 `n/a`。`waitingForMarkValid()` 仅在启用 `ESP32BASE_OTA_REQUIRE_MARK_VALID=1` 且当前 running partition 为 `pending_verify` 时返回 `true`。业务自检通过后调用 `markCurrentValid()`；如果当前镜像不是 `pending_verify`，该函数会记录诊断并返回 `false`，不会误报确认成功。
 
 `Update.end(true)` 必须在 SHA256 校验通过、且实际接收字节数等于声明总大小之后调用。
 

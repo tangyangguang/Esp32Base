@@ -289,10 +289,16 @@ void rollbackAndRestart(const char* reason);
 
 策略：
 
+- Arduino ESP32 core 在 rollback 启用时提供 weak `verifyOta()` / `verifyRollbackLater()`；默认 `verifyRollbackLater()` 为 `false` 且 `verifyOta()` 为 `true`，新 OTA 镜像可能在应用自检前被 core 过早标记为 valid。
+- 量产项目应启用 `ESP32BASE_OTA_REQUIRE_MARK_VALID=1`，由 Esp32Base 覆盖 `verifyRollbackLater()` 并阻止 Arduino core 自动 mark valid。
 - 新固件启动后，应用自检通过再调用 `markCurrentValid()`。
+- `markCurrentValid()` 只在当前 running partition 为 `pending_verify` 时报告成功；如果已经是 `valid`、`aborted`、`invalid`、`undefined` 或状态不可读，会写日志并返回 `false`。
 - 若启用自动 mark valid timeout，`Esp32BaseOta::handle()` 负责检查超时并 rollback。
 - timeout 从 OTA boot 状态初始化完成后开始计算，不依赖 WiFi 连接或 Web 服务启动。
 - timeout 状态绑定当前 running partition，避免 rollback 后再次误判形成循环。
+- setup/应用初始化阶段崩溃应由 bootloader rollback 处理；固件能运行但一直未确认时，由 `Esp32BaseOta::handle()` 的 timeout 触发 rollback。
+- 启动日志会输出 running partition、configured boot partition、next update partition、当前 OTA image state，以及是否正在等待业务 mark valid。
+- `/esp32base/api/ota` 返回 `runningOtaState`、`waitingForMarkValid`、`markValidElapsedMs`、`markValidTimeoutMs`，同时在 `runningPartition.state` 中保留当前 running partition 的 OTA state。
 
 宏：
 
@@ -306,6 +312,34 @@ ESP32BASE_OTA_MARK_VALID_TIMEOUT_MS=30000
 - 写重启日志。
 - rollback。
 - restart。
+
+业务最小接入示例：
+
+```cpp
+#include <Esp32Base.h>
+
+void setup() {
+    Esp32Base::begin();
+
+    const bool appOk = initSensors() && loadBusinessConfig() && startApplication();
+    if (appOk && Esp32BaseOta::waitingForMarkValid()) {
+        Esp32BaseOta::markCurrentValid();
+    }
+}
+
+void loop() {
+    Esp32Base::handle();
+}
+```
+
+ESP32_Faucet 这类量产项目的最小 `platformio.ini` 配置：
+
+```ini
+build_flags =
+  -D ESP32BASE_PROFILE=ESP32BASE_PROFILE_FULL
+  -D ESP32BASE_OTA_REQUIRE_MARK_VALID=1
+  -D ESP32BASE_OTA_MARK_VALID_TIMEOUT_MS=30000
+```
 
 ## 12. 必测场景
 

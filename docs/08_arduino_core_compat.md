@@ -150,7 +150,18 @@ ESP32-S3 开发板常见 USB-CDC 串口配置差异。
 
 启用该宏前，需要在 Core 2.x / 3.x 分别确认 brownout register 名称和 restore 方式；未确认的组合必须保持默认关闭。
 
-## 12. PlatformIO / pioarduino 验证注意事项
+## 12. OTA rollback weak hook
+
+Arduino ESP32 core 在 `CONFIG_APP_ROLLBACK_ENABLE` 启用时会声明 weak `verifyOta()` 和 `verifyRollbackLater()`。当前本地 core 2.x 源码中，默认 `verifyRollbackLater()` 返回 `false`，默认 `verifyOta()` 返回 `true`；因此 `initArduino()` 会在 running partition 处于 `pending_verify` 时很早调用 `esp_ota_mark_app_valid_cancel_rollback()`。
+
+Esp32Base 的策略：
+
+- `ESP32BASE_OTA_REQUIRE_MARK_VALID=0` 时不覆盖该 weak hook，保持既有 Arduino 行为。
+- `ESP32BASE_OTA_REQUIRE_MARK_VALID=1` 时定义 `extern "C" bool verifyRollbackLater()` 并返回 `true`，阻止 Arduino core 在业务初始化前自动 mark valid。
+- 业务必须在应用自检通过后调用 `Esp32BaseOta::markCurrentValid()`。
+- setup 阶段崩溃由 bootloader rollback 处理；运行期未确认由 `Esp32BaseOta::handle()` 的 timeout 处理。
+
+## 13. PlatformIO / pioarduino 验证注意事项
 
 `examples/basic` 同时提供官方 PlatformIO Arduino Core 2.x 环境和 pioarduino Arduino Core 3.x 环境。
 

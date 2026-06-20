@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,6 +30,24 @@ def main() -> int:
         errors.append("Early OTA begin must be documented in code near the boot/rollback initialization path")
     if "Esp32BaseLongOperation::service();" not in ota:
         errors.append("OTA upload chunks must feed watchdog and yield through Esp32BaseLongOperation::service()")
+    rollback_later_override = re.search(
+        r"#if\s+ESP32BASE_OTA_REQUIRE_MARK_VALID\s+"
+        r'extern\s+"C"\s+bool\s+verifyRollbackLater\s*\(\s*\)\s*\{\s*'
+        r"return\s+true\s*;\s*"
+        r"\}\s+"
+        r"#endif",
+        ota,
+    )
+    if not rollback_later_override:
+        errors.append("Esp32Base OTA rollback policy must provide verifyRollbackLater() only inside ESP32BASE_OTA_REQUIRE_MARK_VALID and return true")
+    rollback_block = ota[ota.find("void Esp32BaseOta::handle()"):ota.find("bool Esp32BaseOta::isReady()")]
+    if "checkMarkValidTimeout();" not in rollback_block:
+        errors.append("Esp32BaseOta::handle() must run mark-valid timeout checks directly")
+    timeout_start = ota.find("void checkMarkValidTimeout()")
+    timeout_end = ota.find("\n}\n\nbool Esp32BaseOta::begin()", timeout_start)
+    timeout_block = ota[timeout_start:timeout_end] if timeout_start >= 0 and timeout_end > timeout_start else ""
+    if timeout_block and ("Esp32BaseWeb::isReady()" in timeout_block or "Esp32BaseWiFi::isConnected()" in timeout_block):
+        errors.append("Esp32BaseOta::handle() mark-valid timeout checks must not depend on Web/WiFi readiness")
 
     if errors:
         for error in errors:

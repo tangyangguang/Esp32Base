@@ -47,6 +47,10 @@ public:
     static const char* lastBootPartitionLabel();
     static uint32_t lastBootPartitionAddress();
     static size_t lastBootPartitionSize();
+    static const char* runningOtaState();
+    static bool waitingForMarkValid();
+    static uint32_t markValidElapsedMs();
+    static uint32_t markValidTimeoutMs();
 
     static bool markCurrentValid();
     static bool isRollbackPossible();

@@ -368,6 +368,14 @@ void handleOtaApi() {
     sendIntChunk(Esp32BaseOta::elapsedMs());
     sendChunk(",\"averageBytesPerSecond\":");
     sendIntChunk(Esp32BaseOta::averageBytesPerSecond());
+    sendChunk(",\"runningOtaState\":\"");
+    sendEscapedJsonChunk(Esp32BaseOta::runningOtaState());
+    sendChunk("\",\"waitingForMarkValid\":");
+    sendChunk(Esp32BaseOta::waitingForMarkValid() ? "true" : "false");
+    sendChunk(",\"markValidElapsedMs\":");
+    sendIntChunk(Esp32BaseOta::markValidElapsedMs());
+    sendChunk(",\"markValidTimeoutMs\":");
+    sendIntChunk(Esp32BaseOta::markValidTimeoutMs());
     sendChunk(",\"error\":\"");
     sendEscapedJsonChunk(Esp32BaseOta::lastError());
     sendChunk("\",\"expectedSha256\":\"");

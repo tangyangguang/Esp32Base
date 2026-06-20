@@ -27,6 +27,7 @@
 #endif
 
 #include <Update.h>
+#include <esp_err.h>
 #include <esp_ota_ops.h>
 #include <mbedtls/sha256.h>
 #if __has_include(<mbedtls/version.h>)
@@ -42,6 +43,12 @@
 
 #ifndef ESP32BASE_OTA_MARK_VALID_TIMEOUT_MS
 #define ESP32BASE_OTA_MARK_VALID_TIMEOUT_MS 30000
+#endif
+
+#if ESP32BASE_OTA_REQUIRE_MARK_VALID
+extern "C" bool verifyRollbackLater() {
+    return true;
+}
 #endif
 
 namespace {
@@ -63,6 +70,8 @@ uint32_t g_otaTransferFinishedMs = 0;
 bool g_otaSummaryLogged = false;
 uint32_t g_otaBootMs = 0;
 const esp_partition_t* g_otaBootPartition = nullptr;
+bool g_otaWaitingForMarkValidLogged = false;
+bool g_otaMarkValidTimeoutHandled = false;
 const esp_partition_t* g_otaTargetPartition = nullptr;
 char g_otaTargetPartitionLabel[17] = "";
 uint32_t g_otaTargetPartitionAddress = 0;
@@ -118,6 +127,42 @@ const char* partitionLabelOrUnknown(const esp_partition_t* partition) {
 
 uint32_t partitionAddressOrZero(const esp_partition_t* partition) {
     return partition ? partition->address : 0;
+}
+
+const char* otaStateName(esp_ota_img_states_t state) {
+    switch (state) {
+        case ESP_OTA_IMG_NEW: return "new";
+        case ESP_OTA_IMG_PENDING_VERIFY: return "pending_verify";
+        case ESP_OTA_IMG_VALID: return "valid";
+        case ESP_OTA_IMG_INVALID: return "invalid";
+        case ESP_OTA_IMG_ABORTED: return "aborted";
+        case ESP_OTA_IMG_UNDEFINED: return "undefined";
+        default: return "unknown";
+    }
+}
+
+const char* partitionOtaStateName(const esp_partition_t* partition) {
+    if (!partition || partition->type != ESP_PARTITION_TYPE_APP ||
+        partition->subtype < ESP_PARTITION_SUBTYPE_APP_OTA_MIN ||
+        partition->subtype > ESP_PARTITION_SUBTYPE_APP_OTA_MAX) {
+        return "n/a";
+    }
+    esp_ota_img_states_t state;
+    const esp_err_t err = esp_ota_get_state_partition(partition, &state);
+    if (err == ESP_ERR_NOT_FOUND) {
+        return "undefined";
+    }
+    if (err != ESP_OK) {
+        return "unknown";
+    }
+    return otaStateName(state);
+}
+
+bool currentRunningOtaState(esp_ota_img_states_t& state, esp_err_t& err) {
+    const esp_partition_t* running = esp_ota_get_running_partition();
+    state = ESP_OTA_IMG_UNDEFINED;
+    err = running ? esp_ota_get_state_partition(running, &state) : ESP_ERR_NOT_FOUND;
+    return err == ESP_OK;
 }
 
 void formatOtaBytes(size_t bytes, char* out, size_t len);
@@ -290,6 +335,44 @@ void logUploadStage(const char* stage) {
                     totalBuf);
 }
 
+void checkMarkValidTimeout() {
+#if ESP32BASE_OTA_REQUIRE_MARK_VALID
+    if (!g_otaReady || !g_otaBootPartition || esp_ota_get_running_partition() != g_otaBootPartition ||
+        g_otaMarkValidTimeoutHandled) {
+        return;
+    }
+
+    esp_ota_img_states_t state;
+    const esp_err_t err = esp_ota_get_state_partition(g_otaBootPartition, &state);
+    if (err != ESP_OK || state != ESP_OTA_IMG_PENDING_VERIFY) {
+        return;
+    }
+
+    if (!g_otaWaitingForMarkValidLogged) {
+        g_otaWaitingForMarkValidLogged = true;
+        ESP32BASE_LOG_W("ota",
+                        "waiting_for_mark_valid partition=%s address=0x%lx state=%s elapsed_ms=%lu timeout_ms=%lu",
+                        partitionLabelOrUnknown(g_otaBootPartition),
+                        static_cast<unsigned long>(partitionAddressOrZero(g_otaBootPartition)),
+                        otaStateName(state),
+                        static_cast<unsigned long>(millis() - g_otaBootMs),
+                        static_cast<unsigned long>(ESP32BASE_OTA_MARK_VALID_TIMEOUT_MS));
+    }
+
+    if (millis() - g_otaBootMs >= ESP32BASE_OTA_MARK_VALID_TIMEOUT_MS) {
+        g_otaMarkValidTimeoutHandled = true;
+        ESP32BASE_LOG_E("ota",
+                        "mark_valid_timeout partition=%s address=0x%lx state=%s elapsed_ms=%lu timeout_ms=%lu",
+                        partitionLabelOrUnknown(g_otaBootPartition),
+                        static_cast<unsigned long>(partitionAddressOrZero(g_otaBootPartition)),
+                        otaStateName(state),
+                        static_cast<unsigned long>(millis() - g_otaBootMs),
+                        static_cast<unsigned long>(ESP32BASE_OTA_MARK_VALID_TIMEOUT_MS));
+        Esp32BaseOta::rollbackAndRestart("ota mark-valid timeout");
+    }
+#endif
+}
+
 #if ESP32BASE_ENABLE_ARDUINO_OTA
 const char* arduinoOtaErrorName(ota_error_t error) {
     switch (error) {
@@ -448,18 +531,32 @@ bool Esp32BaseOta::begin() {
     g_otaStatus = READY;
     g_otaBootMs = millis();
     g_otaBootPartition = esp_ota_get_running_partition();
+    g_otaWaitingForMarkValidLogged = false;
+    g_otaMarkValidTimeoutHandled = false;
     const esp_partition_t* configuredBootPartition = esp_ota_get_boot_partition();
     const esp_partition_t* nextUpdatePartition = esp_ota_get_next_update_partition(nullptr);
+    const char* runningOtaState = partitionOtaStateName(g_otaBootPartition);
+    const bool waitingForMarkValid = strcmp(runningOtaState, "pending_verify") == 0;
     char runningElfSha256[65] = "";
     esp_ota_get_app_elf_sha256(runningElfSha256, sizeof(runningElfSha256));
     ESP32BASE_LOG_I("ota",
-                    "boot_summary running_partition=%s address=0x%lx configured_boot_partition=%s address=0x%lx next_update_partition=%s address=0x%lx elf_sha256=%s",
+                    "boot_summary running_partition=%s address=0x%lx running_ota_state=%s configured_boot_partition=%s address=0x%lx configured_boot_state=%s next_update_partition=%s address=0x%lx next_update_state=%s mark_valid_policy=%s waiting_for_mark_valid=%s timeout_ms=%lu elf_sha256=%s",
                     partitionLabelOrUnknown(g_otaBootPartition),
                     static_cast<unsigned long>(partitionAddressOrZero(g_otaBootPartition)),
+                    runningOtaState,
                     partitionLabelOrUnknown(configuredBootPartition),
                     static_cast<unsigned long>(partitionAddressOrZero(configuredBootPartition)),
+                    partitionOtaStateName(configuredBootPartition),
                     partitionLabelOrUnknown(nextUpdatePartition),
                     static_cast<unsigned long>(partitionAddressOrZero(nextUpdatePartition)),
+                    partitionOtaStateName(nextUpdatePartition),
+#if ESP32BASE_OTA_REQUIRE_MARK_VALID
+                    "require_manual",
+#else
+                    "arduino_default",
+#endif
+                    waitingForMarkValid ? "yes" : "no",
+                    static_cast<unsigned long>(ESP32BASE_OTA_MARK_VALID_TIMEOUT_MS),
                     runningElfSha256[0] ? runningElfSha256 : "unavailable");
     if (g_otaBootPartition && configuredBootPartition && !sameOtaPartition(g_otaBootPartition, configuredBootPartition)) {
         ESP32BASE_LOG_W("ota", "boot_partition_mismatch running_partition=%s configured_boot_partition=%s",
@@ -469,10 +566,11 @@ bool Esp32BaseOta::begin() {
     if (g_otaBootPartition) {
         char sizeBuf[32];
         formatOtaBytes(g_otaBootPartition->size, sizeBuf, sizeof(sizeBuf));
-        ESP32BASE_LOG_I("ota", "ready running_partition=%s address=0x%lx size=%s elf_sha256=%s",
+        ESP32BASE_LOG_I("ota", "ready running_partition=%s address=0x%lx size=%s ota_state=%s elf_sha256=%s",
                         g_otaBootPartition->label,
                         static_cast<unsigned long>(g_otaBootPartition->address),
                         sizeBuf,
+                        runningOtaState,
                         runningElfSha256[0] ? runningElfSha256 : "unavailable");
     } else {
         ESP32BASE_LOG_I("ota", "ready running_partition=unknown elf_sha256=%s",
@@ -482,6 +580,13 @@ bool Esp32BaseOta::begin() {
         ESP32BASE_LOG_I("ota", "configured_boot_partition=%s address=0x%lx",
                         configuredBootPartition->label,
                         static_cast<unsigned long>(configuredBootPartition->address));
+    }
+    if (waitingForMarkValid) {
+#if ESP32BASE_OTA_REQUIRE_MARK_VALID
+        ESP32BASE_LOG_W("ota", "mark_valid_required app must call Esp32BaseOta::markCurrentValid() after self-check");
+#else
+        ESP32BASE_LOG_W("ota", "running_partition_pending_verify but ESP32BASE_OTA_REQUIRE_MARK_VALID=0; Arduino core may mark it valid before Esp32Base begins");
+#endif
     }
     return true;
 }
@@ -522,18 +627,7 @@ void Esp32BaseOta::handle() {
 #endif
     }
 #endif
-#if ESP32BASE_OTA_REQUIRE_MARK_VALID
-    if (!g_otaReady || !g_otaBootPartition || esp_ota_get_running_partition() != g_otaBootPartition) {
-        return;
-    }
-    if (millis() - g_otaBootMs >= ESP32BASE_OTA_MARK_VALID_TIMEOUT_MS) {
-        esp_ota_img_states_t state;
-        if (esp_ota_get_state_partition(g_otaBootPartition, &state) == ESP_OK && state == ESP_OTA_IMG_PENDING_VERIFY) {
-            ESP32BASE_LOG_E("ota", "mark-valid timeout, rollback");
-            rollbackAndRestart("ota mark-valid timeout");
-        }
-    }
-#endif
+    checkMarkValidTimeout();
 }
 
 bool Esp32BaseOta::isReady() {
@@ -853,8 +947,69 @@ size_t Esp32BaseOta::lastBootPartitionSize() {
     return g_otaLastBootPartitionSize;
 }
 
+const char* Esp32BaseOta::runningOtaState() {
+    return partitionOtaStateName(esp_ota_get_running_partition());
+}
+
+bool Esp32BaseOta::waitingForMarkValid() {
+#if ESP32BASE_OTA_REQUIRE_MARK_VALID
+    esp_ota_img_states_t state;
+    esp_err_t err;
+    return currentRunningOtaState(state, err) && state == ESP_OTA_IMG_PENDING_VERIFY;
+#else
+    return false;
+#endif
+}
+
+uint32_t Esp32BaseOta::markValidElapsedMs() {
+    if (!g_otaReady || g_otaBootMs == 0) {
+        return 0;
+    }
+    return millis() - g_otaBootMs;
+}
+
+uint32_t Esp32BaseOta::markValidTimeoutMs() {
+    return ESP32BASE_OTA_MARK_VALID_TIMEOUT_MS;
+}
+
 bool Esp32BaseOta::markCurrentValid() {
-    return esp_ota_mark_app_valid_cancel_rollback() == ESP_OK;
+    const esp_partition_t* running = esp_ota_get_running_partition();
+    esp_ota_img_states_t state = ESP_OTA_IMG_UNDEFINED;
+    const esp_err_t stateErr = running ? esp_ota_get_state_partition(running, &state) : ESP_ERR_NOT_FOUND;
+    if (stateErr != ESP_OK) {
+        ESP32BASE_LOG_W("ota",
+                        "mark_valid skipped partition=%s address=0x%lx state=unknown err=%s",
+                        partitionLabelOrUnknown(running),
+                        static_cast<unsigned long>(partitionAddressOrZero(running)),
+                        esp_err_to_name(stateErr));
+        return false;
+    }
+    if (state != ESP_OTA_IMG_PENDING_VERIFY) {
+        ESP32BASE_LOG_W("ota",
+                        "mark_valid skipped partition=%s address=0x%lx state=%s reason=not_pending_verify",
+                        partitionLabelOrUnknown(running),
+                        static_cast<unsigned long>(partitionAddressOrZero(running)),
+                        otaStateName(state));
+        return false;
+    }
+    const esp_err_t err = esp_ota_mark_app_valid_cancel_rollback();
+    if (err == ESP_OK) {
+        g_otaMarkValidTimeoutHandled = true;
+        ESP32BASE_LOG_I("ota",
+                        "mark_valid success partition=%s address=0x%lx previous_state=%s elapsed_ms=%lu",
+                        partitionLabelOrUnknown(running),
+                        static_cast<unsigned long>(partitionAddressOrZero(running)),
+                        otaStateName(state),
+                        static_cast<unsigned long>(markValidElapsedMs()));
+        return true;
+    }
+    ESP32BASE_LOG_E("ota",
+                    "mark_valid failed partition=%s address=0x%lx state=%s err=%s",
+                    partitionLabelOrUnknown(running),
+                    static_cast<unsigned long>(partitionAddressOrZero(running)),
+                    otaStateName(state),
+                    esp_err_to_name(err));
+    return false;
 }
 
 bool Esp32BaseOta::isRollbackPossible() {
@@ -863,17 +1018,29 @@ bool Esp32BaseOta::isRollbackPossible() {
 
 void Esp32BaseOta::rollbackAndRestart(const char* reason) {
     const char* rollbackReason = reason ? reason : "ota rollback";
+    const esp_partition_t* running = esp_ota_get_running_partition();
+    esp_ota_img_states_t state = ESP_OTA_IMG_UNDEFINED;
+    const esp_err_t stateErr = running ? esp_ota_get_state_partition(running, &state) : ESP_ERR_NOT_FOUND;
     Esp32BaseSystem::appendRestartLog(rollbackReason);
     Esp32BaseConfig::flushAll();
 #if ESP32BASE_ENABLE_FILELOG
     Esp32BaseFileLog::flush();
 #endif
-    ESP32BASE_LOG_E("ota", "rollback restart: %s", rollbackReason);
+    ESP32BASE_LOG_E("ota",
+                    "rollback_restart reason=%s partition=%s address=0x%lx state=%s state_err=%s rollback_possible=%s",
+                    rollbackReason,
+                    partitionLabelOrUnknown(running),
+                    static_cast<unsigned long>(partitionAddressOrZero(running)),
+                    stateErr == ESP_OK ? otaStateName(state) : "unknown",
+                    esp_err_to_name(stateErr),
+                    esp_ota_check_rollback_is_possible() ? "yes" : "no");
 #if ESP32BASE_ENABLE_FILELOG
     Esp32BaseFileLog::flush();
 #endif
     delay(50);
-    if (esp_ota_mark_app_invalid_rollback_and_reboot() != ESP_OK) {
+    const esp_err_t err = esp_ota_mark_app_invalid_rollback_and_reboot();
+    if (err != ESP_OK) {
+        ESP32BASE_LOG_E("ota", "rollback_mark_invalid_failed err=%s fallback=restart", esp_err_to_name(err));
         Esp32BaseSystem::restart(rollbackReason);
     }
 }
