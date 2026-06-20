@@ -753,6 +753,7 @@ public:
     static bool initBootSession();
     static Snapshot snapshot();
     static bool isRealTime();
+    static bool formatEpoch(uint32_t epochSec, char* out, size_t len, const char* fmt = nullptr);
     static bool formatTime(char* out, size_t len, const char* fmt = nullptr);
     static bool resolveCurrentBootEvent(uint32_t bootId, uint32_t uptimeSec, uint32_t* epochSec);
     static void onTimeSynced(TimeSyncCallback callback);
@@ -841,9 +842,11 @@ public:
 
 `Esp32BaseTime` 是业务侧统一时间入口。业务记录、时间显示和业务页面应优先使用 `Esp32BaseTime::snapshot()`、`formatTime()` 和 `resolveCurrentBootEvent()`；不要把业务逻辑直接绑定到 NTP。`source` 表示当前可信时间来源：未同步时为 `SOURCE_UPTIME`，RTC 成功读取后为 `SOURCE_RTC`，NTP 成功同步后升级为 `SOURCE_NTP`。NTP 比 RTC 优先级高，后续 RTC refresh 不会把来源从 NTP 降级。
 
+`formatEpoch()` / `formatTime()` 使用 `ESP32BASE_NTP_GMT_OFFSET_SEC` 和 `ESP32BASE_NTP_DAYLIGHT_OFFSET_SEC` 做固定偏移格式化，默认 UTC+8。该格式化不依赖 SNTP 是否已经启动，因此 RTC-only 或 WiFi 尚未连接时也能按同一规则显示真实时间。
+
 `ESP32BASE_TIME_SYNC_MIN_EPOCH` 是统一可信 epoch 下限，默认跟随 `ESP32BASE_NTP_SYNC_MIN_EPOCH`，当前为 `1700000000UL`。低于该值的 RTC/NTP 时间会被拒绝，避免把未初始化或异常回退的时间当成真实时间。
 
-`Esp32BaseRtc` 是 RTC 芯片维护接口，只在 `ESP32BASE_ENABLE_RTC=1` 时可用。当前支持 `ESP32BASE_RTC_DRIVER_DS3231` 和 `ESP32BASE_RTC_DRIVER_PCF8563`，同一个固件只能选择一个驱动，不做自动识别。默认地址：
+`Esp32BaseRtc` 是 RTC 芯片维护接口，只在 `ESP32BASE_ENABLE_RTC=1` 时可用。当前支持 `ESP32BASE_RTC_DRIVER_DS3231` 和 `ESP32BASE_RTC_DRIVER_PCF8563`，同一个固件只能选择一个驱动，不做自动识别。RTC 芯片寄存器按 UTC 日历字段存储；NTP 写回 RTC 时也写 UTC 字段，避免本地时区和 DST 歧义。默认地址：
 
 - DS3231: `0x68`
 - PCF8563: `0x51`

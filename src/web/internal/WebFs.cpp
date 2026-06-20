@@ -4,8 +4,6 @@
 
 #include "WebInternal.h"
 
-#include <time.h>
-
 namespace esp32base_web {
 
 #if ESP32BASE_ENABLE_FS
@@ -13,11 +11,7 @@ static const uint8_t FS_TOP_MAX = 10;
 static const uint16_t FS_TREE_LIST_LIMIT = 128;
 static const uint16_t FS_UPLOAD_DIR_LIMIT = 64;
 static const uint8_t FS_SCAN_MAX_DEPTH = 8;
-#if ESP32BASE_ENABLE_NTP
-static const uint32_t FS_TRUSTED_TIME_MIN_EPOCH = ESP32BASE_NTP_SYNC_MIN_EPOCH;
-#else
-static const uint32_t FS_TRUSTED_TIME_MIN_EPOCH = 1700000000UL;
-#endif
+static const uint32_t FS_TRUSTED_TIME_MIN_EPOCH = ESP32BASE_TIME_SYNC_MIN_EPOCH;
 
 void fsScanYield() {
 #if ESP32BASE_ENABLE_WATCHDOG
@@ -120,12 +114,13 @@ void fsFormatModifiedTime(uint32_t modifiedEpoch, char* out, size_t len) {
         strlcpy(out, "unknown", len);
         return;
     }
-    const time_t raw = static_cast<time_t>(modifiedEpoch);
-    struct tm tmValue;
-    localtime_r(&raw, &tmValue);
-    if (strftime(out, len, "%Y-%m-%d %H:%M:%S", &tmValue) == 0) {
+#if ESP32BASE_ENABLE_TIME
+    if (!Esp32BaseTime::formatEpoch(modifiedEpoch, out, len, "%Y-%m-%d %H:%M:%S")) {
         strlcpy(out, "unknown", len);
     }
+#else
+    strlcpy(out, "unknown", len);
+#endif
 }
 
 void sendFsFileStatus(const char* path, bool readable) {

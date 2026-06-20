@@ -409,12 +409,13 @@ void formatEpoch(uint32_t epoch, char* out, size_t len) {
     if (!out || len == 0) {
         return;
     }
-    const time_t raw = static_cast<time_t>(epoch);
-    struct tm tmValue;
-    localtime_r(&raw, &tmValue);
-    if (strftime(out, len, "%Y-%m-%d %H:%M:%S", &tmValue) == 0) {
+#if ESP32BASE_ENABLE_TIME
+    if (!Esp32BaseTime::formatEpoch(epoch, out, len, "%Y-%m-%d %H:%M:%S")) {
         strlcpy(out, "-", len);
     }
+#else
+    strlcpy(out, "-", len);
+#endif
 }
 
 void formatAppEventTime(const Esp32BaseAppEventRecord& event, char* out, size_t len) {

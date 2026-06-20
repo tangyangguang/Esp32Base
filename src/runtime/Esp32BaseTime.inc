@@ -98,6 +98,31 @@ bool Esp32BaseTime::isRealTime() {
     return snapshot().synced;
 }
 
+bool Esp32BaseTime::formatEpoch(uint32_t epochSec, char* out, size_t len, const char* fmt) {
+    if (!out || len == 0) {
+        return false;
+    }
+    if (!timeTrustedEpoch(epochSec)) {
+        out[0] = '\0';
+        return false;
+    }
+    const int64_t adjusted = static_cast<int64_t>(epochSec) +
+                             static_cast<int64_t>(ESP32BASE_NTP_GMT_OFFSET_SEC) +
+                             static_cast<int64_t>(ESP32BASE_NTP_DAYLIGHT_OFFSET_SEC);
+    if (adjusted < 0) {
+        out[0] = '\0';
+        return false;
+    }
+    const time_t raw = static_cast<time_t>(adjusted);
+    struct tm tmValue;
+    gmtime_r(&raw, &tmValue);
+    if (strftime(out, len, fmt ? fmt : "%Y-%m-%d %H:%M:%S", &tmValue) == 0) {
+        out[0] = '\0';
+        return false;
+    }
+    return true;
+}
+
 bool Esp32BaseTime::formatTime(char* out, size_t len, const char* fmt) {
     if (!out || len == 0) {
         return false;
@@ -107,10 +132,7 @@ bool Esp32BaseTime::formatTime(char* out, size_t len, const char* fmt) {
         out[0] = '\0';
         return false;
     }
-    const time_t raw = static_cast<time_t>(s.epochSec);
-    struct tm tmValue;
-    localtime_r(&raw, &tmValue);
-    return strftime(out, len, fmt ? fmt : "%Y-%m-%d %H:%M:%S", &tmValue) > 0;
+    return formatEpoch(s.epochSec, out, len, fmt);
 }
 
 bool Esp32BaseTime::resolveCurrentBootEvent(uint32_t bootId, uint32_t uptimeSec, uint32_t* epochSec) {

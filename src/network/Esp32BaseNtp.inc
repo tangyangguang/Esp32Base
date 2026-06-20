@@ -117,11 +117,10 @@ bool Esp32BaseNtp::isTimeSynced() {
         char actual[32];
         formatTime(actual, sizeof(actual), "%Y-%m-%d %H:%M:%S");
         const uint32_t up = millis();
-        const time_t bootWall = static_cast<time_t>(snap.bootStartEpochSec);
-        struct tm bootTm;
-        localtime_r(&bootWall, &bootTm);
         char boot[32];
-        strftime(boot, sizeof(boot), "%Y-%m-%d %H:%M:%S", &bootTm);
+        if (!Esp32BaseTime::formatEpoch(snap.bootStartEpochSec, boot, sizeof(boot), "%Y-%m-%d %H:%M:%S")) {
+            strlcpy(boot, "-", sizeof(boot));
+        }
         ESP32BASE_LOG_I("ntp", "time_synchronized actual_time=%s uptime_ms=%lu boot_time=%s", actual, static_cast<unsigned long>(up), boot);
         ESP32BASE_LOG_I("ntp", "time_mapping boot_millis=0 actual_time=%s current_millis=%lu current_time=%s", boot, static_cast<unsigned long>(up), actual);
         g_loggedSync = true;
@@ -191,10 +190,8 @@ bool Esp32BaseNtp::formatTime(char* out, size_t len, const char* fmt) {
     if (!out || len == 0) {
         return false;
     }
-    time_t now = time(nullptr);
-    struct tm tmValue;
-    localtime_r(&now, &tmValue);
-    return strftime(out, len, fmt ? fmt : "%Y-%m-%d %H:%M:%S", &tmValue) > 0;
+    const uint32_t now = static_cast<uint32_t>(time(nullptr));
+    return Esp32BaseTime::formatEpoch(now, out, len, fmt);
 }
 
 const char* Esp32BaseNtp::logTimeString() {

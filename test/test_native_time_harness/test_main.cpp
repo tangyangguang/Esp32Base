@@ -76,6 +76,17 @@ void test_rtc_time_establishes_boot_mapping() {
     TEST_ASSERT_EQUAL_UINT32(1700000105UL, esp32base_internal::timeNativeLastSystemEpoch());
 }
 
+void test_time_format_uses_configured_offset() {
+    resetTimeHarness();
+    g_nativeEspTimerUs = 5LL * 1000000LL;
+
+    TEST_ASSERT_TRUE(Esp32BaseTime::initBootSession());
+    TEST_ASSERT_TRUE(esp32base_internal::timeAcceptRtcEpoch(1700000105UL));
+    char text[32];
+    TEST_ASSERT_TRUE(Esp32BaseTime::formatTime(text, sizeof(text), "%Y-%m-%d %H:%M:%S"));
+    TEST_ASSERT_EQUAL_STRING("2023-11-15 06:15:05", text);
+}
+
 void test_ntp_overrides_rtc_time() {
     resetTimeHarness();
     g_nativeEspTimerUs = 10LL * 1000000LL;
@@ -243,6 +254,7 @@ int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_time_defaults_to_uptime_without_real_time);
     RUN_TEST(test_rtc_time_establishes_boot_mapping);
+    RUN_TEST(test_time_format_uses_configured_offset);
     RUN_TEST(test_ntp_overrides_rtc_time);
     RUN_TEST(test_resolve_current_boot_event_uses_active_mapping);
     RUN_TEST(test_rtc_defaults_to_selected_driver_address_when_configured_address_zero);

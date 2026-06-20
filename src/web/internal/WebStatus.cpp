@@ -23,10 +23,12 @@ bool formatEpochTime(uint32_t epoch, char* out, size_t len) {
     if (!out || len == 0 || epoch == 0) {
         return false;
     }
-    const time_t raw = static_cast<time_t>(epoch);
-    struct tm tmValue;
-    localtime_r(&raw, &tmValue);
-    return strftime(out, len, "%Y-%m-%d %H:%M:%S", &tmValue) > 0;
+#if ESP32BASE_ENABLE_TIME
+    return Esp32BaseTime::formatEpoch(epoch, out, len, "%Y-%m-%d %H:%M:%S");
+#else
+    out[0] = '\0';
+    return false;
+#endif
 }
 
 void formatWatchdogTripResetAt(const WatchdogTripState& state, char* out, size_t len) {

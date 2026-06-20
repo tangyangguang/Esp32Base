@@ -364,7 +364,7 @@ The following areas currently depend on NTP as the only real-time source and mus
 - Update ESP32 system epoch through an internal helper whenever RTC or NTP time is accepted.
 - Accept RTC time only when no NTP-derived mapping is already active.
 - Accept NTP time even when RTC time was already active, and notify callbacks when the active source upgrades.
-- Convert RTC register fields using UTC (`gmtime_r` or equivalent) and reserve `localtime_r` for display.
+- Convert RTC register fields using UTC (`gmtime_r` or equivalent) and reserve fixed-offset display formatting for user-facing time.
 
 ### `src/runtime/Esp32BaseAppEventLog.*`
 

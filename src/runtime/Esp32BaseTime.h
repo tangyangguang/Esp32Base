@@ -26,6 +26,7 @@ public:
     static bool initBootSession();
     static Snapshot snapshot();
     static bool isRealTime();
+    static bool formatEpoch(uint32_t epochSec, char* out, size_t len, const char* fmt = nullptr);
     static bool formatTime(char* out, size_t len, const char* fmt = nullptr);
     static bool resolveCurrentBootEvent(uint32_t bootId, uint32_t uptimeSec, uint32_t* epochSec);
     static void onTimeSynced(TimeSyncCallback callback);
