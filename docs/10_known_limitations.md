@@ -39,7 +39,17 @@
 - deep sleep 期间 STA、AP、DNS、Web 均不可访问；唤醒后按新启动流程恢复。
 - Captive Portal DNS 对所有查询返回 AP IP，不提供按域名扩展的 `addCaptiveTarget()`。
 
-## 4. 并发边界
+## 4. 时间和 RTC 边界
+
+- `Esp32BaseTime` 是业务侧统一时间入口；`Esp32BaseNtp` 只表示 NTP 客户端状态，不作为 RTC-only 或离线设备的通用真实时间 API。
+- 外部 RTC 只作为可选可信时间源，不随任何 profile 自动启用。应用固件必须在构建期配置 `ESP32BASE_ENABLE_RTC=1`，并通过 `ESP32BASE_RTC_DRIVER` 在 DS3231 / PCF8563 中二选一；基础库不做运行时自动识别，也不支持同一固件同时接管两个 RTC 时间源。
+- RTC 芯片寄存器按 UTC 日历字段读写；显示、日志和 Web 页面通过 `ESP32BASE_NTP_GMT_OFFSET_SEC` / `ESP32BASE_NTP_DAYLIGHT_OFFSET_SEC` 做固定偏移格式化。基础库不提供时区数据库、夏令时规则或按地区自动切换。
+- RTC 缺失、I2C 读写失败、振荡停止、低电压或时间低于可信 epoch 下限都不会让 `Esp32Base::begin()` 失败；这些情况只作为诊断状态暴露。需要把 RTC 异常提升为业务故障、停机或告警时，由应用层按自身策略处理。
+- 基础库只使用 RTC 的低频时间读写、状态缓存、Web Status 展示和 NTP 成功后的可选写回。DS3231 / PCF8563 的闹钟、中断引脚、INT/SQW、方波、定时器、温度、校准等扩展能力不由基础库接管。
+- 业务项目可以继续在同一 I2C 总线上自行访问 RTC 芯片扩展寄存器或使用外部 RTC 库，但必须自行负责寄存器语义、并发时序和避免整寄存器写入误清状态位。若业务直接改写 RTC 时间，应在 loop/system task 中调用 `Esp32BaseRtc::refresh()` 让基础库缓存重新收敛。
+- `Esp32BaseTime::snapshot()` 不会每次读取 RTC；默认启动时读取一次，NTP 写回时按阈值写一次，周期健康刷新需要显式设置 `ESP32BASE_RTC_STATUS_REFRESH_MS`。基础库不以高频 I2C 轮询作为时间来源。
+
+## 5. 并发边界
 
 - `Esp32Base::begin()`、`Esp32Base::handle()`、`Esp32BaseConfig`、`Esp32BaseWeb` 和 `Esp32BaseBus` 按单系统服务任务模型使用，推荐固定在 Arduino `loopTask` 或应用自建的同一个服务任务中调用。
 - `Esp32BaseConfig` 当前不是线程安全 API，不提供内部 mutex；业务 FreeRTOS task 不应跨核直接调用 Config 写入、flush 或清理 API。
@@ -49,7 +59,7 @@
 - WiFi callback、timer callback、ISR、LWIP 回调不得直接 publish，只能入队后在 `handle()` 中处理。
 - 本库不提供跨任务事件总线，不包装 FreeRTOS 队列作为公开通用消息系统。
 
-## 5. 存储边界
+## 6. 存储边界
 
 - Config 后端为 ESP32 NVS，只适合小配置，不适合大量数据或高频日志。
 - Config 字符串 API 支持最大 3999 字节可见内容，并使用固定 scratch buffer 读取和比较，避免 Arduino `String` 造成 heap 碎片；它仍然不适合大量数据或高频日志。
@@ -66,7 +76,7 @@ App Events 边界：
 - `/esp32base/app-events/events.bin` 是基础库内部 store；普通 FS 管理页会显示 `app events store` 提醒，但仍允许测试和维护时上传、覆盖或删除，操作后会重新加载 App Events 运行态。常规清空事件仍建议使用 System 页的 App Events 清空动作。
 - App Events 也不是第二套系统诊断日志。boot/reset/restart reason、WiFi、NTP、OTA、LittleFS、FileLog fault、基础库健康状态等 Esp32Base 系统事件仍归 Status、System diagnostics 和 FileLog；App Events 只记录应用业务决策或业务可解释事件。同一故障可同时有系统诊断日志和 App Event，但前者写技术事实和内部错误链路，后者写业务影响、保护动作、跳过原因、用户维护结果或外部决策结果。
 
-## 6. 文件系统边界
+## 7. 文件系统边界
 
 - LittleFS 用于小型配置文件、诊断文件和 Web 静态小资源。
 - 系统诊断日志默认位于 `/esp32base/logs/system.log`，App Events store 默认位于 `/esp32base/app-events/events.bin`；业务文件应放在 `/app/**`、`/data/**` 或项目自定义目录。
@@ -80,21 +90,21 @@ App Events 边界：
 - 不保证在 OTA 写 flash 时并行执行大量 FS 写入的实时性。
 - Fs 没有 maintenance handle；挂载后按显式 API 操作。
 
-## 7. 资源边界
+## 8. 资源边界
 
 - 第一版不依赖 PSRAM。
 - 即使板子有 PSRAM，默认资源预算也按无 PSRAM 设计。
 - ESP32-C3 单核、内存和 wake source 更受限，部分模块默认容量更保守；Web route 默认仍统一为 24，应用可按自身 route 数量显式调小。
 - FULL profile 必须通过实机资源表确认，不能只看依赖声明。
 
-## 8. 兼容边界
+## 9. 兼容边界
 
 - 支持 Arduino ESP32 Core 2.0.14+ 和 3.0.4+。
 - Watchdog、WiFi event、mDNS、brownout 控制必须使用版本条件编译隔离。
 - mDNS `stop()` 对外语义是停止广告，不承诺释放底层 mDNS 全部资源。
 - ESP32-C3 不支持的 wake source 返回 false 并输出 warn。
 
-## 9. OTA 边界
+## 10. OTA 边界
 
 - OTA 只支持整包升级。
 - 未提供 SHA256 时允许跳过完整性校验；提供时必须严格校验。
@@ -102,7 +112,7 @@ App Events 边界：
 - SHA256 规则仅适用于 Web OTA；espota 继续使用 ArduinoOTA 协议内建 MD5。
 - 默认不关闭 brownout detector；临时关闭 brownout 仅作为显式开启的风险选项。
 
-## 10. 日志边界
+## 11. 日志边界
 
 - Core Log 只输出 Serial 和可选 sink callback，不依赖 FS。
 - 系统诊断日志由 Runtime/FS 的 `Esp32BaseFileLog` 提供；CORE 和默认 NET 不具备该能力。FileLog 是实现/API 名称，业务文档和页面默认称为 System Logs 或系统诊断日志。
@@ -110,7 +120,7 @@ App Events 边界：
 - 日志访问权限由应用和部署环境控制。
 - 用户 sink callback 同步执行，不得长时间阻塞。
 
-## 11. 发布后演进边界
+## 12. 发布后演进边界
 
 发布后只接受：
 

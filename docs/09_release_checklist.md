@@ -67,8 +67,28 @@
 - FS 关闭时 FileLog 不拉入 LittleFS。
 - 关闭 Bus/Fs/Health 不产生静态对象。
 - 外部最小应用仅 `#include <Esp32Base.h>` 并启用 FULL profile 时，不额外声明 framework 内置库也必须编译通过，包括 ArduinoOTA。
+- RTC 关闭时不链接 DS3231/PCF8563 驱动符号。
+- DS3231 构建必须排除 PCF8563 驱动符号；PCF8563 构建必须排除 DS3231 驱动符号，证明两个 RTC 芯片是构建期二选一，不是运行时共存。
 
-## 6. OTA 检查
+## 6. RTC / 时间源检查
+
+必须通过：
+
+- `pio test -e native_time_harness`。
+- `pio test -e native_time_pcf8563_harness`。
+- `pio run -d examples/rtc_time_source -e esp32_ds3231`。
+- `pio run -d examples/rtc_time_source -e esp32_pcf8563`。
+- DS3231 示例构建的 map/ELF 裁剪检查必须禁止 `pcf8563` / `Pcf8563`。
+- PCF8563 示例构建的 map/ELF 裁剪检查必须禁止 `ds3231` / `Ds3231`。
+- RTC 未启用的现有 profile 行为不应要求业务初始化 `Wire`，也不应改变 NTP-only 项目的对时语义。
+- 启用 RTC 但目标板未接芯片时，`Esp32Base::begin()` 不能失败，Status/日志应显示 RTC 诊断异常。
+- RTC 芯片寄存器必须按 UTC 日历字段读写；Web、日志、App Events 和文件 Last modified 展示使用统一固定偏移格式化。
+- NTP 成功后按 `ESP32BASE_RTC_NTP_WRITEBACK` 和 `ESP32BASE_RTC_WRITEBACK_THRESHOLD_SEC` 决定是否写回所选 RTC，写回失败不得影响 NTP 时间生效。
+- App Events、Web Status、Watchdog reset time、FS Last modified 和系统诊断日志不得继续把 NTP 当作唯一真实时间来源；应统一通过 `Esp32BaseTime` 读取或解析。
+- 基础库不得占用 RTC 中断引脚，不得接管 DS3231/PCF8563 的闹钟、方波、定时器、温度或校准等扩展功能。
+- 实机条件允许时，分别记录 DS3231 正常时间、DS3231 缺失/OSF，PCF8563 正常时间、PCF8563 缺失/低电压或时钟无效状态；无法实机覆盖时必须在发布记录中写明缺口。
+
+## 7. OTA 检查
 
 必须通过：
 
@@ -90,7 +110,7 @@
 - 上传页进度显示正确。
 - 上传页进度容量只显示 KB/MB/B 人性化值；状态/API JSON 保留 raw `bytes` 字段。
 
-## 7. 配网检查
+## 8. 配网检查
 
 必须通过：
 
@@ -108,7 +128,7 @@
 - 错误密码进入 backoff。
 - 路由器恢复后重连。
 
-## 8. 存储检查
+## 9. 存储检查
 
 必须通过：
 
@@ -133,7 +153,7 @@
 - 合法 `eb_sys.hostname` 覆盖构建默认 hostname；非法持久化 hostname 被忽略并输出 WARN。
 - `factoryReset()` 后重启清除 `eb_sys.hostname`，恢复构建默认 hostname。
 
-## 9. 系统诊断日志（FileLog）检查
+## 10. 系统诊断日志（FileLog）检查
 
 必须通过：
 
@@ -159,7 +179,7 @@
 - clear 幂等，清空后 current 可继续写入。
 - restart、deep sleep、OTA success、rollback restart 前 flush。
 
-## 10. 文件系统检查
+## 11. 文件系统检查
 
 必须通过：
 
@@ -192,7 +212,7 @@
 - listDir / mkdir / rmdir 正常。
 - FS 失败不影响 WiFi/Web。
 
-## 11. Watchdog / Sleep 检查
+## 12. Watchdog / Sleep 检查
 
 必须通过：
 
@@ -203,7 +223,7 @@
 - deep sleep 必须走统一生命周期流程。
 - ESP32-C3 不支持 wake source 返回 false。
 
-## 12. Web 检查
+## 13. Web 检查
 
 必须通过：
 
@@ -245,7 +265,7 @@
 - 慢请求日志。
 - 长 handler 限制已文档化。
 
-## 13. Examples 检查
+## 14. Examples 检查
 
 必须通过：
 
@@ -258,9 +278,10 @@
 - `examples/web_logs_ota` 可在自身目录 `pio run`。
 - `examples/net_runtime` 可在自身目录 `pio run`。
 - `examples/app_events_demo` 可在自身目录 `pio run`，并演示 App Events 写入、分页查看、JSON/CSV 和 POST 写入。
+- `examples/rtc_time_source` 可在自身目录分别构建 DS3231 和 PCF8563 env，并清楚演示构建期二选一、I2C 初始化所有权和业务使用 `Esp32BaseTime` 的接入方式。
 - 所有启用 FS 的示例不应通过构建参数覆盖系统诊断日志默认模式；默认保持 ERROR，现场排查时再显式切到 WARN/INFO。
 
-## 14. Soak 检查
+## 15. Soak 检查
 
 必须完成 48 小时 soak：
 
@@ -268,13 +289,14 @@
 - ESP32 / ESP32-S3 / ESP32-C3 各一台。
 - 高频 deferred NVS 写入。
 - 周期 Web 状态查询。
+- RTC 项目按低频或默认不轮询策略运行，不应在 loop 中产生高频 I2C 访问。
 - 周期 `health.tick` bus 事件。
 - Health tick 默认只输出 DEBUG；超过 loop 阈值才输出 INFO。
 - 路由器掉电恢复。
 - 周期读取 System Logs 页面。
 - 无意外重启、卡死、heap 持续退化或重连失败。
 
-## 15. 发布后维护规则
+## 16. 发布后维护规则
 
 发布后只接受：
 
