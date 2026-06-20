@@ -56,7 +56,7 @@ Core: Log, Config, System
 
 Dependency direction must stay valid:
 
-- `Esp32BaseTime` depends only on Core/system time primitives.
+- `Esp32BaseTime` depends only on Core/system time primitives. It is a small time facade, not part of the heavy Runtime/FS feature set.
 - `Esp32BaseRtc` depends on `Esp32BaseTime`, Core Log, and Arduino `Wire`.
 - `Esp32BaseNtp` remains Network and may update `Esp32BaseTime` and optionally `Esp32BaseRtc`.
 - Web and App Events read time through `Esp32BaseTime`, not directly through `Esp32BaseNtp`.
@@ -110,7 +110,7 @@ RTC support is disabled by default.
 
 Defaults:
 
-- `ESP32BASE_ENABLE_TIME=1` automatically when `ESP32BASE_ENABLE_NTP=1` or `ESP32BASE_ENABLE_RTC=1`; otherwise `0`.
+- `ESP32BASE_ENABLE_TIME=1` automatically when `ESP32BASE_ENABLE_NTP=1`, `ESP32BASE_ENABLE_RTC=1`, `ESP32BASE_ENABLE_APP_EVENTS=1`, or `ESP32BASE_ENABLE_WEB=1`; otherwise `0`.
 - `ESP32BASE_ENABLE_RTC=0`.
 - If RTC is enabled and no driver is selected, default to DS3231.
 - DS3231 default I2C address: `0x68`.
@@ -133,8 +133,10 @@ Optional board configuration:
 I2C ownership rule:
 
 - By default, application code initializes `Wire`.
+- By default, Esp32Base uses Arduino `Wire`.
 - Esp32Base only calls `Wire.begin(...)` when `ESP32BASE_RTC_AUTO_WIRE_BEGIN=1`.
 - Esp32Base does not scan the bus and does not touch unrelated I2C devices.
+- If an application uses another `TwoWire` instance, it must call `Esp32BaseRtc::configure(...)` before `Esp32Base::begin()`.
 
 ## Public API
 
@@ -192,11 +194,13 @@ public:
     };
 
     static bool begin();
+    static bool configure(TwoWire& wire, uint8_t address = 0);
     static void handle();
     static bool isAvailable();
     static bool isTimeValid();
     static bool readEpoch(uint32_t* epochSec);
     static bool setEpoch(uint32_t epochSec);
+    static bool refresh();
     static Status status();
     static const char* statusText();
     static const char* driverName();
@@ -206,6 +210,10 @@ public:
 ```
 
 Existing `Esp32BaseNtp::snapshot()` will remain as a compatibility helper when NTP is enabled and delegate to `Esp32BaseTime::snapshot()`. New code should use `Esp32BaseTime::snapshot()` directly.
+
+`Esp32BaseRtc::configure(...)` is optional. Passing `address=0` means "use the selected driver's default address". It must not call `Wire.begin()` by itself; it only records the bus and address for later `begin()`.
+
+`Esp32BaseRtc::refresh()` performs one bounded RTC read, updates cached RTC status, and asks `Esp32BaseTime` to accept RTC time only when no higher-priority NTP time is active. It exists for maintenance pages or applications that changed RTC time directly.
 
 ## Driver Contract
 
@@ -223,6 +231,8 @@ struct Esp32BaseRtcDriverOps {
 
 The implementation can use static functions selected by preprocessor instead of virtual classes. This keeps code size predictable and avoids dynamic allocation.
 
+This project currently compiles optional runtime/network modules through headers and `.inc` files included by `src/Esp32Base.cpp`; `library.json` does not compile `src/runtime/*.cpp` or `src/network/*.cpp` directly. The RTC implementation should follow the existing `.h` + `.inc` pattern, or explicitly update `library.json` and all examples if standalone driver `.cpp` files are introduced.
+
 Chip-specific mapping:
 
 - DS3231 maps OSF/oscillator-stop state to `STATUS_CLOCK_STOPPED`.
@@ -236,9 +246,10 @@ Startup:
 
 1. Core Config and System initialize.
 2. `Esp32BaseTime::initBootSession()` initializes boot id and uptime mapping.
-3. If RTC is enabled, `Esp32BaseRtc::begin()` runs after System and before App Events time provider setup.
-4. If RTC returns trusted epoch, `Esp32BaseTime` accepts it as `SOURCE_RTC`, sets the log time provider, and makes real time available before WiFi/NTP.
-5. If RTC fails or is invalid, startup continues with uptime.
+3. If RTC is enabled, application code may have called `Esp32BaseRtc::configure(...)` before `Esp32Base::begin()`.
+4. If RTC is enabled, `Esp32BaseRtc::begin()` runs after System and before App Events time provider setup.
+5. If RTC returns trusted epoch, `Esp32BaseTime` accepts it as `SOURCE_RTC`, sets the log time provider, and makes real time available before WiFi/NTP.
+6. If RTC fails or is invalid, startup continues with uptime.
 
 Main loop:
 
@@ -247,6 +258,7 @@ Main loop:
 - Projects that need periodic RTC health refresh may set `ESP32BASE_RTC_STATUS_REFRESH_MS` to a low-frequency interval, such as 30000-60000 ms.
 - `Esp32BaseTime::snapshot()` uses cached boot mapping and monotonic uptime, not an I2C read.
 - Web Status may use cached RTC state or perform one bounded read when rendering diagnostics.
+- If application code changes RTC time directly, it can call `Esp32BaseRtc::refresh()` from loop/task context after the write.
 
 NTP sync:
 
@@ -289,7 +301,8 @@ Conflict rules:
 - Esp32Base must not configure alarm, timer, SQW, CLKOUT, interrupt-enable, or calibration features.
 - Esp32Base may clear only the clock-integrity flag it intentionally handles, and must preserve unrelated status bits.
 - Application ISR code must not perform I2C transactions directly; use ISR flags and handle I2C in loop/task context.
-- If application code writes RTC time itself, Esp32Base should expose a refresh path or naturally pick up the new time on the next RTC check.
+- If application code writes RTC time itself, it should call `Esp32BaseRtc::refresh()` from loop/task context after the write.
+- Applications using a separate RTC library must avoid whole-register writes that clear unrelated status or alarm bits while Esp32Base RTC write-back is enabled.
 
 ## Internal Impact Audit
 
@@ -300,8 +313,17 @@ The following areas currently depend on NTP as the only real-time source and mus
 - Replace `appEventLogTimeFromNtp()` with a provider backed by `Esp32BaseTime::snapshot()`.
 - Initialize `Esp32BaseTime` before RTC, NTP, App Events, and FileLog.
 - Initialize RTC when `ESP32BASE_ENABLE_RTC=1`.
+- Respect `Esp32BaseRtc::configure(...)` if the application selected a non-default `TwoWire` or address before `Esp32Base::begin()`.
 - Keep NTP deferred start on WiFi connected, but route trusted sync into `Esp32BaseTime`.
 - Add RTC `handle()` only for low-frequency maintenance.
+
+### `src/Esp32BaseProfile.h` and build wiring
+
+- Add `ESP32BASE_ENABLE_TIME` and `ESP32BASE_ENABLE_RTC` without adding a new profile.
+- Derive `ESP32BASE_ENABLE_TIME` after all profile defaults and user overrides are expanded.
+- Add compile-time checks for supported `ESP32BASE_RTC_DRIVER` values and valid RTC refresh/write-back thresholds.
+- Keep RTC code excluded when `ESP32BASE_ENABLE_RTC=0`.
+- Follow the existing `.inc` inclusion pattern unless `library.json` is intentionally updated.
 
 ### `src/network/Esp32BaseNtp.*`
 
@@ -309,12 +331,21 @@ The following areas currently depend on NTP as the only real-time source and mus
 - Move boot-session and current-boot event resolution semantics to `Esp32BaseTime`, or delegate to it.
 - On trusted sync, update `Esp32BaseTime`, set log timestamp mode through Time, and trigger RTC write-back.
 - Preserve or document migration for existing `Esp32BaseNtp::snapshot()` callers.
+- Ensure `time(nullptr)` remains a Unix epoch value; use timezone only for display formatting.
 
 ### `src/core/Esp32BaseLog.*`
 
 - Keep the generic time-provider hook.
 - Provider should become `Esp32BaseTime::logTimeString` or equivalent.
 - Logs before RTC/NTP use uptime; logs after RTC or NTP accepted use absolute time.
+
+### `src/runtime/Esp32BaseTime.*`
+
+- Own boot session state, source priority, trusted epoch acceptance, current-boot event resolution, and log time string formatting.
+- Use ESP-IDF monotonic uptime for all boot mapping math.
+- Accept RTC time only when no NTP-derived mapping is already active.
+- Accept NTP time even when RTC time was already active, and notify callbacks when the active source upgrades.
+- Convert RTC register fields using UTC (`gmtime_r` or equivalent) and reserve `localtime_r` for display.
 
 ### `src/runtime/Esp32BaseAppEventLog.*`
 
@@ -357,6 +388,8 @@ Add or update:
 
 - A small RTC example showing DS3231 and PCF8563 configuration variants.
 - Native harness tests for time authority selection, event resolution, and NTP write-back decision logic.
+- Unit tests for UTC epoch to RTC calendar conversion and RTC calendar to epoch conversion.
+- Tests covering `Esp32BaseRtc::configure(...)` with custom address and default-address behavior.
 - Compile checks for RTC disabled, DS3231 selected, and PCF8563 selected.
 - Trim-symbol checks ensuring RTC code is absent when disabled.
 - Documentation examples showing `Wire.begin()` ownership and `ESP32BASE_RTC_AUTO_WIRE_BEGIN`.
@@ -383,9 +416,12 @@ Hardware validation:
 - Logs switch to absolute timestamps after RTC or NTP establishes trusted time.
 - Web Status reports time source and RTC status clearly.
 - Business code can still use RTC alarms/INT/SQW directly without Esp32Base overwriting those settings.
+- `ESP32BASE_ENABLE_RTC=0` excludes DS3231/PCF8563 driver code from the linked image.
+- Custom `TwoWire` and custom address configuration works when called before `Esp32Base::begin()`.
 
 ## Implementation Decisions
 
 - Confirm the current Arduino ESP32 `configTime` / `time()` behavior and normalize all internal contracts to real Unix epoch seconds.
 - Keep `Esp32BaseNtp::snapshot()` as a delegating compatibility API.
 - Keep RTC status refresh on demand by default; periodic refresh is opt-in through `ESP32BASE_RTC_STATUS_REFRESH_MS`.
+- Use UTC for RTC chip storage and conversion; display may use the configured local timezone.
