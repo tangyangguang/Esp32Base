@@ -223,9 +223,9 @@ uint32_t resolveAppEventEpoch(const Esp32BaseAppEventRecord& event) {
     if (event.epochSec != 0) {
         return event.epochSec;
     }
-#if ESP32BASE_ENABLE_NTP
+#if ESP32BASE_ENABLE_TIME
     uint32_t epoch = 0;
-    if (Esp32BaseNtp::resolveCurrentBootEvent(event.bootId, event.uptimeSec, &epoch)) {
+    if (Esp32BaseTime::resolveCurrentBootEvent(event.bootId, event.uptimeSec, &epoch)) {
         return epoch;
     }
 #endif

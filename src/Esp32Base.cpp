@@ -103,14 +103,14 @@ void logBootSessionStart() {
     ESP32BASE_LOG_I("boot", "============================================================");
 }
 
-#if ESP32BASE_ENABLE_APP_EVENTS && ESP32BASE_ENABLE_NTP
-Esp32BaseAppEventLog::TimeSnapshot appEventLogTimeFromNtp() {
-    const Esp32BaseNtp::TimeSnapshot ntp = Esp32BaseNtp::snapshot();
+#if ESP32BASE_ENABLE_APP_EVENTS && ESP32BASE_ENABLE_TIME
+Esp32BaseAppEventLog::TimeSnapshot appEventLogTimeFromBaseTime() {
+    const Esp32BaseTime::Snapshot time = Esp32BaseTime::snapshot();
     Esp32BaseAppEventLog::TimeSnapshot value = {};
-    value.synced = ntp.synced;
-    value.epochSec = ntp.epochSec;
-    value.bootId = ntp.bootId;
-    value.uptimeSec = ntp.uptimeSec;
+    value.synced = time.synced;
+    value.epochSec = time.epochSec;
+    value.bootId = time.bootId;
+    value.uptimeSec = time.uptimeSec;
     return value;
 }
 #endif
@@ -173,8 +173,8 @@ bool Esp32Base::begin() {
 #if ESP32BASE_ENABLE_NTP
     Esp32BaseNtp::initBootSession();
 #endif
-#if ESP32BASE_ENABLE_APP_EVENTS && ESP32BASE_ENABLE_NTP
-    Esp32BaseAppEventLog::setTimeProvider(appEventLogTimeFromNtp);
+#if ESP32BASE_ENABLE_APP_EVENTS && ESP32BASE_ENABLE_TIME
+    Esp32BaseAppEventLog::setTimeProvider(appEventLogTimeFromBaseTime);
 #endif
 
 #if ESP32BASE_ENABLE_BUS

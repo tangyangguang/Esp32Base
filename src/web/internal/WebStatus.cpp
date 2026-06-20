@@ -41,8 +41,8 @@ void formatWatchdogTripResetAt(const WatchdogTripState& state, char* out, size_t
         strlcpy(out, "invalid baseline", len);
         return;
     }
-#if ESP32BASE_ENABLE_NTP
-    if (state.resetTime >= ESP32BASE_NTP_SYNC_MIN_EPOCH && formatEpochTime(state.resetTime, out, len)) {
+#if ESP32BASE_ENABLE_TIME
+    if (state.resetTime >= ESP32BASE_TIME_SYNC_MIN_EPOCH && formatEpochTime(state.resetTime, out, len)) {
         return;
     }
 #endif
@@ -50,8 +50,8 @@ void formatWatchdogTripResetAt(const WatchdogTripState& state, char* out, size_t
 }
 
 uint32_t currentWatchdogTripResetTime() {
-#if ESP32BASE_ENABLE_NTP
-    const Esp32BaseNtp::TimeSnapshot time = Esp32BaseNtp::snapshot();
+#if ESP32BASE_ENABLE_TIME
+    const Esp32BaseTime::Snapshot time = Esp32BaseTime::snapshot();
     if (time.synced) {
         return time.epochSec;
     }
@@ -632,17 +632,53 @@ void handleRoot() {
     sendSubmetricsEnd();
     sendInfoRowEnd();
 #endif
+#if ESP32BASE_ENABLE_TIME
+    const Esp32BaseTime::Snapshot baseTime = Esp32BaseTime::snapshot();
+    sendInfoRowStart("Time");
+    if (baseTime.synced) {
+        sendStatusTag(Esp32BaseWeb::UI_OK, "synced");
+    } else {
+        sendStatusTag(Esp32BaseWeb::UI_NEUTRAL, "uptime only");
+    }
+    sendSubmetricsStart();
+    sendSubmetric("Source", Esp32BaseTime::sourceName(baseTime.source));
+    if (baseTime.synced && Esp32BaseTime::formatTime(value, sizeof(value), "%Y-%m-%d %H:%M:%S")) {
+        sendSubmetric("Current", value);
+    }
+    snprintf(value, sizeof(value), "%lu", static_cast<unsigned long>(baseTime.uptimeSec));
+    sendSubmetric("Uptime sec", value);
+    sendSubmetricsEnd();
+    sendInfoRowEnd();
+#endif
+#if ESP32BASE_ENABLE_RTC
+    sendInfoRowStart("RTC");
+    if (Esp32BaseRtc::status() == Esp32BaseRtc::STATUS_OK) {
+        sendStatusTag(Esp32BaseWeb::UI_OK, Esp32BaseRtc::statusText());
+    } else if (Esp32BaseRtc::status() == Esp32BaseRtc::STATUS_NOT_STARTED) {
+        sendStatusTag(Esp32BaseWeb::UI_NEUTRAL, Esp32BaseRtc::statusText());
+    } else {
+        sendStatusTag(Esp32BaseWeb::UI_WARN, Esp32BaseRtc::statusText());
+    }
+    sendSubmetricsStart();
+    sendSubmetric("Driver", Esp32BaseRtc::driverName());
+    snprintf(value, sizeof(value), "%lu", static_cast<unsigned long>(Esp32BaseRtc::lastEpoch()));
+    sendSubmetric("Last epoch", value);
+    snprintf(value, sizeof(value), "%lu", static_cast<unsigned long>(Esp32BaseRtc::lastSyncUptimeSec()));
+    sendSubmetric("Last sync uptime", value);
+    sendSubmetricsEnd();
+    sendInfoRowEnd();
+#endif
 #if ESP32BASE_ENABLE_NTP
-    const Esp32BaseNtp::TimeSnapshot time = Esp32BaseNtp::snapshot();
-    sendInfoRowStart("NTP time");
+    const Esp32BaseNtp::TimeSnapshot ntpTime = Esp32BaseNtp::snapshot();
+    sendInfoRowStart("NTP");
     if (!Esp32BaseNtp::isStarted()) {
         sendStatusTag(Esp32BaseWeb::UI_NEUTRAL, "not started");
-    } else if (time.synced) {
+    } else if (ntpTime.synced) {
         sendStatusTag(Esp32BaseWeb::UI_OK, "synced");
     } else {
         sendStatusTag(Esp32BaseWeb::UI_WARN, "pending");
     }
-    if (time.synced && Esp32BaseNtp::formatTime(value, sizeof(value), "%Y-%m-%d %H:%M:%S")) {
+    if (ntpTime.synced && Esp32BaseNtp::formatTime(value, sizeof(value), "%Y-%m-%d %H:%M:%S")) {
         sendChunk("<br>");
         sendEscapedHtmlChunk(value);
     }
