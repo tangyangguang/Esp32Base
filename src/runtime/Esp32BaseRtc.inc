@@ -7,6 +7,10 @@
 #include "internal/Esp32BaseTimeInternal.h"
 #include "internal/Esp32BaseRtcDrivers.h"
 
+#if ESP32BASE_RTC_DRIVER == ESP32BASE_RTC_DRIVER_DS3231
+#include "internal/Esp32BaseRtcDs3231.inc"
+#endif
+
 extern TwoWire Wire;
 
 namespace {
@@ -173,7 +177,11 @@ uint32_t Esp32BaseRtc::lastSyncUptimeSec() {
 
 namespace {
 const Esp32BaseRtcDriverOps* rtcDriverOps() {
+#if ESP32BASE_RTC_DRIVER == ESP32BASE_RTC_DRIVER_DS3231
+    return &kDs3231Ops;
+#else
     return &kRtcMissingOps;
+#endif
 }
 }
 
