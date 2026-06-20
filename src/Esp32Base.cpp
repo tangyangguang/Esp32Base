@@ -162,6 +162,14 @@ bool Esp32Base::begin() {
 #if ESP32BASE_ENABLE_TIME
     Esp32BaseTime::initBootSession();
 #endif
+#if ESP32BASE_ENABLE_RTC
+    ESP32BASE_LOG_D("base", "module_begin name=rtc");
+    {
+        const bool ok = Esp32BaseRtc::begin();
+        if (!optionalOk(ok, "rtc")) return false;
+        if (ok) ESP32BASE_LOG_D("base", "module_ready name=rtc");
+    }
+#endif
 #if ESP32BASE_ENABLE_NTP
     Esp32BaseNtp::initBootSession();
 #endif
@@ -250,6 +258,9 @@ void Esp32Base::handle() {
 #endif
 #if ESP32BASE_ENABLE_FILELOG
     Esp32BaseFileLog::handle();
+#endif
+#if ESP32BASE_ENABLE_RTC
+    Esp32BaseRtc::handle();
 #endif
 
 #if ESP32BASE_ENABLE_WIFI
@@ -420,6 +431,9 @@ void Esp32Base::logResources() {
 #endif
 #if ESP32BASE_ENABLE_TIME
 #include "runtime/Esp32BaseTime.inc"
+#endif
+#if ESP32BASE_ENABLE_RTC
+#include "runtime/Esp32BaseRtc.inc"
 #endif
 #if ESP32BASE_ENABLE_HEALTH
 #include "runtime/Esp32BaseHealth.inc"

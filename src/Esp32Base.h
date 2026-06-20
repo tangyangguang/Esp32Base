@@ -30,6 +30,9 @@
 #if ESP32BASE_ENABLE_TIME
 #include "runtime/Esp32BaseTime.h"
 #endif
+#if ESP32BASE_ENABLE_RTC
+#include "runtime/Esp32BaseRtc.h"
+#endif
 #if ESP32BASE_ENABLE_HEALTH
 #include "runtime/Esp32BaseHealth.h"
 #endif
