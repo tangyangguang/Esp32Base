@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check Web response send path invariants that affect ESP32 page latency."""
+"""Check Web invariants that affect ESP32 page latency and route registration."""
 
 from __future__ import annotations
 
@@ -54,6 +54,7 @@ def function_body(source: str, name: str) -> str:
 
 def main() -> int:
     source = read_web_source()
+    web_ota = (ROOT / "src" / "web" / "internal" / "WebOta.cpp").read_text(encoding="utf-8")
     send_progmem = function_body(source, "sendProgmem")
     send_response_content = function_body(source, "sendResponseContent")
     send_raw_chunked_content = function_body(source, "sendRawChunkedContent")
@@ -121,6 +122,14 @@ def main() -> int:
         errors.append("sendResponseHeader() must reject headers after a chunked response has started")
     if "g_server.sendHeader(name, value)" not in send_response_header:
         errors.append("sendResponseHeader() must delegate valid headers to WebServer::sendHeader()")
+    if "builtinRoutes" in source or "server_registering builtin_routes=" in source:
+        errors.append("Web begin() must not maintain a separate hand-counted builtin route total")
+    if "function h(n){var u=['B','KB','MB','GB']" in source or "function fsUH(n){var u=['B','KB','MB','GB']" in source:
+        errors.append("FS and OTA upload pages must share the built-in ebFmtBytes() JavaScript helper")
+    if "function ebFmtBytes(n)" not in source:
+        errors.append("Web upload pages must provide one shared ebFmtBytes() JavaScript helper")
+    if "#if ESP32BASE_ENABLE_OTA" in web_ota:
+        errors.append("src/web/internal/WebOta.cpp is already guarded by WEB && OTA and must not repeat ESP32BASE_ENABLE_OTA guards")
 
     if errors:
         for error in errors:

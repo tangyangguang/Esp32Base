@@ -10,7 +10,6 @@
 
 namespace esp32base_web {
 
-#if ESP32BASE_ENABLE_OTA
 namespace {
 constexpr size_t kRawOtaWriteBufferSize = 64UL * 1024UL;
 constexpr size_t kRawOtaFlashWriteChunkSize = 4UL * 1024UL;
@@ -158,7 +157,8 @@ void handleOtaPage() {
     snprintf(formStart, sizeof(formStart), "<section class='panel formpanel uploadpanel'><h2>Firmware upload</h2><form id='f' class='editform' data-max-size='%lu'>", static_cast<unsigned long>(nextSize));
     sendChunk(formStart);
     sendChunk("<div class='fieldgrid'><div class='field full'><label for='fw'>Firmware file</label><input id='fw' type='file' name='firmware' accept='.bin' required></div><div class='field long'><label for='sha'>SHA256</label><input id='sha' placeholder='Optional 64-character digest' maxlength='64'><small>Optional integrity check for the uploaded firmware.</small></div></div><div class='actions'><input type='submit' value='Upload Firmware'></div></form><progress id='p' value='0' max='100' style='width:100%;display:none'></progress><p id='s' class='statusline muted'></p></section>");
-    sendChunk("<script>function h(n){var u=['B','KB','MB','GB'],i=0,x=n;while(x>=1024&&i<u.length-1){x/=1024;i++;}return (i?x.toFixed(2):Math.round(x))+' '+u[i];}var form=document.getElementById('f'),fw=document.getElementById('fw'),st=document.getElementById('s');function maxSize(){return parseInt(form.dataset.maxSize||'0',10)||0;}function showFile(){var f=fw.files[0],max=maxSize();if(!f){st.textContent='';return;}st.textContent='Selected firmware '+h(f.size)+(max>0?' / OTA slot '+h(max):'');}fw.onchange=showFile;form.onsubmit=function(e){e.preventDefault();if(this.dataset.busy)return false;this.dataset.busy=1;var f=fw.files[0],pg=document.getElementById('p'),b=this.querySelector('[type=submit]'),max=maxSize();if(!f){this.dataset.busy='';return false;}if(max>0&&f.size>max){st.textContent='Upload blocked: firmware '+h(f.size)+' exceeds OTA slot '+h(max);this.dataset.busy='';return false;}var d=new FormData();d.append('firmware',f,f.name);var x=new XMLHttpRequest();if(b)b.disabled=true;pg.style.display='block';st.textContent='Uploading 0%';x.upload.onprogress=function(ev){if(ev.lengthComputable){var p=Math.floor(ev.loaded*100/ev.total);pg.value=p;st.textContent='Uploading '+p+'% '+h(ev.loaded)+' / '+h(ev.total);}};x.onload=function(){var r={};try{r=JSON.parse(x.responseText||'{}');}catch(e){}if(x.status==200){st.textContent='Upload successful. Restarting...';setTimeout(function(){location.href=r.redirect||'/esp32base';},8000);return;}st.textContent='Upload failed: '+(r.error||('HTTP '+x.status));document.getElementById('f').dataset.busy='';if(b)b.disabled=false;};x.onerror=function(){st.textContent='Upload failed: network error';document.getElementById('f').dataset.busy='';if(b)b.disabled=false;};x.open('POST','/esp32base/ota');x.setRequestHeader('X-Firmware-Size',String(f.size));var s=document.getElementById('sha').value;if(s)x.setRequestHeader('X-Sha256',s);x.send(d);return false;};</script>");
+    sendProgmem(WEB_UPLOAD_HELPERS);
+    sendChunk("<script>var form=document.getElementById('f'),fw=document.getElementById('fw'),st=document.getElementById('s');function maxSize(){return parseInt(form.dataset.maxSize||'0',10)||0;}function showFile(){var f=fw.files[0],max=maxSize();if(!f){st.textContent='';return;}st.textContent='Selected firmware '+ebFmtBytes(f.size)+(max>0?' / OTA slot '+ebFmtBytes(max):'');}fw.onchange=showFile;form.onsubmit=function(e){e.preventDefault();if(this.dataset.busy)return false;this.dataset.busy=1;var f=fw.files[0],pg=document.getElementById('p'),b=this.querySelector('[type=submit]'),max=maxSize();if(!f){this.dataset.busy='';return false;}if(max>0&&f.size>max){st.textContent='Upload blocked: firmware '+ebFmtBytes(f.size)+' exceeds OTA slot '+ebFmtBytes(max);this.dataset.busy='';return false;}var d=new FormData();d.append('firmware',f,f.name);var x=new XMLHttpRequest();if(b)b.disabled=true;pg.style.display='block';st.textContent='Uploading 0%';x.upload.onprogress=function(ev){if(ev.lengthComputable){var p=Math.floor(ev.loaded*100/ev.total);pg.value=p;st.textContent='Uploading '+p+'% '+ebFmtBytes(ev.loaded)+' / '+ebFmtBytes(ev.total);}};x.onload=function(){var r={};try{r=JSON.parse(x.responseText||'{}');}catch(e){}if(x.status==200){st.textContent='Upload successful. Restarting...';setTimeout(function(){location.href=r.redirect||'/esp32base';},8000);return;}st.textContent='Upload failed: '+(r.error||('HTTP '+x.status));document.getElementById('f').dataset.busy='';if(b)b.disabled=false;};x.onerror=function(){st.textContent='Upload failed: network error';document.getElementById('f').dataset.busy='';if(b)b.disabled=false;};x.open('POST','/esp32base/ota');x.setRequestHeader('X-Firmware-Size',String(f.size));var s=document.getElementById('sha').value;if(s)x.setRequestHeader('X-Sha256',s);x.send(d);return false;};</script>");
     Esp32BaseWeb::sendFooter();
 }
 
@@ -397,7 +397,6 @@ void handleOtaApi() {
     sendChunk("}");
     endResponse();
 }
-#endif
 
 } // namespace esp32base_web
 

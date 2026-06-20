@@ -31,6 +31,7 @@
       "design-history/**",
       "docs/superpowers",
       "docs/superpowers/**",
+      "docs/13_rtc_time_source_implementation_plan.md",
       "bug-ticklish-kitten.md",
       ".git",
       ".git/**",

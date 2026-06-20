@@ -12,6 +12,7 @@ assets = read("src/web/internal/WebAssets.cpp")
 web = read("src/web/Esp32BaseWeb.cpp")
 ota = read("src/web/internal/WebOta.cpp")
 docs = read("docs/11_web_ui_baseline.md")
+gallery = read("examples/web_ui_gallery/src/main.cpp")
 
 checks = [
     (
@@ -115,6 +116,9 @@ if general_pos < 0:
     errors.append("General compact action buttons must keep a stable minimum width.")
 if override_pos < 0:
     errors.append("Tool link action buttons must reset min-width to fit their compact action column.")
+
+if gallery.count('RUN_SELFTEST("GET", "/esp32base/ui.css"') > 7:
+    errors.append("web_ui_gallery selftest must not lock detailed CSS implementation strings.")
 
 if errors:
     for error in errors:

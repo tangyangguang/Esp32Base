@@ -2,6 +2,7 @@ design-history/
 design-history/**
 docs/superpowers/
 docs/superpowers/**
+docs/13_rtc_time_source_implementation_plan.md
 ESP32BASE_DOCUMENTATION_REVIEW*.md
 bug-ticklish-kitten.md
 .git/

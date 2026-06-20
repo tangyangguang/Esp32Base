@@ -899,18 +899,7 @@ bool Esp32BaseWeb::begin() {
     const uint8_t appRoutes = routeCount(false);
     const uint8_t appPages = routeCount(true);
     const uint8_t staticAssets = staticAssetCount();
-    uint8_t builtinRoutes = 26;
-#if ESP32BASE_ENABLE_FS
-    builtinRoutes += 3;
-#endif
-#if ESP32BASE_ENABLE_APP_EVENTS
-    builtinRoutes += 4;
-#endif
-#if ESP32BASE_ENABLE_OTA
-    builtinRoutes += 3;
-#endif
-    ESP32BASE_LOG_D("web", "server_registering builtin_routes=%u app_routes=%u app_pages=%u static_assets=%u",
-                    static_cast<unsigned>(builtinRoutes),
+    ESP32BASE_LOG_D("web", "server_registering app_routes=%u app_pages=%u static_assets=%u",
                     static_cast<unsigned>(appRoutes),
                     static_cast<unsigned>(appPages),
                     static_cast<unsigned>(staticAssets));

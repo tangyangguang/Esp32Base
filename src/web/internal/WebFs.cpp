@@ -6,7 +6,6 @@
 
 namespace esp32base_web {
 
-#if ESP32BASE_ENABLE_FS
 static const uint8_t FS_TOP_MAX = 10;
 static const uint16_t FS_TREE_LIST_LIMIT = 128;
 static const uint16_t FS_UPLOAD_DIR_LIMIT = 64;
@@ -595,7 +594,8 @@ void sendFsUploadPanel() {
         sendChunk(" Some directories are hidden because their paths are too long.");
     }
     sendChunk("</small></div></div><div class='actions'><input type='submit' value='Upload'></div></form><progress id='fsup' value='0' max='100' style='width:100%;display:none'></progress><p id='fsus' class='statusline muted'></p></section>");
-    sendChunk("<script>function fsUH(n){var u=['B','KB','MB','GB'],i=0,x=n;while(x>=1024&&i<u.length-1){x/=1024;i++;}return (i?x.toFixed(2):Math.round(x))+' '+u[i];}function fsUEnc(s){return encodeURIComponent(s);}function fsUFail(t){var f=document.getElementById('fsu'),b=f.querySelector('[type=submit]');document.getElementById('fsus').textContent=t;f.dataset.busy='';if(b)b.disabled=false;}function fsUSend(dir,file,ow){var f=document.getElementById('fsu'),st=document.getElementById('fsus'),pg=document.getElementById('fsup'),b=f.querySelector('[type=submit]'),d=new FormData(),x=new XMLHttpRequest();d.append('file',file,file.name);if(b)b.disabled=true;pg.style.display='block';st.textContent='Uploading 0%';x.upload.onprogress=function(ev){if(ev.lengthComputable){var p=Math.floor(ev.loaded*100/ev.total);pg.value=p;st.textContent='Uploading '+p+'% '+fsUH(ev.loaded)+' / '+fsUH(ev.total);}};x.onload=function(){var r={};try{r=JSON.parse(x.responseText||'{}');}catch(e){}if(x.status==200&&r.ok){location.href=r.redirect||'/esp32base/fs?manage=1&uploaded=1';return;}fsUFail('Upload failed: '+(r.error||('HTTP '+x.status)));};x.onerror=function(){fsUFail('Upload failed: network error');};x.open('POST','/esp32base/fs/upload?dir='+fsUEnc(dir)+(ow?'&overwrite=1':''));x.send(d);}document.getElementById('fsu').onsubmit=function(e){e.preventDefault();if(this.dataset.busy)return false;this.dataset.busy=1;var dir=document.getElementById('fsudir').value,file=document.getElementById('fsufile').files[0],st=document.getElementById('fsus'),b=this.querySelector('[type=submit]');if(!file){this.dataset.busy='';return false;}if(b)b.disabled=true;st.textContent='Checking target...';var x=new XMLHttpRequest();x.onload=function(){var r={};try{r=JSON.parse(x.responseText||'{}');}catch(e){}if(x.status!=200||!r.ok){fsUFail('Upload blocked: '+(r.error||('HTTP '+x.status)));return;}var ow=false;if(r.exists){ow=confirm((r.path||file.name)+' already exists. Overwrite?');if(!ow){fsUFail('Upload canceled');return;}}fsUSend(dir,file,ow);};x.onerror=function(){fsUFail('Upload blocked: network error');};x.open('GET','/esp32base/fs/check?dir='+fsUEnc(dir)+'&name='+fsUEnc(file.name));x.send();return false;};</script>");
+    sendProgmem(WEB_UPLOAD_HELPERS);
+    sendChunk("<script>function fsUEnc(s){return encodeURIComponent(s);}function fsUFail(t){var f=document.getElementById('fsu'),b=f.querySelector('[type=submit]');document.getElementById('fsus').textContent=t;f.dataset.busy='';if(b)b.disabled=false;}function fsUSend(dir,file,ow){var f=document.getElementById('fsu'),st=document.getElementById('fsus'),pg=document.getElementById('fsup'),b=f.querySelector('[type=submit]'),d=new FormData(),x=new XMLHttpRequest();d.append('file',file,file.name);if(b)b.disabled=true;pg.style.display='block';st.textContent='Uploading 0%';x.upload.onprogress=function(ev){if(ev.lengthComputable){var p=Math.floor(ev.loaded*100/ev.total);pg.value=p;st.textContent='Uploading '+p+'% '+ebFmtBytes(ev.loaded)+' / '+ebFmtBytes(ev.total);}};x.onload=function(){var r={};try{r=JSON.parse(x.responseText||'{}');}catch(e){}if(x.status==200&&r.ok){location.href=r.redirect||'/esp32base/fs?manage=1&uploaded=1';return;}fsUFail('Upload failed: '+(r.error||('HTTP '+x.status)));};x.onerror=function(){fsUFail('Upload failed: network error');};x.open('POST','/esp32base/fs/upload?dir='+fsUEnc(dir)+(ow?'&overwrite=1':''));x.send(d);}document.getElementById('fsu').onsubmit=function(e){e.preventDefault();if(this.dataset.busy)return false;this.dataset.busy=1;var dir=document.getElementById('fsudir').value,file=document.getElementById('fsufile').files[0],st=document.getElementById('fsus'),b=this.querySelector('[type=submit]');if(!file){this.dataset.busy='';return false;}if(b)b.disabled=true;st.textContent='Checking target...';var x=new XMLHttpRequest();x.onload=function(){var r={};try{r=JSON.parse(x.responseText||'{}');}catch(e){}if(x.status!=200||!r.ok){fsUFail('Upload blocked: '+(r.error||('HTTP '+x.status)));return;}var ow=false;if(r.exists){ow=confirm((r.path||file.name)+' already exists. Overwrite?');if(!ow){fsUFail('Upload canceled');return;}}fsUSend(dir,file,ow);};x.onerror=function(){fsUFail('Upload blocked: network error');};x.open('GET','/esp32base/fs/check?dir='+fsUEnc(dir)+'&name='+fsUEnc(file.name));x.send();return false;};</script>");
 }
 
 void fsDownloadFilename(const char* path, char* out, size_t len) {
@@ -751,9 +751,7 @@ void sendFsQuickSummaryRows() {
     sendChunk("<span class='info'>Open FS details for file count, directory count and top files.</span>");
     sendInfoRowEnd();
 }
-#endif
 
-#if ESP32BASE_ENABLE_FS
 void handleFsPage() {
     markRequest();
     if (!ensureAuth()) {
@@ -1181,7 +1179,6 @@ void handleFsDeletePost() {
     redirectSeeOther(ok ? (fileClearedOnly ? "/esp32base/fs?manage=1&deleted=cleared" : "/esp32base/fs?manage=1&deleted=1")
                         : "/esp32base/fs?manage=1&error=delete_failed");
 }
-#endif
 
 } // namespace esp32base_web
 

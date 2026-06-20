@@ -36,6 +36,9 @@ errors: list[str] = []
 app_config = read("src/web/internal/WebAppConfig.cpp")
 header = read("src/web/Esp32BaseAppConfig.h")
 
+require(app_config.count("#if ESP32BASE_ENABLE_APP_CONFIG") == 0,
+        "WebAppConfig.cpp is already guarded by WEB && APP_CONFIG and must not repeat ESP32BASE_ENABLE_APP_CONFIG guards")
+
 try:
     validate_all = function_body(app_config, "bool validateAllSubmitted(")
     write_field = function_body(app_config, "bool writeSubmittedField(")

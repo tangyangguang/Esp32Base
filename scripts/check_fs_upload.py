@@ -141,6 +141,8 @@ if "label for='fsufile'>File</label><input id='fsufile' type='file'" in source a
 web_fs = read("src/web/internal/WebFs.cpp")
 upload_done = function_body(web_fs, "void handleFsUploadDone()")
 upload_write = function_body(web_fs, "void handleFsUpload()")
+if "#if ESP32BASE_ENABLE_FS" in web_fs:
+    errors.append("src/web/internal/WebFs.cpp: file is already guarded by WEB && FS and must not repeat ESP32BASE_ENABLE_FS guards")
 if '"No upload received"' not in upload_done:
     errors.append("src/web/internal/WebFs.cpp: upload completion must reject POSTs that did not receive UPLOAD_FILE_START")
 if upload_done.find("if (startFailed || uploadError[0])") > upload_done.find("if (!uploadReceived"):

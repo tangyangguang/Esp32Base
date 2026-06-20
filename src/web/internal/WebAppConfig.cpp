@@ -6,7 +6,6 @@
 
 namespace esp32base_web {
 
-#if ESP32BASE_ENABLE_APP_CONFIG
 bool validConfigName(const char* value) {
     if (!value) {
         return false;
@@ -828,13 +827,11 @@ void handleAppConfigSubmit() {
 void handleAppConfigPage() {
     sendAppConfigPage();
 }
-#endif
 
 } // namespace esp32base_web
 
 using namespace esp32base_web;
 
-#if ESP32BASE_ENABLE_APP_CONFIG
 bool Esp32BaseAppConfig::setTitle(const char* title) {
     if (!title || !title[0] || strlen(title) >= sizeof(g_appConfigTitle)) {
         return false;
@@ -1023,6 +1020,5 @@ bool Esp32BaseAppConfig::submittedEnum(const char* ns, const char* key, char* ou
     const AppConfigFieldSlot* field = nullptr;
     return g_appConfigSubmitContext && findSubmittedRaw(ns, key, out, len, &field) && field && field->type == APP_CFG_ENUM;
 }
-#endif
 
 #endif

@@ -13,6 +13,9 @@ namespace esp32base_web {
 extern const char WEB_CSS_TYPE[] PROGMEM;
 extern const char WEB_CSS[] PROGMEM;
 extern const char WEB_HEAD[] PROGMEM;
+#if ESP32BASE_ENABLE_FS || ESP32BASE_ENABLE_OTA
+extern const char WEB_UPLOAD_HELPERS[] PROGMEM;
+#endif
 #if ESP32BASE_ENABLE_APP_CONFIG
 extern const char WEB_APPCFG_STYLE[] PROGMEM;
 #endif

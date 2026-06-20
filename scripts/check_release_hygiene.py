@@ -30,6 +30,14 @@ for path, text in (
     if "idf_component.yml" not in text:
         errors.append(f"{path}: release/export filters must exclude generated idf_component.yml files")
 
+for path, text in (
+    ("library.json", library),
+    (".libraryignore", libraryignore),
+    (".piopmignore", piopmignore),
+):
+    if "docs/13_rtc_time_source_implementation_plan.md" not in text:
+        errors.append(f"{path}: release/export filters must exclude implementation-plan process docs")
+
 if "#if ESP32BASE_PROFILE == ESP32BASE_PROFILE_NET" not in profiles:
     errors.append("docs/02_profiles.md: profile example must use numeric ESP32BASE_PROFILE comparison")
 if "#if defined(ESP32BASE_PROFILE_NET)" in profiles:
