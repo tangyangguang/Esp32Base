@@ -319,8 +319,8 @@ public:
 - `text[32]` 是短说明，可 UTF-8 安全截断，并用 `FLAG_TEXT_TRUNCATED` 标记。
 - `value1..value3` 是三个通用 `int32_t` 数值槽；`valueMask` 表示哪个值有效，避免把缺失误读为 0。
 - `code` 是应用自定义短数值码，基础库不解释。
-- NTP 可用且可信时写入 `epochSec` 并设置 `FLAG_TIME_SYNCED`；否则保存 `bootId + uptimeSec`。Web/API 展示会额外给出派生的 `uptimeMs = uptimeSec * 1000`，用于避免把相对运行时间误读成真实日期。
-- 当前 boot 后续完成 NTP 同步时，Web/API 会通过 `Esp32BaseNtp::resolveCurrentBootEvent()` 把同一 boot 的未同步事件解析为 `resolvedEpochSec`；历史 boot 或无法确认的事件仍显示相对 uptime。
+- `Esp32BaseTime` 当前有可信真实时间时写入 `epochSec` 并设置 `FLAG_TIME_SYNCED`；否则保存 `bootId + uptimeSec`。可信时间可来自 RTC 或 NTP，NTP 优先级高于 RTC。Web/API 展示会额外给出派生的 `uptimeMs = uptimeSec * 1000`，用于避免把相对运行时间误读成真实日期。
+- 当前 boot 后续由 RTC 或 NTP 建立可信时间时，Web/API 会通过 `Esp32BaseTime::resolveCurrentBootEvent()` 把同一 boot 的未同步事件解析为 `resolvedEpochSec`；历史 boot 或无法确认的事件仍显示相对 uptime。
 - `Esp32BaseAppEventLog` 不是跨任务并发 API；建议只在 loop/system task、Web handler 或同一业务执行上下文中调用。其他 FreeRTOS task 需要写业务事件时，应通过业务 queue 投递回 loop/system task，避免 append/read/clear 并发修改同一文件和全局状态。
 - `reload()` 面向维护入口或测试导入场景：当 `/esp32base/app-events/events.bin` 被 FS 管理页上传、覆盖或删除后，先清理运行态 `ready/fault/head/count/nextId`，再按当前 store 重新加载；普通业务写入不需要调用它。
 
@@ -728,9 +728,71 @@ WiFi 凭证和重连策略：
 - 仅当应用显式设置有限 maxRetries 且全部用尽，才进入 `FAILED`。
 - 从 `FAILED` 恢复必须通过 `connect()` 重新提交凭证，或 `clearCredentials()` 后再显式 `startConfigPortal()`。
 
-## 8. Esp32BaseDns / Ntp / Mdns
+## 8. Esp32BaseTime / Rtc / Dns / Ntp / Mdns
 
 ```cpp
+class Esp32BaseTime {
+public:
+    enum Source : uint8_t {
+        SOURCE_UPTIME = 0,
+        SOURCE_RTC = 1,
+        SOURCE_NTP = 2
+    };
+
+    struct Snapshot {
+        bool synced;
+        Source source;
+        uint32_t epochSec;
+        uint32_t uptimeSec;
+        uint32_t bootId;
+        uint32_t bootStartEpochSec;
+    };
+
+    typedef void (*TimeSyncCallback)(const Snapshot& snapshot);
+
+    static bool initBootSession();
+    static Snapshot snapshot();
+    static bool isRealTime();
+    static bool formatTime(char* out, size_t len, const char* fmt = nullptr);
+    static bool resolveCurrentBootEvent(uint32_t bootId, uint32_t uptimeSec, uint32_t* epochSec);
+    static void onTimeSynced(TimeSyncCallback callback);
+    static const char* sourceName(Source source);
+    static const char* logTimeString();
+};
+
+class Esp32BaseRtc {
+public:
+    enum Driver : uint8_t {
+        DRIVER_DS3231 = 1,
+        DRIVER_PCF8563 = 2
+    };
+
+    enum Status : uint8_t {
+        STATUS_DISABLED = 0,
+        STATUS_NOT_STARTED = 1,
+        STATUS_OK = 2,
+        STATUS_MISSING = 3,
+        STATUS_I2C_ERROR = 4,
+        STATUS_TIME_INVALID = 5,
+        STATUS_CLOCK_STOPPED = 6,
+        STATUS_CONFIG_ERROR = 7
+    };
+
+    static bool configure(TwoWire& wire, uint8_t address = 0);
+    static bool begin();
+    static void handle();
+    static bool refresh();
+    static bool isAvailable();
+    static bool isTimeValid();
+    static bool readEpoch(uint32_t* epochSec);
+    static bool setEpoch(uint32_t epochSec);
+    static Status status();
+    static const char* statusText();
+    static const char* driverName();
+    static uint32_t lastEpoch();
+    static uint32_t lastSyncUptimeSec();
+};
+
 class Esp32BaseDns {
 public:
     static bool begin();
@@ -777,20 +839,46 @@ public:
 
 `Esp32BaseDns` 在 config portal 模式下对所有 DNS 查询返回 AP IP，不维护固定域名白名单，也不提供 `addCaptiveTarget()`。
 
+`Esp32BaseTime` 是业务侧统一时间入口。业务记录、时间显示和业务页面应优先使用 `Esp32BaseTime::snapshot()`、`formatTime()` 和 `resolveCurrentBootEvent()`；不要把业务逻辑直接绑定到 NTP。`source` 表示当前可信时间来源：未同步时为 `SOURCE_UPTIME`，RTC 成功读取后为 `SOURCE_RTC`，NTP 成功同步后升级为 `SOURCE_NTP`。NTP 比 RTC 优先级高，后续 RTC refresh 不会把来源从 NTP 降级。
+
+`ESP32BASE_TIME_SYNC_MIN_EPOCH` 是统一可信 epoch 下限，默认跟随 `ESP32BASE_NTP_SYNC_MIN_EPOCH`，当前为 `1700000000UL`。低于该值的 RTC/NTP 时间会被拒绝，避免把未初始化或异常回退的时间当成真实时间。
+
+`Esp32BaseRtc` 是 RTC 芯片维护接口，只在 `ESP32BASE_ENABLE_RTC=1` 时可用。当前支持 `ESP32BASE_RTC_DRIVER_DS3231` 和 `ESP32BASE_RTC_DRIVER_PCF8563`，同一个固件只能选择一个驱动，不做自动识别。默认地址：
+
+- DS3231: `0x68`
+- PCF8563: `0x51`
+
+RTC 配置项：
+
+```ini
+build_flags =
+  -D ESP32BASE_ENABLE_RTC=1
+  -D ESP32BASE_RTC_DRIVER=ESP32BASE_RTC_DRIVER_DS3231
+  -D ESP32BASE_RTC_I2C_ADDR=0
+  -D ESP32BASE_RTC_AUTO_WIRE_BEGIN=0
+  -D ESP32BASE_RTC_NTP_WRITEBACK=1
+```
+
+`ESP32BASE_RTC_I2C_ADDR=0` 表示使用所选驱动默认地址。`ESP32BASE_RTC_AUTO_WIRE_BEGIN=0` 时，应用负责在 `Esp32Base::begin()` 前初始化 I2C 并可调用 `Esp32BaseRtc::configure(Wire)` 或绑定自定义 `TwoWire`；设置为 `1` 时，基础库会为 RTC 调用 `Wire.begin()`，可配合 `ESP32BASE_RTC_SDA`、`ESP32BASE_RTC_SCL`、`ESP32BASE_RTC_I2C_CLOCK_HZ` 使用。RTC 缺失、振荡停止或时间非法不会让 `Esp32Base::begin()` 失败；状态通过 `Esp32BaseRtc::status()`、Status 页和日志暴露。
+
+基础库只使用 RTC 的时间读写能力。DS3231/PCF8563 的中断、闹钟、方波、温度等扩展能力不由基础库占用；业务项目可以继续通过 I2C 访问芯片扩展寄存器，但必须自行负责寄存器语义和并发时序。基础库不接管中断引脚。
+
+启用 NTP 和 RTC 时，NTP 首次可信同步后会按 `ESP32BASE_RTC_NTP_WRITEBACK` 和 `ESP32BASE_RTC_WRITEBACK_THRESHOLD_SEC` 决定是否写回 RTC，默认开启，阈值为 2 秒。写回失败只记录状态，不影响 NTP 时间对业务生效。
+
 NTP 默认使用 UTC+8，即 `ESP32BASE_NTP_GMT_OFFSET_SEC=(8L * 3600L)`、`ESP32BASE_NTP_DAYLIGHT_OFFSET_SEC=0L`；应用可在 include 前用宏覆盖。
 
-`isTimeSynced()` 默认要求当前 epoch >= `ESP32BASE_NTP_SYNC_MIN_EPOCH`，该宏默认 `1700000000UL`，避免把明显未同步或异常回退的时间误判为已同步。首次同步确认仍依赖 SNTP completed 事件；本 boot 一旦完成可信同步并建立 `bootStartEpochSec`，后续 `isTimeSynced()` / `snapshot().synced` 不再要求 `sntp_get_sync_status()` 持续保持 completed，只要系统 epoch 仍可信就保持 true。
+`Esp32BaseNtp` 只表示 NTP 客户端状态。`isTimeSynced()` 默认要求 SNTP completed 且当前 epoch >= `ESP32BASE_NTP_SYNC_MIN_EPOCH`。本 boot 一旦完成可信 NTP 同步并建立 `bootStartEpochSec`，后续 `isTimeSynced()` / `snapshot().synced` 不再要求 `sntp_get_sync_status()` 持续保持 completed，只要系统 epoch 仍可信且统一时间来源仍为 NTP 就保持 true。RTC-only 设备应使用 `Esp32BaseTime`，而不是把 `Esp32BaseNtp` 当成通用真实时间 API。
 
-离线业务事件应使用 `snapshot()` 获取统一时间快照：
+离线业务事件应使用 `Esp32BaseTime::snapshot()` 获取统一时间快照：
 
-- `synced=true` 表示当前时间已通过 Esp32Base 可信判定，和 `/esp32base` Status 页 NTP time 行使用同一语义。
+- `synced=true` 表示当前时间已通过 Esp32Base 可信判定，和 `/esp32base` Status 页 Time 行使用同一语义。
 - `epochSec` 仅在 `synced=true` 时有效；未同步时为 `0`，业务不应伪造日期。
 - `uptimeSec` 和 `bootId` 在未同步时也可用，用于记录“本次开机 +N 秒”的业务事件；`uptimeSec` 来自 ESP-IDF 64-bit 运行时间计数源，不受 Arduino `millis()` 约 49.7 天回卷影响。
 - `bootStartEpochSec` 仅在本次 boot 已同步后有效，值为 `epochSec - uptimeSec`。
 
-`Esp32Base::begin()` 会在系统模块初始化后调用 `initBootSession()`，`bootId` 复用 `Esp32BaseSystem::bootCount()`，不为 NTP 额外写启动期 NVS。`bootId=0` 保留为未知；正常非 sleep 重启使用非零 boot count，deep sleep 唤醒沿用上一次非 sleep 重启计数。业务项目不需要手动调用 `initBootSession()`，除非绕过 `Esp32Base::begin()` 直接使用 NTP 模块。
+`Esp32Base::begin()` 会在系统模块初始化后调用 `Esp32BaseTime::initBootSession()`，`bootId` 复用 `Esp32BaseSystem::bootCount()`，不为时间模块额外写启动期 NVS。`bootId=0` 保留为未知；正常非 sleep 重启使用非零 boot count，deep sleep 唤醒沿用上一次非 sleep 重启计数。业务项目不需要手动调用 `initBootSession()`，除非绕过 `Esp32Base::begin()` 直接使用时间模块。
 
-`onTimeSynced(callback)` 注册一个轻量单回调；如果注册时当前 boot 已同步，会立即回调一次。回调参数是同步瞬间的 `TimeSnapshot`，业务可据此扫描自己的日志，把同一 `bootId` 的相对 `uptimeSec` 事件回填为真实时间。基础库不理解也不改写业务日志结构。
+`Esp32BaseTime::onTimeSynced(callback)` 注册一个轻量单回调；如果注册时当前 boot 已有可信真实时间，会立即回调一次。回调参数是同步瞬间的 `Snapshot`，业务可据此扫描自己的日志，把同一 `bootId` 的相对 `uptimeSec` 事件回填为真实时间。基础库不理解也不改写业务日志结构。`Esp32BaseNtp::onTimeSynced(callback)` 只在 NTP 同步语义下使用。
 
 回填 helper 语义：
 
@@ -810,8 +898,7 @@ NTP 对时成功日志必须包含：
 - 当前 uptime。
 - 推算出的 boot wall time。
 
-日志时间戳在 NTP 对时前使用启动后的 `millis()`，例如 `[42442]`；NTP 对时成功后切换为绝对日期时间，例如 `[2026-05-05 12:45:55]`。
-对时成功时的 `time_mapping` 日志用于把早期毫秒时间轴换算为实际时间。
+日志时间戳在没有可信真实时间前使用启动后的 `millis()`，例如 `[42442]`；RTC 或 NTP 建立可信时间后切换为绝对日期时间，例如 `[2026-05-05 12:45:55]`。NTP 对时成功时的 `time_mapping` 日志用于把早期毫秒时间轴换算为实际时间。
 
 ## 9. Esp32BaseWeb
 
@@ -1035,7 +1122,7 @@ Route 缓冲机制：
 - 带 `data-eb-ajax` 的 helper 表单会在浏览器支持 `fetch` 时携带 `X-Esp32Base-Ajax: 1` 和 `Accept: application/json` 局部提交；服务端用 `isAjaxRequest()` 判断后返回 `sendAjaxReplace(targetId, html, noticeTitle)` 或 `sendAjaxError(code, error)`。未携带 AJAX header 时，同一 POST endpoint 仍应保留 `POST -> 303 -> GET` fallback。
 - `UiTone` 仅表达语义色：neutral、ok、warn、danger、info。业务项目不得把危险、警告、成功语义当作普通装饰色复用。
 - 导航会给当前匹配项输出 `active` class；匹配规则为 path 完全相等，或当前路径以 `path + "/"` 开头，多个匹配时选择最长 path。`SYSTEM_NAV_SECTION` 下 WiFi/Auth/OTA 二级页会把底部 System 入口标记为 active；App Config 页面在启用时使用自己的底部入口标记 active。
-- `/esp32base` Status 页是只读设备体检页，采用诊断优先结构：不额外显示和相邻详细区重复的 `System Overview` 预览块，而是按 Device、Network、Runtime Health、Storage & Logs、Firmware & OTA、Hardware 排序展示 hostname、固件/profile、uptime/boot count、WiFi/IP/RSSI、STA/AP/eFuse MAC、heap、max alloc、Watchdog lifetime/trip resets、NTP time、last reset/wake、FS 容量摘要、FileLog 配置摘要和 OTA slot 摘要；Status 页默认不做 LittleFS 全量文件树扫描、文件可读性检查、top files 统计、FileLog 段文件大小统计、当前镜像 size 校验、运行 ELF SHA 计算或运行时分区表枚举，File details 入口并入 FS 行，完整 File inventory 只放在 `/esp32base/fs` 详情页。FileLog level/files/limit 合并为一行子指标，页面容量值只显示 KB/MB/B 人性化格式，Max OTA upload 是下一 OTA slot 的上传硬上限。低频 `Running ELF SHA256` 和 Partition Table 只在 `/esp32base?details=1` 显示。
+- `/esp32base` Status 页是只读设备体检页，采用诊断优先结构：不额外显示和相邻详细区重复的 `System Overview` 预览块，而是按 Device、Network、Runtime Health、Storage & Logs、Firmware & OTA、Hardware 排序展示 hostname、固件/profile、uptime/boot count、WiFi/IP/RSSI、STA/AP/eFuse MAC、heap、max alloc、Watchdog lifetime/trip resets、Time/RTC/NTP 状态、last reset/wake、FS 容量摘要、FileLog 配置摘要和 OTA slot 摘要；Status 页默认不做 LittleFS 全量文件树扫描、文件可读性检查、top files 统计、FileLog 段文件大小统计、当前镜像 size 校验、运行 ELF SHA 计算或运行时分区表枚举，File details 入口并入 FS 行，完整 File inventory 只放在 `/esp32base/fs` 详情页。FileLog level/files/limit 合并为一行子指标，页面容量值只显示 KB/MB/B 人性化格式，Max OTA upload 是下一 OTA slot 的上传硬上限。低频 `Running ELF SHA256` 和 Partition Table 只在 `/esp32base?details=1` 显示。
 - `/esp32base/logs` 和 `/esp32base/logs/raw` 是只读系统诊断日志查看入口，只读取已经落盘的 FileLog segment 快照；GET 读取不得主动 `flush()`、创建、清空、重建文件或改变 FileLog fault 状态。INFO 缓存中的新日志按常规 flush interval 落盘，清空/格式化/重启等维护副作用必须通过 POST 路径。
 - `/esp32base/fs` 是启用 FS profile 时注册的 LittleFS 诊断页，默认只读，显示 Summary、Top 10 最大文件和最多 128 项文件树；文件树展示 Path、Type、Size、Last modified、Status 和 Action。Last modified 来自 LittleFS 最后修改时间，不是创建时间，时间明显不可信时显示 `unknown`；Status 展示 `ok`、`unreadable`、`filelog`、`app events store` 或 `esp32base managed` 等维护标签。文件树提供单文件下载；当文件声明有大小但首块无法读取时，Status 显示 `unreadable`，不再给出会生成空文件的下载按钮；当 `FS used` 明显大于可见文件合计时提示内部/历史占用异常。
 - `/esp32base/fs/download?path=/file` 下载一个已存在且可读取的文件，复用 Basic Auth 和路径校验，目录、缺失文件和非法路径不会下载；如果文件声明有大小但无法读取首块，返回 `500 File read failed`。

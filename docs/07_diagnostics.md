@@ -264,13 +264,13 @@ CI 应覆盖核心矩阵，release 前执行完整矩阵。
 - restart/deep sleep 生命周期 reason 仍由 `Esp32BaseSystem::appendRestartLog()` / `restartLogCount()` 记录，与 `boot_count` 分开看。
 - 启动日志按 begin 顺序输出，便于定位失败模块。
 - `DEBUG` 编译级别下，启动流程输出模块初始化顺序，以及 Web/NTP/mDNS/OTA 延迟启动或停止原因；这些日志用于开发诊断，默认 `INFO` 构建不输出。
-- NTP 对时前日志时间戳使用启动后毫秒数，例如 `[42442]`；对时后切换为绝对日期时间。
+- 没有可信真实时间前，日志时间戳使用启动后毫秒数，例如 `[42442]`；RTC 或 NTP 建立可信时间后切换为绝对日期时间。
 - NTP 默认按 UTC+8 输出本地时间，应用可通过 `ESP32BASE_NTP_GMT_OFFSET_SEC` / `ESP32BASE_NTP_DAYLIGHT_OFFSET_SEC` 覆盖。
-- NTP 同步判断默认要求 epoch >= `ESP32BASE_NTP_SYNC_MIN_EPOCH`，默认值为 `1700000000UL`；本 boot 首次可信同步后会锁存时间映射，后续不要求 SNTP status 持续保持 completed。
+- 统一时间可信判断默认要求 epoch >= `ESP32BASE_TIME_SYNC_MIN_EPOCH`，默认值跟随 `ESP32BASE_NTP_SYNC_MIN_EPOCH=1700000000UL`；本 boot 首次可信同步后会锁存时间映射。NTP 自身状态仍要求首次 SNTP completed，后续不要求 SNTP status 持续保持 completed。
 - NTP 未同步状态不输出周期性 WARN/DEBUG；只有明确的单次同步失败事件才应输出 WARN。
-- NTP profile 启动时复用系统 boot count 作为 `bootId`，日志输出 `time_boot_session boot_id=N source=boot_count`；NTP 不再为 boot session 额外写启动期 NVS。deep sleep 唤醒沿用上一次非 sleep 重启计数；业务离线事件应同时保存 bootId 和 uptimeSec，不要把 bootId 当作每次 deep sleep 唤醒的唯一会话号。
+- Time 模块启动时复用系统 boot count 作为 `bootId`，日志输出 `time_boot_session boot_id=N source=boot_count`；时间模块不为 boot session 额外写启动期 NVS。deep sleep 唤醒沿用上一次非 sleep 重启计数；业务离线事件应同时保存 bootId 和 uptimeSec，不要把 bootId 当作每次 deep sleep 唤醒的唯一会话号。
 - 日志和人工页面中的字节数只显示 KB/MB/B 人性化值；状态/API JSON 可保留 raw `bytes` 并附带 `human`。
-- NTP 对时成功后输出实际时间、当前 uptime、推算 boot wall time，并让 `TimeSnapshot.synced`、Status 页 NTP time 行和日志绝对时间切换共享同一可信同步语义。
+- NTP 对时成功后输出实际时间、当前 uptime、推算 boot wall time；Status 页 `Time` 行和日志绝对时间切换共享同一可信时间语义，`NTP` 行只表示联网对时客户端状态。
 - WiFi 连接、断开、重连 backoff、进入/退出 config portal 都必须有清晰日志。慢速 backoff 阶段的重复 WiFi 重试日志使用 INFO，避免长期离线设备在默认 ERROR FileLog 下持续写 Flash；首次故障和短间隔重试仍保留 WARN，供现场排查切到 WARN/INFO 时查看。
 - WiFi 初始化安全启动保护必须输出可诊断日志：`wifi_init_safe_boot_guard_set` 表示已在任何 Arduino WiFi 初始化调用前建立 guard，`wifi_init_safe_boot_guarded_reset` 表示检测到连续 WiFi 初始化期 brownout/panic/watchdog/software reset 但仍未达到阈值，`wifi_init_safe_boot_pause` 表示已暂停 WiFi 初始化并进入无 WiFi 诊断状态，`wifi_init_safe_boot_paused` 表示危险复位后仍保持暂停，`wifi_init_safe_boot_auto_resume` 表示后续非危险复位自动恢复一次 WiFi 初始化。触发暂停时必须输出中文供电风险提示，说明疑似 WiFi/RF 启动瞬时电流导致供电跌落，并建议检查电源、USB 线、稳压器余量、接线和板端 VIN/5V-GND 低 ESR 储能电容。
 - WiFi STA 安全启动保护必须输出可诊断日志：`sta_safe_boot_guard_set` 表示已进入 guarded STA 尝试，`sta_safe_boot_guarded_reset` 表示检测到连续 guarded brownout/panic/watchdog 复位但仍未达到阈值，`sta_safe_boot_pause` 表示已暂停凭据并回退 AP 配网，`sta_safe_boot_paused` 表示危险复位后仍保持暂停，`sta_safe_boot_auto_resume` 表示后续非危险复位自动恢复已保存 STA 尝试，`sta_safe_boot_resume` 表示用户重新提交凭据或点击重试后恢复 STA 尝试，`sta_safe_boot_cleared` 表示连接成功、凭据清除或恢复重试后保护状态已清空。

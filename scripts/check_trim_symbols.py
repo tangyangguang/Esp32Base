@@ -44,10 +44,28 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--build-dir", default="examples/basic/.pio/build")
     parser.add_argument("--nm", default=None)
+    parser.add_argument("--elf", default=None, help="check one explicit ELF instead of build-dir/envs")
+    parser.add_argument("--forbid", nargs="*", default=None, help="symbol substrings that must be absent")
     parser.add_argument("envs", nargs="*", default=DEFAULT_ENVS)
     args = parser.parse_args()
 
     nm = find_nm(args.nm)
+    if args.elf:
+        if args.forbid is None:
+            print("error: --elf requires --forbid", file=sys.stderr)
+            return 2
+        elf = Path(args.elf)
+        if not elf.exists():
+            print(f"explicit: missing {elf}", file=sys.stderr)
+            return 1
+        symbols = read_symbols(nm, elf)
+        hits = [pattern for pattern in args.forbid if pattern in symbols]
+        if hits:
+            print(f"{elf}: FAIL forbidden symbols: {', '.join(hits)}")
+            return 1
+        print(f"{elf}: OK")
+        return 0
+
     build_dir = Path(args.build_dir)
     failed = False
     for env in args.envs:

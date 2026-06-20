@@ -103,7 +103,9 @@ App Config 支持 string、int、decimal 定点数、bool 和 enum 字段；保�
 
 Web 页面应优先使用 Esp32Base 的 UI baseline、helper 和页面能力块；不要在业务项目里为样式问题临时复制 CSS 或绕开基础库。单字段轻量编辑可使用行内编辑 helper，小型 1-3 字段表单可使用弹层表单 helper；二者会在支持 `fetch` 的浏览器中局部提交和局部替换，禁用 JS 时仍回退到普通表单提交。需要业务自控打开/关闭时，也可直接使用原生 `<dialog class="panel eb-modal">` 并复用 `fieldgrid`、`actions`、`btnlink`。找不到合适页面能力块时，先查看 [Web UI 页面结构与样式基线](docs/11_web_ui_baseline.md)，并优先回到 Esp32Base 评估是否补充统一能力。
 
-联网 profile 可通过 `Esp32BaseNtp::snapshot()` 获取统一业务时间快照。断网启动时业务仍能记录当前 `bootId + uptimeSec`；`bootId` 复用系统 boot count，不为 NTP 额外写启动期 NVS。本次 boot 后续 NTP 同步成功时，`onTimeSynced()` 会回调，业务可用 `resolveCurrentBootEvent()` 只回填同一 boot 的相对时间事件，历史未知时间不会被伪造为日期。
+需要真实时间时，业务项目应优先通过 `Esp32BaseTime::snapshot()` 获取统一时间快照。NTP 是最高优先级时间源；启用 RTC 时，DS3231 或 PCF8563 可在离线启动时提供真实时间。断网启动时业务仍能记录当前 `bootId + uptimeSec`；本次 boot 后续由 RTC 或 NTP 建立可信时间后，可用 `Esp32BaseTime::resolveCurrentBootEvent()` 只回填同一 boot 的相对时间事件，历史未知时间不会被伪造为日期。旧的 `Esp32BaseNtp::snapshot()` 仍表示 NTP 自身状态，不作为 RTC-only 设备的业务时间入口。
+
+外部 RTC 通过 `ESP32BASE_ENABLE_RTC=1` 显式启用，当前支持 `ESP32BASE_RTC_DRIVER_DS3231` 和 `ESP32BASE_RTC_DRIVER_PCF8563`。同一个应用固件只选择一个驱动，不做运行时自动识别；硬件板确定后在 `platformio.ini` 中设置 `ESP32BASE_RTC_DRIVER`。默认 I2C 地址可用 `ESP32BASE_RTC_I2C_ADDR=0` 交给驱动选择：DS3231 为 `0x68`，PCF8563 为 `0x51`。基础库默认不调用 `Wire.begin()`，推荐业务在 `Esp32Base::begin()` 前初始化自己的 I2C 总线并调用 `Esp32BaseRtc::configure(Wire)`；如果希望基础库初始化 RTC I2C，可设置 `ESP32BASE_RTC_AUTO_WIRE_BEGIN=1`，并按需配置 `ESP32BASE_RTC_SDA`、`ESP32BASE_RTC_SCL` 和 `ESP32BASE_RTC_I2C_CLOCK_HZ`。RTC 中断、闹钟、方波、温度等芯片扩展能力不由基础库占用，业务项目可在同一 I2C 总线上自行访问；基础库只做低频读写时间、状态展示和 NTP 成功后的可选写回。示例见 `examples/rtc_time_source`。
 
 WiFi 默认关闭 modem sleep，让 Web 首屏和 OTA 不被 Arduino ESP32 默认 `WIFI_PS_MIN_MODEM` 的 DTIM 唤醒抖动拖慢；电池设备可调用 `Esp32BaseWiFi::setPowerSave(true)` 恢复 modem sleep。
 

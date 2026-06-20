@@ -27,6 +27,8 @@ ESP32BASE_PROFILE_CORE
 - `ESP32BASE_ENABLE_WIFI`
 - `ESP32BASE_ENABLE_DNS`
 - `ESP32BASE_ENABLE_NTP`
+- `ESP32BASE_ENABLE_TIME`
+- `ESP32BASE_ENABLE_RTC`
 - `ESP32BASE_ENABLE_MDNS`
 - `ESP32BASE_ENABLE_WEB`
 - `ESP32BASE_ENABLE_APP_CONFIG`
@@ -72,6 +74,8 @@ Profile 默认值不能覆盖用户显式 `-D`。
 - `ARDUINO_OTA` 需要 `OTA`，默认值跟随 `OTA`；启用 OTA 的 profile 默认同时支持 Web OTA 和 espota。
 - `DNS` 需要 `WIFI`。
 - `NTP` 需要 `WIFI`。
+- `NTP` 和 `RTC` 需要 `TIME`；`TIME` 在启用 NTP、RTC、App Events 或 Web 时默认启用。
+- `RTC` 默认关闭，通过 `ESP32BASE_ENABLE_RTC=1` 显式启用。
 - `MDNS` 需要 `WIFI`。
 - `FILELOG` 需要 `FS`。
 - `APP_EVENTS` 需要 `FS`，默认关闭，不随任何 profile 自动开启。
@@ -92,6 +96,16 @@ Profile 默认值不能覆盖用户显式 `-D`。
 启用 FS 的 profile 默认启用系统诊断日志。底层实现/API 名称仍为 FileLog（`Esp32BaseFileLog`）；用户仍可显式关闭 `ESP32BASE_ENABLE_FILELOG`。
 
 应用事件日志通过 `ESP32BASE_ENABLE_APP_EVENTS=1` 显式启用，默认容量 `ESP32BASE_APP_EVENT_LOG_CAPACITY=1024`，允许范围 `64..2048`。该能力使用 LittleFS 固定文件存储，适合结构化业务事件，不作为系统诊断日志、调试日志或业务长期数据模型。
+
+外部 RTC 是可选时间源，不随任何 profile 自动启用。应用固件必须在构建期二选一配置驱动，不做运行时自动识别：
+
+```ini
+build_flags =
+  -D ESP32BASE_ENABLE_RTC=1
+  -D ESP32BASE_RTC_DRIVER=ESP32BASE_RTC_DRIVER_DS3231
+```
+
+可选驱动为 `ESP32BASE_RTC_DRIVER_DS3231` 和 `ESP32BASE_RTC_DRIVER_PCF8563`。默认 `ESP32BASE_RTC_I2C_ADDR=0` 表示使用芯片默认地址；也可显式设置 7-bit I2C 地址。`ESP32BASE_RTC_AUTO_WIRE_BEGIN=0` 时，应用负责在 `Esp32Base::begin()` 前初始化 `Wire` 或自定义 `TwoWire` 并调用 `Esp32BaseRtc::configure(...)`；设置为 `1` 时基础库只为 RTC 调用一次 `Wire.begin()`，可配合 `ESP32BASE_RTC_SDA`、`ESP32BASE_RTC_SCL`、`ESP32BASE_RTC_I2C_CLOCK_HZ` 使用。
 
 应用持久化参数配置页通过 `ESP32BASE_ENABLE_APP_CONFIG=1` 显式启用，依赖 Web。业务必须在 `Esp32Base::begin()` 前注册分组和字段；保存前 veto、字段校验和保存后回调语义见 [API 契约](03_api.md) 与 [Web 与配网](04_web.md)。
 

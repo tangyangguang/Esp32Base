@@ -1945,7 +1945,7 @@ esp32base_internal::rtcWriteBackFromNtp(now);
 #endif
 ```
 
-Keep existing NTP logging and `g_timeSyncCallback`, but derive boot wall time from `Esp32BaseTime::snapshot()` instead of NTP-private `g_bootStartEpochSec`. After accepting NTP time, set `g_loggedSync = true` and call `g_timeSyncCallback(snapshot())` as before so existing business callbacks still run. Remove NTP-private boot mapping state (`g_bootSessionReady`, `g_bootId`, `g_bootStartEpochSec`) after the compatibility methods below delegate to `Esp32BaseTime`.
+Keep existing NTP logging and `g_timeSyncCallback`, but derive boot wall time from `Esp32BaseTime::snapshot()` instead of NTP-private `g_bootStartEpochSec`. After accepting NTP time, set `g_loggedSync = true` and call `g_timeSyncCallback(snapshot())` as before so existing business callbacks still run. Remove NTP-private boot mapping state (`g_bootSessionReady`, `g_bootId`, `g_bootStartEpochSec`); NTP compatibility methods use the unified time mapping internally but still report `synced=true` only for the NTP source.
 
 - [ ] **Step 5: Keep compatibility APIs**
 

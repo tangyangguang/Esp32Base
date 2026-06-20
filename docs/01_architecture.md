@@ -62,6 +62,8 @@ Core 不包含 Event Bus。Bus 是 Runtime 可选模块。
 - `Esp32BaseFs`
 - `Esp32BaseFileLog`
 - `Esp32BaseAppEventLog`
+- `Esp32BaseTime`
+- `Esp32BaseRtc`
 - `Esp32BaseHealth`
 
 职责：
@@ -72,6 +74,8 @@ Core 不包含 Event Bus。Bus 是 Runtime 可选模块。
 - LittleFS。
 - 系统诊断日志 sink（`Esp32BaseFileLog`），依赖 Fs，通过 Core Log 的 line sink 接收日志。
 - 应用事件日志，依赖 Fs，提供业务项目可复用的结构化事件环形存储，不解释业务语义。
+- 统一可信时间门面（`Esp32BaseTime`），整合 uptime、RTC 和 NTP。
+- 外部 RTC 时间源（`Esp32BaseRtc`），支持 DS3231 / PCF8563 构建期二选一。
 - 健康诊断。
 
 Runtime 只依赖 Core。
@@ -185,16 +189,18 @@ Core 不 include Runtime/FileLog、Web、Network 或 OTA。重启和休眠前需
 2. Config
 3. System
 4. OTA boot 初始化，如启用 OTA；该步骤只处理 rollback/mark-valid 相关启动状态，不启动网络 OTA 服务
-5. NTP boot session / AppEvents time provider，如启用
-6. Bus，如启用
-7. Fs，如启用
-8. AppEvents，如启用
-9. FileLog，如启用
-10. Watchdog，如启用
-11. Sleep，如启用
-12. Health，如启用
-13. WiFi，如启用
-14. 标记 ready
+5. Time boot session，如启用
+6. RTC，如启用
+7. NTP boot session / AppEvents time provider，如启用
+8. Bus，如启用
+9. Fs，如启用
+10. AppEvents，如启用
+11. FileLog，如启用
+12. Watchdog，如启用
+13. Sleep，如启用
+14. Health，如启用
+15. WiFi，如启用
+16. 标记 ready
 
 `begin()` 不等待网络相关状态。
 
@@ -228,17 +234,18 @@ ESP32BASE_STRICT_OPTIONAL_BEGIN=0
 1. 如果 OTA 正在上传，跳过 Config deferred flush。
 2. 否则 Config deferred flush，一轮最多一条。
 3. FileLog handle，如启用。
-4. WiFi handle。
-5. Captive DNS handle。
-6. 条件启动 Web。
-7. 条件启动 NTP。
-8. 条件启动 mDNS。
-9. 条件启动 OTA 网络服务（ArduinoOTA/espota）。
-10. Web handle。
-11. OTA handle，包含 mark-valid timeout 检查。
-12. Health handle。
-13. Watchdog feed。
-14. 一次性启动诊断日志。
+4. RTC handle，如启用。
+5. WiFi handle。
+6. Captive DNS handle。
+7. 条件启动 Web。
+8. 条件启动 NTP。
+9. 条件启动 mDNS。
+10. 条件启动 OTA 网络服务（ArduinoOTA/espota）。
+11. Web handle。
+12. OTA handle，包含 mark-valid timeout 检查。
+13. Health handle。
+14. Watchdog feed。
+15. 一次性启动诊断日志。
 
 LittleFS 当前没有 maintenance 任务，不在 handle 中做额外维护。
 

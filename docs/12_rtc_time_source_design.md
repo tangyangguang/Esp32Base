@@ -215,7 +215,7 @@ public:
 };
 ```
 
-Existing `Esp32BaseNtp::snapshot()` will remain as a compatibility helper when NTP is enabled and delegate to `Esp32BaseTime::snapshot()`. New code should use `Esp32BaseTime::snapshot()` directly.
+Existing `Esp32BaseNtp::snapshot()` remains a compatibility helper for NTP client state. It uses the unified time mapping internally but reports `synced=true` only when the active trusted source is NTP. New business code should use `Esp32BaseTime::snapshot()` directly, especially for RTC-only devices.
 
 `Esp32BaseRtc::configure(...)` is optional. If it is never called, Esp32Base uses Arduino `Wire` plus `ESP32BASE_RTC_I2C_ADDR`, falling back to the selected driver's default address when the macro is `0`. Passing `address=0` to `configure(...)` explicitly means "use the selected driver's default address"; passing a nonzero address overrides the macro. `configure(...)` must not call `Wire.begin()` by itself; it only records the bus and address for later `begin()`.
 
