@@ -29,6 +29,7 @@
 - 7 个 profile。
 - ESP32 / ESP32-S3 / ESP32-C3。
 - Arduino Core 2.x / 3.x。
+- Core 3.x pioarduino 构建前运行 `scripts/ensure_arduino3_platformio.py`，并保留 env 的 `scripts/pioarduino_core3_preflight.py` 自动检查，确保 Arduino 3.x framework 主包和 libs 包已安装，避免 `FRAMEWORK_DIR` 为空的本地包状态错误。
 
 检查：
 

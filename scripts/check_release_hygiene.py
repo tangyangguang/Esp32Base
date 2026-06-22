@@ -17,6 +17,8 @@ profiles = read("docs/02_profiles.md")
 api_docs = read("docs/03_api.md")
 memory_budget = read("docs/06_memory_budget.md")
 web_asset_gating = read("scripts/check_web_asset_gating.py")
+arduino3_ensure = read("scripts/ensure_arduino3_platformio.py")
+arduino3_preflight = read("scripts/pioarduino_core3_preflight.py")
 
 for path, text in (
     (".gitignore", read(".gitignore")),
@@ -49,15 +51,22 @@ if "`APP_CONFIG` 需要 `WEB`" not in profiles:
     errors.append("docs/02_profiles.md: dependency rules must document APP_CONFIG requires WEB")
 if "保留用于兼容旧代码" in api_docs:
     errors.append("docs/03_api.md: must not explain current APIs as legacy compatibility")
-if "| FULL | 1043904 |" not in memory_budget:
+if "| FULL | 1043712 |" not in memory_budget:
     errors.append("docs/06_memory_budget.md: ESP32/Core2 FULL size table must be refreshed to current build")
+if "| ESP32 FULL, Core 3.x | 1291808 |" not in memory_budget:
+    errors.append("docs/06_memory_budget.md: ESP32/Core3 FULL size table must be refreshed to current build")
 if "ESP32BASE_ENABLE_APP_EVENTS" not in web_asset_gating or ".appevfilters" not in web_asset_gating:
     errors.append("scripts/check_web_asset_gating.py: must guard optional App Events CSS assets")
+if "esp32_full_arduino3" not in arduino3_ensure or "framework-arduinoespressif32" not in arduino3_ensure:
+    errors.append("scripts/ensure_arduino3_platformio.py: must preinstall pioarduino Core 3.x packages")
+if "pioarduino Core 3.x package preflight failed" not in arduino3_preflight:
+    errors.append("scripts/pioarduino_core3_preflight.py: must guard pioarduino package availability")
 
 docs = {
     "README.md": "发布包排除 docs/superpowers",
     "docs/01_architecture.md": "OTA boot 初始化",
     "docs/09_release_checklist.md": "check_web_asset_gating.py",
+    "docs/08_arduino_core_compat.md": "ensure_arduino3_platformio.py",
 }
 for path, needle in docs.items():
     if needle not in read(path):

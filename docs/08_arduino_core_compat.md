@@ -165,16 +165,19 @@ Esp32Base 的策略：
 
 `examples/basic` 同时提供官方 PlatformIO Arduino Core 2.x 环境和 pioarduino Arduino Core 3.x 环境。
 
-官方 `platformio/espressif32@6.7.0` 与 pioarduino 当前都会使用 `framework-arduinoespressif32` 这个包名。两类环境交替构建时，PlatformIO 可能会卸载并重新安装对应 framework：
+官方 `platformio/espressif32@6.7.0` 与 pioarduino 当前都会使用 `framework-arduinoespressif32` 这个包名。两类环境交替构建时，PlatformIO 可能会卸载并重新安装对应 framework。`examples/basic` 的 Core 3.x env 显式固定 pioarduino 的 Arduino 3.3.8 framework 主包和 libs 包，并通过 `scripts/pioarduino_core3_preflight.py` 在构建前检查关键包路径。做 Core 3.x 验证前仍建议先运行预热脚本，避免构建脚本在主 framework 包缺失或半安装状态下拿到空的 `FRAMEWORK_DIR`：
 
-- 从 Core 2.x 环境切到 Core 3.x 环境时，第一次 Core 3.x 构建可能先失败于 `FRAMEWORK_DIR` 为空。
-- 随后任一 pioarduino 环境完成 framework 安装后，Core 3.x 环境重跑应通过。
-- 这个现象属于本地 PlatformIO 包管理状态，不应直接判断为源码兼容失败。
+```sh
+python3 scripts/ensure_arduino3_platformio.py
+```
+
+如果该脚本失败，先按本地 PlatformIO 包管理状态处理；不要把 `FRAMEWORK_DIR` 为空、framework 主包缺失或工具包反复安装直接判断为源码兼容失败。
 
 推荐验证顺序：
 
 ```sh
 platformio run -d examples/basic -e esp32_core -e esp32_full -j 1
+python3 scripts/ensure_arduino3_platformio.py
 platformio run -d examples/basic -e esp32_full_arduino3 -j 1
 platformio run -d examples/basic -e esp32_core_arduino3 -j 1
 ```
@@ -186,4 +189,4 @@ platformio run -d examples/basic -e esp32_core_arduino3 -j 1
 如需同时验证 Core 2.x 与 Core 3.x，记录首次失败时应区分：
 
 - 编译、链接、符号或 API 错误：按源码兼容问题处理。
-- framework 包缺失、`FRAMEWORK_DIR` 为 `None`、工具包反复安装：按本地构建环境问题处理，安装完成后重跑确认。
+- framework 包缺失、`FRAMEWORK_DIR` 为 `None`、工具包反复安装：先运行 `scripts/ensure_arduino3_platformio.py`，安装完成后重跑确认。
