@@ -66,6 +66,7 @@
 - WEB 不链接 Update。
 - FS 关闭时 FileLog 不拉入 LittleFS。
 - 关闭 Bus/Fs/Health 不产生静态对象。
+- Web 可选页面资源必须按能力宏裁剪；运行 `scripts/check_web_asset_gating.py`，避免未启用 App Events 时仍带入 App Events 专属 CSS。
 - 外部最小应用仅 `#include <Esp32Base.h>` 并启用 FULL profile 时，不额外声明 framework 内置库也必须编译通过，包括 ArduinoOTA。
 - RTC 关闭时不链接 DS3231/PCF8563 驱动符号。
 - DS3231 构建必须排除 PCF8563 驱动符号；PCF8563 构建必须排除 DS3231 驱动符号，证明两个 RTC 芯片是构建期二选一，不是运行时共存。
