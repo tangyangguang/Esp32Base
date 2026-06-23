@@ -57,7 +57,7 @@ build_flags =
 
 Web/API 保存的 hostname 存储在 `eb_sys.hostname`，重启后覆盖构建默认值，并用于 DHCP client hostname、mDNS 和 OTA；出厂重置清除该配置后恢复 `ESP32BASE_DEFAULT_HOSTNAME`。
 
-示例工程默认使用 `-fno-exceptions` 减少 Arduino / C++ 运行时链接体积。Esp32Base 不使用 C++ `throw/catch`，该 flags 不影响本库能力；业务应用如果确实依赖 C++ 异常，应从自己的 `build_flags` 中移除该项。
+示例工程默认使用 `-fno-exceptions` 和 `-flto` 减少 Arduino / C++ 运行时与未使用库代码的链接体积，并移除 PlatformIO 默认的 `-fno-lto`；Core 3.x 示例还移除 `-fuse-cxa-atexit`，避免固件不会用到的进程退出析构注册开销。Esp32Base 与示例代码不使用 C++ `throw/catch`，也不依赖进程退出析构；业务应用如果确实依赖 C++ 异常、特殊链接行为或退出析构语义，应从自己的构建配置中移除对应 flags 并重新评估容量。
 
 底部横条可在 System 页面配置为 Off、Status only 或 Links + status。该设置保存到 `eb_ui.footer_mode`，用于控制 `sendFooter()` 输出的紧凑系统入口和运行摘要。
 
