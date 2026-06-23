@@ -51,9 +51,9 @@ if "`APP_CONFIG` 需要 `WEB`" not in profiles:
     errors.append("docs/02_profiles.md: dependency rules must document APP_CONFIG requires WEB")
 if "保留用于兼容旧代码" in api_docs:
     errors.append("docs/03_api.md: must not explain current APIs as legacy compatibility")
-if "| FULL | 1043712 |" not in memory_budget:
+if "| FULL | 993840 |" not in memory_budget:
     errors.append("docs/06_memory_budget.md: ESP32/Core2 FULL size table must be refreshed to current build")
-if "| ESP32 FULL, Core 3.x | 1291808 |" not in memory_budget:
+if "| ESP32 FULL, Core 3.x | 1227952 |" not in memory_budget:
     errors.append("docs/06_memory_budget.md: ESP32/Core3 FULL size table must be refreshed to current build")
 if "ESP32BASE_ENABLE_APP_EVENTS" not in web_asset_gating or ".appevfilters" not in web_asset_gating:
     errors.append("scripts/check_web_asset_gating.py: must guard optional App Events CSS assets")

@@ -130,6 +130,10 @@ Web JSON：
 - 避免大 `String` 拼接。
 - 状态 API 使用固定 buffer 或 chunked output。
 
+构建 flags：
+
+- 示例工程默认加入 `-fno-exceptions`。Esp32Base 与示例代码不使用 C++ 异常，该 flags 可避免 Arduino / C++ 异常运行时进入固件；如果业务应用主动使用 `throw/catch`，应移除该 flags 并重新评估容量。
+
 Web 发送 buffer：
 
 - HTML/JSON/CSV 与 PROGMEM CSS/JS 共用 512 B 静态 chunk buffer。响应头仍走 Arduino `WebServer`，正文 data chunk 由基础库写出 `hex\r\n + payload + \r\n` 标准 chunked 帧，避免每个 chunk 触发 `WebServer::sendContent()` 内部小块 `malloc/free`。chunk payload 保持 512 B，不恢复早前实机回归中不稳定的 1 KB/1.4 KB 大 chunk。长响应发送每个 chunk 时会喂 watchdog，避免 UI baseline 增加页面体积后，业务长页面仍在同步 `WebServer::handleClient()` 内就触发 task WDT。若 flush 前后检测到客户端断开，当前响应标记为 broken 并停止继续输出。
@@ -182,12 +186,12 @@ ESP32-C3 4MB 要控制 Web/OTA/Fs 组合的体积。
 
 | Target | 分区表 | NVS | 单 app slot（最大固件） | LittleFS（最大文件数据） | coredump | 当前代表 FULL firmware.bin | 余量 |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| ESP32 4MB, Core 2.x | `partitions/esp32-4mb-ota-balanced.csv` | `20 KB / 0x5000` | `1.25 MB / 0x140000` | `1.38 MB / 0x160000` | `64 KB / 0x10000` | 1043712 | 267008 |
-| ESP32 4MB, large app | `partitions/esp32-4mb-ota-large-app.csv` | `20 KB / 0x5000` | `1.38 MB / 0x160000` | `1.13 MB / 0x120000` | `64 KB / 0x10000` | 1043712 | 398080 |
-| ESP32 4MB, large FS | `partitions/esp32-4mb-ota-large-fs.csv` | `20 KB / 0x5000` | `1.00 MB / 0x100000` | `1.88 MB / 0x1E0000` | `64 KB / 0x10000` | 1043712 | 4864 |
-| ESP32 4MB, Core 3.x | `partitions/esp32-4mb-ota-balanced.csv` | `20 KB / 0x5000` | `1.25 MB / 0x140000` | `1.38 MB / 0x160000` | `64 KB / 0x10000` | 1291808 | 18912 |
-| ESP32-S3 8MB, Core 2.x | `partitions/esp32-s3-8mb-ota-balanced.csv` | `20 KB / 0x5000` | `2.25 MB / 0x240000` | `3.38 MB / 0x360000` | `64 KB / 0x10000` | 995360 | 1363936 |
-| ESP32-C3 4MB, Core 2.x | `partitions/esp32-c3-4mb-ota-balanced.csv` | `20 KB / 0x5000` | `1.25 MB / 0x140000` | `1.38 MB / 0x160000` | `64 KB / 0x10000` | 1087744 | 222976 |
+| ESP32 4MB, Core 2.x | `partitions/esp32-4mb-ota-balanced.csv` | `20 KB / 0x5000` | `1.25 MB / 0x140000` | `1.38 MB / 0x160000` | `64 KB / 0x10000` | 993840 | 316880 |
+| ESP32 4MB, large app | `partitions/esp32-4mb-ota-large-app.csv` | `20 KB / 0x5000` | `1.38 MB / 0x160000` | `1.13 MB / 0x120000` | `64 KB / 0x10000` | 993840 | 447952 |
+| ESP32 4MB, large FS | `partitions/esp32-4mb-ota-large-fs.csv` | `20 KB / 0x5000` | `1.00 MB / 0x100000` | `1.88 MB / 0x1E0000` | `64 KB / 0x10000` | 993840 | 54736 |
+| ESP32 4MB, Core 3.x | `partitions/esp32-4mb-ota-balanced.csv` | `20 KB / 0x5000` | `1.25 MB / 0x140000` | `1.38 MB / 0x160000` | `64 KB / 0x10000` | 1227952 | 82768 |
+| ESP32-S3 8MB, Core 2.x | `partitions/esp32-s3-8mb-ota-balanced.csv` | `20 KB / 0x5000` | `2.25 MB / 0x240000` | `3.38 MB / 0x360000` | `64 KB / 0x10000` | 945536 | 1413760 |
+| ESP32-C3 4MB, Core 2.x | `partitions/esp32-c3-4mb-ota-balanced.csv` | `20 KB / 0x5000` | `1.25 MB / 0x140000` | `1.38 MB / 0x160000` | `64 KB / 0x10000` | 1014944 | 295776 |
 
 4MB FULL profile 的 OTA slot 余量已经明显收窄，ESP32 4MB + Arduino Core 3.x FULL 属于高资源风险组合。首版可以支持，但业务若继续增加大页面、证书、图片或大型逻辑，应优先改用 `partitions/esp32-4mb-ota-large-app.csv` 或 8MB Flash 板型，而不是压缩本库核心逻辑。
 
@@ -199,26 +203,26 @@ ESP32-C3 4MB 要控制 Web/OTA/Fs 组合的体积。
 
 | Profile | firmware.bin | text | data | bss | flash.text | flash.rodata |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| CORE | 285744 | 207966 | 16708 | 9608 | 151143 | 59676 |
-| RUNTIME | 336912 | 247626 | 16732 | 11520 | 190127 | 71164 |
-| NET | 815168 | 672282 | 25892 | 27624 | 590267 | 109392 |
-| NET_RUNTIME | 866240 | 712090 | 25916 | 29544 | 629987 | 120636 |
-| WEB | 934832 | 737654 | 26036 | 33232 | 655535 | 163544 |
-| WEB_RUNTIME | 1013552 | 792358 | 26060 | 34784 | 710151 | 187532 |
-| FULL | 1043712 | 812042 | 26076 | 37304 | 729835 | 197992 |
+| CORE | 278624 | 207718 | 16708 | 9608 | 150895 | 52804 |
+| RUNTIME | 324048 | 246006 | 16732 | 11520 | 188507 | 59916 |
+| NET | 800864 | 671162 | 25892 | 27624 | 589147 | 96208 |
+| NET_RUNTIME | 846544 | 709878 | 25916 | 29544 | 627775 | 103144 |
+| WEB | 896240 | 726706 | 26036 | 33232 | 644587 | 135900 |
+| WEB_RUNTIME | 968432 | 780630 | 26060 | 34784 | 698423 | 154132 |
+| FULL | 993840 | 798734 | 26076 | 37304 | 716527 | 161428 |
 
 ### 7.2 芯片与 Core 版本代表构建
 
 | Target | firmware.bin | text | data | bss | flash.text | flash.rodata |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| ESP32-S3 CORE, Core 2.x | 277888 | 206730 | 13396 | 5744 | 153155 | 56368 |
-| ESP32-S3 FULL, Core 2.x | 995360 | 772378 | 22576 | 39632 | 708031 | 199012 |
-| ESP32-C3 CORE, Core 2.x | 272608 | 204964 | 7496 | 6864 | 159682 | 45288 |
-| ESP32-C3 FULL, Core 2.x | 1087744 | 841822 | 15572 | 40368 | 787166 | 177920 |
-| ESP32 CORE, Core 3.x | 306944 | 208623 | 17009 | 9928 | 146512 | 79880 |
-| ESP32 FULL, Core 3.x | 1291808 | 998835 | 25869 | 41608 | 908672 | 265668 |
+| ESP32-S3 CORE, Core 2.x | 274944 | 209082 | 13428 | 9864 | 155507 | 51044 |
+| ESP32-S3 FULL, Core 2.x | 945536 | 759270 | 22576 | 39632 | 694923 | 162292 |
+| ESP32-C3 CORE, Core 2.x | 273344 | 207716 | 7528 | 11080 | 162434 | 46160 |
+| ESP32-C3 FULL, Core 2.x | 1014944 | 825900 | 15572 | 40368 | 771244 | 161352 |
+| ESP32 CORE, Core 3.x | 299600 | 208387 | 17009 | 9928 | 146276 | 72764 |
+| ESP32 FULL, Core 3.x | 1227952 | 981983 | 25869 | 41608 | 891820 | 218668 |
 
-跨芯片和 Arduino Core 版本的代表构建记录必须由同一自动 size 脚本整体刷新。ESP32 Core 3.x FULL 当前距 1.25MB app slot 仅剩约 18KB，必须纳入 CI size gate。
+跨芯片和 Arduino Core 版本的代表构建记录必须由同一自动 size 脚本整体刷新。ESP32 Core 3.x FULL 当前距 1.25MB app slot 约 80KB，仍必须纳入 CI size gate。
 
 ## 8. 实机资源记录表
 
