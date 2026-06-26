@@ -153,16 +153,14 @@ Profile 是默认组合，用户仍可用 `ESP32BASE_ENABLE_*` 精细覆盖。�
 
 系统诊断日志（实现/API 名称 `Esp32BaseFileLog`）是 Runtime/FS 能力，不属于 Core。`CORE` 和默认 `NET` 不链接 LittleFS；`RUNTIME`、`NET_RUNTIME`、`WEB_RUNTIME`、`FULL` 默认可用系统诊断日志。
 
-仓库示例默认面向 ESP32 4MB Flash，并使用 `partitions/esp32-4mb-ota-balanced.csv`。应用项目强烈推荐直接选择 `partitions/` 中已有分区表，不要在业务项目里重新设计分区布局；除非硬件容量、OTA 策略或持久化容量确实不匹配，才自定义分区表，并必须同步验证串口烧录、OTA、NVS、LittleFS 和数据保留边界。
+仓库示例默认面向 ESP32 4MB Flash，并使用 `partitions/esp32-4mb-ota-balanced.csv`。应用项目强烈推荐直接选择 `partitions/` 中已有分区表，不要在业务项目里重新设计分区布局；除非硬件容量、OTA 策略或持久化容量确实不匹配，才自定义分区表，并必须同步验证串口烧录、OTA、NVS、LittleFS 和数据保留边界。ESP32 / ESP32-C3 4MB 推荐分区表保留两个 1.5MB OTA app slot，剩余空间作为 LittleFS 数据分区。
 
 推荐分区表：
 
 | 文件 | 适用场景 | NVS | OTA state | 单 app slot（最大固件） | LittleFS（最大文件数据） | coredump | 关键要求 |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
-| `partitions/esp32-4mb-ota-balanced.csv` | classic ESP32 4MB 默认双 OTA，固件体积正常，保留较大 LittleFS | `20 KB / 0x5000` | `8 KB / 0x2000` | `1.25 MB / 0x140000` | `1.38 MB / 0x160000` | `64 KB / 0x10000` | `app0=0x10000`，兼容 PlatformIO/Arduino 默认上传偏移 |
-| `partitions/esp32-4mb-ota-large-app.csv` | classic ESP32 4MB 双 OTA，大 Web/FULL 业务固件，需要更大 app slot | `20 KB / 0x5000` | `8 KB / 0x2000` | `1.38 MB / 0x160000` | `1.13 MB / 0x120000` | `64 KB / 0x10000` | `app0=0x10000`，兼容 PlatformIO/Arduino 默认上传偏移 |
-| `partitions/esp32-4mb-ota-large-fs.csv` | classic ESP32 4MB 双 OTA，固件较小但记录、日志或文件数据较多 | `20 KB / 0x5000` | `8 KB / 0x2000` | `1.00 MB / 0x100000` | `1.88 MB / 0x1E0000` | `64 KB / 0x10000` | `app0=0x10000`，适合非 FULL 或页面较少的应用 |
-| `partitions/esp32-c3-4mb-ota-balanced.csv` | ESP32-C3 4MB 双 OTA | `20 KB / 0x5000` | `8 KB / 0x2000` | `1.25 MB / 0x140000` | `1.38 MB / 0x160000` | `64 KB / 0x10000` | C3 项目优先使用 |
+| `partitions/esp32-4mb-ota-balanced.csv` | classic ESP32 4MB 默认双 OTA，两个 1.5MB 固件槽，剩余空间用于 LittleFS | `20 KB / 0x5000` | `8 KB / 0x2000` | `1.50 MB / 0x180000` | `896 KB / 0xE0000` | `64 KB / 0x10000` | `app0=0x10000`，兼容 PlatformIO/Arduino 默认上传偏移 |
+| `partitions/esp32-c3-4mb-ota-balanced.csv` | ESP32-C3 4MB 双 OTA，两个 1.5MB 固件槽，剩余空间用于 LittleFS | `20 KB / 0x5000` | `8 KB / 0x2000` | `1.50 MB / 0x180000` | `896 KB / 0xE0000` | `64 KB / 0x10000` | C3 项目优先使用 |
 | `partitions/esp32-s3-8mb-ota-balanced.csv` | ESP32-S3 8MB 双 OTA，较宽松 app/FS 空间 | `20 KB / 0x5000` | `8 KB / 0x2000` | `2.25 MB / 0x240000` | `3.38 MB / 0x360000` | `64 KB / 0x10000` | S3 8MB 项目优先使用 |
 
 `Esp32BaseFs` 对业务暴露文本、二进制、追加、定长文件、目录和容量 API，并提供 `readBytesAt()` / `writeBytesAt()` 按偏移读写能力。业务可通过这些 API 实现二进制定长日志分页读取和环形覆盖写入，不需要 include `LittleFS.h` 或 Arduino `File`。需要同时读取总容量和已用容量时优先使用 `storageInfo(total, used)`，避免分别调用 `totalBytes()` / `usedBytes()` 造成重复底层查询。大块读写会在 Esp32BaseFs 层分块并定期让出调度，Watchdog 启用时会配合基础库长操作机制，业务不需要在每个存储类里重复拆分 Flash 写入。固定容量环形文件应先用 `createFixedFile()` 确保容量，再用 `writeBytesAt()` 覆盖槽位；`appendBytes()` 适合低频追加，会做写后大小和末端可读校验，不适合作为大文件 bulk 初始化循环。业务必须检查这些 API 的返回值；当 LittleFS 元数据仍声明文件大小但内容块不可读、FS 满或写后校验失败时，API 会返回 `false`，且写入失败不等于已回滚。LittleFS mount failed 时不会自动格式化，以保护业务持久化文件；需要清空或重建文件系统时，只能通过明确的维护动作调用 `Esp32BaseFs::format()` 或 Web System 页格式化入口。Web System 页的 `format-fs` 只清 LittleFS，不清 WiFi、Web Auth、业务 namespace 或任何 NVS 配置；显式工具页格式化成功后可通过 `Esp32BaseWeb::setAfterFormatFsCallback()` 或 `Esp32BaseWeb::EVENT_TOOLS_FORMAT_FS_SUCCESS` 通知应用，业务如需同步清 NVS 统计、文件索引或缓存，应在该回调/事件中自行处理。内置 `/esp32base/fs` 会显示文件树的 Last modified 和 Status；Last modified 来自 LittleFS 最后修改时间，不是创建时间，时间明显不可信时显示 `unknown`。不可读文件会标记为 `unreadable`，只在管理模式提供删除，不提供下载。`/esp32base/fs?manage=1` 还提供受限上传，用于测试期导入业务数据文件：上传保留本地文件名，可选择任何已有目录，不创建目录；同名文件会在浏览器确认后覆盖；上传先写同目录唯一临时文件，校验通过后再替换目标，避免上传中断时先清空旧文件；断电遗留的临时文件不会阻塞下一次上传，可由管理入口显式删除。

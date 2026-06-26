@@ -10,7 +10,7 @@ Profile 是经过验证的能力组合。
 ESP32BASE_PROFILE_CORE
 ```
 
-仓库示例默认面向 ESP32 4MB Flash，并使用 `partitions/esp32-4mb-ota-balanced.csv`。应用项目强烈推荐直接选择 `partitions/` 中已有分区表，不要在业务项目里重新设计分区布局；尤其是 FULL/Web OTA profile，固件必须小于下一 OTA app slot。classic ESP32 4MB 大固件项目可选择 `partitions/esp32-4mb-ota-large-app.csv`，固件较小但文件数据较多的项目可选择 `partitions/esp32-4mb-ota-large-fs.csv`。这些 4MB 预设都保持 `app0=0x10000`，不需要额外设置上传偏移。ESP32-S3、ESP32-C3 或 8MB 板型应选择对应 env 或匹配的分区表。`examples/basic` 提供 classic ESP32、ESP32-S3 8MB 和 ESP32-C3 4MB env；`full_demo`、`web_logs_ota` 和 `net_runtime` 也提供 ESP32-S3 8MB env。
+仓库示例默认面向 ESP32 4MB Flash，并使用 `partitions/esp32-4mb-ota-balanced.csv`。应用项目强烈推荐直接选择 `partitions/` 中已有分区表，不要在业务项目里重新设计分区布局；尤其是 FULL/Web OTA profile，固件必须小于下一 OTA app slot。classic ESP32 4MB 与 ESP32-C3 4MB 推荐分区表都保留两个 1.5MB OTA app slot，剩余空间作为 LittleFS 数据分区，并保持 `app0=0x10000`，不需要额外设置上传偏移。ESP32-S3、ESP32-C3 或 8MB 板型应选择对应 env 或匹配的分区表。`examples/basic` 提供 classic ESP32、ESP32-S3 8MB 和 ESP32-C3 4MB env；`full_demo`、`web_logs_ota` 和 `net_runtime` 也提供 ESP32-S3 8MB env。
 
 底层宏：
 

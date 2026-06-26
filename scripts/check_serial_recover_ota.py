@@ -54,9 +54,9 @@ def make_standard_project(base: Path) -> Path:
                 "# Name, Type, SubType, Offset, Size, Flags",
                 "nvs, data, nvs, 0x9000, 0x5000,",
                 "otadata, data, ota, 0xe000, 0x2000,",
-                "ota_0, app, ota_0, 0x10000, 0x140000,",
-                "ota_1, app, ota_1, 0x150000, 0x140000,",
-                "spiffs, data, spiffs, 0x290000, 0x160000,",
+                "ota_0, app, ota_0, 0x10000, 0x180000,",
+                "ota_1, app, ota_1, 0x190000, 0x180000,",
+                "spiffs, data, spiffs, 0x310000, 0xE0000,",
             ]
         ),
     )
