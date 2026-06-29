@@ -1,6 +1,6 @@
 # API 契约
 
-本文锁定第一版最终实现的公开 API 形态。发布后维护阶段不得随意改变这些边界。
+本文记录当前公开 API 形态和调用边界。
 
 ## 1. 头文件
 
@@ -347,14 +347,14 @@ public:
 - 双 header 都无效、文件尺寸不匹配、创建/删除/写 header 失败或写后校验失败属于结构性故障，会进入 `faulted()`。
 - 单条 record CRC 损坏或未提交 future record 不会进入全局 fault；业务读取 `readLatest()` 会跳过该槽，`begin()` 和完整 `readLatest(0, count(), ...)` 扫描会把 `count()` 收敛到可读取的有效记录数，append 仍可继续覆盖后续槽。
 - `readLatest()`、`readStoreInfo()` 和 `readStoreRecords()` 是只读路径，不会隐式调用 `begin()`、创建文件或重建 store；未 ready 时返回失败并暴露 `not_ready` 或当前 fault。
-- `readStoreInfo()` / `readStoreRecords()` 是事件日志内置页面使用的存储级读取能力。它按当前 header 的事件环范围读取底层槽位，只要 record 字节能读出就返回，并标记 `ok/crc_mismatch/invalid_magic/invalid_level/uncommitted/empty/read_failed`、slot、offset、stored/calculated crc、magic/level/crc/commit 布尔状态。该能力用于查看事件日志文件内容和存储状态，不作为业务事件列表的默认数据源。
+- `readStoreInfo()` / `readStoreRecords()` 是事件日志内置页面使用的存储级读取能力。它用于查看事件日志文件内容和存储状态，会返回槽位、偏移、CRC/提交状态和可读性诊断，不作为业务事件列表的默认数据源。
 - FS 未 ready、空间不足、读写失败或记录跳过时通过 `lastError()` 暴露原因；读路径遇到不可读 I/O 会返回 `false`，但不会自动清空。
 - `clear()` 重建空文件，默认保留递增 `nextId()`；业务恢复出厂或清空业务记录时可显式调用。
 - 每次 `append()` 会写入一个 188 bytes record，再提交一个 64 bytes header 副本并做读回校验。该模式适合低频关键业务事件，不适合传感器采样、流水明细、统计累积或秒级状态上报；这些场景应由业务使用自己的批量、环形或聚合存储模型。
 
 两套使用方向：
 
-- 内置 `/esp32base/app-events` 是事件日志页面。它展示业务事件日志的内容、文件、容量、slot、status、CRC、`flags/valueMask/reserved` 等底层字段，面向维护人员和开发人员；它不解释业务语义，也不把 `source/type/reason/code/value` 翻译成业务话术。
+- 内置 `/esp32base/app-events` 是事件日志页面。它展示业务事件日志内容、容量和存储诊断，面向维护人员和开发人员；它不解释业务语义，也不把 `source/type/reason/code/value` 翻译成业务话术。
 - 业务系统自己的业务事件列表和详情页应使用 `readLatest()` 或 `/esp32base/api/app-events` 获取有效事件，再用业务语言解释。业务页面通常只展示时间、等级、业务对象、业务动作、业务结果和必要数值，不展示 `magic/crc16/reserved/valueMask/flags` 等内部字段。基础库不提供业务枚举表、不内置业务文案，也不要求业务系统复用内置页面。
 
 Web/API 查询：
@@ -362,7 +362,7 @@ Web/API 查询：
 - HTML 页面 `/esp32base/app-events` 支持 `page`、`per` 以及常用筛选：`level=info|warn|error`、`time=real|uptime`、`source`、`type`、`reason`、`q`。`source/type/reason` 是精确匹配，并复用事件 token 的长度和字符校验；超长或非法筛选返回 `400 invalid_filter`，不会截断后误匹配。`q` 在 `source/type/reason/object/text` 内做大小写不敏感关键词匹配。该页面和 CSV 使用存储级记录读取，因此 CRC 损坏但能读出的记录也会展示并标记状态。
 - JSON API `/esp32base/api/app-events` 支持 `offset`、`limit` 和同一组筛选条件，返回 `count`、`total`、`filters` 和最新优先的 `events`；筛选请求单次扫描完成当前页输出和匹配计数。
 - 每条 JSON 事件包含 `epochSec`、`resolvedEpochSec`、`bootId`、`uptimeSec`、`uptimeMs`、`level/source/type/reason/object/code/value1..value3/valueMask/flags/text`。`uptimeSec` 是存储稳定字段，`uptimeMs` 是 64-bit 派生展示值；`resolvedEpochSec=0` 表示没有可信真实时间。
-- CSV `/esp32base/app-events.csv` 使用同一组筛选条件，并导出 `slot,status,record_offset,stored_crc16,calculated_crc16,crc_ok` 以及全部 record 字段。如果导出过程中读取失败，响应末尾追加 `# error,...` 行暴露失败原因。
+- CSV `/esp32base/app-events.csv` 使用同一组筛选条件，并导出事件字段和必要存储诊断字段。如果导出过程中读取失败，响应末尾追加可见错误行暴露失败原因。
 
 示例：
 
