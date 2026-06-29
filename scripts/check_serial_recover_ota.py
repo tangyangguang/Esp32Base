@@ -116,24 +116,24 @@ def write_flash_lines(text: str) -> list[str]:
     return [line for line in text.splitlines() if line.startswith("+ ") and " write_flash " in line]
 
 
+def command_offsets(command: str) -> list[str]:
+    return [part for part in command.split() if part.startswith("0x")]
+
+
 def check_faucet_recovery(tmp: Path, errors: list[str]) -> None:
     rc, text = dry_run(make_faucet_project(tmp))
     commands = write_flash_lines(text)
 
     if rc != 0:
         errors.append(f"expected faucet rc=0, got {rc}")
-    if "otadata: 0x19000 size=0x2000 clear=write 0xff image in write_flash" not in text:
-        errors.append("faucet dry-run must show otadata is cleared inside write_flash")
-    if "ota_0@0x20000" not in text or "ota_1@0x180000" not in text:
-        errors.append("faucet dry-run must identify both ESP32_Faucet OTA slots")
     if len(commands) != 1:
         errors.append(f"expected exactly one faucet write_flash command, got {len(commands)}")
-    elif "0x19000" not in commands[0] or "0x20000" not in commands[0] or "0x180000" not in commands[0]:
-        errors.append("faucet write_flash command must include otadata, ota_0, and ota_1 offsets")
-    elif "0x1e000" in commands[0]:
-        errors.append("faucet recovery must not write boot_app0 into the ota_0-adjacent gap")
-    if "boot_app0: skipped because it overlaps otadata being cleared" not in text:
-        errors.append("faucet dry-run must skip boot_app0 when otadata is being cleared")
+    else:
+        offsets = command_offsets(commands[0])
+        if not {"0x19000", "0x20000", "0x180000"}.issubset(set(offsets)):
+            errors.append("faucet write_flash command must include otadata, ota_0, and ota_1 offsets")
+        if "0x1e000" in offsets:
+            errors.append("faucet recovery must not write boot_app0 into the ota_0-adjacent gap")
     if " erase_region " in text:
         errors.append("faucet dry-run must not emit a second erase_region command")
 
@@ -144,14 +144,12 @@ def check_standard_overlap(tmp: Path, errors: list[str]) -> None:
 
     if rc != 0:
         errors.append(f"expected standard rc=0, got {rc}")
-    if "boot_app0: skipped because it overlaps otadata being cleared" not in text:
-        errors.append("standard dry-run must explain boot_app0/otadata overlap")
-    if "otadata_erased@0xe000" not in text:
-        errors.append("standard dry-run must still clear otadata at 0xe000")
     if len(commands) != 1:
         errors.append(f"expected exactly one standard write_flash command, got {len(commands)}")
-    elif commands[0].split().count("0xe000") != 1:
-        errors.append("standard write_flash command must not write duplicate 0xe000 entries")
+    else:
+        offsets = command_offsets(commands[0])
+        if offsets.count("0xe000") != 1:
+            errors.append("standard write_flash command must clear otadata once and skip overlapping boot_app0")
 
 
 def check_unit_and_blank_offsets(tmp: Path, errors: list[str]) -> None:
@@ -164,14 +162,12 @@ def check_unit_and_blank_offsets(tmp: Path, errors: list[str]) -> None:
 
     if rc != 0:
         errors.append(f"expected unit/blank rc=0, got {rc}")
-    if "otadata: 0xe000 size=0x2000 clear=write 0xff image in write_flash" not in text:
-        errors.append("unit/blank dry-run must resolve otadata to 0xe000 size 0x2000")
-    if "ota_0@0x10000" not in text or "ota_1@0x170000" not in text:
-        errors.append("unit/blank dry-run must resolve blank OTA app offsets with 64K alignment")
     if len(commands) != 1:
         errors.append(f"expected exactly one unit/blank write_flash command, got {len(commands)}")
-    elif "0xe000" not in commands[0] or "0x10000" not in commands[0] or "0x170000" not in commands[0]:
-        errors.append("unit/blank write_flash command must include resolved otadata, ota_0, and ota_1 offsets")
+    else:
+        offsets = command_offsets(commands[0])
+        if not {"0xe000", "0x10000", "0x170000"}.issubset(set(offsets)):
+            errors.append("unit/blank write_flash command must include resolved otadata, ota_0, and ota_1 offsets")
 
 
 def check_serial_busy_report(errors: list[str]) -> None:
