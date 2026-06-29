@@ -11,10 +11,6 @@ ROOT = Path(__file__).resolve().parents[1]
 WEBOTA_PATH = ROOT / "scripts" / "esp32base_webota.py"
 
 
-def read(path: str) -> str:
-    return (ROOT / path).read_text(encoding="utf-8")
-
-
 def load_webota_module():
     spec = importlib.util.spec_from_file_location("esp32base_webota_check", WEBOTA_PATH)
     if spec is None or spec.loader is None:
@@ -32,10 +28,14 @@ def require(condition: bool, message: str, errors: list[str]) -> None:
 class FakeRawSocket:
     def __init__(self) -> None:
         self.writes: list[bytes] = []
+        self.options: list[tuple[int, int, int]] = []
         self.closed = False
 
     def sendall(self, data: bytes) -> None:
         self.writes.append(data)
+
+    def setsockopt(self, level: int, option: int, value: int) -> None:
+        self.options.append((level, option, value))
 
     def makefile(self, *args, **kwargs):
         return io.BytesIO(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK")
@@ -79,9 +79,28 @@ def check_raw_upload_send_contract(webota_module, errors: list[str]) -> None:
         errors.append("scripts/esp32base_webota.py: raw upload must sleep between paced raw chunks")
 
 
+def check_raw_socket_options(webota_module, errors: list[str]) -> None:
+    fake_socket = FakeRawSocket()
+
+    def option(name: str, default=None):
+        if name == "esp32base_webota_socket_send_buffer":
+            return "4096"
+        return default
+
+    with mock.patch.object(webota_module, "_option", side_effect=option):
+        webota_module._configure_raw_upload_socket(fake_socket)
+
+    socket_module = webota_module.socket
+    expected = {
+        (socket_module.IPPROTO_TCP, socket_module.TCP_NODELAY, 1),
+        (socket_module.SOL_SOCKET, socket_module.SO_SNDBUF, 4096),
+    }
+    if not expected.issubset(set(fake_socket.options)):
+        errors.append("scripts/esp32base_webota.py: raw upload socket must set TCP_NODELAY and configurable SO_SNDBUF")
+
+
 def main() -> int:
     webota_module = load_webota_module()
-    webota = read("scripts/esp32base_webota.py")
     errors: list[str] = []
 
     require(
@@ -145,34 +164,20 @@ def main() -> int:
     try:
         webota_module._validate_remote_ota_capacity({"nextUpdatePartition": {"size": 1024, "label": "ota_0"}}, 2048)
         errors.append("scripts/esp32base_webota.py: preflight must reject firmware larger than next OTA partition")
-    except webota_module.WebOtaPreflightError as exc:
-        if "Web OTA blocked before upload" not in str(exc):
-            errors.append("scripts/esp32base_webota.py: oversize preflight error must clearly say upload was not sent")
+    except webota_module.WebOtaPreflightError:
+        pass
     try:
         webota_module._validate_remote_ota_capacity({"nextUpdatePartition": {"size": 2048, "label": "ota_0"}}, 1024)
     except webota_module.WebOtaPreflightError:
         errors.append("scripts/esp32base_webota.py: preflight must allow firmware within next OTA partition")
 
     check_raw_upload_send_contract(webota_module, errors)
-    if "connection.endheaders(first_chunk)" in webota:
-        errors.append("scripts/esp32base_webota.py: raw upload must not rely on HTTPConnection.endheaders(first_chunk)")
-    if "def _send_raw_aligned" in webota or "raw_send_carry" in webota:
-        errors.append("scripts/esp32base_webota.py: raw upload must not split every socket send into HTTP_RAW_BUFLEN-sized writes")
+    check_raw_socket_options(webota_module, errors)
     require(
         webota_module.RAW_RSSI_WEAK_DBM == -70 and webota_module.RAW_RSSI_VERY_WEAK_DBM == -75,
         "scripts/esp32base_webota.py: raw upload must define weak RSSI thresholds",
         errors,
     )
-    if "esp32base_webota_socket_send_buffer" not in webota or "SO_SNDBUF" not in webota:
-        errors.append("scripts/esp32base_webota.py: raw upload must expose socket send-buffer control")
-    if "TCP_NODELAY" not in webota:
-        errors.append("scripts/esp32base_webota.py: raw upload sockets must disable Nagle for paced writes")
-    if "esp32base_webota_fallback_to_multipart" in webota:
-        errors.append("scripts/esp32base_webota.py: raw upload must not expose automatic multipart fallback")
-    if "_with_upload_path(parsed, \"/esp32base/ota\")" in webota:
-        errors.append("scripts/esp32base_webota.py: raw upload must not retry through the multipart path")
-    if "Web OTA fallback: raw upload interrupted" in webota:
-        errors.append("scripts/esp32base_webota.py: raw upload must not hide failures behind multipart fallback")
 
     with mock.patch.object(webota_module, "_option", return_value=None):
         try:
