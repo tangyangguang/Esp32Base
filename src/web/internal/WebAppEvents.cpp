@@ -976,7 +976,6 @@ void handleAppEventsApi() {
     if (!ensureAuth()) {
         return;
     }
-    // Route marker: /esp32base/api/app-events
     AppEventFilter filter;
     if (!readFilter(filter)) {
         sendInvalidFilterJson();

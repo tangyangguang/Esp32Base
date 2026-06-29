@@ -300,7 +300,7 @@ src/
 
 不提供全局短别名头文件，避免 `Log`、`Config`、`Web` 等名字污染应用全局命名空间。
 
-## 13. Profile Unity Implementation
+## 13. Profile 裁剪实现模型
 
 Core 使用标准 `.cpp` 编译单元，始终参与编译。
 
