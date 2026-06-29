@@ -10,9 +10,17 @@ import time
 from pathlib import Path
 from urllib.parse import urlparse
 
-Import("env")
+try:
+    Import("env")
+except NameError:
+    env = None
 
 HTTP_RAW_BUFLEN = 1436
+DEFAULT_WEBOTA_PATH = "/esp32base/ota/raw"
+DEFAULT_REQUEST_TIMEOUT_SEC = 120.0
+DEFAULT_UPLOAD_TIMEOUT_SEC = 90.0
+DEFAULT_RAW_CHUNK_SIZE = 64 * 1024
+DEFAULT_RAW_PAUSE_MS = 0.0
 RAW_RSSI_WEAK_DBM = -70
 RAW_RSSI_VERY_WEAK_DBM = -75
 RAW_WEAK_CHUNK_SIZE = 16 * 1024
@@ -159,7 +167,7 @@ def _build_url():
             "missing OTA host: set esp32base_webota_host or esp32base_webota_url in platformio.ini"
         )
     port = _option("esp32base_webota_port", "80")
-    path = _option("esp32base_webota_path", "/esp32base/ota/raw")
+    path = _option("esp32base_webota_path", DEFAULT_WEBOTA_PATH)
     if not path.startswith("/"):
         path = "/" + path
     return "http://%s:%s%s" % (host, port, path)
@@ -669,8 +677,8 @@ def _run_webota(target, source, env):
         headers["X-Sha256"] = sha256
 
     try:
-        timeout = _as_float(_option("esp32base_webota_timeout"), 120.0)
-        upload_timeout = _as_float(_option("esp32base_webota_upload_timeout"), 90.0)
+        timeout = _as_float(_option("esp32base_webota_timeout"), DEFAULT_REQUEST_TIMEOUT_SEC)
+        upload_timeout = _as_float(_option("esp32base_webota_upload_timeout"), DEFAULT_UPLOAD_TIMEOUT_SEC)
     except ValueError as exc:
         print("Error: %s" % exc, file=sys.stderr)
         env.Exit(1)
@@ -678,8 +686,8 @@ def _run_webota(target, source, env):
     chunk_size_configured = _configured_option("esp32base_webota_chunk_size") not in (None, "")
     raw_pause_configured = _configured_option("esp32base_webota_raw_pause_ms") not in (None, "")
     try:
-        chunk_size = _as_int(_option("esp32base_webota_chunk_size"), 64 * 1024)
-        raw_pause_ms = _as_non_negative_float(_option("esp32base_webota_raw_pause_ms"), 0.0)
+        chunk_size = _as_int(_option("esp32base_webota_chunk_size"), DEFAULT_RAW_CHUNK_SIZE)
+        raw_pause_ms = _as_non_negative_float(_option("esp32base_webota_raw_pause_ms"), DEFAULT_RAW_PAUSE_MS)
     except ValueError as exc:
         print("Error: %s" % exc, file=sys.stderr)
         env.Exit(1)
@@ -785,13 +793,14 @@ def _run_webota(target, source, env):
     )
 
 
-firmware_target = os.path.join(env.subst("$BUILD_DIR"), "%s.bin" % env.subst("$PROGNAME"))
-webota_action = env.Action(_run_webota, "Uploading via Esp32Base Web OTA")
-webota_target = env.AddCustomTarget(
-    "webota",
-    firmware_target,
-    webota_action,
-    title="Esp32Base Web OTA",
-    description="Upload firmware through Esp32Base HTTP Web OTA",
-)
-env.AlwaysBuild(webota_target)
+if env is not None:
+    firmware_target = os.path.join(env.subst("$BUILD_DIR"), "%s.bin" % env.subst("$PROGNAME"))
+    webota_action = env.Action(_run_webota, "Uploading via Esp32Base Web OTA")
+    webota_target = env.AddCustomTarget(
+        "webota",
+        firmware_target,
+        webota_action,
+        title="Esp32Base Web OTA",
+        description="Upload firmware through Esp32Base HTTP Web OTA",
+    )
+    env.AlwaysBuild(webota_target)

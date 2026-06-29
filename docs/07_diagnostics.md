@@ -280,7 +280,7 @@ CI 应覆盖核心矩阵，release 前执行完整矩阵。
 - `ESP32BASE_LOG_LEVEL` 是编译期上限；如果编译为 `ESP32BASE_LOG_NONE`，日志宏被移除，FileLog 也不会收到日志。
 - 普通页面 GET 慢请求、认证成功、路由注册和配置审计 skipped/read/deferred 属于 DEBUG 诊断；POST 等操作慢请求和健康慢循环属于 INFO 性能提示；配置实际写入、flush、启动认证加载、WiFi/OTA/NTP/mDNS 状态、格式化、重启和认证失败应保留 INFO/WARN/ERROR。
 - Config audit 可在 `Esp32Base::begin()` 前开启；begin 前开启可覆盖基础库初始化读写，begin 后开启只覆盖后续业务运行期访问。read audit 噪声较大，且多数为 DEBUG。
-- `INFO` 日志明文输出 WiFi 名称/密码和 Web Auth 用户名/密码，便于业务接入和现场调试。
+- `INFO` 日志可输出 WiFi SSID、Web Auth 用户名、来源、结果和 `password_set` 状态；不得输出 WiFi 或 Web Auth 密码值。
 
 ## 6. 运行诊断
 

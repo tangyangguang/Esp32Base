@@ -80,8 +80,8 @@ void handleWifiSubmit() {
         Esp32BaseConfig::getStr("eb_wifi", "pass", verifyPassword, sizeof(verifyPassword), "");
         ok = strcmp(verifySsid, ssid.c_str()) == 0 && strcmp(verifyPassword, effectivePassword) == 0;
     }
-    ESP32BASE_LOG_I("web", "wifi form submitted ssid=%s password=%s result=%s",
-                    ssid.c_str(), effectivePassword, ok ? "success" : "failed");
+    ESP32BASE_LOG_I("web", "wifi form submitted ssid=%s password_set=%s result=%s",
+                    ssid.c_str(), effectivePassword[0] ? "yes" : "no", ok ? "success" : "failed");
     redirectSeeOther(ok ? "/esp32base/wifi?saved=1" : "/esp32base/wifi?error=save_failed");
     if (ok) {
         delay(250);

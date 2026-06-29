@@ -72,7 +72,7 @@ DNS 拦截策略：
 - 业务项目需要允许用户修改认证账号/密码时，优先链接内置 `/esp32base/auth` 认证管理页面。
 - 业务自建配置页时，应先 `checkAuth()`，再用 `verifyAuth(currentUser, currentPass)` 验证当前凭据，最后调用 `saveAuth(newUser, newPass)`。
 - 更新 Web Auth 会写入后读回校验，保存成功后立即生效；浏览器缓存旧 Basic Auth 时，后续请求会重新触发认证。保存失败不会主动清空旧认证。
-- Web Auth 持久化使用 `eb_web.auth_user`、`eb_web.auth_pass`，并在 INFO 日志中输出明文用户名和密码，便于业务接入和现场调试。
+- Web Auth 持久化使用 `eb_web.auth_user`、`eb_web.auth_pass`。日志可输出用户名、来源、结果和 `password_set` 状态，但不输出密码值。
 - Basic Auth 请求日志每个 HTTP 请求最多输出 1 条，避免 OTA 上传分块反复校验时刷屏。
 - WiFi 密码字段不会回显已保存密码。留空表示保持已保存密码；需要切换开放网络时必须显式勾选清除密码。
 - WiFi 凭据保存会写入后读回校验；保存失败时不会切换运行中连接尝试。
@@ -95,7 +95,7 @@ OTA 规则：
 - 关闭 Web Auth 时，内置页面和 OTA 均无密码保护。
 - 关闭 Web Auth 不只是关闭登录框，而是让所有内置 HTTP 页面和 POST 操作无需认证。
 - 关闭 Web Auth 只影响 HTTP/Web OTA；不关闭 ArduinoOTA/espota 密码。
-- Web Auth 密码不在 HTML、JSON 或 API 响应中输出；INFO 日志明文输出 Web Auth 用户名/密码，明文存储和明文日志是项目选择，不作为缺陷或待修风险评估。
+- Web Auth 密码不在 HTML、JSON、API 响应或日志中输出；日志只输出用户名、来源、结果和 `password_set` 状态。当前持久化仍保存到普通 NVS，未启用平台级 flash encryption 时不应视为密文凭据库。
 - 内置危险 POST 必须是 POST method，并会做轻量 `Origin` / `Referer` host 校验；存在这些头时必须与请求 `Host` 同源，缺失时放行，保证 curl、PlatformIO `webota` 和简单脚本可用。非 POST 返回 405，校验失败返回 403，不执行副作用。
 
 ## 5. 路由表

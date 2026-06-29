@@ -911,11 +911,15 @@ bool Esp32BaseWeb::begin() {
         }
 #if ESP32BASE_WEB_ALLOW_INSECURE_DEFAULT_AUTH
         if (!g_defaultAuthSet) {
-            ESP32BASE_LOG_W("web", "auth_loaded user=%s password=%s source=insecure_builtin", g_authUser, g_authPass);
+            ESP32BASE_LOG_W("web", "auth_loaded user=%s password_set=%s source=insecure_builtin",
+                            g_authUser,
+                            g_authPass[0] ? "yes" : "no");
         } else
 #endif
         {
-            ESP32BASE_LOG_I("web", "auth_loaded user=%s password=%s source=default", g_authUser, g_authPass);
+            ESP32BASE_LOG_I("web", "auth_loaded user=%s password_set=%s source=default",
+                            g_authUser,
+                            g_authPass[0] ? "yes" : "no");
         }
     } else {
         g_startLocked = false;
@@ -1050,9 +1054,9 @@ void Esp32BaseWeb::setDefaultAuth(const char* user, const char* pass) {
     if (!g_authLoadedFromStorage) {
         applyDefaultAuth();
     }
-    ESP32BASE_LOG_I("web", "default_auth_set user=%s password=%s applied=%s",
+    ESP32BASE_LOG_I("web", "default_auth_set user=%s password_set=%s applied=%s",
                     g_defaultAuthUser,
-                    g_defaultAuthPass,
+                    g_defaultAuthPass[0] ? "yes" : "no",
                     g_authLoadedFromStorage ? "no" : "yes");
 }
 
@@ -1106,7 +1110,9 @@ bool Esp32BaseWeb::saveAuth(const char* user, const char* pass) {
     }
     applyStoredAuth(user, pass);
     g_startLocked = false;
-    ESP32BASE_LOG_I("web", "auth_saved user=%s password=%s", g_authUser, g_authPass);
+    ESP32BASE_LOG_I("web", "auth_saved user=%s password_set=%s",
+                    g_authUser,
+                    g_authPass[0] ? "yes" : "no");
     return true;
 }
 
@@ -1115,7 +1121,9 @@ bool Esp32BaseWeb::resetAuth() {
     const bool hasDefault = applyDefaultAuth();
     if (hasDefault) {
         g_startLocked = false;
-        ESP32BASE_LOG_I("web", "auth_loaded user=%s password=%s source=default", g_authUser, g_authPass);
+        ESP32BASE_LOG_I("web", "auth_loaded user=%s password_set=%s source=default",
+                        g_authUser,
+                        g_authPass[0] ? "yes" : "no");
     } else {
         g_startLocked = true;
         ESP32BASE_LOG_W("web", "auth_default_missing action=auth_reset_locked");

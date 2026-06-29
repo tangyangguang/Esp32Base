@@ -155,7 +155,7 @@ Esp32BaseFileLog::setMode(Esp32BaseFileLog::ERROR);
 - 日志和内置页面中的大数字字节数必须使用人性化显示，例如 `1.00 MB`，不重复输出原始 bytes。
 - `formatBytes()` 采用二进制单位，`1 KB = 1024 bytes`，`1 MB = 1024 KB`。
 - 状态/API JSON 可保留 raw `bytes` 数值，同时提供 `human` 字段用于人性化展示。
-- WiFi 名称/密码、Web Auth 用户名/密码在 `INFO` 日志中明文输出，这是本库用于业务接入和现场调试的设计。
+- WiFi/Web Auth 日志不得输出密码值；可输出 SSID、用户名、来源、结果和 `password_set` 这类状态字段。
 - sink callback 在日志调用现场同步执行，用户 sink 不得长时间阻塞。
 
 ### 3.4 Esp32BaseFileLog
@@ -721,7 +721,7 @@ WiFi 凭证和重连策略：
 - 只有显式 `clearCredentials()`、`startConfigPortal()` 或应用自定义策略，才能进入 AP/config portal。
 - `clearCredentials()` 只清空库管理的 WiFi 凭证，不立即触发重连、断线或 portal；NVS 清理失败时返回 false。
 - `connect(..., persist=true)` 必须先同步写入 NVS 保存凭证，写入失败时返回 false 且不切换连接；这是显式配置提交的可靠性取舍，避免页面提交后立即重启导致新凭证丢失。
-- `INFO` 日志明文输出 SSID 和密码，便于业务接入和现场调试。
+- WiFi 日志可输出 SSID 和 `password_set` 状态，不输出密码值。
 - `begin()` 默认禁用 WiFi modem sleep，并在启动时显式下发 `WiFi.setSleep(false)`，使 Web/OTA 请求不受 Arduino ESP32 默认 `WIFI_PS_MIN_MODEM` 的 DTIM 唤醒延迟影响；电池设备可调用 `setPowerSave(true)` 恢复 modem sleep，但需要接受 Web 首屏可见延迟。
 - 进入 deep sleep 后 STA、AP、DNS、Web 均不可用；唤醒相当于新一轮启动，按凭证状态恢复网络。
 - 默认无限重试；`FAILED` 状态通常只在 STA mode 切换失败等底层异常下出现，安全启动触发时会发布 `wifi.failed` 并回退 AP/config portal。
@@ -1146,7 +1146,7 @@ Route 缓冲机制：
 - `verifyAuth(user, pass)` 校验显式传入的账号密码；无参 `verifyAuth()` 仍表示当前请求是否已认证。
 - `saveAuth(user, pass)` 保存 Web Auth 到 `eb_web.auth_user`、`eb_web.auth_pass`，保存后读回校验，并在保存成功后立即切换为新认证；保存失败不会主动清空旧认证。
 - `resetAuth()` 清除 `eb_web` 持久化 Auth，并恢复应用默认认证；没有应用默认认证时返回 false，Web 进入无默认认证的锁定状态，除非开发固件显式启用 `ESP32BASE_WEB_ALLOW_INSECURE_DEFAULT_AUTH=1`。
-- Web Auth 明文密码会持久化到 `eb_web.auth_pass`，并在 INFO 日志中随用户名明文输出，用于业务接入和现场调试；HTML、JSON 和 API 响应仍不输出 Web Auth 密码。明文存储和明文日志是项目选择，不作为缺陷或待修风险评估；`authPassword()` 仅供本地 C++ 集成使用。
+- Web Auth 密码当前持久化到普通 NVS 的 `eb_web.auth_pass`；未启用平台级 flash encryption 时，不应把设备物理存储视为密文凭据库。日志、HTML、JSON 和 API 响应不输出 Web Auth 密码值；日志只输出用户名、来源、结果和 `password_set` 状态。`authPassword()` 仅供本地 C++ 集成使用。
 - `METHOD_ANY` 用于同一路径 GET/POST 复用；应用 handler 内可用 `currentMethod()`、`isMethod()` 或 `currentMethodName()` 判断当前请求方法。
 - `currentMethod()` 仅在 handler 上下文中返回实际方法：GET 为 `METHOD_GET`，POST 为 `METHOD_POST`；handler 外或未知方法返回 `METHOD_UNKNOWN`。
 - `isMethod(METHOD_ANY)` 在有效 handler 请求中返回 true；`METHOD_ANY` 不作为实际请求方法返回。

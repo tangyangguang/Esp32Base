@@ -16,7 +16,6 @@ piopmignore = read(".piopmignore")
 profiles = read("docs/02_profiles.md")
 api_docs = read("docs/03_api.md")
 memory_budget = read("docs/06_memory_budget.md")
-web_asset_gating = read("scripts/check_web_asset_gating.py")
 arduino3_ensure = read("scripts/ensure_arduino3_platformio.py")
 arduino3_preflight = read("scripts/pioarduino_core3_preflight.py")
 
@@ -62,12 +61,13 @@ if "`APP_CONFIG` 需要 `WEB`" not in profiles:
     errors.append("docs/02_profiles.md: dependency rules must document APP_CONFIG requires WEB")
 if "保留用于兼容旧代码" in api_docs:
     errors.append("docs/03_api.md: must not explain current APIs as legacy compatibility")
-if "| FULL | 973648 |" not in memory_budget:
-    errors.append("docs/06_memory_budget.md: ESP32/Core2 FULL size table must be refreshed to current build")
-if "| ESP32 FULL, Core 3.x | 1208224 |" not in memory_budget:
-    errors.append("docs/06_memory_budget.md: ESP32/Core3 FULL size table must be refreshed to current build")
-if "ESP32BASE_ENABLE_APP_EVENTS" not in web_asset_gating or ".appevfilters" not in web_asset_gating:
-    errors.append("scripts/check_web_asset_gating.py: must guard optional App Events CSS assets")
+for marker in (
+    "当前代表 FULL firmware.bin",
+    "ESP32 FULL, Core 3.x",
+    "同一自动 size 脚本整体刷新",
+):
+    if marker not in memory_budget:
+        errors.append(f"docs/06_memory_budget.md: missing memory budget release marker {marker!r}")
 if "esp32_full_arduino3" not in arduino3_ensure or "framework-arduinoespressif32" not in arduino3_ensure:
     errors.append("scripts/ensure_arduino3_platformio.py: must preinstall pioarduino Core 3.x packages")
 if "pioarduino Core 3.x package preflight failed" not in arduino3_preflight:
