@@ -497,7 +497,7 @@ POST -> 303 Redirect -> GET
 - `examples/web_ui_gallery`：专门用于查看和验收 Web UI baseline 的页面能力与样式，覆盖状态、统计、分页记录、配置、命令、流程、维护、访问控制、确认、空状态和多字段表单。
 - `examples/full_demo`
 
-`examples/web_ui_gallery/README.md` 记录了本地构建、烧录查看和 selftest env 的使用方式。
+`examples/web_ui_gallery/README.md` 记录了本地构建和烧录查看方式。
 
 验证重点：
 

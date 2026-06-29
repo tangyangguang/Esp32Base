@@ -48,14 +48,3 @@ pio device monitor -d examples/web_ui_gallery -b 115200
 
 - 用户名：`admin`
 - 密码：`admin`
-
-## 自测固件
-
-selftest env 会在 Web ready 后请求所有样例页面、关键 POST 跳转和跨站 `Origin` 拒绝用例，串口输出 `selftest summary pass=... total=...`。
-
-```bash
-pio run -d examples/web_ui_gallery -e esp32_web_ui_gallery_selftest -t upload
-pio device monitor -d examples/web_ui_gallery -b 115200
-```
-
-自测主要验证路由、认证、分页链接、结果提示、`POST -> 303 -> GET` 和 POST 同源保护，视觉效果仍需要在 PC 和手机浏览器中人工查看。

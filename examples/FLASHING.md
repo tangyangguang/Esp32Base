@@ -48,7 +48,6 @@ pio run -d examples/net_runtime -e esp32s3_net_runtime -t upload
 ```sh
 pio run -d examples/web_ui_gallery -e esp32_web_ui_gallery -t upload
 pio run -d examples/web_ui_gallery -e esp32s3_web_ui_gallery -t upload
-pio run -d examples/web_ui_gallery -e esp32_web_ui_gallery_selftest -t upload
 ```
 
 ## basic

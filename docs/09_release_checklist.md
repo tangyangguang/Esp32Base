@@ -238,7 +238,7 @@
 - System Logs clear POST + confirm + once + 303。
 - System Logs clear 回到页面后显示成功/失败提示。
 - FS/FileLog 不可用时 System Logs 页面显示 `System logs unavailable`。
-- 业务示例中的副作用 POST 必须调用 `Esp32BaseWeb::checkPostAllowed(context)`；带跨站 `Origin` 的 POST selftest 应返回 403。
+- 业务示例中的副作用 POST 必须调用 `Esp32BaseWeb::checkPostAllowed(context)`；跨站 `Origin` 拒绝由 Web 行为测试或实机验证覆盖。
 - 日志内容 HTML escape。
 - 默认 Web 首页和导航开箱可用。
 - 业务优先导航可设置 device name、home path、home mode、system nav mode。
@@ -275,7 +275,7 @@
 - `examples/full_demo` 可在自身目录 `pio run`。
 - `examples/full_demo` 覆盖 App Config string/int/decimal/bool/enum、字段级校验、页面级校验、重启提示和回调。
 - `examples/web_ui_gallery` 可在自身目录 `pio run`。
-- `examples/web_ui_gallery` 覆盖 Web UI baseline 的状态、统计、分页记录、配置、命令、流程、维护、访问控制、确认、空状态和表单页面，并提供 selftest env。
+- `examples/web_ui_gallery` 覆盖 Web UI baseline 的状态、统计、分页记录、配置、命令、流程、维护、访问控制、确认、空状态和表单页面。
 - `examples/web_logs_ota` 可在自身目录 `pio run`。
 - `examples/net_runtime` 可在自身目录 `pio run`。
 - `examples/app_events_demo` 可在自身目录 `pio run`，并演示 App Events 写入、分页查看、JSON/CSV 和 POST 写入。
