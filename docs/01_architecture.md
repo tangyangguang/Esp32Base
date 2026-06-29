@@ -183,7 +183,7 @@ Core 不 include Runtime/FileLog、Web、Network 或 OTA。重启和休眠前需
 
 ## 8. begin 顺序
 
-`Esp32Base::begin()` 固定顺序：
+`Esp32Base::begin()` 当前顺序约束：
 
 1. Log
 2. Config
@@ -229,7 +229,7 @@ ESP32BASE_STRICT_OPTIONAL_BEGIN=0
 
 ## 10. handle 顺序
 
-`Esp32Base::handle()` 固定顺序：
+`Esp32Base::handle()` 当前顺序约束：
 
 1. 如果 OTA 正在上传，跳过 Config deferred flush。
 2. 否则 Config deferred flush，一轮最多一条。

@@ -125,7 +125,7 @@ OTA 规则：
 - `setHeadExtraCallback()` 可在 `sendHeader()` 的 `</head>` 和顶部导航输出前注入业务 CSS，业务页面不需要复制基础库 header/nav；`/esp32base` 及其子路径的内置页面会跳过该业务注入，避免内置页重复下发业务样式。
 - 导航按当前请求路径输出 `active` class：完全匹配优先，嵌套路由按最长 path 前缀匹配；`SYSTEM_NAV_SECTION` 下系统维护入口只在 footer 中展示，WiFi/Auth/OTA 二级页会把 System 标记为 active，App Config 页面在启用时标记自己的 footer 入口。
 - 默认 Web 样式采用简洁中性色，普通链接、导航和 tabs 不使用蓝色主色；业务项目最终视觉仍由 `setHeadExtraCallback()` 注入 CSS 覆盖。
-- 业务页面应优先使用 `docs/11_web_ui_baseline.md` 中定义的页面能力块、helper 和基础 CSS。找不到合适能力块时，不应先在业务项目复制 CSS 或写一次性布局补丁，而应回到 Esp32Base 评估是否补充统一能力块、CSS 类、helper、示例和文档。
+- 业务页面可优先复用 `docs/11_web_ui_baseline.md` 中定义的页面能力、helper 和基础 CSS。现有能力不适合时，业务侧可以做最小局部实现；只有多个项目确实会复用的模式，才回到 Esp32Base 补通用 helper、样式、示例和文档。
 
 默认容量：
 
@@ -259,7 +259,7 @@ App Config 页面：
 - 未注册 group 或字段时页面显示轻量空状态，提示应用尚未注册配置字段。
 - 支持 string、int、decimal 定点数、bool、enum；string 最大 256 bytes，enum value 最大 31 bytes，label/option label 最大 31 bytes，help 最大 96 bytes，unit 最大 12 bytes，decimal 使用 `int32_t raw` 和 `scale=0..6`。
 - 页面按 group 输出紧凑 panel，字段默认直接可编辑；点击 Save 时前端只展示变更核对清单，不作为服务端事实来源。
-- 变更核对清单使用中性 review 样式，不使用成功色或警告色；只有实际保存结果才使用 `ok`/`danger` notice。
+- 变更核对清单使用中性样式，不使用成功色或警告色；只有实际保存结果才使用 `ok`/`danger` notice。
 - POST 保存时后端重新解析、执行内置校验、执行字段级和页面级业务校验、读取当前 NVS 并计算实际变化字段。
 - 任一校验失败时零写入；校验通过后只保存变化字段，未变化字段绝不写 NVS。
 - 只读状态、未来版本或业务版本不兼容等业务规则应通过页面级校验作为保存前 veto 处理；校验回调可读取本次整页提交值，拒绝时不会进入任何 App Config 字段写入。
