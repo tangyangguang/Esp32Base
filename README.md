@@ -2,8 +2,6 @@
 
 `Esp32Base` 是面向 ESP32 / ESP32-S3 / ESP32-C3、基于 Arduino ESP32 Core 的轻量基础库设计。
 
-本仓库当前按 `docs/` 中的新架构实施。历史设计方案、评审记录和临时评估文件已从发布分支清理，不参与编译，也不作为实现依据；发布包只保留当前契约、示例和运行所需文件。
-
 ## 定位
 
 `Esp32Base` 不是 Web 管理平台、云框架或大型组件系统，而是一套可裁剪的 ESP32 应用基础底座。
@@ -224,12 +222,3 @@ python path/to/Esp32Base/scripts/esp32base_serial_recover_ota.py \
 10. [发布检查清单](docs/09_release_checklist.md)
 11. [已知限制](docs/10_known_limitations.md)
 12. [Web UI 页面结构与样式基线](docs/11_web_ui_baseline.md)
-
-历史设计方案、评审记录和临时评估文件已从发布分支清理，不作为新实现的直接依据。
-
-## 最终实施原则
-
-- 文档和代码必须保持一致。
-- 首版发布前按最终最优实现推进，不保留旧 key、旧 API 或旧行为迁移包袱。
-- Profile 裁剪必须以编译产物、map 文件和符号检查验证。
-- 发布后不再做大规模架构重构，只做 bug 修复、兼容性维护、文档修正和必要小范围适配。
