@@ -88,7 +88,7 @@ ESP32-C3：
 
 mDNS 在 Core 3.x / IDF v5 下频繁 destroy/recreate 风险较高。
 
-第一版固定策略：
+当前策略：
 
 - 断网时软停止：标记 not advertising。
 - 重连后刷新 service record。
@@ -107,7 +107,7 @@ mDNS 在 Core 3.x / IDF v5 下频繁 destroy/recreate 风险较高。
 
 ## 8. PSRAM
 
-第一版不依赖 PSRAM。
+当前版本不依赖 PSRAM。
 
 不使用 PSRAM 作为默认资源预算前提。
 

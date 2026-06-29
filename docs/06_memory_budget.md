@@ -142,7 +142,7 @@ Web 页面体积：
 
 ## 5. PSRAM
 
-第一版不依赖 PSRAM。
+当前版本不依赖 PSRAM。
 
 即使板子有 PSRAM，默认路径也不使用 PSRAM 作为必要条件。
 
