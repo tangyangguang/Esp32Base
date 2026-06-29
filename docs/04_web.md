@@ -325,8 +325,8 @@ App Events 页面：
 - Device 显示名称、hostname、固件、profile、uptime 和 boot count；Network 显示 WiFi/IP/RSSI、power save、STA MAC 和 AP MAC。
 - Runtime Health 显示 heap free/min/max alloc/total、Watchdog、Time/RTC/NTP、last reset 和 last wake；heap、Watchdog 和时间相关多值信息使用紧凑子指标展示，避免逗号串联造成阅读困难。
 - Storage & Logs 显示 FS used/free/total、Details 入口、FileLog enabled/disabled/unavailable/write fault、日志级别、轮转文件数、容量上限和路径；File details 入口并入 FS 行，FileLog level/files/limit 合并为一行子指标，避免状态页打开日志段文件；文件/目录数量、已统计文件大小、other/overhead 和 Top 文件列表只放在 `/esp32base/fs` 详情页，避免状态页被低频诊断明细撑高；Hardware 显示芯片型号、revision、CPU、SDK、Flash、PSRAM 和 eFuse MAC。
-- `/esp32base/fs` 默认是只读 LittleFS 详情页，显示 Summary、Top 10 最大文件和最多 128 项文件树；文件树展示 Path、Type、Size、Last modified、Status 和 Action。Last modified 来自 LittleFS 最后修改时间，不是创建时间；当时间明显不可信时显示 `unknown`。Status 独立显示 `ok`、`unreadable`、`filelog`、`app events store` 或 `esp32base managed` 等维护标签，Action 只保留下载和管理模式删除。文件树提供单文件下载；当文件声明有大小但首块无法读取时，Status 显示 `unreadable`，下载路由返回 `500 File read failed`，避免浏览器保存 0 字节伪成功文件；当 FS used 明显大于可见文件合计时显示内部/历史占用告警，提示删除可见文件不一定释放全部空间。业务侧如果使用 `Esp32BaseFs` 读写文件，也必须检查返回值；逻辑大小存在不代表内容块一定可读。
-- `/esp32base/fs?manage=1` 增加单文件删除和受限上传，不提供目录删除、批量删除、编辑、重命名、移动或任意路径输入；删除必须通过 `POST /esp32base/fs/delete -> 303 -> GET`，格式化仍只在 System 页危险操作区。上传流程是“选择已有设备目录 + 选择本地文件”，上传保留本地文件名，不创建目录，可选择任何已有目录；文件选择字段独占一行，不能和目录选择器挤在同一栅格行导致控件重叠；同名文件由 `/esp32base/fs/check` 触发浏览器确认后再带 `overwrite=1` 上传；路径过长会拒绝，不截断，目录选择器会提示过长目录不可选。覆盖上传先写同目录唯一临时文件并在校验后替换目标；断电遗留的临时文件不会阻塞下一次上传，可由管理入口显式删除。没有 multipart 文件的上传 POST 会返回 `No upload received`；上传完成会校验最终文件大小和末端可读性；上传到 FileLog 路径前会先 flush，上传结束后重新加载 FileLog 运行态，reload 失败会作为上传错误返回。App Events 启用时，`/esp32base/app-events/events.bin` 显示为 `app events store`；其他 `/esp32base/**` 文件显示为 `esp32base managed`。这些标签只作为基础库命名空间提醒，不作为通用上传或删除禁区，便于测试和维护实验；上传或删除后会重新加载 App Events 运行态，reload 失败会作为维护错误返回；如果最终替换已经修改 App Events store 或 FileLog 文件但随后失败，也会先刷新对应运行态再返回上传错误。不可读文件在管理模式仍显示删除入口，因为删除只依赖路径存在且是文件，不要求内容块可读。底层删除失败后会尝试截断文件为 0；删除或清理成功后若 FileLog 之前处于 `write fault`，会重新加载当前 FileLog 模式以便恢复写入。
+- `/esp32base/fs` 默认是只读 LittleFS 详情页，展示容量摘要、主要文件和文件树。文件树应区分普通文件、不可读文件和基础库管理文件；不可读文件不能给出会生成 0 字节伪成功的下载入口。当 FS used 明显大于可见文件合计时，应提示可能存在内部、历史或不可见占用。业务侧如果使用 `Esp32BaseFs` 读写文件，也必须检查返回值；逻辑大小存在不代表内容块一定可读。
+- `/esp32base/fs?manage=1` 增加单文件删除和受限上传，不提供目录删除、批量删除、编辑、重命名、移动或任意路径输入；删除必须通过 `POST /esp32base/fs/delete -> 303 -> GET`，格式化仍只在 System 页危险操作区。上传保留本地文件名，只写入已有目录；覆盖上传必须显式确认，并避免上传中断时先清空旧文件。基础库管理文件应在文件树中给出维护提醒；维护操作修改 FileLog 或 App Events store 后，应刷新对应运行态。
 - Firmware & OTA 默认显示运行 app slot、下一 OTA slot、Max OTA upload、rollback 状态，以及仅在存在错误时显示的 Last OTA error；默认状态页不调用当前镜像 size 校验，也不计算 `OTA headroom`。Max OTA upload 是下一 OTA slot 的上传硬上限。
 - 启用 Watchdog 时显示 `enabled, lifetime resets N, trip resets M` 或 invalid baseline 和 trip reset time；Reset Trip 保存时间使用和页面 Time 行一致的可信 epoch 判断，无可用时间则显示 `unknown (time unavailable)`。
 - 启用 Time 时，Status 页显示统一 `Time` 行，包含当前来源 `uptime/rtc/ntp`、可信状态、当前时间和 uptime；启用 RTC 时额外显示 `RTC` 行，包含驱动、状态、最近读取 epoch 和读取时的 uptime；启用 NTP 时显示 `NTP` 行，只表示联网对时客户端自身状态。
@@ -517,7 +517,7 @@ void handleBusinessPage() {
 
 表单和命令提交默认仍应保留 `POST -> 303 -> GET`。行内编辑和小表单弹层可以在同一个 endpoint 中通过 `isAjaxRequest()` 返回 JSON 局部结果：成功用 `sendAjaxReplace()` 替换目标片段，失败用 `sendAjaxError()` 在当前行或弹层内显示错误。前端局部刷新只改善体验，服务端仍必须重新校验认证、同源、参数、状态和权限。
 
-不默认局部刷新的操作包括重启、格式化、清日志、OTA、文件上传/下载/删除和 Auth 修改；这些操作应保留明确确认、进度页或整页结果，避免用户误判设备状态。FS 上传覆盖先写唯一临时文件并在校验后替换目标，上传中断不应先清空旧文件；遗留临时文件不会阻塞下一次上传，可由管理入口显式删除。
+不默认局部刷新的操作包括重启、格式化、清日志、OTA、文件上传/下载/删除和 Auth 修改；这些操作应保留明确确认、进度页或整页结果，避免用户误判设备状态。FS 覆盖上传必须避免上传中断时先清空旧文件。
 
 ### 8.1 Skinning
 
