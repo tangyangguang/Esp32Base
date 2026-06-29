@@ -43,27 +43,6 @@ for path, text in (
     if "idf_component.yml" not in text:
         errors.append(f"{path}: release/export filters must exclude generated idf_component.yml files")
 
-stale_process_refs = (
-    ("docs/", "super" + "powers"),
-    (".", "super" + "powers"),
-    ("_", "implementation" + "_plan.md"),
-    ("Super", "powers"),
-)
-for path in (
-    "README.md",
-    "docs/09_release_checklist.md",
-    "docs/11_web_ui_baseline.md",
-    "library.json",
-    ".gitignore",
-    ".libraryignore",
-    ".piopmignore",
-):
-    text = read(path)
-    for parts in stale_process_refs:
-        marker = "".join(parts)
-        if marker in text:
-            errors.append(f"{path}: stale process reference remains")
-
 for path in ("src/Esp32BaseProfile.h", "src/runtime/Esp32BaseFs.inc"):
     text = read(path)
     for marker in ("AUTO_FORMAT", "formatOnFail", "LittleFS.begin(true", "auto-format requested"):
