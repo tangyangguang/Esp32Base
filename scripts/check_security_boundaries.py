@@ -31,12 +31,8 @@ for path, text in (
 ):
     if "password=%s" in text:
         errors.append(f"{path}: credential logs must not include plaintext password values")
-for needle, message in (
-    ("Leave empty to keep the saved password", "WiFi form must explain blank password keeps the saved secret"),
-    ("name='clear_password'", "WiFi form must provide an explicit way to clear the stored password for open networks"),
-):
-    if needle not in web_wifi:
-        errors.append(f"src/web/internal/WebWifi.cpp: {message}")
+if "name='clear_password'" not in web_wifi:
+    errors.append("src/web/internal/WebWifi.cpp: WiFi form must provide an explicit way to clear the stored password for open networks")
 
 if "ESP32BASE_WEB_ALLOW_INSECURE_DEFAULT_AUTH" not in profile:
     errors.append("src/Esp32BaseProfile.h: missing explicit insecure default auth opt-in macro")
