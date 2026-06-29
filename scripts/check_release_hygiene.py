@@ -26,20 +26,31 @@ for path, text in (
     (".libraryignore", libraryignore),
     (".piopmignore", piopmignore),
 ):
-    if "docs/superpowers" not in text:
-        errors.append(f"{path}: release/export filters must exclude docs/superpowers")
     if "__pycache__" not in text or "*.py[cod]" not in text:
         errors.append(f"{path}: release/export filters must exclude Python cache files")
     if "idf_component.yml" not in text:
         errors.append(f"{path}: release/export filters must exclude generated idf_component.yml files")
 
-for path, text in (
-    ("library.json", library),
-    (".libraryignore", libraryignore),
-    (".piopmignore", piopmignore),
+stale_process_refs = (
+    ("docs/", "super" + "powers"),
+    (".", "super" + "powers"),
+    ("_", "implementation" + "_plan.md"),
+    ("Super", "powers"),
+)
+for path in (
+    "README.md",
+    "docs/09_release_checklist.md",
+    "docs/11_web_ui_baseline.md",
+    "library.json",
+    ".gitignore",
+    ".libraryignore",
+    ".piopmignore",
 ):
-    if "docs/*_implementation_plan.md" not in text:
-        errors.append(f"{path}: release/export filters must exclude implementation-plan process docs")
+    text = read(path)
+    for parts in stale_process_refs:
+        marker = "".join(parts)
+        if marker in text:
+            errors.append(f"{path}: stale process reference remains")
 
 if "#if ESP32BASE_PROFILE == ESP32BASE_PROFILE_NET" not in profiles:
     errors.append("docs/02_profiles.md: profile example must use numeric ESP32BASE_PROFILE comparison")
@@ -63,7 +74,7 @@ if "pioarduino Core 3.x package preflight failed" not in arduino3_preflight:
     errors.append("scripts/pioarduino_core3_preflight.py: must guard pioarduino package availability")
 
 docs = {
-    "README.md": "发布包排除 docs/superpowers",
+    "README.md": "发布包只保留当前契约、示例和运行所需文件",
     "docs/01_architecture.md": "OTA boot 初始化",
     "docs/09_release_checklist.md": "check_web_asset_gating.py",
     "docs/08_arduino_core_compat.md": "ensure_arduino3_platformio.py",

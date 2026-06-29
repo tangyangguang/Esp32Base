@@ -53,7 +53,6 @@
 - 发布包包含示例依赖哨兵 `examples/basic/src/deps_*.cpp`。
 - 发布包包含独立 PIO 示例 `examples/full_demo`、`examples/web_ui_gallery`、`examples/web_logs_ota`、`examples/net_runtime`。
 - 发布包不包含历史设计、评审、评估等过程文件。
-- 发布包不包含 docs/superpowers 过程规格、执行计划和一次性实施计划。
 - 发布包不包含 `.pio/`、`.cache/`、`idf_component.yml` 等构建生成物。
 
 ## 5. 裁剪检查

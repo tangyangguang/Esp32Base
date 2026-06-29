@@ -1,8 +1,5 @@
 design-history/
 design-history/**
-docs/superpowers/
-docs/superpowers/**
-docs/*_implementation_plan.md
 ESP32BASE_DOCUMENTATION_REVIEW*.md
 bug-ticklish-kitten.md
 .git/
