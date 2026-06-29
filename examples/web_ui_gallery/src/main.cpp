@@ -157,7 +157,7 @@ void handleStatusPage() {
     Esp32BaseWeb::endMetricGrid();
     Esp32BaseWeb::sendInfoRowCompactLink("最近记录", "只放和判断状态有关的最近事件。", "2 条", "/ui-records", "查看");
     Esp32BaseWeb::endPanel();
-    Esp32BaseWeb::beginPanel("页面模板目录");
+    Esp32BaseWeb::beginPanel("页面示例目录");
     Esp32BaseWeb::sendInfoRowCompactLink("状态与统计", "设备首页和轻量统计摘要，避免引入图表库。", nullptr, "/ui-status/stats", "查看");
     Esp32BaseWeb::sendInfoRowCompactLink("记录与分页", "筛选、表头、空状态和页码型分页。", nullptr, "/ui-records", "查看");
     Esp32BaseWeb::sendInfoRowCompactLink("配置与表单", "紧凑配置列表、行内动作和多字段独立编辑页。", nullptr, "/ui-config", "查看");
@@ -317,9 +317,9 @@ void handleFlowPage() {
         return;
     }
     Esp32BaseWeb::sendHeader("UI Flow");
-    Esp32BaseWeb::sendPageTitle("流程向导", "用于校准、首次设置和复杂维护。");
+    Esp32BaseWeb::sendPageTitle("分步操作", "用于校准、首次设置和复杂维护。");
     sendGalleryResults();
-    Esp32BaseWeb::beginPanel("三步流程");
+    Esp32BaseWeb::beginPanel("三步操作");
     Esp32BaseWeb::sendInfoRowCompact("1. 依据", "展示旧值、数据来源和是否允许继续。", "通过");
     Esp32BaseWeb::sendInfoRowCompactLink("2. 实测", "录入真实测量结果，不塞进普通配置表。", nullptr, "/ui-form", "继续");
     Esp32BaseWeb::sendInfoRowCompactLink("3. 核对保存", "展示旧值、新值、变化幅度和影响范围。", nullptr, "/ui-config/flow?saved=1", "保存");

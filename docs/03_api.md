@@ -1394,7 +1394,7 @@ Offset binary API 用于业务二进制定长记录、分页读取和环形覆�
 
 - `readBytesAt()` 打开已存在文件并从 `offset` 读取最多 `maxLen` 字节，实际读取长度写入 `readLen`；读到 EOF 前允许短读并返回 true。
 - `readBytes()` / `readBytesAt()` 在 FS 未 ready、path 非绝对路径、文件不存在、out 为空或 `offset > fileSize` 时返回 false；失败时 `readLen` 为 0。`offset == fileSize` 返回 true 且读取 0 字节。底层声明文件仍有剩余内容但读出 0 字节时，`readBytes()` / `readBytesAt()` 返回 false，避免把 LittleFS 元数据仍存在但内容块不可读的文件误判为成功读取。
-- 大块读写会在 Esp32BaseFs 层分块并定期让出调度和喂 watchdog。`readBytes()`、`readBytesAt()`、`writeBytes()`、`appendBytes()`、`writeBytesAt()` 和 `createFixedFile()` 都走同一长操作治理，不要求业务存储类重复分块。
+- 大块读写会在 Esp32BaseFs 层分块并定期让出调度和喂 watchdog。`readBytes()`、`readBytesAt()`、`writeBytes()`、`appendBytes()`、`writeBytesAt()` 和 `createFixedFile()` 都走同一长操作处理，不要求业务存储类重复分块。
 - `writeFile()` / `writeBytes()` / `appendFile()` / `appendBytes()` 会在写入后 flush 并校验最终大小；非空写入还会确认写入后文件末端可读。`appendBytes()` 面向低频追加，不适合用循环追加来初始化大容量定长文件。写入失败不等于已回滚，调用方必须按返回值处理可能的部分写入或文件不可读状态。
 - `createFixedFile(const char* path, uint32_t size, uint8_t fillByte = 0)` 用于固定容量二进制文件初始化。FS 未 ready、path 非绝对路径或底层创建/写入/校验失败时返回 false；`size == 0` 会创建或截断为空文件。文件不存在、大小不匹配，或同尺寸但末端不可读时会用 `fillByte` 分块重建；已存在且大小一致、末端可读时返回 true 并保留原内容，避免业务每次启动清空持久环形记录。重建过程按长 FS 操作处理 watchdog，并校验最终文件可读。
 - `writeBytesAt()` 只覆盖已存在文件中的现有字节，不隐式创建文件、不扩展文件、不填洞；FS 未 ready、path 非绝对路径、文件不存在、data 为空但 len 非 0、`offset + len > fileSize`、底层写失败、写后大小不符或写入范围不可读时返回 false。

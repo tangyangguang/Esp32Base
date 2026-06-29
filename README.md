@@ -18,8 +18,8 @@
 
 已知限制、明确不支持能力和风险边界详见 [已知限制](docs/10_known_limitations.md)。
 
-Web 页面结构、样式基线、业务页面模板和换肤策略详见 [Web UI 页面结构与样式基线](docs/11_web_ui_baseline.md)。
-业务项目接入前，建议先用 `examples/web_ui_gallery` 统一查看和验证状态、记录、配置、命令、流程、确认和空状态等页面样式；`examples/full_demo` 侧重完整功能集成。
+Web 页面结构、样式基线、业务页面模式和换肤策略详见 [Web UI 页面结构与样式基线](docs/11_web_ui_baseline.md)。
+业务项目接入前，建议先用 `examples/web_ui_gallery` 统一查看和验证状态、记录、配置、命令、分步操作、确认和空状态等页面样式；`examples/full_demo` 侧重完整功能集成。
 基础 Web CSS 由 `/esp32base/ui.css` 统一输出并允许浏览器缓存，业务页面通过 `sendHeader()` 自动引用，不需要复制样式；按钮默认按轻量设备控制台风格收敛，普通入口和分页使用浅底描边，明确保存/执行才使用主按钮；原生 `<dialog class="panel eb-modal">` 也会获得统一的浅色弹层、遮罩、表单和按钮对齐。
 
 ## 快速开始

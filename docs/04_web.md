@@ -4,7 +4,7 @@
 
 Web 层用于小型局域网管理，不是大型 Web 平台。
 
-页面结构、样式基线、业务页面模板、换肤策略和视觉调整规则见 [Web UI 页面结构与样式基线](11_web_ui_baseline.md)。
+页面结构、样式基线、业务页面模式、换肤策略和视觉调整规则见 [Web UI 页面结构与样式基线](11_web_ui_baseline.md)。
 
 能力：
 
@@ -501,7 +501,7 @@ void handleBusinessPage() {
         return;
     }
     Esp32BaseWeb::sendHeader("业务配置");
-    Esp32BaseWeb::sendPageTitle("配置编辑模板", "简单字段行内改，多字段对象进入独立编辑页。");
+    Esp32BaseWeb::sendPageTitle("配置编辑示例", "简单字段行内改，多字段对象进入独立编辑页。");
     Esp32BaseWeb::beginPanel("紧凑配置列表");
     Esp32BaseWeb::sendInfoRowCompactLink("第 1 路名称", "用于页面和记录展示，不影响实际控制。", "花坛",
                                          "/config/name", "展开修改");
