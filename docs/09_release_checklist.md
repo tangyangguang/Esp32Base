@@ -46,11 +46,11 @@
 必须通过：
 
 - `platformio pkg pack .` 成功。
-- 发布包包含可选模块 `.inc` 实现文件，以及 `src/web/*.cpp`、`src/web/internal/*.h/.cpp` Web 多编译单元实现。
+- 发布包包含可选模块和 Web 运行所需源码。
 - 发布包包含推荐分区表：`partitions/esp32-4mb-ota-balanced.csv`、`partitions/esp32-c3-4mb-ota-balanced.csv`、`partitions/esp32-s3-8mb-ota-balanced.csv`。
 - 推荐分区表的 `app0` 偏移必须和 PlatformIO / Arduino 上传地址一致；默认应为 `0x10000`。
 - classic ESP32 4MB 推荐分区表必须保持 `app0=0x10000`，不要求业务项目设置 `board_upload.offset_address`。
-- 发布包包含示例依赖哨兵 `examples/basic/src/deps_*.cpp`。
+- 发布包包含 `examples/basic` 的 profile 依赖裁剪验证源码。
 - 发布包包含独立 PIO 示例 `examples/full_demo`、`examples/web_ui_gallery`、`examples/web_logs_ota`、`examples/net_runtime`。
 - 发布包不包含历史设计、评审、评估等过程文件。
 - 发布包不包含 `.pio/`、`.cache/`、`idf_component.yml` 等构建生成物。
@@ -171,7 +171,7 @@
 - FileLog 模式为 OFF 时，System Logs 和 System 页必须醒目显示 `disabled`，并说明新日志不会写入。
 - FileLog OFF 后 System Logs 页面仍能查看已有历史 segment。
 - `GET /esp32base/logs` 和 `GET /esp32base/logs/raw` 必须只读，不得主动 `flush()`、创建、清空、重建或改变 FileLog fault 状态；需要写入/清理/格式化的维护动作必须走 POST。
-- System 页格式化 LittleFS 成功后必须触发 after-format 回调/事件，信息包含 `source=tools`、`formatSuccess`、`mountSuccess`、`fileLogReloadSuccess`；格式化失败不得触发。
+- System 页格式化 LittleFS 成功后必须触发 after-format 回调/事件，结果应说明格式化、重新挂载和 FileLog reload 状态；格式化失败不得触发。
 - System 页格式化 LittleFS 成功并重新 mount 后，启用 App Events 时必须重新创建 `/esp32base/app-events/events.bin`，后续 append/read 不得沿用旧 head/count。
 - `setSerialLevel(NONE)` 后 Serial 不输出，但 FileLog 仍按当前模式写入。
 - `setRuntimeLevel(NONE)` 后 Serial 和 FileLog 都停止。
@@ -193,18 +193,18 @@
 - append 正常。
 - `readBytes()` / `readBytesAt()` 支持分页读取，文件不存在和 offset 越界返回失败，EOF 短读返回实际长度；未到 EOF 却读出 0 字节必须返回失败。
 - `writeFile()` / `writeBytes()` / `appendFile()` / `appendBytes()` 写后大小校验正常，非空写入后末端可读。
-- `writeBytes() / appendBytes() / writeBytesAt() 大块读写` 通过 `Esp32BaseFs` 分块 I/O 和 4KB 级 watchdog-friendly service 覆盖；业务不需要在存储类里重复拆分 Flash 写入。
-- `createFixedFile() 支持 16KB、32KB、64KB` 定长文件创建，首字节、中间字节和末尾字节填充值正确；非法路径、FS 未 ready、空间不足等情况返回 false 且不崩溃。
+- `writeBytes()` / `appendBytes()` / `writeBytesAt()` 大块读写通过 `Esp32BaseFs` 分块 I/O 和 watchdog-friendly service 覆盖；业务不需要在存储类里重复拆分 Flash 写入。
+- `createFixedFile()` 支持常见定长文件创建，首字节、中间字节和末尾字节填充值正确；非法路径、FS 未 ready、空间不足等情况返回 false 且不崩溃。
 - `createFixedFile()` 初始化大文件时不得用 `appendBytes()` 做分块循环；必须避免大 heap 分配，并避免触发 task watchdog。
 - `writeBytesAt()` 支持已有文件固定位置覆盖，文件不存在和写越界返回失败，不隐式扩展文件；覆盖后文件大小不变且覆盖范围可读。
 - FS 已满或存在不可读文件时，Web 诊断返回错误不应触发 task WDT 重启。
 - `listDirInfo()` 返回 name、size、isDir 和 Last modified epoch；`/esp32base/fs` 文件树显示 Last modified 和独立 Status 列。Last modified 不是创建时间，时间明显不可信时显示 `unknown`。
 - 启用 `ESP32BASE_ENABLE_APP_EVENTS=1` 时，`/esp32base/app-events/events.bin` 固定容量创建成功；默认 1024 条、单条 188 bytes、约 188 KiB；重复写入后环形覆盖，重启后仍可分页读取。
 - 已存在 `/esp32base/app-events/events.bin` 但文件尺寸不匹配或不可读时必须进入 fault，不得自动删除或重建；只有文件缺失时 `begin()` 才可创建空 store。
-- App Events 双 header 损坏进入 fault，不自动扫描或清空；单条 record CRC 错误应跳过并暴露 `record_skipped`，完整扫描后 `count()` 收敛到可读记录数，I/O 读取失败才使 `readLatest()` 返回 false。
+- App Events 双 header 损坏进入 fault，不自动扫描或清空；单条 record CRC 错误应跳过并暴露可诊断状态，完整扫描后 `count()` 收敛到可读记录数，I/O 读取失败才使 `readLatest()` 返回 false。
 - `readLatest()`、`readStoreInfo()` 和 `readStoreRecords()` 不得从只读路径隐式调用 `begin()` 或创建 store。
 - `Esp32BaseAppEventLog::clear()` 幂等，清空后保留递增 id 并可继续写入。
-- App Events 成功 `begin/append/read/clear` 后不得保留旧 `lastError()`；`record_skipped` 只在本次读取确实跳过损坏记录时出现。
+- App Events 成功 `begin/append/read/clear` 后不得保留旧 `lastError()`；损坏记录提示只在本次读取确实跳过记录时出现。
 - FS 管理页上传、覆盖或删除 `/esp32base/app-events/events.bin` 后必须重新加载 App Events 运行态；文件树应显示 `app events store` 提醒。
 - CSV 文本字段必须防护 spreadsheet formula 前缀，不能只做 CSV 引号转义。
 - `/esp32base/fs?manage=1` 对 `unreadable` 文件仍必须提供单文件删除入口，但不能提供下载入口。
@@ -271,7 +271,7 @@
 必须通过：
 
 - `examples/basic` 继续覆盖 profile/芯片/Core 版本矩阵。
-- `examples/basic` 的 `deps_*.cpp` 哨兵继续验证裁剪。
+- `examples/basic` 的 profile 依赖裁剪验证源码继续生效。
 - `examples/full_demo` 可在自身目录 `pio run`。
 - `examples/full_demo` 覆盖 App Config string/int/decimal/bool/enum、字段级校验、页面级校验、重启提示和回调。
 - `examples/web_ui_gallery` 可在自身目录 `pio run`。
