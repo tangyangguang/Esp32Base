@@ -322,9 +322,8 @@ App Events 页面：
 系统首页：
 
 - `/esp32base` 是只读设备体检页，采用诊断优先结构：默认按 Device、Network、Runtime Health、Storage & Logs、Firmware & OTA、Hardware 展示调试信息，不额外显示相邻重复的总览预览块；低频分区表和运行 ELF SHA 位于 `/esp32base?details=1`。
-- Device 显示名称、hostname、固件、profile、uptime 和 boot count；Network 显示 WiFi/IP/RSSI、power save、STA MAC 和 AP MAC。
-- Runtime Health 显示 heap free/min/max alloc/total、Watchdog、Time/RTC/NTP、last reset 和 last wake；heap、Watchdog 和时间相关多值信息使用紧凑子指标展示，避免逗号串联造成阅读困难。
-- Storage & Logs 显示 FS used/free/total、Details 入口、FileLog enabled/disabled/unavailable/write fault、日志级别、轮转文件数、容量上限和路径；File details 入口并入 FS 行，FileLog level/files/limit 合并为一行子指标，避免状态页打开日志段文件；文件/目录数量、已统计文件大小、other/overhead 和 Top 文件列表只放在 `/esp32base/fs` 详情页，避免状态页被低频诊断明细撑高；Hardware 显示芯片型号、revision、CPU、SDK、Flash、PSRAM 和 eFuse MAC。
+- Status 页展示设备身份、网络、运行健康、存储与日志、固件 OTA 和硬件摘要。多值信息使用紧凑子指标，避免逗号串联造成阅读困难。
+- Status 页不打开日志段文件、不扫描完整文件树、不统计 Top 文件列表；低频或较重的文件细节放在 `/esp32base/fs`，运行 ELF SHA 和分区表放在 `/esp32base?details=1`。
 - `/esp32base/fs` 默认是只读 LittleFS 详情页，展示容量摘要、主要文件和文件树。文件树应区分普通文件、不可读文件和基础库管理文件；不可读文件不能给出会生成 0 字节伪成功的下载入口。当 FS used 明显大于可见文件合计时，应提示可能存在内部、历史或不可见占用。业务侧如果使用 `Esp32BaseFs` 读写文件，也必须检查返回值；逻辑大小存在不代表内容块一定可读。
 - `/esp32base/fs?manage=1` 增加单文件删除和受限上传，不提供目录删除、批量删除、编辑、重命名、移动或任意路径输入；删除必须通过 `POST /esp32base/fs/delete -> 303 -> GET`，格式化仍只在 System 页危险操作区。上传保留本地文件名，只写入已有目录；覆盖上传必须显式确认，并避免上传中断时先清空旧文件。基础库管理文件应在文件树中给出维护提醒；维护操作修改 FileLog 或 App Events store 后，应刷新对应运行态。
 - Firmware & OTA 默认显示运行 app slot、下一 OTA slot、Max OTA upload、rollback 状态，以及仅在存在错误时显示的 Last OTA error；默认状态页不调用当前镜像 size 校验，也不计算 `OTA headroom`。Max OTA upload 是下一 OTA slot 的上传硬上限。
@@ -447,7 +446,7 @@ Esp32BaseWeb::addPage("/config", "配置", handleConfigPage);
 - `SYSTEM_NAV_SECTION` 会在页面底部以小字系统入口与 `Free heap`、`Up`、`RSSI` 同行展示；窄屏下系统入口和状态摘要可自然换行，避免遮挡和横向滚动。
 - Footer bar 可在 System 页面运行时切换 Off、Status only、Links + status；关闭底部横条时系统页面仍可通过直达 URL 访问。
 - 基础库页面复用同一套导航框架，业务页和系统页保持一致入口结构。
-- `/esp32base` 系统页按 Device、Network、Runtime Health、Storage & Logs、Firmware & OTA、Hardware 展示设备调试信息，包括 STA/AP/eFuse MAC、last reset/wake 和 OTA slot 摘要；运行 ELF SHA 与运行时分区表只在 `/esp32base?details=1` 显示。
+- `/esp32base` 系统页按设备、网络、运行健康、存储日志、固件 OTA 和硬件维度展示调试信息；运行 ELF SHA 与运行时分区表只在 `/esp32base?details=1` 显示。
 - `/esp32base/api/status` 保留 `resetReason` / `wakeReason` 原始字段，并提供 `resetReasonText` / `wakeReasonText` 中文说明字段；`wifi.rssi` 返回当前 WiFi RSSI，未连接时为 `0`。
 - `/esp32base/api/hostname` 返回 `currentHostname`、`defaultHostname`、`storedHostname`、`storedValid`、`restartRequired` 和校验规则；POST 参数 `hostname` 必须符合 1-32 位小写字母、数字和短横线规则，不能首尾短横线，不能包含 `.local`。
 
