@@ -161,7 +161,7 @@ Profile 是默认组合，用户仍可用 `ESP32BASE_ENABLE_*` 精细覆盖。�
 | `partitions/esp32-c3-4mb-ota-balanced.csv` | ESP32-C3 4MB 双 OTA，两个 1.5MB 固件槽，剩余空间用于 LittleFS | `20 KB / 0x5000` | `8 KB / 0x2000` | `1.50 MB / 0x180000` | `896 KB / 0xE0000` | `64 KB / 0x10000` | C3 项目优先使用 |
 | `partitions/esp32-s3-8mb-ota-balanced.csv` | ESP32-S3 8MB 双 OTA，较宽松 app/FS 空间 | `20 KB / 0x5000` | `8 KB / 0x2000` | `2.25 MB / 0x240000` | `3.38 MB / 0x360000` | `64 KB / 0x10000` | S3 8MB 项目优先使用 |
 
-`Esp32BaseFs` 对业务暴露文本、二进制、追加、定长文件、目录、容量和按偏移读写 API，业务不需要直接 include `LittleFS.h` 或 Arduino `File`。容量读取优先使用 `storageInfo(total, used)`；固定容量文件先用 `createFixedFile()`，再用 `writeBytesAt()` 覆盖槽位；`appendBytes()` 适合低频追加。LittleFS mount failed 时不会自动格式化，需要清空或重建时只能通过明确维护动作调用 `Esp32BaseFs::format()` 或 Web System 页格式化入口。Web 格式化只清 LittleFS，不清 WiFi、Web Auth、业务 namespace 或 NVS 配置；业务如需同步清理，应使用 after-format callback 或事件自行处理。`/esp32base/fs?manage=1` 提供受限上传，上传保留本地文件名、只能选择已有目录、先写临时文件并校验后替换目标。
+`Esp32BaseFs` 对业务暴露文本、二进制、追加、定长文件、目录、容量和按偏移读写 API，业务不需要直接 include `LittleFS.h` 或 Arduino `File`。容量读取优先使用 `storageInfo(total, used)`；固定容量文件先用 `createFixedFile()`，再用 `writeBytesAt()` 覆盖槽位；`appendBytes()` 适合低频追加。LittleFS mount failed 时不会自动格式化，需要清空或重建时只能通过明确维护动作调用 `Esp32BaseFs::format()` 或 Web System 页格式化入口。Web 格式化只清 LittleFS，不清 WiFi、Web Auth、业务 namespace 或 NVS 配置；业务如需同步清理，应使用 after-format callback 或事件自行处理。`/esp32base/fs?manage=1` 提供受限上传，上传保留本地文件名，只能选择已有目录；覆盖上传应避免中断时先清空旧文件。
 
 LittleFS 中的 `/esp32base/**` 是基础库管理命名空间。系统诊断日志默认在 `/esp32base/logs/system.log`，App Events store 默认在 `/esp32base/app-events/events.bin`；业务项目应把自己的文件放到 `/app/**`、`/data/**` 或项目自定义目录，避免和基础库维护动作混用。
 
