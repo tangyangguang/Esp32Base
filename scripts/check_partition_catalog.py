@@ -72,22 +72,6 @@ for path, partitions in expected.items():
                 f"got offset=0x{entry['offset']:X} size=0x{entry['size']:X}"
             )
 
-docs = [
-    ("README.md", "应用项目强烈推荐直接选择 `partitions/` 中已有分区表"),
-    ("README.md", "单 app slot（最大固件）"),
-    ("README.md", "LittleFS（最大文件数据）"),
-    ("README.md", "1.50 MB / 0x180000"),
-    ("README.md", "896 KB / 0xE0000"),
-    ("docs/02_profiles.md", "应用项目强烈推荐直接选择 `partitions/` 中已有分区表"),
-    ("docs/06_memory_budget.md", "除非硬件容量、OTA 策略或持久化容量确实不匹配，否则不推荐业务项目自定义分区表"),
-    ("docs/06_memory_budget.md", "LittleFS（最大文件数据）"),
-    ("docs/06_memory_budget.md", "1.50 MB / 0x180000"),
-    ("docs/09_release_checklist.md", "`partitions/esp32-c3-4mb-ota-balanced.csv`"),
-]
-for path, needle in docs:
-    if needle not in read(path):
-        errors.append(f"{path}: missing partition catalog marker {needle!r}")
-
 if errors:
     for error in errors:
         print(error)

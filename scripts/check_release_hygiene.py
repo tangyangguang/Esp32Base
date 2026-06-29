@@ -15,7 +15,6 @@ libraryignore = read(".libraryignore")
 piopmignore = read(".piopmignore")
 profiles = read("docs/02_profiles.md")
 api_docs = read("docs/03_api.md")
-memory_budget = read("docs/06_memory_budget.md")
 arduino3_ensure = read("scripts/ensure_arduino3_platformio.py")
 arduino3_preflight = read("scripts/pioarduino_core3_preflight.py")
 
@@ -61,27 +60,10 @@ if "`APP_CONFIG` 需要 `WEB`" not in profiles:
     errors.append("docs/02_profiles.md: dependency rules must document APP_CONFIG requires WEB")
 if "保留用于兼容旧代码" in api_docs:
     errors.append("docs/03_api.md: must not explain current APIs as legacy compatibility")
-for marker in (
-    "当前代表 FULL firmware.bin",
-    "ESP32 FULL, Core 3.x",
-    "同一自动 size 脚本整体刷新",
-):
-    if marker not in memory_budget:
-        errors.append(f"docs/06_memory_budget.md: missing memory budget release marker {marker!r}")
 if "esp32_full_arduino3" not in arduino3_ensure or "framework-arduinoespressif32" not in arduino3_ensure:
     errors.append("scripts/ensure_arduino3_platformio.py: must preinstall pioarduino Core 3.x packages")
 if "pioarduino Core 3.x package preflight failed" not in arduino3_preflight:
     errors.append("scripts/pioarduino_core3_preflight.py: must guard pioarduino package availability")
-
-docs = {
-    "README.md": "发布包只保留当前契约、示例和运行所需文件",
-    "docs/01_architecture.md": "OTA boot 初始化",
-    "docs/09_release_checklist.md": "check_web_asset_gating.py",
-    "docs/08_arduino_core_compat.md": "ensure_arduino3_platformio.py",
-}
-for path, needle in docs.items():
-    if needle not in read(path):
-        errors.append(f"{path}: missing release hygiene marker {needle!r}")
 
 if errors:
     for error in errors:

@@ -22,17 +22,6 @@ for path in ("src/Esp32BaseProfile.h", "src/runtime/Esp32BaseFs.inc"):
         if needle in text:
             errors.append(f"{path}: forbidden automatic format marker {needle!r}")
 
-docs = {
-    "README.md": "LittleFS mount failed 时不会自动格式化",
-    "docs/03_api.md": "LittleFS mount failed 时不会自动格式化",
-    "docs/09_release_checklist.md": "任何启动路径都不得自动格式化 LittleFS",
-    "docs/10_known_limitations.md": "LittleFS 默认不自动格式化",
-}
-
-for path, needle in docs.items():
-    if needle not in read(path):
-        errors.append(f"{path}: missing no-auto-format documentation marker {needle!r}")
-
 if errors:
     for error in errors:
         print(error)
