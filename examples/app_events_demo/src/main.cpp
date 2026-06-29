@@ -36,16 +36,16 @@ bool appendDemoEvent(Esp32BaseAppEventLog::Level level,
 
 void seedDemoEvents() {
     appendDemoEvent(Esp32BaseAppEventLog::LEVEL_INFO,
-                    "policy",
+                    "config",
                     "state_ready",
                     "sample_config_loaded",
-                    "policy:demo",
+                    "config:demo",
                     1,
                     3,
                     0,
                     0,
                     Esp32BaseAppEventLog::VALUE1,
-                    "sample policy ready");
+                    "sample config ready");
 
     appendDemoEvent(Esp32BaseAppEventLog::LEVEL_INFO,
                     "scheduler",

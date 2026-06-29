@@ -89,7 +89,7 @@ Core 不包含：
 - 云平台绑定
 - 大型 Web 管理平台
 - 大型前端 SPA
-- 模板 policy 架构
+- 复杂策略框架
 - 静态模块注册表
 
 系统诊断日志作为 Runtime/FS 可选模块提供，实现/API 名称为 `Esp32BaseFileLog`，不属于 Core。启用 FS 的 profile 默认开启系统诊断日志；CORE 不为 LittleFS 或系统诊断日志付成本。

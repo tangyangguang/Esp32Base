@@ -19,7 +19,7 @@
 - Core 不包含 Bus / WiFi / Web / OTA / Fs / Watchdog。
 - Profile 数量固定为 7 个。
 - 不引入静态模块注册表。
-- 不引入模板 policy 架构。
+- 不引入复杂策略框架。
 - 不引入未列入边界的新模块。
 
 ## 3. 编译检查
