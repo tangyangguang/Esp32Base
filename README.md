@@ -69,7 +69,7 @@ Web/Auth 不再内置启用 admin/admin。启用 Web 的业务必须在 `Esp32Ba
 
 业务首页推荐注册为 `/index`。在 `HOME_APP` 或 `HOME_COMBINED` 下，如果没有显式 `setHomePath()` 且存在 `/index` 业务页，裸 `/` 会跳转到 `/index`；如果应用确实需要直接渲染裸根路径，可显式 `setHomePath("/")` 并注册 GET `/` 业务页。`/esp32base` 始终保留为基础库系统入口。
 
-启用 FS 的 profile 会默认启用系统诊断日志。它的实现/API 名称仍是 `Esp32BaseFileLog`，默认写入 `/esp32base/logs/system.log`，Web 默认入口显示为 `System Logs`，URL 仍是 `/esp32base/logs`。系统诊断日志面向开发、维护和运维排障，记录设备运行过程中的技术事实和内部链路，例如启动、reset reason、WiFi、NTP、OTA、LittleFS、FileLog 写入保护和基础库健康状态。默认容量 `4 × 32KB`，模式 ERROR；运行时可配置为 OFF、ERROR、WARN、INFO。默认 ERROR 是低 Flash 磨损策略：全功能固件在没有业务数据、应用事件或显式调试日志需求时，只把错误级系统诊断写入 LittleFS，避免 WARN/INFO 默认长期刷写影响寿命。慢 Web 操作和慢 loop 诊断属于 INFO 性能提示，默认 ERROR 系统日志不记录，现场排查时可切到 INFO 查看。长期离线或路由器不可用时，WiFi 慢速 backoff 的重复重试日志使用 INFO，默认 ERROR 系统日志不写入；现场排查可临时切到 INFO 查看完整重试链路。INFO 模式会让启动、联网、OTA、性能提示和维护操作等低优先级日志进入 LittleFS，适合调试和短期现场排查，不建议作为长期量产默认。Status 页默认只显示 LittleFS O(1) 容量摘要和 FileLog 配置摘要，不做全量文件树扫描，也不打开 FileLog 段文件统计已用大小；完整文件数量、目录数量、top files 和可读性检查位于 `/esp32base/fs`。低频分区表和运行 ELF SHA 只在 `/esp32base?details=1` 显示。System Logs 的 GET 页面只读取已落盘快照，不主动 flush 或写 LittleFS；缓存中的低优先级日志会按常规 flush interval 落盘。如果 FS 满或文件损坏导致写入失败，Web 会显示 FileLog 运行态为 `write fault`，表示配置仍开启、已有日志可能仍可读取，但新日志写入已被保护停写。`unavailable` 表示模式开启但当前 FS/init 状态无法启用系统日志；`disabled` 表示模式为 OFF，新日志不会写入。需要更详细现场诊断时，可通过 Web System 页或代码显式切到 WARN/INFO。
+启用 FS 的 profile 会默认启用系统诊断日志。实现/API 名称仍是 `Esp32BaseFileLog`，默认写入 `/esp32base/logs/system.log`，Web 入口为 `/esp32base/logs`，显示名为 `System Logs`。它面向开发、维护和运维排障，默认容量 `4 × 32KB`、模式 ERROR；运行时可切换 OFF、ERROR、WARN、INFO。Status 页只显示容量和运行态摘要，完整文件树在 `/esp32base/fs`，低频分区表和运行 ELF SHA 只在 `/esp32base?details=1` 显示。FS 不可用或写入失败时会显示 `unavailable`、`disabled` 或 `write fault` 等运行态。
 
 需要记录业务可解释事件时，可显式启用通用应用事件日志。它默认关闭，不随 FULL profile 自动开启；启用后依赖 FS，默认在 `/esp32base/app-events/events.bin` 保存 `1024` 条固定结构记录，约 `188 KiB`。App Events 是面向长期运行设备的“近期关键事件窗口”，用于解释最近一段业务行为；它不是业务长期数据模型，不替代统计、报表、累计量、传感器采样历史、完整执行历史或不允许覆盖的业务数据。每条 App Event 会写记录槽和 header，适合低频关键业务事件，不适合高频采样、流水或统计明细。应用项目负责决定事件何时写入、`source/type/reason/object` 如何命名以及页面文案如何解释；基础库只提供结构化写入、固定容量环形覆盖、分页读取、Web/API/CSV 展示和按需清空。
 
@@ -79,7 +79,7 @@ build_flags =
   -D ESP32BASE_ENABLE_APP_EVENTS=1
 ```
 
-内置入口为 `/esp32base/app-events`，JSON API 为 `/esp32base/api/app-events?offset=0&limit=50`，CSV 导出为 `/esp32base/app-events.csv`，清空入口位于 System 页的危险操作区。内置事件日志页面用偏底层视角展示事件日志文件、slot、状态、CRC 和完整记录字段；JSON API 只输出有效事件，适合业务系统创建自己的业务事件列表和详情页并用业务语言解释。页面/API/CSV 支持等级、时间类型、来源、类型、原因和关键词筛选；CSV 文本字段会做语法转义并防护常见 spreadsheet formula 前缀；时间优先显示可信真实时间，无法解析时显示 `uptime N ms` 和 boot id。单条损坏记录不会让整个日志停写；结构性 header/写入故障才进入 fault。格式化 LittleFS 后，System 页会重新创建 App Events store；FS 管理页会把 `/esp32base/app-events/events.bin` 标记为 `app events store` 作为提醒，但仍允许测试和维护时普通上传或删除，操作后会重新加载 App Events 运行态。该能力明确独立于 `/esp32base/logs` 的系统诊断日志，不混入 WiFi、OTA、NTP、启动、健康状态等基础库系统日志。样例见 `examples/app_events_demo`。
+内置入口为 `/esp32base/app-events`，JSON API 为 `/esp32base/api/app-events?offset=0&limit=50`，CSV 导出为 `/esp32base/app-events.csv`，清空入口位于 System 页危险操作区。页面/API/CSV 支持等级、时间类型、来源、类型、原因和关键词筛选；JSON 只输出有效事件，业务系统可基于它创建自己的业务事件页。该能力独立于 `/esp32base/logs` 的系统诊断日志，不混入 WiFi、OTA、NTP、启动、健康状态等基础库系统日志。样例见 `examples/app_events_demo`。
 
 App Events 适合记录计划跳过、保护触发、运行异常、外部 API 决策、用户清除告警等低频关键事件。不适合记录用水量长期统计、报表数据、累计值、传感器采样序列、大 payload、高频明细或必须永久保留的完整业务历史；这些应继续由业务自己的数据模型和文件负责。
 
@@ -101,7 +101,7 @@ build_flags =
   -D ESP32BASE_APP_CONFIG_MAX_FIELDS=8
 ```
 
-App Config 支持 string、int、decimal 定点数、bool 和 enum 字段；保存时后端重新校验并只写入实际变化字段。需要只读模式、未来配置版本或业务版本不兼容时拒绝整页提交的场景，应使用 `setPageValidateCallback()` 做保存前 veto；该回调可读取本次提交的全部字段，返回 false 时不会写入任何 App Config NVS 字段。提交通过后多字段保存逐项写入 NVS，不提供跨字段事务；如果某个字段写入失败，会停止继续写后续字段并显示 partial，关键强一致业务配置应使用单个 POD/blob 或业务自定义提交模型。`setSaveCallback()` 只用于保存后通知，不用于拒绝保存。注册传入的字符串和 enum option 数组需保持固件生命周期有效。标记为重启后生效的字段保存后会在未重启会话内持续提示旧值和已保存新值，适合低频修改的小型业务配置。
+App Config 支持 string、int、decimal 定点数、bool 和 enum 字段；保存时后端重新校验并只写入实际变化字段。`setPageValidateCallback()` 用于保存前 veto，`setSaveCallback()` 只用于保存后通知。多字段保存不是跨 key 事务，关键强一致配置应使用单个 POD/blob 或业务自定义提交模型。注册传入的字符串和 enum option 数组需保持固件生命周期有效。标记为重启后生效的字段会在未重启会话内持续提示运行中旧值和已保存新值。
 
 Web 页面应优先使用 Esp32Base 的 UI baseline、helper 和页面能力块；不要在业务项目里为样式问题临时复制 CSS 或绕开基础库。单字段轻量编辑可使用行内编辑 helper，小型 1-3 字段表单可使用弹层表单 helper；二者会在支持 `fetch` 的浏览器中局部提交和局部替换，禁用 JS 时仍回退到普通表单提交。需要业务自控打开/关闭时，也可直接使用原生 `<dialog class="panel eb-modal">` 并复用 `fieldgrid`、`actions`、`btnlink`。找不到合适页面能力块时，先查看 [Web UI 页面结构与样式基线](docs/11_web_ui_baseline.md)，并优先回到 Esp32Base 评估是否补充统一能力。
 
@@ -163,7 +163,7 @@ Profile 是默认组合，用户仍可用 `ESP32BASE_ENABLE_*` 精细覆盖。�
 | `partitions/esp32-c3-4mb-ota-balanced.csv` | ESP32-C3 4MB 双 OTA，两个 1.5MB 固件槽，剩余空间用于 LittleFS | `20 KB / 0x5000` | `8 KB / 0x2000` | `1.50 MB / 0x180000` | `896 KB / 0xE0000` | `64 KB / 0x10000` | C3 项目优先使用 |
 | `partitions/esp32-s3-8mb-ota-balanced.csv` | ESP32-S3 8MB 双 OTA，较宽松 app/FS 空间 | `20 KB / 0x5000` | `8 KB / 0x2000` | `2.25 MB / 0x240000` | `3.38 MB / 0x360000` | `64 KB / 0x10000` | S3 8MB 项目优先使用 |
 
-`Esp32BaseFs` 对业务暴露文本、二进制、追加、定长文件、目录和容量 API，并提供 `readBytesAt()` / `writeBytesAt()` 按偏移读写能力。业务可通过这些 API 实现二进制定长日志分页读取和环形覆盖写入，不需要 include `LittleFS.h` 或 Arduino `File`。需要同时读取总容量和已用容量时优先使用 `storageInfo(total, used)`，避免分别调用 `totalBytes()` / `usedBytes()` 造成重复底层查询。大块读写会在 Esp32BaseFs 层分块并定期让出调度，Watchdog 启用时会配合基础库长操作机制，业务不需要在每个存储类里重复拆分 Flash 写入。固定容量环形文件应先用 `createFixedFile()` 确保容量，再用 `writeBytesAt()` 覆盖槽位；`appendBytes()` 适合低频追加，会做写后大小和末端可读校验，不适合作为大文件 bulk 初始化循环。业务必须检查这些 API 的返回值；当 LittleFS 元数据仍声明文件大小但内容块不可读、FS 满或写后校验失败时，API 会返回 `false`，且写入失败不等于已回滚。LittleFS mount failed 时不会自动格式化，以保护业务持久化文件；需要清空或重建文件系统时，只能通过明确的维护动作调用 `Esp32BaseFs::format()` 或 Web System 页格式化入口。Web System 页的 `format-fs` 只清 LittleFS，不清 WiFi、Web Auth、业务 namespace 或任何 NVS 配置；显式工具页格式化成功后可通过 `Esp32BaseWeb::setAfterFormatFsCallback()` 或 `Esp32BaseWeb::EVENT_TOOLS_FORMAT_FS_SUCCESS` 通知应用，业务如需同步清 NVS 统计、文件索引或缓存，应在该回调/事件中自行处理。内置 `/esp32base/fs` 会显示文件树的 Last modified 和 Status；Last modified 来自 LittleFS 最后修改时间，不是创建时间，时间明显不可信时显示 `unknown`。不可读文件会标记为 `unreadable`，只在管理模式提供删除，不提供下载。`/esp32base/fs?manage=1` 还提供受限上传，用于测试期导入业务数据文件：上传保留本地文件名，可选择任何已有目录，不创建目录；同名文件会在浏览器确认后覆盖；上传先写同目录唯一临时文件，校验通过后再替换目标，避免上传中断时先清空旧文件；断电遗留的临时文件不会阻塞下一次上传，可由管理入口显式删除。
+`Esp32BaseFs` 对业务暴露文本、二进制、追加、定长文件、目录、容量和按偏移读写 API，业务不需要直接 include `LittleFS.h` 或 Arduino `File`。容量读取优先使用 `storageInfo(total, used)`；固定容量文件先用 `createFixedFile()`，再用 `writeBytesAt()` 覆盖槽位；`appendBytes()` 适合低频追加。LittleFS mount failed 时不会自动格式化，需要清空或重建时只能通过明确维护动作调用 `Esp32BaseFs::format()` 或 Web System 页格式化入口。Web 格式化只清 LittleFS，不清 WiFi、Web Auth、业务 namespace 或 NVS 配置；业务如需同步清理，应使用 after-format callback 或事件自行处理。`/esp32base/fs?manage=1` 提供受限上传，上传保留本地文件名、只能选择已有目录、先写临时文件并校验后替换目标。
 
 LittleFS 中的 `/esp32base/**` 是基础库管理命名空间。系统诊断日志默认在 `/esp32base/logs/system.log`，App Events store 默认在 `/esp32base/app-events/events.bin`；业务项目应把自己的文件放到 `/app/**`、`/data/**` 或项目自定义目录，避免和基础库维护动作混用。
 
