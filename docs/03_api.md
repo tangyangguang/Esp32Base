@@ -545,44 +545,7 @@ Esp32BaseConfig::flushAll();
 - 业务 task 需要改配置时，应通过 FreeRTOS queue、flag 或 ring buffer 把请求投递给 loop/system task，再由这个任务统一调用 Config API。
 - 实时任务不要直接做 NVS、LittleFS、Web、OTA、FileLog 操作；这些操作可能写 flash、分配资源或阻塞网络/文件系统，容易影响实时响应。
 
-最小队列示例：
-
-```cpp
-#include <Esp32Base.h>
-#include <freertos/FreeRTOS.h>
-#include <freertos/queue.h>
-#include <freertos/task.h>
-
-struct ConfigMsg {
-    int32_t targetTemp;
-};
-
-QueueHandle_t g_configQueue;
-
-void controlTask(void*) {
-    ConfigMsg msg;
-    for (;;) {
-        msg.targetTemp = 25;
-        xQueueSend(g_configQueue, &msg, 0);
-        vTaskDelay(pdMS_TO_TICKS(1000));
-    }
-}
-
-void setup() {
-    g_configQueue = xQueueCreate(4, sizeof(ConfigMsg));
-    Esp32Base::begin();
-    xTaskCreatePinnedToCore(controlTask, "control", 4096, nullptr, 1, nullptr, 1);
-}
-
-void loop() {
-    Esp32Base::handle();
-
-    ConfigMsg msg;
-    while (xQueueReceive(g_configQueue, &msg, 0) == pdTRUE) {
-        Esp32BaseConfig::setIntDeferred("app_cfg", "target", msg.targetTemp, 1000);
-    }
-}
-```
+典型做法是业务 task 只投递轻量消息，loop/system task 在调用 `Esp32Base::handle()` 的同一上下文中消费消息并调用 Config API。队列、ring buffer 或应用自定义 mailbox 均可，关键是不要跨 task 直接写 NVS/FS 或调用 Web/OTA 维护路径。
 
 ## 5. Esp32BaseSystem
 
@@ -895,13 +858,13 @@ NTP 日志策略：
 - `ntp_client_started` 和对时成功日志使用 INFO。
 - 只有接入明确的单次同步失败事件时，才应为该失败事件输出 WARN。
 
-NTP 对时成功日志必须包含：
+NTP 对时成功日志应能帮助把启动后毫秒时间轴映射到真实时间，至少包含：
 
 - 当前实际日期时间。
 - 当前 uptime。
 - 推算出的 boot wall time。
 
-日志时间戳在没有可信真实时间前使用启动后的 `millis()`，例如 `[42442]`；RTC 或 NTP 建立可信时间后切换为绝对日期时间，例如 `[2026-05-05 12:45:55]`。NTP 对时成功时的 `time_mapping` 日志用于把早期毫秒时间轴换算为实际时间。
+日志时间戳在没有可信真实时间前使用启动后的 `millis()`，例如 `[42442]`；RTC 或 NTP 建立可信时间后切换为绝对日期时间，例如 `[2026-05-05 12:45:55]`。NTP 对时成功时应输出可用于换算早期毫秒时间轴的诊断信息。
 
 ## 9. Esp32BaseWeb
 
@@ -1120,7 +1083,7 @@ Route 缓冲机制：
 - `FooterBarMode` 控制 `sendFooter()` 的底部横条输出：`FOOTER_BAR_OFF` 不显示，`FOOTER_BAR_STATUS_ONLY` 只显示运行摘要，`FOOTER_BAR_FULL` 显示系统入口和运行摘要。默认 `FOOTER_BAR_FULL`，System 页面保存后写入 `eb_ui.footer_mode` 并立即影响后续页面输出。
 - `setBuiltinLabel()` 覆盖内置导航标签，可用于中文本地化；系统工具页统一使用 `BUILTIN_TOOLS`，不提供旧 Reboot 历史别名。
 - `setHeadExtraCallback()` 设置额外 head 输出回调；`sendHeader()` 在默认 `WEB_HEAD` 后、`</head><body>` 和顶部导航前调用它，业务项目可在这里输出 `<style>`，避免页面刷新时先显示基础库默认导航样式。该回调不会注入 `/esp32base` 及其子路径的内置页面，避免业务 CSS 增加内置页体积。
-- `setAfterFormatFsCallback()` 注册内置 System 页 `POST /esp32base/tools/format-fs` 的 after-format 回调；只有显式工具页格式化 LittleFS 成功后触发，格式化失败不触发，启动挂载失败路径不会触发。`FormatFsResult.source` 固定为 `tools`，`formatSuccess` 固定为 true，`mountSuccess` 和 `fileLogReloadSuccess` 反映格式化后的重新挂载和 FileLog reload 结果。启用 Bus 时同一动作还会发布 `EVENT_TOOLS_FORMAT_FS_SUCCESS`，data 为包含 `source`、`formatSuccess`、`mountSuccess`、`fileLogReloadSuccess` 的短 JSON。基础库不会默认清任何业务 NVS；业务如需同步清统计、文件索引或运行时缓存，应在该回调或事件订阅里自行处理。
+- `setAfterFormatFsCallback()` 注册内置 System 页 `POST /esp32base/tools/format-fs` 的 after-format 回调；只有显式工具页格式化 LittleFS 成功后触发，格式化失败不触发，启动挂载失败路径不会触发。回调结果会说明格式化来源、重新挂载状态和 FileLog reload 状态。启用 Bus 时同一动作还会发布 `EVENT_TOOLS_FORMAT_FS_SUCCESS`。基础库不会默认清任何业务 NVS；业务如需同步清统计、文件索引或运行时缓存，应在该回调或事件订阅里自行处理。
 - Web UI helper 只负责轻量 HTML 结构和统一样式，不接管业务数据模型：`sendPageTitle()` 输出页面标题区，`beginPanel()` / `endPanel()` 输出内容分组，`sendNotice()` / `sendResultNotice()` 输出横向状态反馈，`beginMetricGrid()` / `sendMetric()` / `endMetricGrid()` 输出状态和统计摘要，`sendInfoRowCompact*()` 输出紧凑信息行和单动作，`sendInfoRowInlineEdit()` 输出单字段行内编辑，`sendInfoRowDialogForm()` 输出 1-3 字段小表单弹层，`sendPagination()` 输出页码型分页、每页条数和跳页表单。分页 `perPage=0` 时默认 10 条，每页选项为 10、15、20、30、50。`sendInfoRowCompactLink()`、`sendInfoRowCompactForm()`、行内编辑和弹层入口都会按 `UiTone` 输出轻量按钮；页面级明确保存/执行按钮仍可直接使用普通 submit 按钮。
 - 带 `data-eb-ajax` 的 helper 表单会在浏览器支持 `fetch` 时携带 `X-Esp32Base-Ajax: 1` 和 `Accept: application/json` 局部提交；服务端用 `isAjaxRequest()` 判断后返回 `sendAjaxReplace(targetId, html, noticeTitle)` 或 `sendAjaxError(code, error)`。未携带 AJAX header 时，同一 POST endpoint 仍应保留 `POST -> 303 -> GET` fallback。
 - `UiTone` 仅表达语义色：neutral、ok、warn、danger、info。业务项目不得把危险、警告、成功语义当作普通装饰色复用。
@@ -1431,9 +1394,9 @@ Offset binary API 用于业务二进制定长记录、分页读取和环形覆�
 
 - `readBytesAt()` 打开已存在文件并从 `offset` 读取最多 `maxLen` 字节，实际读取长度写入 `readLen`；读到 EOF 前允许短读并返回 true。
 - `readBytes()` / `readBytesAt()` 在 FS 未 ready、path 非绝对路径、文件不存在、out 为空或 `offset > fileSize` 时返回 false；失败时 `readLen` 为 0。`offset == fileSize` 返回 true 且读取 0 字节。底层声明文件仍有剩余内容但读出 0 字节时，`readBytes()` / `readBytesAt()` 返回 false，避免把 LittleFS 元数据仍存在但内容块不可读的文件误判为成功读取。
-- 大块读写会在 Esp32BaseFs 层分块并定期让出调度；当前默认单次底层 I/O 块为 512B，累计约 4KB 后进行 watchdog-friendly service。`readBytes()`、`readBytesAt()`、`writeBytes()`、`appendBytes()`、`writeBytesAt()` 和 `createFixedFile()` 都走同一长操作治理，不要求业务存储类重复分块。
+- 大块读写会在 Esp32BaseFs 层分块并定期让出调度和喂 watchdog。`readBytes()`、`readBytesAt()`、`writeBytes()`、`appendBytes()`、`writeBytesAt()` 和 `createFixedFile()` 都走同一长操作治理，不要求业务存储类重复分块。
 - `writeFile()` / `writeBytes()` / `appendFile()` / `appendBytes()` 会在写入后 flush 并校验最终大小；非空写入还会确认写入后文件末端可读。`appendBytes()` 面向低频追加，不适合用循环追加来初始化大容量定长文件。写入失败不等于已回滚，调用方必须按返回值处理可能的部分写入或文件不可读状态。
-- `createFixedFile(const char* path, uint32_t size, uint8_t fillByte = 0)` 用于固定容量二进制文件初始化。FS 未 ready、path 非绝对路径或底层创建/写入/校验失败时返回 false；`size == 0` 会创建或截断为空文件。文件不存在、大小不匹配，或同尺寸但末端不可读时会用 `fillByte` 分块重建；已存在且大小一致、末端可读时返回 true 并保留原内容，避免业务每次启动清空持久环形记录。重建过程使用固定小块写入，避免一次性占用大 heap，并按长 FS 操作处理 watchdog；完成后校验最终大小并抽样校验首字节、中间字节和末尾字节。
+- `createFixedFile(const char* path, uint32_t size, uint8_t fillByte = 0)` 用于固定容量二进制文件初始化。FS 未 ready、path 非绝对路径或底层创建/写入/校验失败时返回 false；`size == 0` 会创建或截断为空文件。文件不存在、大小不匹配，或同尺寸但末端不可读时会用 `fillByte` 分块重建；已存在且大小一致、末端可读时返回 true 并保留原内容，避免业务每次启动清空持久环形记录。重建过程按长 FS 操作处理 watchdog，并校验最终文件可读。
 - `writeBytesAt()` 只覆盖已存在文件中的现有字节，不隐式创建文件、不扩展文件、不填洞；FS 未 ready、path 非绝对路径、文件不存在、data 为空但 len 非 0、`offset + len > fileSize`、底层写失败、写后大小不符或写入范围不可读时返回 false。
 - `removeFileWithRecovery()` 在 `LittleFS.remove()` 失败后会尝试把目标文件截断为 0，并用 `REMOVE_FILE_DELETED`、`REMOVE_FILE_CLEARED`、`REMOVE_FILE_FAILED` 明确区分硬删除、仅清空和失败。`removeFile()` 只在硬删除成功时返回 true；维护页面使用恢复型枚举显示 `File deleted or cleared`，业务代码不应把“清空成功”误判为“文件已不存在”。
 - 需要固定容量环形文件时，应用应优先用 `createFixedFile()` 初始化或校验文件容量，再用 `writeBytesAt()` 覆盖记录槽位。
