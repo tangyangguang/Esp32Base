@@ -28,10 +28,10 @@ def make_project(base: Path, name: str, partition_csv: str) -> Path:
     return project
 
 
-def make_faucet_project(base: Path) -> Path:
+def make_custom_offset_project(base: Path) -> Path:
     return make_project(
         base,
-        "Esp32_Faucet",
+        "Esp32_CustomOffsets",
         "\n".join(
             [
                 "# Name, Type, SubType, Offset, Size, Flags",
@@ -120,22 +120,22 @@ def command_offsets(command: str) -> list[str]:
     return [part for part in command.split() if part.startswith("0x")]
 
 
-def check_faucet_recovery(tmp: Path, errors: list[str]) -> None:
-    rc, text = dry_run(make_faucet_project(tmp))
+def check_custom_offset_recovery(tmp: Path, errors: list[str]) -> None:
+    rc, text = dry_run(make_custom_offset_project(tmp))
     commands = write_flash_lines(text)
 
     if rc != 0:
-        errors.append(f"expected faucet rc=0, got {rc}")
+        errors.append(f"expected custom-offset rc=0, got {rc}")
     if len(commands) != 1:
-        errors.append(f"expected exactly one faucet write_flash command, got {len(commands)}")
+        errors.append(f"expected exactly one custom-offset write_flash command, got {len(commands)}")
     else:
         offsets = command_offsets(commands[0])
         if not {"0x19000", "0x20000", "0x180000"}.issubset(set(offsets)):
-            errors.append("faucet write_flash command must include otadata, ota_0, and ota_1 offsets")
+            errors.append("custom-offset write_flash command must include otadata, ota_0, and ota_1 offsets")
         if "0x1e000" in offsets:
-            errors.append("faucet recovery must not write boot_app0 into the ota_0-adjacent gap")
+            errors.append("custom-offset recovery must not write boot_app0 into the ota_0-adjacent gap")
     if " erase_region " in text:
-        errors.append("faucet dry-run must not emit a second erase_region command")
+        errors.append("custom-offset dry-run must not emit a second erase_region command")
 
 
 def check_standard_overlap(tmp: Path, errors: list[str]) -> None:
@@ -190,7 +190,7 @@ def main() -> int:
     errors: list[str] = []
     with tempfile.TemporaryDirectory() as tmp:
         base = Path(tmp)
-        check_faucet_recovery(base, errors)
+        check_custom_offset_recovery(base, errors)
         check_standard_overlap(base, errors)
         check_unit_and_blank_offsets(base, errors)
         check_serial_busy_report(errors)

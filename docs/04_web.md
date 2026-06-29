@@ -426,7 +426,7 @@ Esp32BaseWeb::addPage("/config", "Config", handleConfigPage);
 业务优先导航：
 
 ```cpp
-Esp32BaseWeb::setDeviceName("Faucet");
+Esp32BaseWeb::setDeviceName("Device");
 Esp32BaseWeb::setHomePath("/status");
 Esp32BaseWeb::setHomeMode(Esp32BaseWeb::HOME_COMBINED);
 Esp32BaseWeb::setSystemNavMode(Esp32BaseWeb::SYSTEM_NAV_SECTION);
@@ -470,7 +470,7 @@ void handleConfigApi() {
     Esp32BaseWeb::sendText(405, "method not allowed");
 }
 
-Esp32BaseWeb::addRoute("/api/faucet/config", Esp32BaseWeb::METHOD_ANY, handleConfigApi);
+Esp32BaseWeb::addRoute("/api/device/config", Esp32BaseWeb::METHOD_ANY, handleConfigApi);
 ```
 
 ## 8. Web UI baseline helper
