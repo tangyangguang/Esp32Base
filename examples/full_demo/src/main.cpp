@@ -2,8 +2,6 @@
 #include <Esp32Base.h>
 
 static const char* APP_NS = "demo";
-static const char* APP_KEY_BOOT = "boot";
-static const char* APP_KEY_META = "meta";
 static const char* APP_KEY_VALUE = "value";
 static const char* APP_KEY_CODE = "code";
 static const char* APP_KEY_LIMIT = "limit";
@@ -14,13 +12,6 @@ static const char* APP_KEY_ENABLED = "enabled";
 static const char* APP_KEY_SAFE = "safe";
 static const char* APP_KEY_MODE = "mode";
 static const char* APP_KEY_PROFILE = "profile";
-static const char* APP_KEY_MIN_RAW = "minraw";
-
-struct DemoMeta {
-    uint32_t boot;
-    uint32_t nextId;
-    uint32_t marker;
-};
 
 const Esp32BaseAppConfig::EnumOption MODE_OPTIONS[] = {
     {"auto", "Auto"},
@@ -186,7 +177,6 @@ void setup() {
     Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_OTA, "OTA");
     Esp32BaseWeb::setBuiltinLabel(Esp32BaseWeb::BUILTIN_TOOLS, "System");
     Esp32BaseWeb::setHeadExtraCallback(handleHeadExtra);
-    Esp32BaseConfig::enableConfigAudit(true);
     Esp32BaseAppConfig::setTitle("App Config");
     Esp32BaseAppConfig::setPageValidateCallback(validateAppConfigPage);
     Esp32BaseAppConfig::setChangeCallback(onAppConfigChange);
@@ -214,8 +204,6 @@ void setup() {
                                  "Enum field stored as option value.", true, nullptr});
     Esp32BaseAppConfig::addEnum({"advanced", APP_NS, APP_KEY_PROFILE, "Profile", "balanced", PROFILE_OPTIONS, 3,
                                  "Second enum for option rendering.", false, nullptr});
-    Esp32BaseAppConfig::addDecimal({"advanced", APP_NS, APP_KEY_MIN_RAW, "Raw minimum", INT32_MIN, INT32_MIN, INT32_MIN, 1, 0, nullptr,
-                                    "Scale 0 INT32_MIN parser boundary.", false, nullptr});
     Esp32Base::begin();
 #if ESP32BASE_FULL_DEMO_HAS_WIFI_CREDENTIALS
     Esp32BaseWiFi::connect(ESP32BASE_FULL_DEMO_WIFI_SSID, ESP32BASE_FULL_DEMO_WIFI_PASS, true);
@@ -230,26 +218,12 @@ void setup() {
 #endif
     }
 #endif
-    const int32_t boot = Esp32BaseConfig::getInt(APP_NS, APP_KEY_BOOT, 0) + 1;
-    Esp32BaseConfig::setIntDeferred(APP_NS, APP_KEY_BOOT, boot);
-    DemoMeta meta = {};
-    Esp32BaseConfig::getPod(APP_NS, APP_KEY_META, meta);
-    meta.boot = static_cast<uint32_t>(boot);
-    meta.nextId += 1U;
-    meta.marker = 0xEB32BA5EUL;
-    if (Esp32BaseConfig::setPodDeferred(APP_NS, APP_KEY_META, meta)) {
-        DemoMeta pendingMeta = {};
-        Esp32BaseConfig::getPod(APP_NS, APP_KEY_META, pendingMeta);
-        ESP32BASE_LOG_I("example", "demo meta boot=%lu next_id=%lu",
-                        static_cast<unsigned long>(pendingMeta.boot),
-                        static_cast<unsigned long>(pendingMeta.nextId));
-    }
     Esp32BaseWeb::addPage("/", "Dashboard", handleDashboard);
     Esp32BaseWeb::addRoute("/dashboard", Esp32BaseWeb::METHOD_GET, handleDashboard);
     Esp32BaseWeb::addPage("/control", "Control", handleControl);
     Esp32BaseWeb::addApi("/api/control", handleControlApi);
     Esp32BaseWeb::addApi("/api/csv", handleCsvApi);
-    ESP32BASE_LOG_I("example", "full demo ready boot=%ld", static_cast<long>(boot));
+    ESP32BASE_LOG_I("example", "full demo ready");
 }
 
 void loop() {
