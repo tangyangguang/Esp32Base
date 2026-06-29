@@ -61,32 +61,14 @@
 
 ## 4. 业务项目接入规则
 
-业务项目接入 Web UI baseline 时，先按页面能力选择基础库提供的结构、helper 和 CSS 类，不在业务项目里临时复制基础库 CSS、手写一套局部布局，或用一次性样式绕开基础库。
+业务项目接入 Web UI baseline 时，优先按页面能力选择基础库提供的结构、helper 和 CSS 类，不在业务项目里复制基础库 CSS 或绕开基础库壳层。
 
 判断规则：
 
 - 现有能力块能表达页面结构时，业务页面只填充业务数据和必要动作。
-- 找不到合适能力块时，先视为 Esp32Base 的能力、命名或文档需要评估。
+- 找不到合适能力块时，先判断该页面模式是否应沉淀为 Esp32Base 通用能力。
 - 多个 ESP32 项目可能复用的页面模式，应回到 Esp32Base 补统一能力块、CSS/helper、示例和文档。
 - 只有确认场景是业务独有且不会复用时，才允许业务侧做最小局部实现；局部实现仍应复用基础壳层、字号、按钮、表单、提示和分页样式。
-
-给基础库会话的提示词模板：
-
-```text
-我在业务项目接入 Esp32Base Web UI baseline 时，遇到一个页面场景找不到合适的能力块。
-
-业务场景：
-- 页面用途：
-- 需要展示、编辑或操作的数据：
-- 当前尝试使用的 Esp32Base 能力块：
-- 为什么不合适：
-- 是否可能在多个 ESP32 项目复用：
-- 期望效果或截图：
-
-请先评估这是否应该沉淀为 Esp32Base 的通用 Web UI 能力。
-如果应该，请补充统一的页面能力块、CSS/helper、示例和文档；
-如果不应该，请说明业务侧应该如何最小化实现，避免破坏整体 UI baseline。
-```
 
 ## 5. 基础壳层
 
@@ -461,7 +443,7 @@ void handleHeadExtra() {
 
 基础样式由 `/esp32base/ui.css` 输出，页面通过 `sendHeader()` 自动引用。业务页面不需要手动引用该 CSS，也不应该复制整段基础 CSS；浏览器会缓存该资源，避免每个页面重复下载同一份样式。
 
-内置 Status、WiFi、System Logs、App Events、System、Auth、OTA、FS 和 App Config 页面已经按这套 baseline 收敛。后续页面调整应优先改 `/esp32base/ui.css` 的公共 class 或 helper 输出结构，不在单个内置页复制一次性样式。
+内置 Status、WiFi、System Logs、App Events、System、Auth、OTA、FS 和 App Config 页面已经按这套 baseline 收敛。页面调整应优先改 `/esp32base/ui.css` 的公共 class 或 helper 输出结构，不在单个内置页复制局部样式。
 
 ## 10. 提交与防重复规则
 
@@ -512,17 +494,13 @@ POST -> 303 Redirect -> GET
 - 刷新不重复提交。
 - 皮肤变量覆盖后仍保持语义清楚。
 
-## 12. 样式调整回路
-
-实现和试用过程中允许调整样式。
-
-调整原则：
+## 12. 样式维护边界
 
 - 优先改基础 CSS 变量或通用 class。
 - 其次改 helper 输出结构。
-- 不在业务页面堆一次性 CSS。
+- 不在业务页面堆局部 CSS。
 - 不为了单个项目加入业务组件。
-- 每次样式调整先更新 `examples/web_ui_gallery`，必要时同步 `examples/full_demo`，再扩散到业务项目。
+- 页面能力或公共样式变化应能在 `examples/web_ui_gallery` 中看到效果；影响完整集成时同步 `examples/full_demo`。
 
 影响判断：
 
@@ -530,7 +508,7 @@ POST -> 303 Redirect -> GET
 - 配置行、分页 footer、导航结构属于中改。
 - 页面能力分类或 helper API 变化属于大改。
 
-大改必须先更新当前 `docs/` 中对应规范并通过示例页验证；发布分支不保留过程设计或执行计划。
+大改应更新对应规范并通过示例页验证。
 
 ## 13. 相关文档
 
