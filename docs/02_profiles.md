@@ -265,4 +265,4 @@ Bus 默认启用，但可显式关闭。
 - WEB 无 Update 符号。
 - 关闭 Bus / Fs / Health 时无对应静态对象。
 
-更完整的裁剪验收表和资源记录规则见 [内存与容量预算](06_memory_budget.md)。
+更完整的裁剪验收和容量边界见 [内存与容量预算](06_memory_budget.md)。

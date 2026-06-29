@@ -53,8 +53,6 @@
 
 该上限只控制应用通过 `addRoute()` / `addPage()` / `addApi()` 注册的静态 route 槽位；内置 Web 路由不占用此表。默认 24 是基础库当前 full profile 的设计目标，优先避免业务页面/API 增长时过早触发 route 容量不足。route 较少且需要节省静态 RAM 的应用，可以在构建参数里显式调小。
 
-ESP32 full_demo 对照构建中，24 route 相比 16 route 让 `g_routes` 增加 672 bytes BSS。该成本属于可量化的静态 RAM 开销，不应和启动期 NVS 写入、FileLog 初始化写日志或 WiFi 瞬时电流问题混为同一个根因。
-
 ### 3.3 Config pending
 
 默认：
@@ -194,46 +192,15 @@ ESP32-C3 4MB 要控制 Web/OTA/Fs 组合的体积。
 
 4MB FULL profile 必须持续关注 OTA slot 余量。ESP32 / ESP32-C3 4MB 推荐分区表提供 1.5MB 单 app slot；业务若继续增加大页面、证书、图片或大型逻辑，应优先改用 8MB Flash 板型，而不是压缩本库核心逻辑或重新引入多套 4MB 分区预设。
 
-## 7. 自动构建资源记录
+## 7. 容量验收
 
-以下数据来自 `examples/basic` 的 PlatformIO release 构建产物。`firmware.bin` 为实际固件镜像大小；`text` 按 `flash.text + iram0.text` 汇总；`data` / `bss` 来自 DRAM section。ESP32 / Core 2.x 的 7 profile 表必须作为同批自动 size 表整体更新，避免同一页混用不同批次数据。
+容量验收以当前构建产物为准，不在长期文档中维护手工复制的 size 表。
 
-### 7.1 ESP32 / Arduino Core 2.x
+发布前至少核对：
 
-| Profile | firmware.bin | text | data | bss | flash.text | flash.rodata |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| CORE | 273680 | 203694 | 16656 | 9568 | 146871 | 51940 |
-| RUNTIME | 324496 | 239846 | 16680 | 11488 | 182347 | 66584 |
-| NET | 795536 | 659942 | 25832 | 27568 | 577927 | 102156 |
-| NET_RUNTIME | 838224 | 696222 | 25840 | 29480 | 614119 | 108556 |
-| WEB | 883232 | 708546 | 25844 | 33160 | 626427 | 141236 |
-| WEB_RUNTIME | 950592 | 757394 | 25868 | 34712 | 675187 | 159724 |
-| FULL | 973648 | 773050 | 25884 | 37240 | 690843 | 167108 |
+- CORE / NET / WEB / FULL 的符号裁剪是否符合 profile 边界。
+- 代表目标的 `firmware.bin` 是否落在推荐分区表的 app slot 内。
+- `text / data / bss` 是否出现异常增长。
+- 实机 `free heap` / `min free heap` 是否覆盖启动、联网、Web 请求、OTA 和 LittleFS 主要路径。
 
-### 7.2 芯片与 Core 版本代表构建
-
-| Target | firmware.bin | text | data | bss | flash.text | flash.rodata |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| ESP32-S3 CORE, Core 2.x | 269312 | 204586 | 13356 | 9824 | 151011 | 49972 |
-| ESP32-S3 FULL, Core 2.x | 924912 | 733626 | 22364 | 39560 | 669279 | 167536 |
-| ESP32-C3 CORE, Core 2.x | 267056 | 202698 | 7472 | 11056 | 157416 | 44952 |
-| ESP32-C3 FULL, Core 2.x | 987472 | 801708 | 15364 | 40328 | 747052 | 158280 |
-| ESP32 CORE, Core 3.x | 289392 | 200971 | 16945 | 9480 | 138860 | 70048 |
-| ESP32 FULL, Core 3.x | 1208224 | 966935 | 25714 | 41328 | 876928 | 214136 |
-
-跨芯片和 Arduino Core 版本的代表构建记录必须由同一自动 size 脚本整体刷新。ESP32 Core 3.x FULL 当前距 1.25MB app slot 约 100KB，仍必须纳入 CI size gate。
-
-## 8. 实机资源记录表
-
-以下项目必须通过实机采集补齐，不能由 ELF 静态数据替代。
-
-| 项目 | ESP32 | ESP32-S3 | ESP32-C3 |
-| --- | --- | --- | --- |
-| boot free heap | | | |
-| min free heap | | | |
-| WiFi connected free heap | | | |
-| Web request min heap | | | |
-| OTA min heap | | | |
-| LittleFS op min heap | | | |
-
-资源表必须随发布文档维护。发布前至少补齐裁剪、固件体积、boot free heap 和主要场景 min heap；无法自动采集的实机数据必须在发布检查清单中明确记录。
+如果某次发布无法完成实机容量验证，应在发布记录中说明缺口，不应把空表或过期数值留在项目文档里。
