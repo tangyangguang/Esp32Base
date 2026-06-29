@@ -105,10 +105,10 @@ pio run -t webota
 记录：
 
 - progress。
-- 上传开始输出 `INFO ota upload_start size=<friendly> sha256=<provided|none>`。
-- 上传过程中按 10% 阶段输出少量 `INFO ota upload_progress progress=<N>% bytes=<friendly> total=<friendly>`，不按 chunk 刷屏。
-- 上传完成输出 `INFO ota upload_success size=<friendly> sha256=<actual>`；失败继续输出 ERROR。
-- 成功、失败或 abort 后输出上传摘要，例如 `INFO ota upload_summary duration=13.49s uploaded=1020.2 KB average=75.7 KB/s`。ArduinoOTA/espota 使用 `arduino_upload_summary` / `arduino_upload_failed` 前缀。
+- 上传开始日志应包含固件大小和是否提供 SHA256。
+- 上传过程中按阶段输出少量进度日志，包含百分比和已写入/总大小，不按 chunk 刷屏。
+- 上传完成日志应包含实际固件大小和校验结果；失败日志应能区分写入、校验和启动槽切换阶段。
+- 成功、失败或 abort 后输出上传摘要，包含耗时、上传字节数和平均速度；ArduinoOTA/espota 也应输出对应摘要。
 - bytesProcessed。
 - totalSize。
 - totalSize human。
