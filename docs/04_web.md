@@ -301,10 +301,10 @@ App Events 页面：
 
 - 仅在 `ESP32BASE_ENABLE_APP_EVENTS=1` 时注册，标题和导航标签为 `App Events`，可通过 `setBuiltinLabel(BUILTIN_APP_EVENTS, "...")` 覆盖。
 - 这是应用业务事件日志的内置系统视图，用偏底层的维护视角展示事件日志内容、管理和存储状态；它不属于 System Logs，也不替业务系统解释业务语义。
-- 页面显示 record/capacity、实际文件大小、有效事件数、next id、存储路径、expected size、head、active header、sequence、record size、紧凑筛选和 CSV 导出、分页表格和详情弹层；分页使用 `sendPagination()`，默认每页 10 条。
+- 页面显示事件容量、实际文件大小、有效事件数、next id、存储路径、header 状态、紧凑筛选、CSV 导出、分页表格和详情弹层；分页使用 `sendPagination()`，默认每页 10 条。
 - 筛选条件包括等级、时间类型、来源、类型、原因和关键词；HTML、JSON API、CSV 共用同一组筛选语义。`source/type/reason` 必须符合事件 token 的字符和长度约束，避免超长参数被截断后误匹配。筛选请求不额外做独立 count 扫描，而是在输出当前页时统计匹配总数。
-- 表格展示 `Status`、slot/index、ID、Time、Level、Event、Object、Details 和详情入口。CRC 损坏、magic 异常、level 异常、未提交或空槽等只要能读出 record 字节就客观展示并标记 status；字符串字段按固定长度安全显示，不假设损坏记录带有 `\0`。
-- 详情弹层展示 `magic/id/epochSec/bootId/uptimeSec/value1/value2/value3/code/level/flags/valueMask/reserved/crc16/source/type/reason/object/text` 全部 record 字段，并展示 `slot/index/recordOffset/status/stored crc/calculated crc/readOk/magicOk/levelOk/crcOk/committed/resolvedEpochSec/uptimeMs` 等派生信息；内部字段使用弱化样式。
+- 表格展示状态、位置、时间、等级、事件、对象和详情入口。CRC 损坏、magic 异常、level 异常、未提交或空槽等只要能读出 record 字节就客观展示并标记状态；字符串字段按固定长度安全显示，不假设损坏记录带有 `\0`。
+- 详情弹层展示事件字段和必要存储诊断字段，便于维护人员判断记录是否可读、是否提交、时间是否可解析；内部字段使用弱化样式。
 - `epochSec` 可用时按本地时间显示；否则如果本次 boot 后续已由 RTC 或 NTP 建立可信真实时间，则解析并显示真实时间；仍无法解析时显示 `uptime N ms` 和 `boot N`，不伪造日期。
 - 清空事件日志是危险操作，只在 System 页面提供 `POST /esp32base/tools/app-events-clear`，必须通过 Web Auth 和同源检查，成功后 303 回到 System 页面。
 - JSON API 事件包含 `epochSec`、`resolvedEpochSec`、`bootId`、`uptimeSec` 和 64-bit 派生 `uptimeMs`；`resolvedEpochSec=0` 表示没有可信真实时间。
