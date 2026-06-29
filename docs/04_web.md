@@ -595,7 +595,7 @@ Esp32BaseWeb::endJson();
 
 不进入 AP/config portal、而是保持无 WiFi 诊断状态的条件：
 
-- WiFi 初始化安全启动保护触发：设备连续在 Arduino WiFi 初始化最早期发生 guarded brownout/panic/watchdog/software reset，达到阈值后本轮跳过所有 WiFi 初始化调用。此时串口日志会输出 `wifi_init_safe_boot_pause` 和中文供电风险提示；因为 WiFi 被跳过，Web 配网页不会启动，需要通过正常上电恢复重试或修复供电后重启。
+- WiFi 初始化安全启动保护触发：设备连续在 Arduino WiFi 初始化最早期发生 guarded brownout/panic/watchdog/software reset，达到阈值后本轮跳过所有 WiFi 初始化调用，并输出可诊断的供电风险提示；因为 WiFi 被跳过，Web 配网页不会启动，需要通过正常上电恢复重试或修复供电后重启。
 
 默认 config portal AP SSID 为 `ESP32-Config-XXXX`，其中 `XXXX` 取 eFuse MAC 按常见网络 MAC 顺序显示时的最后两个字节，便于和 Status 页 MAC 信息对照。
 
@@ -638,16 +638,12 @@ Arduino `WebServer` 是同步模型。
 - 长任务采用“启动任务 -> 返回 task id -> 轮询状态”的方式。
 - Web handle 对超过 250ms 的慢请求输出日志；GET 使用 DEBUG，POST 等操作使用 INFO。
 
-这属于已知限制，文档和示例必须体现。
+发送路径边界：
 
-内部发送路径要点：
-
-- 基础库不对每个 HTTP 请求强制下发 `setNoDelay(true)`；实机回归显示该设置在弱链路下会降低 512 B chunked 响应吞吐。
-- `sendChunk()` / `sendProgmem()` 共用 512 B 静态 chunk buffer；响应头仍由 Arduino `WebServer` 生成，正文 data chunk 由基础库无堆分配 writer 写出标准 chunked 帧，避免每个 chunk 触发 `WebServer::sendContent()` 内部 `malloc/free`，同时避免 PROGMEM CSS/JS 被拆成大量 128 B 小 chunk。
-- `sendResponseContent()` 只在发送前检查客户端是否已经断开，发送后不再用 `client().connected()` 判定失败；`endResponse()` 在响应未标记断开时总是尝试发送最终 0-length chunk，避免同步 WebServer 下 curl/浏览器等待 chunked 响应结束直到超时。客户端主动刷新、断网或取消下载导致的 `response_client_disconnected` 记录为 INFO，不进入默认 ERROR FileLog。
-- 长 HTML/JSON/CSV 响应在每个 data chunk 前后喂 watchdog；业务长页面仍处在同步 `WebServer::handleClient()` 内时，不再只依赖 `Esp32Base::handle()` 返回后的统一喂狗。
-- 小 JSON 如果已经完整生成，使用 `sendJson()` 一次性返回固定 `Content-Length`；只有需要流式拼接或响应体较大时才使用 `beginResponse()` / `sendChunk()` / `endResponse()`。
-- `sendHeader()` 不再把基础 CSS 内联进每个 HTML 页面，而是引用 `/esp32base/ui.css`；该资源使用固定 `Content-Length` 和 `Cache-Control: public, max-age=86400`，减少业务页面重复下载 9KB 级样式内容。业务 `setHeadExtraCallback()` 只作用于应用页面和自定义页面，内置 `/esp32base` 页面不承载业务 CSS 字节。
-- `addStaticAsset()` 注册的应用静态资源不使用 chunked 响应，按固定长度直接写客户端，适合小型 CSS/JS/图片；资源表只保存指针，应用传入的数据和 content type 字符串必须在固件生命周期内有效。受保护资源使用 private cache，公开资源使用 public cache。
+- 长 HTML/JSON/CSV 响应应通过 `beginResponse()` / `sendChunk()` / `sendBytes()` / `endResponse()` 流式输出，并在发送过程中让出调度和喂 watchdog。
+- 小 JSON 如果已经完整生成，可直接使用 `sendJson()` 返回。
+- 客户端断开时，基础库应停止继续输出当前响应；客户端主动刷新、断网或取消下载不应进入默认 ERROR 系统诊断日志。
+- `sendHeader()` 引用 `/esp32base/ui.css`，避免每个 HTML 页面重复内联基础 CSS；业务 `setHeadExtraCallback()` 只作用于应用页面和自定义页面。
+- `addStaticAsset()` 适合注册固件内小型 CSS/JS/图片；应用传入的数据和 content type 字符串必须在固件生命周期内有效。
 - WiFi modem sleep 默认关闭，避免按 DTIM 周期唤醒；电池业务可调用 `Esp32BaseWiFi::setPowerSave(true)` 显式恢复 modem sleep。
 - 内置基础 CSS 不再包含 App Config 专用样式；启用 `ESP32BASE_ENABLE_APP_CONFIG` 时 App Config 页会按需注入额外 `<style>`，其他页面不下发这部分字节。
