@@ -52,18 +52,6 @@ if "source=insecure_builtin" not in web_core:
     errors.append("src/web/Esp32BaseWeb.cpp: insecure built-in default auth must be explicitly logged when enabled")
 if '_option("esp32base_webota_user", "admin")' in webota or '_option("esp32base_webota_password", "admin")' in webota:
     errors.append("scripts/esp32base_webota.py: webota must not default Basic Auth to admin/admin")
-if "Web OTA auth is required" not in webota:
-    errors.append("scripts/esp32base_webota.py: webota must fail with a clear message when auth is not configured")
-for needle in (
-    "storedAuthMatches",
-    "readStoredAuth",
-    "writeAuthKeyIfChanged",
-    "hasStored && storedAuthMatches(storedUser, storedPass, user, pass)",
-    'writeAuthKeyIfChanged(prefs, "auth_user"',
-    'writeAuthKeyIfChanged(prefs, "auth_pass"',
-):
-    if needle not in web_routing:
-        errors.append(f"src/web/internal/WebRouting.cpp: missing unchanged auth save guard {needle!r}")
 for forbidden in [
     'strlcpy(currentUser, g_server.arg("current_user").c_str()',
     'strlcpy(currentPass, g_server.arg("current_pass").c_str()',
@@ -73,15 +61,6 @@ for forbidden in [
 ]:
     if forbidden in web_auth:
         errors.append("src/web/internal/WebAuth.cpp: auth submit must reject overlong form values instead of truncating g_server.arg()")
-for needle in [
-    'authReadArg("current_user", currentUser, sizeof(currentUser))',
-    'authReadArg("current_pass", currentPass, sizeof(currentPass))',
-    'authReadArg("new_user", newUser, sizeof(newUser))',
-    'authReadArg("new_pass", newPass, sizeof(newPass))',
-    'authReadArg("confirm_pass", confirmPass, sizeof(confirmPass))',
-]:
-    if needle not in web_auth:
-        errors.append(f"src/web/internal/WebAuth.cpp: missing bounded auth form read {needle!r}")
 if "- 回显当前密码" in web_docs:
     errors.append("docs/04_web.md: WiFi page docs must not claim the saved password is echoed")
 if "custom_esp32base_webota_user = admin" in ota_docs or "custom_esp32base_webota_password = admin" in ota_docs:

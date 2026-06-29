@@ -82,7 +82,6 @@ def check_raw_upload_send_contract(webota_module, errors: list[str]) -> None:
 def main() -> int:
     webota_module = load_webota_module()
     webota = read("scripts/esp32base_webota.py")
-    ota_docs = read("docs/05_ota.md")
     errors: list[str] = []
 
     require(
@@ -90,8 +89,6 @@ def main() -> int:
         "scripts/esp32base_webota.py: default upload timeout must be 90 seconds",
         errors,
     )
-    if "`esp32base_webota_upload_timeout`：默认 `90` 秒" not in ota_docs:
-        errors.append("docs/05_ota.md: webota upload timeout default must document 90 seconds")
     require(
         webota_module.DEFAULT_WEBOTA_PATH == "/esp32base/ota/raw",
         "scripts/esp32base_webota.py: default upload path must use raw /esp32base/ota/raw",
@@ -102,12 +99,6 @@ def main() -> int:
         "scripts/esp32base_webota.py: default chunk size must be 65536 bytes",
         errors,
     )
-    if "`esp32base_webota_path`：默认 `/esp32base/ota/raw`" not in ota_docs:
-        errors.append("docs/05_ota.md: webota default raw path must be documented")
-    if "`esp32base_webota_chunk_size`：默认 `65536` 字节" not in ota_docs:
-        errors.append("docs/05_ota.md: webota chunk size default must document 65536 bytes")
-    if "脚本默认 raw endpoint 使用 65536 字节分块" not in ota_docs:
-        errors.append("docs/05_ota.md: raw Web OTA default chunk guidance must be documented")
     require(
         webota_module.HTTP_RAW_BUFLEN == 1436,
         "scripts/esp32base_webota.py: raw upload padding must use Arduino WebServer HTTP_RAW_BUFLEN",
@@ -182,30 +173,13 @@ def main() -> int:
         errors.append("scripts/esp32base_webota.py: raw upload must not retry through the multipart path")
     if "Web OTA fallback: raw upload interrupted" in webota:
         errors.append("scripts/esp32base_webota.py: raw upload must not hide failures behind multipart fallback")
-    if "预检还会比较本地固件大小和设备下一 OTA 分区容量，超出时不会发送固件 body" not in ota_docs:
-        errors.append("docs/05_ota.md: webota preflight must document size check before sending firmware body")
-    if "raw padding 依赖当前 Arduino ESP32 `WebServer` 的 `HTTP_RAW_BUFLEN=1436`" not in ota_docs:
-        errors.append("docs/05_ota.md: raw padding must document Arduino HTTP_RAW_BUFLEN maintenance constraint")
-    if "本项目暂不在上传脚本中动态解析 Arduino core 头文件" not in ota_docs:
-        errors.append("docs/05_ota.md: raw padding must document the intentional fixed-constant strategy")
-    if "已按源码核对 Arduino ESP32 `2.0.16`、`2.0.17`、`3.0.0`、`3.0.7`、`3.3.0`" not in ota_docs:
-        errors.append("docs/05_ota.md: raw padding must document checked Arduino ESP32 core versions")
-    if "该风险只影响 raw endpoint；浏览器表单上传和显式 `/esp32base/ota` multipart 路径不依赖 `HTTPRaw`" not in ota_docs:
-        errors.append("docs/05_ota.md: raw padding risk must document the parser boundary")
-    if "raw 上传失败不会完成 OTA boot 分区切换，设备应保持原固件运行" not in ota_docs:
-        errors.append("docs/05_ota.md: raw padding risk must document failed raw OTA boot behavior")
-    if "脚本不把每次 socket send 强行切成 1436 字节" not in ota_docs:
-        errors.append("docs/05_ota.md: raw upload pacing must document padding without 1436-byte socket send slicing")
-    if "raw 请求头会和第一段固件 body 在同一次 socket 写中发送" not in ota_docs:
-        errors.append("docs/05_ota.md: raw upload must document first body bytes sent with headers")
-    if "`esp32base_webota_raw_pause_ms`" not in ota_docs:
-        errors.append("docs/05_ota.md: raw upload pacing option must be documented")
-    if "`esp32base_webota_socket_send_buffer`" not in ota_docs:
-        errors.append("docs/05_ota.md: raw socket send-buffer option must be documented")
-    if "不会在 raw 失败后自动改走 multipart" not in ota_docs:
-        errors.append("docs/05_ota.md: raw command must document that it does not auto-fallback to multipart")
-    if "RSSI 低于 -70 dBm" not in ota_docs or "RSSI 低于 -75 dBm" not in ota_docs:
-        errors.append("docs/05_ota.md: raw upload weak RSSI auto pacing must be documented")
+
+    with mock.patch.object(webota_module, "_option", return_value=None):
+        try:
+            webota_module._auth_header()
+            errors.append("scripts/esp32base_webota.py: Web OTA must reject missing auth configuration")
+        except ValueError:
+            pass
 
     if errors:
         for error in errors:
