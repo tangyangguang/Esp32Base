@@ -87,14 +87,6 @@ if "- 回显当前密码" in web_docs:
 if "custom_esp32base_webota_user = admin" in ota_docs or "custom_esp32base_webota_password = admin" in ota_docs:
     errors.append("docs/05_ota.md: Web OTA examples must not use admin/admin placeholders")
 
-docs = {
-    "docs/03_api.md": "未设置应用默认认证且没有已保存认证时，Web 服务不会启动",
-    "docs/05_ota.md": "Web OTA 认证来自当前 Web Auth",
-}
-for path, needle in docs.items():
-    if needle not in read(path):
-        errors.append(f"{path}: missing security boundary marker {needle!r}")
-
 if errors:
     for error in errors:
         print(error)

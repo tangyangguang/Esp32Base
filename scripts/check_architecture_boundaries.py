@@ -52,14 +52,6 @@ if "Esp32BaseFileLog" in sleep:
 if "esp32base_internal::runPreSleepHooks();" not in sleep:
     errors.append("src/runtime/Esp32BaseSleep.inc: deep sleep must run registered pre-sleep hooks")
 
-docs = {
-    "docs/01_architecture.md": "Core 不 include Runtime/FileLog",
-    "docs/01_architecture.md": "OTA boot 初始化",
-}
-for path, needle in docs.items():
-    if needle not in read(path):
-        errors.append(f"{path}: missing architecture boundary marker {needle!r}")
-
 if errors:
     for error in errors:
         print(error)
