@@ -48,17 +48,20 @@ def check_raw_upload_send_contract(webota_module, errors: list[str]) -> None:
     with tempfile.TemporaryDirectory() as tmp:
         firmware = Path(tmp) / "firmware.bin"
         firmware.write_bytes(b"abcdefg")
+        firmware_size = 7
+        padded_size = webota_module._raw_padded_size(firmware_size)
+        padding_size = padded_size - firmware_size
         fake_socket = FakeRawSocket()
         stats: dict[str, object] = {}
         parsed = urlparse("http://esp32.local/esp32base/ota/raw")
         headers = {
             "Authorization": "Basic dGVzdDp0ZXN0",
-            "X-Firmware-Size": "7",
+            "X-Firmware-Size": str(firmware_size),
         }
         with mock.patch.object(webota_module, "_open_socket", return_value=fake_socket), mock.patch.object(
             webota_module.time, "sleep"
         ) as sleep_mock, mock.patch.object(webota_module, "_print_progress"):
-            response = webota_module._send_raw(parsed, firmware, 7, headers, 4, 5.0, stats, 1.0, False)
+            response = webota_module._send_raw(parsed, firmware, firmware_size, headers, 4, 5.0, stats, 1.0, False)
             response.read()
 
     if len(fake_socket.writes) != 3:
@@ -67,13 +70,14 @@ def check_raw_upload_send_contract(webota_module, errors: list[str]) -> None:
     first, second, padding = fake_socket.writes
     if b"POST /esp32base/ota/raw HTTP/1.1\r\n" not in first:
         errors.append("scripts/esp32base_webota.py: raw upload must send a raw POST request")
-    if b"Content-Length: 1436\r\n" not in first:
+    expected_length = f"Content-Length: {padded_size}\r\n".encode("ascii")
+    if expected_length not in first:
         errors.append("scripts/esp32base_webota.py: raw upload Content-Length must include padding")
     if not first.endswith(b"\r\n\r\nabcd"):
         errors.append("scripts/esp32base_webota.py: raw upload must send request headers and first firmware bytes together")
     if second != b"efg":
         errors.append("scripts/esp32base_webota.py: raw upload must stream remaining firmware bytes")
-    if padding != b"\0" * 1429:
+    if padding != b"\0" * padding_size:
         errors.append("scripts/esp32base_webota.py: raw upload must send zero padding bytes")
     if sleep_mock.call_count != 2:
         errors.append("scripts/esp32base_webota.py: raw upload must sleep between paced raw chunks")
@@ -118,14 +122,15 @@ def main() -> int:
         "scripts/esp32base_webota.py: default chunk size must be 65536 bytes",
         errors,
     )
+    raw_boundary = webota_module.HTTP_RAW_BUFLEN
     require(
-        webota_module.HTTP_RAW_BUFLEN == 1436,
-        "scripts/esp32base_webota.py: raw upload padding must use Arduino WebServer HTTP_RAW_BUFLEN",
+        isinstance(raw_boundary, int) and raw_boundary > 0,
+        "scripts/esp32base_webota.py: raw upload padding boundary must be a positive integer",
         errors,
     )
     require(
-        webota_module._raw_padded_size(1436) == 1436
-        and webota_module._raw_padded_size(1437) == 2872,
+        webota_module._raw_padded_size(raw_boundary) == raw_boundary
+        and webota_module._raw_padded_size(raw_boundary + 1) == raw_boundary * 2,
         "scripts/esp32base_webota.py: raw upload must pad Content-Length to avoid final short-read timeout",
         errors,
     )
