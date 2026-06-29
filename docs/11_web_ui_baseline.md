@@ -7,7 +7,7 @@
 它服务两类页面：
 
 - 基础库内置页面，例如 Status、WiFi、System Logs、App Events、System、Auth、OTA、App Config。
-- 业务自定义页面，例如设备首页、业务配置、记录列表、操作命令、校准流程、诊断维护。
+- 业务自定义页面，例如设备首页、业务配置、记录列表、操作命令、校准操作、诊断维护。
 
 这套基线不是大型前端框架，也不是业务页面集合。它只提供轻量、紧凑、统一、可裁剪的页面表达能力，让业务项目不用反复调 CSS 和基础布局。
 
@@ -475,7 +475,7 @@ POST -> 303 Redirect -> GET
 
 示例位置：
 
-- `examples/web_ui_gallery`：专门用于查看和验收 Web UI baseline 的页面能力与样式，覆盖状态、统计、分页记录、配置、命令、流程、维护、访问控制、确认、空状态和多字段表单。
+- `examples/web_ui_gallery`：专门用于查看和验收 Web UI baseline 的页面能力与样式，覆盖状态、统计、分页记录、配置、命令、分步操作、维护、访问控制、确认、空状态和多字段表单。
 - `examples/full_demo`
 
 `examples/web_ui_gallery/README.md` 记录了本地构建和烧录查看方式。

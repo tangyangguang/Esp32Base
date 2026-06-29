@@ -362,7 +362,7 @@ void handleConfirmPage() {
     sendGalleryResults();
     Esp32BaseWeb::beginPanel("高风险操作");
     Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_DANGER, "会影响设备状态", "真实项目中应展示影响范围、保留数据和恢复方式。");
-    Esp32BaseWeb::sendInfoRowCompactForm("恢复出厂", "示例只演示页面流程，不执行真实清理。", "保留记录", "/ui-confirm/run", "确认执行", "confirm", "1", Esp32BaseWeb::UI_DANGER);
+    Esp32BaseWeb::sendInfoRowCompactForm("恢复出厂", "示例只演示页面操作，不执行真实清理。", "保留记录", "/ui-confirm/run", "确认执行", "confirm", "1", Esp32BaseWeb::UI_DANGER);
     Esp32BaseWeb::endPanel();
     Esp32BaseWeb::sendFooter();
 }

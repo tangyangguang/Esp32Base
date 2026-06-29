@@ -275,7 +275,7 @@
 - `examples/full_demo` 可在自身目录 `pio run`。
 - `examples/full_demo` 覆盖 App Config string/int/decimal/bool/enum、字段级校验、页面级校验、重启提示和回调。
 - `examples/web_ui_gallery` 可在自身目录 `pio run`。
-- `examples/web_ui_gallery` 覆盖 Web UI baseline 的状态、统计、分页记录、配置、命令、流程、维护、访问控制、确认、空状态和表单页面。
+- `examples/web_ui_gallery` 覆盖 Web UI baseline 的状态、统计、分页记录、配置、命令、分步操作、维护、访问控制、确认、空状态和表单页面。
 - `examples/web_logs_ota` 可在自身目录 `pio run`。
 - `examples/net_runtime` 可在自身目录 `pio run`。
 - `examples/app_events_demo` 可在自身目录 `pio run`，并演示 App Events 写入、分页查看、JSON/CSV 和 POST 写入。
