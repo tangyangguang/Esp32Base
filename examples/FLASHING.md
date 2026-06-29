@@ -27,7 +27,6 @@ pio run -d examples/app_events_demo -e esp32s3_full -t upload
 ```sh
 pio run -d examples/full_demo -e esp32_full -t upload
 pio run -d examples/full_demo -e esp32s3_full -t upload
-pio run -d examples/full_demo -e esp32_full_selftest -t upload
 ```
 
 ## web_logs_ota
