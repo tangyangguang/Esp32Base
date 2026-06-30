@@ -197,7 +197,7 @@ python path/to/Esp32Base/scripts/esp32base_serial_recover_ota.py \
   --port /dev/ttyUSB0
 ```
 
-脚本会先构建目标 PlatformIO env，读取 `board_build.partitions` 对应 CSV，定位 `data/ota`、`ota_0`、`ota_1`，写入 bootloader、partition table 和当前 `firmware.bin`，默认把同一固件写入所有 OTA app 槽。`otadata` 清理不会再作为第二条 `erase_region` 命令执行；脚本会生成一个与 `data/ota` 分区等长的全 `0xFF` 临时镜像，并随其他镜像一起放进同一次 `write_flash`，避免写完 app 槽后因板子未重新进入下载模式而清理失败。`boot_app0` 默认跟随 `data/ota` 偏移；清理 `otadata` 时脚本会跳过 `boot_app0`，以清理结果为准，避免同一条命令重复写同一地址或写到 `ota_0` 前的无语义空洞。恢复前可先加 `--dry-run` 查看完整 `esptool.py` 命令、写入槽位和 `otadata` 处理方式；特殊板型可用 `--bootloader-offset`、`--partition-offset`、`--boot-app0-offset` 显式覆盖偏移。
+脚本会先构建目标 PlatformIO env，读取 `board_build.partitions` 对应 CSV，定位 OTA data 和两个 OTA app 槽，写入 bootloader、partition table 和当前 `firmware.bin`，默认把同一固件写入所有 OTA app 槽并清理启动选择。恢复前可先加 `--dry-run` 查看完整 `esptool.py` 命令、写入槽位和 `otadata` 处理方式；特殊板型可用 `--bootloader-offset`、`--partition-offset`、`--boot-app0-offset` 显式覆盖偏移。
 
 恢复脚本独占串口。执行前先关闭 `pio device monitor`、IDE 串口监视器和其他占用同一 `/dev/cu.*` 或 `/dev/tty.*` 端口的程序；脚本在 macOS/Linux 上会尽量用 `lsof` 提前报告占用者。部分 CH340/CP210x 板子在 460800 下可能进入 stub 后传输中断，可用 `--baud 115200` 降速恢复；如果仍停在 `Connecting...`，需要按住 BOOT 并复位，让设备重新进入下载模式。
 
@@ -349,7 +349,7 @@ build_flags =
 - Web OTA 与 espota 不得同时写 flash。
 - Web OTA 成功后 `/esp32base/api/ota` 中 `bootPartition` 与 `lastTargetPartition` 一致。
 - 启用 `ESP32BASE_OTA_REQUIRE_MARK_VALID=1` 时，即使 WiFi/Web 未 ready，OTA boot/rollback 状态也已初始化，`handle()` 能执行 mark-valid timeout 检查。
-- 双 OTA 串口恢复脚本 dry-run 输出两个 OTA app 槽写入，并显示 `otadata` 会在同一次 `write_flash` 中写入全 `0xFF` 镜像完成清理。
+- 双 OTA 串口恢复脚本 dry-run 输出两个 OTA app 槽写入，并显示 OTA data 清理计划。
 - 双 OTA 串口恢复脚本 dry-run 覆盖 hex、K/M 和空 offset 分区表，确认能解析 `otadata`、`ota_0`、`ota_1`。
 - 双 OTA 串口恢复前关闭串口 monitor；测试覆盖端口占用诊断，实机恢复失败时优先排查 monitor 占用、下载模式进入和高波特率链路稳定性。
 - SHA256 错误，上传失败且不切换分区。

@@ -195,7 +195,7 @@ pio run -t webota
 
 量产项目建议启用 `ESP32BASE_OTA_REQUIRE_MARK_VALID=1`，避免 Arduino core 在应用自检前过早把新 OTA 镜像标记为 valid。业务应在传感器、配置和核心任务初始化通过后调用 `Esp32BaseOta::markCurrentValid()`；setup 阶段崩溃交给 bootloader rollback，运行期未确认交给 `Esp32BaseOta::handle()` timeout rollback。最小配置和示例见 `docs/05_ota.md`。
 
-双 OTA 设备如果已经通过 Web OTA 切换到另一个槽位，串口 `pio run -t upload` 的行为取决于分区表和 PlatformIO/Arduino flash plan。仓库标准分区中 `otadata=0xe000`，串口上传会把 `boot_app0.bin` 写到同一位置，通常会把启动选择重新初始化到 `ota_0`；但自定义分区如果把 `otadata` 移到其他偏移，串口上传可能只覆盖固定 app 槽而不更新当前启动槽，设备仍可能继续从旧的 `ota_1` 启动。串口恢复优先使用基础库脚本，它会按分区表写入两个 OTA app 槽，并在同一次 `write_flash` 里写入全 `0xFF` 的 `otadata` 镜像完成清理；清理 `otadata` 时脚本会跳过 `boot_app0`，以避免重复或错误写入：
+双 OTA 设备如果已经通过 Web OTA 切换到另一个槽位，串口 `pio run -t upload` 的行为取决于分区表和 PlatformIO/Arduino flash plan。仓库标准分区通常会把启动选择重新初始化到 `ota_0`；但自定义分区如果只覆盖固定 app 槽而不更新 OTA data，设备仍可能继续从旧槽启动。串口恢复优先使用基础库脚本，它会按分区表写入两个 OTA app 槽并清理启动选择：
 
 ```sh
 python path/to/Esp32Base/scripts/esp32base_serial_recover_ota.py \
@@ -204,7 +204,7 @@ python path/to/Esp32Base/scripts/esp32base_serial_recover_ota.py \
   --port /dev/ttyUSB0
 ```
 
-可先加 `--dry-run` 查看将执行的 `esptool.py` 命令和 `otadata` 处理方式；特殊分区表或板型可显式覆盖 bootloader、partition table 和 boot_app0 偏移。默认情况下 `boot_app0` 跟随 `data/ota` 偏移，且在清理 `otadata` 时跳过。执行恢复前先关闭 `pio device monitor`、串口调试器和其他占用同一端口的程序；如果 CH340/CP210x 转串口在高波特率下出现 `Serial data stream stopped` 或连接中断，可用 `--baud 115200` 降速重试。
+可先加 `--dry-run` 查看将执行的 `esptool.py` 命令和 `otadata` 处理方式；特殊分区表或板型可显式覆盖 bootloader、partition table 和 boot_app0 偏移。执行恢复前先关闭 `pio device monitor`、串口调试器和其他占用同一端口的程序；如果 CH340/CP210x 转串口在高波特率下出现 `Serial data stream stopped` 或连接中断，可用 `--baud 115200` 降速重试。
 
 ## 文档入口
 
