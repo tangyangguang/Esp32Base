@@ -165,10 +165,10 @@
 - ERROR 仅在 FileLog 模式为 ERROR/WARN/INFO 后写文件；WARN 仅在 WARN/INFO 后写文件；INFO 仅在 INFO 后写文件；DEBUG/VERBOSE 不能配置为系统诊断日志模式。
 - INFO 使用 `1KB / 2s` 缓存。
 - Web System 页只能设置 Off/ERROR/WARN/INFO，非法 POST 值必须失败。
-- Web System 页切换 FileLog 模式时，WARN 审计日志必须包含上一次模式和新模式。
-- FileLog 配置模式开启但运行期因 FS 写入故障停写时，Status、System Logs、System 页必须显示 `write fault`，并说明已有日志可能仍可读取，不能显示成 `disabled`。
-- FileLog 配置模式开启但 FS/init 前置条件不满足时，Status、System Logs、System 页必须显示 `unavailable`，不能显示成用户关闭的 `disabled`。
-- FileLog 模式为 OFF 时，System Logs 和 System 页必须醒目显示 `disabled`，并说明新日志不会写入。
+- Web System 页切换 FileLog 模式时，审计日志应记录上一次模式和新模式。
+- FileLog 配置模式开启但运行期因 FS 写入故障停写时，Status、System Logs、System 页必须区分写入故障和用户关闭，并说明已有日志可能仍可读取。
+- FileLog 配置模式开启但 FS/init 前置条件不满足时，Status、System Logs、System 页必须区分前置条件不足和用户关闭。
+- FileLog 模式为 OFF 时，System Logs 和 System 页必须说明新日志不会写入。
 - FileLog OFF 后 System Logs 页面仍能查看已有历史 segment。
 - `GET /esp32base/logs` 和 `GET /esp32base/logs/raw` 必须只读，不得主动 `flush()`、创建、清空、重建或改变 FileLog fault 状态；需要写入/清理/格式化的维护动作必须走 POST。
 - System 页格式化 LittleFS 成功后必须触发 after-format 回调/事件，结果应说明格式化、重新挂载和 FileLog reload 状态；格式化失败不得触发。
@@ -198,17 +198,17 @@
 - `createFixedFile()` 初始化大文件时不得用 `appendBytes()` 做分块循环；必须避免大 heap 分配，并避免触发 task watchdog。
 - `writeBytesAt()` 支持已有文件固定位置覆盖，文件不存在和写越界返回失败，不隐式扩展文件；覆盖后文件大小不变且覆盖范围可读。
 - FS 已满或存在不可读文件时，Web 诊断返回错误不应触发 task WDT 重启。
-- `listDirInfo()` 返回 name、size、isDir 和 Last modified epoch；`/esp32base/fs` 文件树显示 Last modified 和独立 Status 列。Last modified 不是创建时间，时间明显不可信时显示 `unknown`。
-- 启用 `ESP32BASE_ENABLE_APP_EVENTS=1` 时，`/esp32base/app-events/events.bin` 固定容量创建成功；默认 1024 条、单条 188 bytes、约 188 KiB；重复写入后环形覆盖，重启后仍可分页读取。
+- `listDirInfo()` 返回 name、size、isDir 和 Last modified epoch；`/esp32base/fs` 文件树应展示修改时间和可读性/维护状态。Last modified 不是创建时间，时间明显不可信时应明确标识。
+- 启用 `ESP32BASE_ENABLE_APP_EVENTS=1` 时，`/esp32base/app-events/events.bin` 按配置容量创建成功；重复写入后环形覆盖，重启后仍可分页读取。
 - 已存在 `/esp32base/app-events/events.bin` 但文件尺寸不匹配或不可读时必须进入 fault，不得自动删除或重建；只有文件缺失时 `begin()` 才可创建空 store。
 - App Events 双 header 损坏进入 fault，不自动扫描或清空；单条 record CRC 错误应跳过并暴露可诊断状态，完整扫描后 `count()` 收敛到可读记录数，I/O 读取失败才使 `readLatest()` 返回 false。
 - `readLatest()`、`readStoreInfo()` 和 `readStoreRecords()` 不得从只读路径隐式调用 `begin()` 或创建 store。
 - `Esp32BaseAppEventLog::clear()` 幂等，清空后保留递增 id 并可继续写入。
 - App Events 成功 `begin/append/read/clear` 后不得保留旧 `lastError()`；损坏记录提示只在本次读取确实跳过记录时出现。
-- FS 管理页上传、覆盖或删除 `/esp32base/app-events/events.bin` 后必须重新加载 App Events 运行态；文件树应显示 `app events store` 提醒。
+- FS 管理页上传、覆盖或删除 App Events store 后必须重新加载 App Events 运行态；文件树应给出基础库管理文件提醒。
 - CSV 文本字段必须防护 spreadsheet formula 前缀，不能只做 CSV 引号转义。
 - `/esp32base/fs?manage=1` 对 `unreadable` 文件仍必须提供单文件删除入口，但不能提供下载入口。
-- 单文件删除失败后应尝试截断为 0；如果因此释放可见文件占用，页面不能只显示 `delete_failed`。
+- 单文件删除失败后应尝试截断为 0；如果因此释放可见文件占用，页面应区分“已清空”和“彻底失败”。
 - 清理文件后如果 FileLog 处于写入故障保护，应重新加载当前 FileLog 模式以便恢复写入。
 - listDir / mkdir / rmdir 正常。
 - FS 失败不影响 WiFi/Web。
@@ -237,7 +237,7 @@
 - System Logs 页面。
 - System Logs clear POST + confirm + once + 303。
 - System Logs clear 回到页面后显示成功/失败提示。
-- FS/FileLog 不可用时 System Logs 页面显示 `System logs unavailable`。
+- FS/FileLog 不可用时 System Logs 页面应显示不可用原因，不提供误导性的日志内容。
 - 业务示例中的副作用 POST 必须调用 `Esp32BaseWeb::checkPostAllowed(context)`；跨站 `Origin` 拒绝由 Web 行为测试或实机验证覆盖。
 - 日志内容 HTML escape。
 - 默认 Web 首页和导航开箱可用。
