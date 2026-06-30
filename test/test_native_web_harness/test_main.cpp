@@ -123,6 +123,20 @@ void test_native_request_inputs_and_json_response() {
     TEST_ASSERT_EQUAL_STRING("{\"ok\":true}", response.body.c_str());
 }
 
+void test_native_request_accessors_report_truncation() {
+    Esp32BaseWeb::nativeTestReset();
+    Esp32BaseWeb::nativeTestBeginRequest(Esp32BaseWeb::METHOD_POST, "/api/run");
+    Esp32BaseWeb::nativeTestSetParam("mode", "long-value");
+    Esp32BaseWeb::nativeTestSetBody("{\"long\":true}");
+
+    char value[5];
+    char body[8];
+    TEST_ASSERT_FALSE(Esp32BaseWeb::getParam("mode", value, sizeof(value)));
+    TEST_ASSERT_EQUAL_STRING("long", value);
+    TEST_ASSERT_FALSE(Esp32BaseWeb::getRequestBody(body, sizeof(body)));
+    TEST_ASSERT_EQUAL_STRING("{\"long\"", body);
+}
+
 void test_native_response_stream_and_headers_are_captured() {
     Esp32BaseWeb::nativeTestReset();
     Esp32BaseWeb::nativeTestBeginRequest(Esp32BaseWeb::METHOD_GET, "/download");
@@ -241,6 +255,7 @@ void test_native_ota_preflight_rejects_missing_or_invalid_declared_size() {
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_native_request_inputs_and_json_response);
+    RUN_TEST(test_native_request_accessors_report_truncation);
     RUN_TEST(test_native_response_stream_and_headers_are_captured);
     RUN_TEST(test_native_post_guard_captures_method_auth_and_origin_failures);
     RUN_TEST(test_native_redirect_see_other_is_captured);

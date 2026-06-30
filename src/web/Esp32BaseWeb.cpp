@@ -132,13 +132,14 @@ bool headerNameEquals(const std::string& a, const char* b) {
     return true;
 }
 
-void copyTo(const std::string& value, char* out, size_t len) {
+bool copyTo(const std::string& value, char* out, size_t len) {
     if (!out || len == 0) {
-        return;
+        return false;
     }
     const size_t take = std::min(len - 1U, value.size());
     std::memcpy(out, value.data(), take);
     out[take] = '\0';
+    return value.size() < len;
 }
 
 NativeTestParam* findParam(const char* name) {
@@ -469,16 +470,14 @@ bool Esp32BaseWeb::getParam(const char* name, char* out, size_t len) {
     if (!param || !out || len == 0) {
         return false;
     }
-    copyTo(param->value, out, len);
-    return true;
+    return copyTo(param->value, out, len);
 }
 
 bool Esp32BaseWeb::getRequestBody(char* out, size_t len) {
     if (!out || len == 0) {
         return false;
     }
-    copyTo(nativeState().body, out, len);
-    return true;
+    return copyTo(nativeState().body, out, len);
 }
 
 void Esp32BaseWeb::sendHeader(const char* title) {
@@ -1312,16 +1311,16 @@ bool Esp32BaseWeb::getParam(const char* name, char* out, size_t len) {
     if (!name || !out || len == 0 || !g_server.hasArg(name)) {
         return false;
     }
-    strlcpy(out, g_server.arg(name).c_str(), len);
-    return true;
+    const String value = g_server.arg(name);
+    return strlcpy(out, value.c_str(), len) < len;
 }
 
 bool Esp32BaseWeb::getRequestBody(char* out, size_t len) {
     if (!out || len == 0) {
         return false;
     }
-    strlcpy(out, g_server.arg("plain").c_str(), len);
-    return true;
+    const String value = g_server.arg("plain");
+    return strlcpy(out, value.c_str(), len) < len;
 }
 
 void Esp32BaseWeb::sendHeader(const char* title) {

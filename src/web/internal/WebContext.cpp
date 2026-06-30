@@ -18,6 +18,10 @@ static char* readClientBytesWithTimeout(WiFiClient& client, size_t maxLength, si
         if (!newLength) {
             break;
         }
+        const size_t remaining = maxLength - dataLength;
+        if (newLength > remaining) {
+            newLength = remaining;
+        }
         char* newBuf = static_cast<char*>(buf ? realloc(buf, dataLength + newLength + 1) : malloc(newLength + 1));
         if (!newBuf) {
             free(buf);
