@@ -337,7 +337,7 @@ App Events 页面：
 - 字号和控件尺寸采用主次清晰的设备控制台尺度，避免页面在桌面端显得松散、在手机端难以点击。
 - 页面宽度、背景和内容块样式保持统一，避免正文和操作块错位。
 - 顶部导航使用中性色和主色浅底 active 状态，主色由 CSS 变量控制。
-- 内置状态、WiFi、Auth、OTA、System Logs、App Events、System 页面使用统一标题、panel、按钮和表单节奏；页面标题、正文 panel、导航和 footer 使用同一布局宽度。
+- 内置状态、WiFi、Auth、OTA、System Logs、App Events、System 页面使用统一标题、内容块、按钮和表单节奏；页面标题、正文、导航和 footer 使用同一布局宽度。
 - 内置页的 `POST -> 303 -> GET` 操作结果提示统一紧跟页面标题，先反馈结果，再进入具体内容块。
 - 默认输入框样式只作用于文本类输入，例如未声明 type 的 input、text、password、number、email、url、tel、search。
 - checkbox、radio、file、range、color、hidden 等非文本控件保持浏览器原生尺寸和行为，业务页面不需要额外覆盖基础 CSS。
