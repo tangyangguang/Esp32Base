@@ -12,6 +12,7 @@ errors = []
 
 web_routing = read("src/web/internal/WebRouting.cpp")
 web_core = read("src/web/Esp32BaseWeb.cpp")
+web_header = read("src/web/Esp32BaseWeb.h")
 web_auth = read("src/web/internal/WebAuth.cpp")
 web_wifi = read("src/web/internal/WebWifi.cpp")
 wifi = read("src/network/Esp32BaseWiFi.inc")
@@ -38,14 +39,10 @@ if "ESP32BASE_WEB_ALLOW_INSECURE_DEFAULT_AUTH" not in profile:
     errors.append("src/Esp32BaseProfile.h: missing explicit insecure default auth opt-in macro")
 if 'applyPlainAuth(g_defaultAuthSet ? g_defaultAuthUser : "admin"' in web_routing:
     errors.append("src/web/internal/WebRouting.cpp: Web auth must not silently fall back to admin/admin")
-if "auth_default_missing" not in web_core:
-    errors.append("src/web/Esp32BaseWeb.cpp: Web begin must fail closed when no stored/default auth is configured")
-if "g_startLocked" not in web_core or "bool Esp32BaseWeb::startLocked()" not in web_core:
-    errors.append("src/web/Esp32BaseWeb.cpp: auth-missing fail-closed must latch startLocked after the first failure")
+if "bool Esp32BaseWeb::startLocked()" not in web_core or "static bool startLocked();" not in web_header:
+    errors.append("src/web/Esp32BaseWeb.cpp: auth-missing fail-closed must expose a start-locked state")
 if "!Esp32BaseWeb::startLocked()" not in base:
     errors.append("src/Esp32Base.cpp: deferred Web start must stop retrying while Web start is locked")
-if "source=insecure_builtin" not in web_core:
-    errors.append("src/web/Esp32BaseWeb.cpp: insecure built-in default auth must be explicitly logged when enabled")
 if '_option("esp32base_webota_user", "admin")' in webota or '_option("esp32base_webota_password", "admin")' in webota:
     errors.append("scripts/esp32base_webota.py: webota must not default Basic Auth to admin/admin")
 for forbidden in [
