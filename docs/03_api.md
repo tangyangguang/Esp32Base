@@ -1070,7 +1070,7 @@ Route 缓冲机制：
 - `addRoute()` 始终写入静态路由表。
 - path 必须以 `/` 开头，最大可见长度为 47 字节；更长路径返回 false，避免静默截断。
 - Web 未启动时缓存。
-- Web 启动时一次性注册。
+- Web 启动阶段注册一次。
 - Web 已启动时立即注册。
 - `addPage()` 注册业务页面并默认进入业务导航；`addNavItem()` 可把应用已有路由加入业务导航但不注册 handler。
 - `addPage(path, title, handler)` 必须由应用显式提供短标题，例如 `Fan`、`Config`。

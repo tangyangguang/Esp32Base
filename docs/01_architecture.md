@@ -245,7 +245,7 @@ ESP32BASE_STRICT_OPTIONAL_BEGIN=0
 12. OTA handle，包含 mark-valid timeout 检查。
 13. Health handle。
 14. Watchdog feed。
-15. 一次性启动诊断日志。
+15. 启动阶段诊断日志。
 
 LittleFS 当前没有 maintenance 任务，不在 handle 中做额外维护。
 

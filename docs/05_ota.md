@@ -63,7 +63,7 @@ pio run -t webota
 - `esp32base_webota_port`：默认 `80`。
 - `esp32base_webota_path`：默认 `/esp32base/ota/raw`，走 raw binary endpoint；显式设为 `/esp32base/ota` 时走 multipart 上传路径，和浏览器手工选择文件上传使用同一个设备端 OTA handler。
 - `esp32base_webota_user` / `esp32base_webota_password`：当前 Web Auth 用户名和密码；未配置时脚本仍可从环境变量读取，但不再假设设备内置 `admin/admin`。
-- `esp32base_webota_auth`：可用 `user:password` 一次性设置 Basic Auth。
+- `esp32base_webota_auth`：可用 `user:password` 设置 Basic Auth。
 - `esp32base_webota_sha256`：默认 `auto`，可设为 `off` 或 64 字符 SHA256。
 - `esp32base_webota_timeout`：默认 `120` 秒，用于预检和普通请求。
 - `esp32base_webota_upload_timeout`：默认 `90` 秒，用于实际固件上传，弱网或大固件可单独调大。

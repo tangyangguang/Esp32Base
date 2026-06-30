@@ -3,7 +3,7 @@
 
 const Esp32BaseWeb::ResultNotice GALLERY_RESULTS[] = {
     {"saved", "1", Esp32BaseWeb::UI_OK, "保存成功", "页面已通过 POST -> 303 -> GET 返回。"},
-    {"done", "1", Esp32BaseWeb::UI_OK, "操作已提交", "这是一次性命令的完成反馈。"},
+    {"done", "1", Esp32BaseWeb::UI_OK, "操作已提交", "这是即时命令的完成反馈。"},
     {"blocked", "1", Esp32BaseWeb::UI_WARN, "暂不能执行", "设备状态不满足条件时，应说明原因和下一步。"}
 };
 
@@ -161,7 +161,7 @@ void handleStatusPage() {
     Esp32BaseWeb::sendInfoRowCompactLink("状态与统计", "设备首页和轻量统计摘要，避免引入图表库。", nullptr, "/ui-status/stats", "查看");
     Esp32BaseWeb::sendInfoRowCompactLink("记录与分页", "筛选、表头、空状态和页码型分页。", nullptr, "/ui-records", "查看");
     Esp32BaseWeb::sendInfoRowCompactLink("配置与表单", "紧凑配置列表、行内动作和多字段独立编辑页。", nullptr, "/ui-config", "查看");
-    Esp32BaseWeb::sendInfoRowCompactLink("命令与确认", "一次性动作、危险确认和 PRG 防重复提交。", nullptr, "/ui-action", "查看");
+    Esp32BaseWeb::sendInfoRowCompactLink("命令与确认", "即时动作、危险确认和 PRG 防重复提交。", nullptr, "/ui-action", "查看");
     Esp32BaseWeb::sendInfoRowCompactLink("维护与权限", "诊断维护、访问受限和空状态。", nullptr, "/ui-status/maintenance", "查看");
     Esp32BaseWeb::endPanel();
     Esp32BaseWeb::sendFooter();
@@ -303,7 +303,7 @@ void handleActionPage() {
         return;
     }
     Esp32BaseWeb::sendHeader("UI Action");
-    Esp32BaseWeb::sendPageTitle("操作命令", "一次性动作与长期配置分离，提交后必须回到 GET 页面。");
+    Esp32BaseWeb::sendPageTitle("操作命令", "即时动作与长期配置分离，提交后必须回到 GET 页面。");
     sendGalleryResults();
     Esp32BaseWeb::beginPanel("立即执行");
     Esp32BaseWeb::sendInfoRowCompactForm("可执行", "设备空闲、时间可信、无严重异常。", nullptr, "/ui-action/run", "开始", "run", "1");
