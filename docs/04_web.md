@@ -282,14 +282,13 @@ OTA 上传页：
 System Logs 页面：
 
 - 需要 Basic Auth。
-- FS/FileLog 不可用时显示轻量不可用面板，标题为 `System logs unavailable`。
+- FS/FileLog 不可用时显示轻量不可用面板，并说明不可用原因。
 - Clear system logs POST 后通过 303 回到 System Logs 页，并在页面顶部显示成功或失败提示；刷新页面不重复提交。
 - FileLog 模式为 OFF 时，System Logs 页面仍展示已有历史日志；OFF 只表示停止后续写入。
 - `GET /esp32base/logs` 和 `GET /esp32base/logs/raw` 必须保持只读，只读取已经落盘的系统诊断日志快照，不主动 `flush()`、创建、清空或重建文件。页面会展示当前 buffer used/total，尚在缓存中的 INFO 日志可等待常规 flush interval；清空、格式化、重启等维护副作用仍必须通过 POST，不通过 GET 触发。
 - System Logs 页面只面向 Esp32Base 系统诊断日志，不读取 `Esp32BaseAppEventLog`，也不展示业务事件。页面命名面向用户，`Esp32BaseFileLog` 是底层实现/API 名称。
-- 显示 enabled、path、mode、rotate files、buffer used/total、flush interval、max per file、max total、每段大小。
-- 系统诊断日志状态信息使用 panel 内紧凑小字号表格展示，label/value 纵向对齐；其中的容量值只显示 KB/MB/B 人性化值，不重复 raw bytes。
-- 页面顶部以标签展示所有 segment，顺序为 `current-0`、`history-1`、`history-2` 到最旧 history；标签里的文件名和大小分开展示，大小只显示 KB/MB/B 人性化值。
+- 显示系统诊断日志的启用状态、路径、模式、轮转、缓冲区和容量摘要；容量值用 KB/MB/B 人性化格式展示，不重复暴露 raw bytes。
+- 页面提供 current 和历史 segment 的切换入口，并展示各 segment 的文件名和大小。
 - 默认显示 `current-0`；可通过 `?segment=N` 查看单个历史文件，非法或越界 segment 回落到 `current-0`。
 - 日志正文不内联进主 HTML；System Logs 页面通过 iframe 加载 `/esp32base/logs/raw?segment=N` 的 `text/plain` 原文，避免大日志逐字符 HTML escape。
 - 清空日志入口位于 System 页面；System Logs 页面只负责查看日志。
@@ -301,7 +300,7 @@ App Events 页面：
 
 - 仅在 `ESP32BASE_ENABLE_APP_EVENTS=1` 时注册，标题和导航标签为 `App Events`，可通过 `setBuiltinLabel(BUILTIN_APP_EVENTS, "...")` 覆盖。
 - 这是应用业务事件日志的内置系统视图，用偏底层的维护视角展示事件日志内容、管理和存储状态；它不属于 System Logs，也不替业务系统解释业务语义。
-- 页面显示事件容量、实际文件大小、有效事件数、next id、存储路径、header 状态、紧凑筛选、CSV 导出、分页表格和详情弹层；分页使用 `sendPagination()`，默认每页 10 条。
+- 页面显示事件容量、文件大小、有效事件数、next id、存储路径、header 状态、筛选、CSV 导出、分页列表和事件详情。
 - 筛选条件包括等级、时间类型、来源、类型、原因和关键词；HTML、JSON API、CSV 共用同一组筛选语义。`source/type/reason` 必须符合事件 token 的字符和长度约束，避免超长参数被截断后误匹配。筛选请求不额外做独立 count 扫描，而是在输出当前页时统计匹配总数。
 - 表格展示状态、位置、时间、等级、事件、对象和详情入口。CRC 损坏、magic 异常、level 异常、未提交或空槽等只要能读出 record 字节就客观展示并标记状态；字符串字段按固定长度安全显示，不假设损坏记录带有 `\0`。
 - 详情弹层展示事件字段和必要存储诊断字段，便于维护人员判断记录是否可读、是否提交、时间是否可解析；内部字段使用弱化样式。
