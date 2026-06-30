@@ -52,7 +52,7 @@
 - classic ESP32 4MB 推荐分区表必须保持 `app0=0x10000`，不要求业务项目设置 `board_upload.offset_address`。
 - 发布包包含 `examples/basic` 的 profile 依赖裁剪验证源码。
 - 发布包包含独立 PIO 示例 `examples/full_demo`、`examples/web_ui_gallery`、`examples/web_logs_ota`、`examples/net_runtime`。
-- 发布包不包含历史设计、评审、评估等过程文件。
+- 发布包不包含历史设计、评审、评估等本地非发布材料。
 - 发布包不包含 `.pio/`、`.cache/`、`idf_component.yml` 等构建生成物。
 
 ## 5. 裁剪检查
