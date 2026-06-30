@@ -375,7 +375,7 @@ void handleCsvApi() {
 
 - `beginResponse(code, contentType, filename)` 可输出 CSV、JSONL、HTML 片段或二进制下载等自定义响应；文本用 `sendChunk()`，二进制块用 `sendBytes()`。
 - `contentType` 必须非空且不超过 63 字节；`filename` 仅允许字母、数字、`.`、`_`、`-`，非法时返回 false。
-- 固件内固定 CSS/JS/图片优先使用 `addStaticAsset()`，让基础库统一输出固定长度和缓存头；动态下载或临时导出需要自定义头时，先调用 `sendResponseHeader(name, value)`，再调用 `beginResponse()` 或 `sendJson()` 等实际发送函数。
+- 固件内固定 CSS/JS/图片优先使用 `addStaticAsset()`，让基础库统一输出固定长度和缓存头；动态下载或按需导出需要自定义头时，先调用 `sendResponseHeader(name, value)`，再调用 `beginResponse()` 或 `sendJson()` 等实际发送函数。
 - handler 外调用 begin/end chunked 响应会安全失败或 no-op，并记录 WARN。
 - 长响应发送会在每次实际写入客户端后主动 `yield()`；客户端已断开时停止继续输出，避免大 HTML/CSS 页面长期占住 Web 处理。
 - 当前仍使用 Arduino 同步 `WebServer`，单个大 HTML/JSON/CSV 响应发送期间会占用 `handleClient()`，新连接需等待当前 handler 返回；业务长任务采用“启动任务 -> 返回 task id -> 轮询状态”，大历史数据优先分页、缩短默认 range 或异步加载。
