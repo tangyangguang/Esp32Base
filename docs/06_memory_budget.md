@@ -181,12 +181,11 @@ ESP32-C3 4MB 要控制 Web/OTA/Fs 组合的体积。
 
 推荐分区表：
 
-| Target | 分区表 | NVS | 单 app slot（最大固件） | LittleFS（最大文件数据） | coredump | 当前代表 FULL firmware.bin | 余量 |
-| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| ESP32 4MB, Core 2.x | `partitions/esp32-4mb-ota-balanced.csv` | `20 KB / 0x5000` | `1.50 MB / 0x180000` | `896 KB / 0xE0000` | `64 KB / 0x10000` | 967069 | 605795 |
-| ESP32 4MB, Core 3.x | `partitions/esp32-4mb-ota-balanced.csv` | `20 KB / 0x5000` | `1.50 MB / 0x180000` | `896 KB / 0xE0000` | `64 KB / 0x10000` | 1207813 | 365051 |
-| ESP32-S3 8MB, Core 2.x | `partitions/esp32-s3-8mb-ota-balanced.csv` | `20 KB / 0x5000` | `2.25 MB / 0x240000` | `3.38 MB / 0x360000` | `64 KB / 0x10000` | 924912 | 1434384 |
-| ESP32-C3 4MB, Core 2.x | `partitions/esp32-c3-4mb-ota-balanced.csv` | `20 KB / 0x5000` | `1.50 MB / 0x180000` | `896 KB / 0xE0000` | `64 KB / 0x10000` | 975352 | 597512 |
+| Target | 分区表 | NVS | 单 app slot（最大固件） | LittleFS（最大文件数据） | coredump |
+| --- | --- | ---: | ---: | ---: | ---: |
+| ESP32 4MB | `partitions/esp32-4mb-ota-balanced.csv` | `20 KB / 0x5000` | `1.50 MB / 0x180000` | `896 KB / 0xE0000` | `64 KB / 0x10000` |
+| ESP32-S3 8MB | `partitions/esp32-s3-8mb-ota-balanced.csv` | `20 KB / 0x5000` | `2.25 MB / 0x240000` | `3.38 MB / 0x360000` | `64 KB / 0x10000` |
+| ESP32-C3 4MB | `partitions/esp32-c3-4mb-ota-balanced.csv` | `20 KB / 0x5000` | `1.50 MB / 0x180000` | `896 KB / 0xE0000` | `64 KB / 0x10000` |
 
 4MB FULL profile 必须持续关注 OTA slot 余量。ESP32 / ESP32-C3 4MB 推荐分区表提供 1.5MB 单 app slot；业务若继续增加大页面、证书、图片或大型逻辑，应优先改用 8MB Flash 板型，而不是压缩本库核心逻辑或重新引入多套 4MB 分区预设。
 
