@@ -213,7 +213,7 @@ WiFi 配置页：
 
 - 回显当前 SSID。
 - 不回显当前密码；留空表示保持已保存密码，显式勾选清除密码才会切换开放网络。
-- 页面使用 baseline 表单结构：`formpanel + editform + fieldgrid`；清除 WiFi 使用 `dangerpanel`。
+- 页面应清楚区分 WiFi 保存和清除凭据这类危险操作。
 - 表单提交前用前端 JS 校验 SSID 非空；密码可为空，用于开放 WiFi。
 - 服务端 API 必须重复校验 SSID 非空，密码允许为空。
 - 空 SSID 返回错误，不保存凭证。
@@ -258,8 +258,8 @@ App Config 页面：
 - 启用后必须显式设置 `ESP32BASE_APP_CONFIG_MAX_GROUPS` 和 `ESP32BASE_APP_CONFIG_MAX_FIELDS`，硬上限为 16 组、128 字段。
 - 未注册 group 或字段时页面显示轻量空状态，提示应用尚未注册配置字段。
 - 支持 string、int、decimal 定点数、bool、enum；string 最大 256 bytes，enum value 最大 31 bytes，label/option label 最大 31 bytes，help 最大 96 bytes，unit 最大 12 bytes，decimal 使用 `int32_t raw` 和 `scale=0..6`。
-- 页面按 group 输出紧凑 panel，字段默认直接可编辑；点击 Save 时前端只展示变更核对清单，不作为服务端事实来源。
-- 变更核对清单使用中性样式，不使用成功色或警告色；只有实际保存结果才使用 `ok`/`danger` notice。
+- 页面按 group 展示字段，字段默认直接可编辑；点击 Save 时前端只展示变更核对清单，不作为服务端事实来源。
+- 变更核对清单只用于提交前确认；只有实际保存结果才作为成功或失败反馈。
 - POST 保存时后端重新解析、执行内置校验、执行字段级和页面级业务校验、读取当前 NVS 并计算实际变化字段。
 - 任一校验失败时零写入；校验通过后只保存变化字段，未变化字段绝不写 NVS。
 - 只读状态、未来版本或业务版本不兼容等业务规则应通过页面级校验作为保存前 veto 处理；校验回调可读取本次整页提交值，拒绝时不会进入任何 App Config 字段写入。
@@ -272,7 +272,7 @@ App Config 页面：
 OTA 上传页：
 
 - 使用 Web Basic Auth，不额外要求单独认证。
-- 页面使用 `formpanel uploadpanel`，保持上传控件、SHA256 可选校验和进度反馈在同一任务块内。
+- 页面保持上传控件、SHA256 可选校验和进度反馈在同一任务流程内。
 - 上传中显示进度。
 - 页面进度同时显示百分比、已处理容量和总容量。
 - 页面容量值只显示 KB/MB/B 人性化格式；OTA 状态 API 继续保留 raw `bytes` 数值并附带 `human` 字段。
