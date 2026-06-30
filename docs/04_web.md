@@ -490,7 +490,7 @@ Esp32BaseWeb::addRoute("/api/device/config", Esp32BaseWeb::METHOD_ANY, handleCon
 - `isAjaxRequest()`、`sendAjaxReplace()`、`sendAjaxError()`：配合 `X-Esp32Base-Ajax: 1` 处理局部提交结果。
 - `sendPagination(pagination)`：页码型列表分页，包含总条数、总页数、首页、上一页、下一页、尾页、当前页附近页码、每页条数和跳页提交；`perPage=0` 时默认 10 条，每页选项为 10、15、20、30、50。
 
-如果业务页面已经使用浏览器原生 `<dialog>`，推荐写作 `<dialog class="panel eb-modal">`。基础 `/esp32base/ui.css` 会统一原生 dialog、遮罩、`dialog.panel` 和 `dialog.eb-modal` 的轻量弹层外观；弹层内部继续复用 `fieldgrid`、`field`、`actions`、`btnlink` 和 `secondary`，无需在业务库复制 modal 样式。只读详情弹层可以增加 `data-eb-light-dismiss="1"`，允许点击遮罩关闭；危险确认、提交表单和可能丢失输入的弹层不要启用。
+如果业务页面已经使用浏览器原生 `<dialog>`，可复用基础 `/esp32base/ui.css` 的轻量弹层、表单和按钮样式，无需在业务库复制 modal CSS。只读详情弹层可以增加 `data-eb-light-dismiss="1"`，允许点击遮罩关闭；危险确认、提交表单和可能丢失输入的弹层不要启用。
 
 示例：
 
@@ -537,7 +537,7 @@ void handleHeadExtra() {
 - 主按钮只用于明确提交/执行；普通入口、分页和低频工具动作使用浅底描边按钮，整体高度不要显得过高或过胖。
 - 紧凑行动作和分页跳转使用按钮型链接，不使用小尺寸状态标签代替可点击控件。
 - 紧凑行同时包含状态值和动作时，状态值与按钮之间必须有清晰间距。
-- 紧凑行右侧使用固定值列和动作列；同一组内的状态值、数量和按钮应竖向对齐。
+- 紧凑行同时包含状态值和动作时，同一组内的状态值、数量和按钮应保持稳定对齐。
 - 同组只读状态值应和带动作行的状态值位置保持一致，避免占用动作按钮视觉区域。
 - 简单字段行内编辑和多字段独立编辑页有明显区别。
 - 分页显示总条数、总页数、首页、上一页、下一页、尾页和当前页。

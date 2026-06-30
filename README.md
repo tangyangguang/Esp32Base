@@ -101,7 +101,7 @@ build_flags =
 
 App Config 支持 string、int、decimal 定点数、bool 和 enum 字段；保存时后端重新校验并只写入实际变化字段。`setPageValidateCallback()` 用于保存前 veto，`setSaveCallback()` 只用于保存后通知。多字段保存不是跨 key 事务，关键强一致配置应使用单个 POD/blob 或业务自定义提交模型。注册传入的字符串和 enum option 数组需保持固件生命周期有效。标记为重启后生效的字段会在未重启会话内持续提示运行中旧值和已保存新值。
 
-Web 页面可优先使用 Esp32Base 的 UI baseline、helper 和页面能力；不要在业务项目里为样式问题临时复制 CSS 或绕开基础库壳层。单字段轻量编辑可使用行内编辑 helper，小型 1-3 字段表单可使用弹层表单 helper；二者会在支持 `fetch` 的浏览器中局部提交和局部替换，禁用 JS 时仍回退到普通表单提交。需要业务自控打开/关闭时，也可直接使用原生 `<dialog class="panel eb-modal">` 并复用 `fieldgrid`、`actions`、`btnlink`。现有页面能力不适合时，业务侧可以做最小局部实现；多个项目确实会复用的模式，再回到 Esp32Base 补通用 helper、样式、示例和文档。
+Web 页面可优先使用 Esp32Base 的 UI baseline、helper 和页面能力；不要在业务项目里为样式问题临时复制 CSS 或绕开基础库壳层。单字段轻量编辑可使用行内编辑 helper，小型 1-3 字段表单可使用弹层表单 helper；二者会在支持 `fetch` 的浏览器中局部提交和局部替换，禁用 JS 时仍回退到普通表单提交。需要业务自控打开/关闭时，也可直接使用原生 `<dialog>` 并复用基础表单和按钮样式。现有页面能力不适合时，业务侧可以做最小局部实现；多个项目确实会复用的模式，再回到 Esp32Base 补通用 helper、样式、示例和文档。
 
 需要真实时间时，业务项目应优先通过 `Esp32BaseTime::snapshot()` 获取统一时间快照。NTP 是最高优先级时间源；启用 RTC 时，DS3231 或 PCF8563 可在离线启动时提供真实时间。断网启动时业务仍能记录当前 `bootId + uptimeSec`；本次 boot 后续由 RTC 或 NTP 建立可信时间后，可用 `Esp32BaseTime::resolveCurrentBootEvent()` 只回填同一 boot 的相对时间事件，历史未知时间不会被伪造为日期。旧的 `Esp32BaseNtp::snapshot()` 仍表示 NTP 自身状态，不作为 RTC-only 设备的业务时间入口。
 
