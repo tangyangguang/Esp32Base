@@ -429,6 +429,9 @@ void Esp32Base::logResources() {
 #if ESP32BASE_ENABLE_FILELOG
 #include "runtime/Esp32BaseFileLog.inc"
 #endif
+#if ESP32BASE_ENABLE_RS485_PORT
+#include "runtime/Esp32BaseRs485Port.inc"
+#endif
 #if ESP32BASE_ENABLE_TIME
 #include "runtime/Esp32BaseTime.inc"
 #endif

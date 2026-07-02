@@ -27,6 +27,9 @@
 #if ESP32BASE_ENABLE_FILELOG
 #include "runtime/Esp32BaseFileLog.h"
 #endif
+#if ESP32BASE_ENABLE_RS485_PORT
+#include "runtime/Esp32BaseRs485Port.h"
+#endif
 #if ESP32BASE_ENABLE_TIME
 #include "runtime/Esp32BaseTime.h"
 #endif

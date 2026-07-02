@@ -866,7 +866,83 @@ NTP 对时成功日志应能帮助把启动后毫秒时间轴映射到真实时�
 
 日志时间戳在没有可信真实时间前使用启动后的 `millis()`，例如 `[42442]`；RTC 或 NTP 建立可信时间后切换为绝对日期时间，例如 `[2026-05-05 12:45:55]`。NTP 对时成功时应输出可用于换算早期毫秒时间轴的诊断信息。
 
-## 9. Esp32BaseWeb
+## 9. Esp32BaseRs485Port
+
+仅在 `ESP32BASE_ENABLE_RS485_PORT=1` 时可用。该模块只封装 ESP32 `HardwareSerial` 半双工 RS485 的通用方向控制能力，不提供 Modbus/RTU、CRC、地址、超时帧、重试、寄存器或任何应用协议。
+
+```cpp
+class Esp32BaseRs485Port {
+public:
+    struct Config {
+        int8_t rxPin;
+        int8_t txPin;
+        int8_t dePin;
+        uint32_t baud;
+        uint32_t serialConfig;
+        uint32_t turnaroundDelayUs;
+        bool deActiveHigh;
+    };
+
+    explicit Esp32BaseRs485Port(HardwareSerial& serial);
+
+    bool configure(int8_t rxPin,
+                   int8_t txPin,
+                   int8_t dePin,
+                   uint32_t baud,
+                   uint32_t serialConfig = SERIAL_8N1,
+                   uint32_t turnaroundDelayUs = ESP32BASE_RS485_DEFAULT_TURNAROUND_DELAY_US,
+                   bool deActiveHigh = true);
+    bool configure(const Config& config);
+    bool begin();
+    bool isBegun() const;
+
+    size_t writeBytes(const uint8_t* data, size_t len);
+    size_t writeBytes(const char* text);
+    bool readable();
+    int readByte();
+    int available();
+
+    void setTurnaroundDelayUs(uint32_t delayUs);
+    uint32_t turnaroundDelayUs() const;
+    void setDirectionReceive();
+    void setDirectionTransmit();
+};
+```
+
+约定：
+
+- 应用持有 `Esp32BaseRs485Port` 实例并指定 `HardwareSerial`，基础库不抢占 `Serial1`/`Serial2`。
+- `configure()` 要求 RX、TX、DE 引脚和 `baud` 有效；`serialConfig` 直接传给 Arduino `HardwareSerial::begin()`，例如 `SERIAL_8N1`。
+- `begin()` 会先把 DE 配置为输出并置为接收态，再初始化串口。默认 `deActiveHigh=true`，即 DE 高电平发送、低电平接收；反相收发器可设置为 `false`。
+- `writeBytes()` 发送前切到 TX，等待 `turnaroundDelayUs`，写入字节，调用 `HardwareSerial::flush()` 等待 TX 完成，再等待同一 turnaround delay 并切回 RX。
+- `readable()`、`available()` 和 `readByte()` 只做轮询读取，不缓存协议帧；没有可读字节时 `readByte()` 返回 Arduino `Stream::read()` 的 `-1`。
+- `setDirectionReceive()` / `setDirectionTransmit()` 只在 `begin()` 成功后生效，用于少数需要手动控制方向的应用层时序。
+- 模块不分配大缓冲，不创建 Esp32Base 后台任务，不参与 `Esp32Base::handle()`；应用在单 loop 中调用读取和协议状态机。
+
+最小接入：
+
+```cpp
+#define ESP32BASE_ENABLE_RS485_PORT 1
+#include <Esp32Base.h>
+
+Esp32BaseRs485Port rs485(Serial2);
+
+void setup() {
+    Esp32Base::begin();
+    rs485.configure(16, 17, 4, 9600, SERIAL_8N1, 50);
+    rs485.begin();
+}
+
+void loop() {
+    Esp32Base::handle();
+    if (rs485.readable()) {
+        const int value = rs485.readByte();
+        // Application protocol parsing belongs here.
+    }
+}
+```
+
+## 10. Esp32BaseWeb
 
 ```cpp
 class Esp32BaseWeb {
@@ -1141,7 +1217,7 @@ Native Web handler 测试：
 - `sendHeader()` 输出的默认 input 样式只覆盖文本类控件；checkbox、radio、file、range、color、hidden 等非文本控件不被拉伸成文本输入框。
 - `sendHeader()` 的基础样式保持简洁中性：普通链接不默认渲染为蓝色按钮，导航 active 使用浅绿灰背景和深绿灰文字；业务视觉仍推荐通过 `setHeadExtraCallback()` 注入 CSS。
 
-## 10. Esp32BaseAppConfig
+## 11. Esp32BaseAppConfig
 
 仅在 `ESP32BASE_ENABLE_APP_CONFIG=1` 时可用，依赖 Web。启用后必须显式设置：
 
@@ -1216,7 +1292,7 @@ void setup() {
 }
 ```
 
-## 11. Esp32BaseOta
+## 12. Esp32BaseOta
 
 ```cpp
 class Esp32BaseOta {
@@ -1276,7 +1352,7 @@ Web OTA 上传页面不要求额外认证；它只复用 Web 层 Basic Auth。�
 
 Web OTA 与 ArduinoOTA 不得同时写 flash；已有 OTA 传输进行时，另一入口必须拒绝或暂停处理。
 
-## 11. Esp32BaseWatchdog / Sleep / Fs / Health
+## 13. Esp32BaseWatchdog / Sleep / Fs / Health
 
 ```cpp
 class Esp32BaseWatchdog {

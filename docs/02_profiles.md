@@ -23,6 +23,7 @@ ESP32BASE_PROFILE_CORE
 - `ESP32BASE_ENABLE_FS`
 - `ESP32BASE_ENABLE_FILELOG`
 - `ESP32BASE_ENABLE_APP_EVENTS`
+- `ESP32BASE_ENABLE_RS485_PORT`
 - `ESP32BASE_ENABLE_HEALTH`
 - `ESP32BASE_ENABLE_WIFI`
 - `ESP32BASE_ENABLE_DNS`
@@ -80,6 +81,7 @@ Profile 默认值不能覆盖用户显式 `-D`。
 - `FILELOG` 需要 `FS`。
 - `APP_EVENTS` 需要 `FS`，默认关闭，不随任何 profile 自动开启。
 - `APP_CONFIG` 需要 `WEB`，默认关闭，不随任何 profile 自动开启。
+- `RS485_PORT` 无 Esp32Base 内部硬依赖，默认关闭，不随任何 profile 自动开启；业务通过 `ESP32BASE_ENABLE_RS485_PORT=1` 显式启用，并自行选择 `HardwareSerial`、RX/TX/DE 引脚和串口参数。
 
 软依赖：
 
@@ -96,6 +98,8 @@ Profile 默认值不能覆盖用户显式 `-D`。
 启用 FS 的 profile 默认启用系统诊断日志。底层实现/API 名称仍为 FileLog（`Esp32BaseFileLog`）；用户仍可显式关闭 `ESP32BASE_ENABLE_FILELOG`。
 
 应用事件日志通过 `ESP32BASE_ENABLE_APP_EVENTS=1` 显式启用，默认容量 `ESP32BASE_APP_EVENT_LOG_CAPACITY=1024`，允许范围 `64..2048`。该能力使用 LittleFS 固定文件存储，适合结构化业务事件，不作为系统诊断日志、调试日志或业务长期数据模型。
+
+RS485 半双工基础串口通过 `ESP32BASE_ENABLE_RS485_PORT=1` 显式启用。它只负责 `HardwareSerial` 初始化、DE 方向脚切换、发送后 `flush()` 等待和轮询读取，不创建后台任务，不分配协议缓冲，不解析帧，也不内置 Modbus/RTU、CRC、重试或业务命令。
 
 外部 RTC 是可选时间源，不随任何 profile 自动启用。应用固件必须在构建期二选一配置驱动，不做运行时自动识别：
 

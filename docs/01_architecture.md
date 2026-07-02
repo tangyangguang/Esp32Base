@@ -64,6 +64,7 @@ Core 不包含 Event Bus。Bus 是 Runtime 可选模块。
 - `Esp32BaseAppEventLog`
 - `Esp32BaseTime`
 - `Esp32BaseRtc`
+- `Esp32BaseRs485Port`
 - `Esp32BaseHealth`
 
 职责：
@@ -76,6 +77,7 @@ Core 不包含 Event Bus。Bus 是 Runtime 可选模块。
 - 应用事件日志，依赖 Fs，提供业务项目可复用的结构化事件环形存储，不解释业务语义。
 - 统一可信时间门面（`Esp32BaseTime`），整合 uptime、RTC 和 NTP。
 - 外部 RTC 时间源（`Esp32BaseRtc`），支持 DS3231 / PCF8563 构建期二选一。
+- RS485 半双工串口方向控制（`Esp32BaseRs485Port`），封装 `HardwareSerial`、RX/TX/DE 引脚、发送前后 DE 切换和轮询读取，不包含 Modbus 或业务协议。
 - 健康诊断。
 
 Runtime 只依赖 Core。
