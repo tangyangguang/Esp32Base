@@ -23,6 +23,9 @@
 #if ESP32BASE_ENABLE_APP_EVENTS
 #include "../../runtime/Esp32BaseAppEvents.h"
 #endif
+#if ESP32BASE_ENABLE_RECORD_STORE
+#include "../../runtime/Esp32BaseRecordStore.h"
+#endif
 #if ESP32BASE_ENABLE_FS
 #include "../../runtime/Esp32BaseFs.h"
 #endif

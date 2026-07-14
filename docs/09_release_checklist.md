@@ -172,7 +172,7 @@
 - FileLog OFF 后 System Logs 页面仍能查看已有历史 segment。
 - `GET /esp32base/logs` 和 `GET /esp32base/logs/raw` 必须只读，不得主动 `flush()`、创建、清空、重建或改变 FileLog fault 状态；需要写入/清理/格式化的维护动作必须走 POST。
 - System 页格式化 LittleFS 成功后必须触发 after-format 回调/事件，结果应说明格式化、重新挂载和 FileLog reload 状态；格式化失败不得触发。
-- System 页格式化 LittleFS 成功并重新 mount 后，启用 App Events 时必须重新创建 `/esp32base/records/app-events.v1/`，后续 append/read 不得沿用格式化前的运行态。
+- System 页格式化 LittleFS 成功并重新 mount 后，启用 App Events 时必须重新创建 `/esp32base/records/app-events.v1/`，并逐个reload已登记的当前业务Store；后续append/read不得沿用格式化前的运行态，任一恢复失败不得提示整体成功。
 - `setSerialLevel(NONE)` 后 Serial 不输出，但 FileLog 仍按当前模式写入。
 - `setRuntimeLevel(NONE)` 后 Serial 和 FileLog 都停止。
 - WARN/ERROR 立即写入。
@@ -205,6 +205,8 @@
 - RecordStore启动扫描和reload必须按段批量遍历槽位，最新分页必须按段倒序批量读取；不得按记录反复打开文件，千条容量的Store不能造成数十秒启动延迟。
 - `readLatest()`、`readById()`、`readStatus()`不得从只读路径隐式创建或重写Store。
 - `clear()`通过双控制头提交逻辑可见边界，再尽力删除旧段；清空后保留递增ID并可继续写入，它不是安全擦除。
+- Web登记当前业务Store后，System页必须显示各Store路径、状态和记录数，并通过独立红色 `Clear Business Records` 危险操作统一清空；App Events和未登记历史版本不得进入该列表。
+- Business Records清空必须先全量预检：任一Store未初始化或结构故障时零修改；执行中失败时停止并报告已清空数。成功后原Store对象记录数为0、ID继续递增且可继续append/read；cleanup失败时旧记录保持不可见并报告degraded。
 - App Events默认100KiB、单条48字节、估算容量2113条、实际按段保留约2029～2113条，并在业务Store之前创建。
 - `/esp32base/records/**`在FS管理页可查看和下载，但禁止上传覆盖和直接删除。
 - App Events HTML/API/CSV只输出有效语义字段和状态，不输出损坏槽位或内部CRC布局；HTML页面必须保持结构清楚的状态摘要、筛选、最新优先分页列表，以及每条记录可打开并覆盖全部公开字段的详情视图。
@@ -247,6 +249,7 @@
 - `addPage()` / `addNavItem()` 注册的业务入口进入业务导航且不重复业务首页入口。
 - 内置 Status/WiFi/OTA/System Logs/Tools/Auth 标签可覆盖，用于本地化；底层枚举名仍为 `BUILTIN_LOGS`。
 - Tools 维护页中的重启和格式化 FS 按钮都有二次确认。
+- `POST /esp32base/tools/business-records-clear` 必须需要 Basic Auth、POST 和同源检查；GET不得清空，业务页面不应再提供平行的业务记录清空入口。
 - Tools 维护页可保存 hostname，显示当前值、默认值、已保存值和重启需求；保存后不热切换当前运行时 hostname。
 - 启用 `ESP32BASE_ENABLE_APP_CONFIG` 后，System 页显示 App Config 入口，`/esp32base/app-config` 可按 group 展示业务参数。
 - 启用 `ESP32BASE_ENABLE_APP_EVENTS` 后，系统导航显示 App Events 入口，`/esp32base/app-events`、`/esp32base/api/app-events`、`/esp32base/app-events.csv` 可用；内置页面的状态、筛选、分页列表和逐条详情在桌面及窄屏下均不得挤压、重叠或丢失字段。

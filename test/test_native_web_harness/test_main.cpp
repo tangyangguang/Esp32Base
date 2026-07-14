@@ -214,6 +214,9 @@ void test_native_after_format_callback_reports_tools_success_details() {
     TEST_ASSERT_TRUE(state.last.formatSuccess);
     TEST_ASSERT_TRUE(state.last.mountSuccess);
     TEST_ASSERT_FALSE(state.last.fileLogReloadSuccess);
+    TEST_ASSERT_EQUAL_UINT8(0, state.last.businessRecordStoreCount);
+    TEST_ASSERT_EQUAL_UINT8(0, state.last.businessRecordStoreReloadedCount);
+    TEST_ASSERT_TRUE(state.last.businessRecordStoresReloadSuccess);
 
     Esp32BaseWeb::clearAfterFormatFsCallback();
     Esp32BaseWeb::nativeTestNotifyToolsFormatFsSuccess(true, true);

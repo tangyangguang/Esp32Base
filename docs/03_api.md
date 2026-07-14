@@ -320,6 +320,22 @@ ID和轮换：
 
 RecordStore对象可全局定义，但构造函数不访问FS、不注册全局表；业务必须在 `Esp32Base::begin()` 成功后调用各实例的 `begin()`。同一路径只能有一个活动实例。API不提供mutex，其他FreeRTOS任务必须通过业务队列回到同一system/loop任务。读取回调中的payload只在本次回调期间有效，且不得重入同一Store。
 
+启用 Web 时，当前版本业务 Store 应在每次 `begin()` 调用完成后登记到 System 工具页。即使 `begin()` 因已有 Store 损坏而返回失败，只要定义已经建立，登记仍可成功并在 System 页展示故障；必须分别检查两个返回值：
+
+```cpp
+const bool storeReady = wateringRecords.begin(wateringDefinition);
+const bool storeRegistered = Esp32BaseWeb::registerBusinessRecordStore(wateringRecords);
+if (!storeRegistered) {
+    ESP32BASE_LOG_E("watering", "record_store_web_registration_failed");
+}
+if (!storeReady) {
+    ESP32BASE_LOG_E("watering", "record_store_begin_failed error=%s",
+                    wateringRecords.lastErrorReason());
+}
+```
+
+登记只保存对象指针，因此对象必须具有全局或等同于设备运行期的生命周期。业务只登记当前实际使用的版本；未登记历史版本不属于 `Clear Business Records`，其删除属于独立文件维护流程，不由本 API 处理。清空前基础库预检全部已登记 Store；任一 Store 未初始化或结构故障时一个都不清。执行中发生 I/O 失败时停止后续 Store 并报告已完成数量。成功清空直接更新原 Store 对象的可见边界、计数、状态和 `nextRecordId`，业务不应销毁、重新 `begin()` 或重置 ID，可继续使用同一对象追加和分页读取。Web 清空运行在基础库的 loop/system task；业务不得从其他 FreeRTOS task 并发调用 append/read/clear，仍应通过队列回到同一任务。App Events 使用独立入口，不进入业务 Store 登记表。
+
 `appendCompleted()` 是同步持久化操作：返回成功前会顺序追加当前段、执行LittleFS flush并做写后验证；正常追加不写控制头。具体耗时取决于芯片、Arduino Core、LittleFS分区和段大小；不得从ISR、timer callback或实时控制任务直接调用，应把已完成的浇水、开关门、喂食记录投递到同一system/loop任务保存。不能为了缩短返回时间跳过flush，否则“返回成功”不再代表记录已经提交到Flash。
 
 业务负责固定payload的编码、解码、字段版本、业务校验和显示。不得直接持久化含指针、`String`、编译器padding或平台相关布局的C++对象。六区域浇水详情应按区域1到区域6的固定位置连续编码；位置已经表达区域编号时不重复保存编号。
@@ -961,6 +977,8 @@ void loop() {
 ```cpp
 class Esp32BaseWeb {
 public:
+    static constexpr uint8_t MAX_BUSINESS_RECORD_STORES = 8;
+
     static constexpr const char* EVENT_READY = "web.ready";
     static constexpr const char* EVENT_STOPPED = "web.stopped";
     static constexpr const char* EVENT_TOOLS_FORMAT_FS_SUCCESS = "web.tools.format_fs.success";
@@ -1030,6 +1048,9 @@ public:
         bool formatSuccess;
         bool mountSuccess;
         bool fileLogReloadSuccess;
+        uint8_t businessRecordStoreCount;
+        uint8_t businessRecordStoreReloadedCount;
+        bool businessRecordStoresReloadSuccess;
     };
 
     using AfterFormatFsCallback = void (*)(const FormatFsResult& result, void* user);
@@ -1073,6 +1094,7 @@ public:
     static bool addStaticAsset(const char* path, const char* contentType, const uint8_t* data, size_t len,
                                uint32_t cacheMaxAgeSec = 86400, bool authRequired = true);
     static bool addNavItem(const char* path, const char* title);
+    static bool registerBusinessRecordStore(Esp32BaseRecordStore& store);
 
     static bool setDeviceName(const char* name);
     static bool setHomePath(const char* path);
@@ -1167,13 +1189,14 @@ Route 缓冲机制：
 - title 最大可见长度为 23 字节；空 title 返回 false。
 - `addRoute()` 和 `addApi()` 不进入业务入口列表，避免 API 或隐藏路由污染导航。
 - `addStaticAsset()` 注册业务 CSS/JS/图片等固件内固定资源，使用独立固定容量表，不消耗应用 route 表；path 必须以 `/` 开头且最大可见长度为 47 字节，不能位于 `/esp32base/**` 内置命名空间，content type 最大 63 字节，data 指针和 content type 字符串必须在固件生命周期内有效。默认 `authRequired=true`，响应包含固定 `Content-Length`、`X-Content-Type-Options: nosniff` 和 `Cache-Control`；受保护资源使用 `private, max-age=...`，公开资源使用 `public, max-age=...`，`cacheMaxAgeSec=0` 时发送 `no-store`。业务静态资源应优先用该 API 注册，不应绕开 Esp32Base WebServer。
+- `registerBusinessRecordStore(store)` 仅在 RecordStore 启用时有效。业务应在该 Store 的 `begin()` 调用完成后登记当前版本实例，并检查登记返回值；基础库最多保存 8 个生命周期覆盖设备运行期的实例指针，重复登记同一对象幂等，不同对象登记同一路径会被拒绝。System 页只管理这些已登记实例，不扫描目录，不登记 App Events，也不处理未登记历史版本。登记成功后基础库统一提供状态展示、全量逻辑清空，并在 System 页格式化 LittleFS 后自动 `reload()` 当前 Store。
 - `setDeviceName()` 设置导航品牌和默认标题；`setHomePath()` 设置业务首页路径。
 - `setHomeMode(HOME_ESP32BASE)` 保持基础库首页默认行为，`/` 跳转 `/esp32base`；`HOME_APP` 和 `HOME_COMBINED` 让 `/` 进入业务首页，并保留 `/esp32base` 系统入口。未显式 `setHomePath()` 时优先使用已注册的 `/index` 业务页作为首页；显式 `setHomePath("/")` 且注册 GET `/` 业务页时，裸 `/` 直接调用业务 handler，不产生自跳转。
 - `setSystemNavMode()` 控制系统入口位置：顶部、底部或底部紧凑系统工具区；默认使用 `SYSTEM_NAV_SECTION`，把 Status、System Logs、System 作为小字链接与 `Free heap`、`Up`、`RSSI` 放在同一 footer 区域，窄屏可自然换行；启用 App Config 或 App Events 时系统入口同时显示对应直达链接。System Logs 是 `/esp32base/logs` 的默认用户标签，底层枚举仍是 `BUILTIN_LOGS`。
 - `FooterBarMode` 控制 `sendFooter()` 的底部横条输出：`FOOTER_BAR_OFF` 不显示，`FOOTER_BAR_STATUS_ONLY` 只显示运行摘要，`FOOTER_BAR_FULL` 显示系统入口和运行摘要。默认 `FOOTER_BAR_FULL`，System 页面保存后写入 `eb_ui.footer_mode` 并立即影响后续页面输出。
 - `setBuiltinLabel()` 覆盖内置导航标签，可用于中文本地化；系统工具页统一使用 `BUILTIN_TOOLS`，不提供旧 Reboot 历史别名。
 - `setHeadExtraCallback()` 设置额外 head 输出回调；`sendHeader()` 在默认 `WEB_HEAD` 后、`</head><body>` 和顶部导航前调用它，业务项目可在这里输出 `<style>`，避免页面刷新时先显示基础库默认导航样式。该回调不会注入 `/esp32base` 及其子路径的内置页面，避免业务 CSS 增加内置页体积。
-- `setAfterFormatFsCallback()` 注册内置 System 页 `POST /esp32base/tools/format-fs` 的 after-format 回调；只有显式工具页格式化 LittleFS 成功后触发，格式化失败不触发，启动挂载失败路径不会触发。回调结果会说明格式化来源、重新挂载状态和 FileLog reload 状态。启用 Bus 时同一动作还会发布 `EVENT_TOOLS_FORMAT_FS_SUCCESS`。基础库不会默认清任何业务 NVS；业务如需同步清统计、文件索引或运行时缓存，应在该回调或事件订阅里自行处理。
+- `setAfterFormatFsCallback()` 注册内置 System 页 `POST /esp32base/tools/format-fs` 的 after-format 回调；只有显式工具页格式化 LittleFS 成功后触发，格式化失败不触发，启动挂载失败路径不会触发。回调结果会说明格式化来源、重新挂载、FileLog reload，以及已登记业务 Store 的总数、成功 reload 数和整体结果。启用 Bus 时同一动作还会发布 `EVENT_TOOLS_FORMAT_FS_SUCCESS`。已登记 RecordStore 由基础库自动 reload；基础库不会默认清任何业务 NVS，业务如需同步清统计、文件索引或运行时缓存，仍应在该回调或事件订阅里自行处理。
 - Web UI helper 只负责轻量 HTML 结构和统一样式，不接管业务数据模型：`sendPageTitle()` 输出页面标题区，`beginPanel()` / `endPanel()` 输出内容分组，`sendNotice()` / `sendResultNotice()` 输出横向状态反馈，`beginMetricGrid()` / `sendMetric()` / `endMetricGrid()` 输出状态和统计摘要，`sendInfoRowCompact*()` 输出紧凑信息行和单动作，`sendInfoRowInlineEdit()` 输出单字段行内编辑，`sendInfoRowDialogForm()` 输出 1-3 字段小表单弹层，`sendPagination()` 输出页码型分页、每页条数和跳页表单。分页 `perPage=0` 时默认 10 条，每页选项为 10、15、20、30、50。`sendInfoRowCompactLink()`、`sendInfoRowCompactForm()`、行内编辑和弹层入口都会按 `UiTone` 输出轻量按钮；页面级明确保存/执行按钮仍可直接使用普通 submit 按钮。
 - 带 `data-eb-ajax` 的 helper 表单会在浏览器支持 `fetch` 时携带 `X-Esp32Base-Ajax: 1` 和 `Accept: application/json` 局部提交；服务端用 `isAjaxRequest()` 判断后返回 `sendAjaxReplace(targetId, html, noticeTitle)` 或 `sendAjaxError(code, error)`。未携带 AJAX header 时，同一 POST endpoint 仍应保留 `POST -> 303 -> GET` fallback。
 - `UiTone` 仅表达语义色：neutral、ok、warn、danger、info。业务项目不得把危险、警告、成功语义当作普通装饰色复用。
@@ -1185,7 +1208,7 @@ Route 缓冲机制：
 - `/esp32base/fs?manage=1` 进入单文件删除和受限上传管理模式；`POST /esp32base/fs/delete` 只接受一个已存在文件路径，复用 Basic Auth、同源检查和 `POST -> 303 -> GET`，不提供目录删除、批量删除、编辑或任意路径输入。不可读文件仍允许删除，便于清理损坏文件；删除不以文件内容可读为前提。基础库管理文件会在文件树中给出维护提醒；维护操作修改 FileLog 或 App Events store 后，应刷新对应运行态。
 - `/esp32base/fs/check?dir=/data&name=records.bin` 是上传前检查接口，复用 Basic Auth，按“已有目录 + 本地文件名”计算目标路径，返回目标是否存在、是否是目录以及是否允许上传；路径拼接如果超过内部路径上限会直接拒绝，不截断成另一个目标。
 - `POST /esp32base/fs/upload` 是 multipart 上传接口，复用 Basic Auth 和同源检查；上传保留本地文件名，可以写入任何已有目录，不创建目录。目标文件存在时必须传 `overwrite=1` 才会覆盖；覆盖上传必须避免上传中断时先清空旧文件。路径过长、缺少文件、目标非法或写入失败会返回错误，不会复用上一笔上传状态。上传只负责写入 LittleFS，不校验业务数据语义、索引、NVS 状态或运行时缓存。
-- `/esp32base/tools` System 页承载低频维护入口和操作，App Config 启用时作为首个入口显示，后面是 WiFi Setup、Web Auth、Firmware OTA、File system 直达入口、hostname 保存、Watchdog trip reset、重启设备；启用 FS 的 profile 还提供手动格式化 LittleFS 操作，会清除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth、业务 namespace 或任何 NVS 配置。格式化成功后会重新 mount FS、reload FileLog，并在 App Events 启用时重新创建 `/esp32base/records/app-events.v1/`；业务如需重新创建或 reload 自己的 RecordStore、同步业务统计、文件索引或缓存，应注册 `setAfterFormatFsCallback()` 或订阅 `EVENT_TOOLS_FORMAT_FS_SUCCESS` 自行处理。
+- `/esp32base/tools` System 页承载低频维护入口和操作，App Config 启用时作为首个入口显示，后面是 WiFi Setup、Web Auth、Firmware OTA、File system 直达入口、hostname 保存、Watchdog trip reset、重启设备；启用 FS 的 profile 还提供手动格式化 LittleFS 操作，会清除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth、业务 namespace 或任何 NVS 配置。格式化成功后会重新 mount FS、reload FileLog、重新创建 App Events，并自动 reload 已登记的当前业务 RecordStore；业务仍应通过 after-format 回调或事件同步自己的派生统计、文件索引或缓存。
 - `/esp32base/auth` 是内置认证管理页面，受当前 Basic Auth 保护，提交成功后新账号密码立即生效。
 - Web Auth 认证优先级为：已保存认证 > 应用默认认证。未设置应用默认认证且没有已保存认证时，Web 服务不会启动。
 - 内置 Web 不提供首次登录强制改密；量产或可被他人访问的设备必须在业务启动时调用 `setDefaultAuth()`，或通过业务流程先保存认证。

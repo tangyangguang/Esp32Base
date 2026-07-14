@@ -93,6 +93,10 @@ Record Store 是固定长度、仅追加、按段淘汰的业务历史容器，�
 
 业务规划步骤：先设计最紧凑的固定 payload，再用 `payload + 24` 得到单条槽位，按希望保留的记录数估算数据量，加上每段 32 字节和控制文件 128 字节，最后结合 FileLog、App Events、其他业务 Store、OTA 后临时需求和 LittleFS 安全余量确定预算。它是设计阶段的人为决策，不是运行时“按条数申请”的 API。
 
+启用 Web 的项目应在当前版本 Store 调用 `begin()` 后，再调用 `Esp32BaseWeb::registerBusinessRecordStore(store)` 并检查两个返回值。System 页只管理已登记对象：显示状态和记录数，统一提供 `Clear Business Records`，并在 System 格式化 LittleFS 后自动 `reload()`。登记不扫描目录，因此不会把 App Events 或未登记历史版本误纳入；Store 对象必须在整个设备运行期持续有效。基础库不提供业务记录CSV或通用下载，因为它不理解不透明payload的字段、单位和版本语义；业务如需要可读导出仍自行实现。
+
+统一清空先预检全部已登记 Store。任一 Store 未初始化或结构故障时不修改任何 Store；执行过程中发生 I/O 失败时停止后续清空并报告部分完成。成功清空沿用 `clear()` 的控制头提交语义，原对象立即反映0条记录并保留递增ID，可继续追加，不需要重新 `begin()`。删除旧段失败时历史记录仍不可见，但状态会保留 `CleanupFailed/Degraded` 供 System 页和业务诊断。
+
 App Events 默认先创建，预算固定为 `ESP32BASE_APP_EVENT_STORE_MAX_BYTES = 100 KiB`，不提供单独的最小剩余空间宏。业务应在它之后规划其他 Store。100 KiB 预算、24 字节事件 payload、48 字节槽位时，估算容量为 2113 条；实际保留量会在 2029～2113 条之间波动，因为轮换时淘汰一个约 4 KiB 的完整最老段。
 
 ## 6. 失败与恢复

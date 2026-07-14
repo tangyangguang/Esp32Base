@@ -90,6 +90,8 @@ App Event业务负载24字节，RecordStore公共元数据24字节，单条固�
 
 通用RecordStore的当前逻辑占用为 `128字节控制文件 + 各段32字节段头 + 记录数 × (payloadSizeBytes + 24)`。业务应在设计固定负载后根据LittleFS分区一次性确定各Store预算；基础库不建立全局预算管理器。段大小由预算自适应选择，详细规划和实机数据见 [Record Store 设计、接入与实机基准](12_record_store.md)。
 
+同时启用 Web 和 RecordStore 时，System 工具页为最多8个当前业务Store保留固定指针登记表，在32位ESP32上为32字节指针空间外加1字节计数；不复制Store状态、payload或记录内容。未启用RecordStore时不编译对应管理页面和处理逻辑。
+
 ### 3.6 Health
 
 ```cpp

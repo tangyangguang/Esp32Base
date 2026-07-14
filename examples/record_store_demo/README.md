@@ -6,6 +6,15 @@ The example intentionally writes fields at explicit byte offsets instead of pers
 
 The store directory is `/esp32base/records/door-opening.v1/`. See [`docs/12_record_store.md`](../../docs/12_record_store.md) for capacity planning, failure behavior and measured classic ESP32 performance.
 
+This minimal demo does not enable Web. In a Web-enabled business application, register each current-version Store after its `begin()` call so the built-in System page owns the confirmed clear operation and post-format reload:
+
+```cpp
+const bool ready = doorOpeningRecords.begin(definition);
+const bool registered = Esp32BaseWeb::registerBusinessRecordStore(doorOpeningRecords);
+```
+
+Check both results. Keep the Store object alive for the complete device runtime, do not build a second business clear endpoint, and do not register inactive historical versions.
+
 Build all representative chips:
 
 ```sh

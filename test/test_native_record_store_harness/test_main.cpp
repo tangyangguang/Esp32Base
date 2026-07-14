@@ -467,6 +467,32 @@ void test_different_versions_use_different_directories() {
     TEST_ASSERT_TRUE(Esp32BaseFs::exists(second.path()));
 }
 
+void test_clearing_current_version_does_not_modify_historical_version() {
+    Esp32BaseRecordStore historical;
+    Esp32BaseRecordStore current;
+    TEST_ASSERT_TRUE(historical.begin(definition("watering", 1)));
+    TEST_ASSERT_TRUE(current.begin(definition("watering", 2)));
+    uint8_t bytes[8];
+    payload(bytes, 1);
+    TEST_ASSERT_TRUE(historical.appendInstant(bytes, sizeof(bytes)));
+    payload(bytes, 2);
+    TEST_ASSERT_TRUE(current.appendInstant(bytes, sizeof(bytes)));
+
+    TEST_ASSERT_TRUE(current.clear());
+    Esp32BaseRecordStore::StoreStatus historicalStatus;
+    Esp32BaseRecordStore::StoreStatus currentStatus;
+    TEST_ASSERT_TRUE(historical.readStatus(historicalStatus));
+    TEST_ASSERT_TRUE(current.readStatus(currentStatus));
+    TEST_ASSERT_EQUAL_UINT32(1, historicalStatus.recordCount);
+    TEST_ASSERT_EQUAL_UINT32(0, currentStatus.recordCount);
+    TEST_ASSERT_EQUAL_UINT32(2, currentStatus.nextRecordId);
+
+    Esp32BaseRecordStore::RecordMetadata record;
+    uint8_t output[8];
+    TEST_ASSERT_EQUAL(Esp32BaseRecordStore::RecordReadResult::Found,
+                      historical.readById(1, output, sizeof(output), record));
+}
+
 void test_existing_control_wrong_size_is_not_rewritten() {
     Esp32BaseRecordStore store;
     TEST_ASSERT_TRUE(store.begin(definition()));
@@ -615,6 +641,7 @@ int main(int argc, char** argv) {
     RUN_TEST(test_overlapping_segment_ranges_are_a_structural_fault);
     RUN_TEST(test_clear_hides_records_and_continues_ids);
     RUN_TEST(test_different_versions_use_different_directories);
+    RUN_TEST(test_clearing_current_version_does_not_modify_historical_version);
     RUN_TEST(test_existing_control_wrong_size_is_not_rewritten);
     RUN_TEST(test_existing_definition_mismatch_is_not_rewritten);
     RUN_TEST(test_minimum_free_space_blocks_business_store_creation);

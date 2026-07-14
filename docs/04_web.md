@@ -200,6 +200,7 @@ System:
 - `POST /esp32base/tools/footer-bar`
 - `POST /esp32base/tools/filelog`
 - `POST /esp32base/tools/logs-clear`，System 页面主入口，成功后回到 System 页面
+- `POST /esp32base/tools/business-records-clear`，仅 `ESP32BASE_ENABLE_RECORD_STORE=1`，逻辑清空所有通过 `registerBusinessRecordStore()` 登记的当前版本业务 Store；需要认证、同源 POST 和用户二次确认
 - `POST /esp32base/tools/app-events-clear`，仅 `ESP32BASE_ENABLE_APP_EVENTS=1`，清空事件日志；System 页面危险操作入口，成功后回到 System 页面
 - `POST /esp32base/tools/watchdog-trip-reset`
 - `POST /esp32base/tools/format-fs`，仅 `ESP32BASE_ENABLE_FS=1`，只格式化 LittleFS；格式化成功后通知 after-format 回调/事件，不清任何 NVS
@@ -235,11 +236,12 @@ System 维护页：
 - 启用 FS 的 profile 显示 `Format LittleFS`，该操作会删除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth、业务 namespace 或任何 NVS 配置。
 - 启用 FileLog 的 profile 显示系统诊断日志模式设置、运行态和 `Clear system logs`；模式设置只接受 OFF、ERROR、WARN、INFO，保存后立即生效并写入 `eb_log.mode`，清空日志只接受 POST，成功后回到 System 页面显示结果。运行态为 `write fault` 时表示配置模式仍开启，但 FileLog 因 FS 写入故障被运行期保护停写；已有日志仍可能可读，不应显示成 `disabled`。运行态为 `unavailable` 时表示配置模式开启但 FS/init 前置条件未满足。运行态为 `disabled` 时明确 FileLog 模式为 OFF，新日志不会写入。
 - 系统诊断日志默认文件为 `/esp32base/logs/system.log`，App Events store 默认目录为 `/esp32base/records/app-events.v1/`；二者都位于 `/esp32base/**` 基础库管理命名空间。
+- 启用 RecordStore 且业务通过 `registerBusinessRecordStore()` 登记当前 Store 后，System 页显示独立的 `Clear Business Records` 红色危险操作框，列出每个 Store 的版本目录、状态和记录数。清空前必须先确认所有 Store 可操作；预检失败时零修改，执行中失败时停止并报告已清空数量。成功后原 Store 对象保持可用、记录数为0、ID继续递增。该操作不扫描 `/esp32base/records/**`，不清 App Events，也不处理未登记历史版本。
 - 启用 App Events 的 profile 显示 `Clear App Events` 危险操作；它只对 App Events store 做逻辑清空，不重写数据区，也不清系统诊断日志、WiFi、Web Auth、NVS 配置或其他 LittleFS 文件。
-- 格式化 FS 是显式 POST 操作；执行前 flush 系统诊断日志，格式化成功后重新 mount FS、重新加载 FileLog 模式，并在 App Events 启用时重新创建 `/esp32base/records/app-events.v1/`；成功提示应明确显示在 System 页面，同时输出 WARN 级维护日志记录请求、format/mount/FileLog reload/App Events recreate 结果。只有 `Esp32BaseFs::format()` 成功时才触发 `Esp32BaseWeb::setAfterFormatFsCallback()` 注册的回调和 `EVENT_TOOLS_FORMAT_FS_SUCCESS` 事件；格式化失败、启动挂载失败和其他 FS 维护动作不触发。回调结果包含 `source=tools`、`formatSuccess`、`mountSuccess`、`fileLogReloadSuccess`；业务如需重新创建或 reload 自己的 RecordStore、同步业务统计、文件索引或运行时缓存，应在该回调/事件里自行处理。重启请求同样输出 WARN 级维护日志。
+- 格式化 FS 是显式 POST 操作；执行前 flush 系统诊断日志，格式化成功后重新 mount FS、重新加载 FileLog 模式、重新创建 App Events，并逐个 `reload()` 已登记的当前业务 Store；任一 Store 恢复失败都不能提示整体成功。只有 `Esp32BaseFs::format()` 成功时才触发 `Esp32BaseWeb::setAfterFormatFsCallback()` 注册的回调和 `EVENT_TOOLS_FORMAT_FS_SUCCESS` 事件；格式化失败、启动挂载失败和其他 FS 维护动作不触发。回调结果除原字段外还包含 `businessRecordStoreCount`、`businessRecordStoreReloadedCount` 和 `businessRecordStoresReloadSuccess`；业务仍负责在回调/事件里同步自己的派生统计、文件索引或缓存。重启请求同样输出 WARN 级维护日志。
 - 普通 `GET` 页面慢请求只输出 DEBUG；`POST` 等操作慢请求输出 INFO，默认 ERROR 系统日志不记录，现场排查时可切到 INFO 查看。
 - API 层仍建议要求 POST，不使用 GET 触发重启。
-- 内置危险 POST 包括 WiFi 保存/清除、App Config 保存、Hostname 保存、Auth 保存、重启、System 操作、System Logs clear、Web OTA upload/done；跨站 `Origin` 或 `Referer` 会被拒绝。
+- 内置危险 POST 包括 WiFi 保存/清除、App Config 保存、Hostname 保存、Auth 保存、重启、System 操作、System Logs clear、Business Records clear、App Events clear、Web OTA upload/done；跨站 `Origin` 或 `Referer` 会被拒绝。
 - 业务自定义 POST 或危险操作应优先调用 `Esp32BaseWeb::checkPostAllowed(context)`，不要只做 `checkAuth()`；即使业务误把危险 handler 注册为 `METHOD_ANY`，该 helper 也会拒绝非 POST 请求。
 
 Status 页：

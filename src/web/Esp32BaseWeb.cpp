@@ -6,40 +6,94 @@
 
 #include "Esp32BaseWeb.h"
 
+#if ESP32BASE_ENABLE_RECORD_STORE
+#include "../runtime/Esp32BaseRecordStore.h"
+#include "../core/Esp32BaseLog.h"
+#endif
 #if ESP32BASE_ENABLE_BUS
 #include "../runtime/Esp32BaseBus.h"
 #endif
 
 #include <stdio.h>
+#include <string.h>
 
 namespace {
 Esp32BaseWeb::AfterFormatFsCallback g_afterFormatFsCallback = nullptr;
 void* g_afterFormatFsCallbackUser = nullptr;
+#if ESP32BASE_ENABLE_RECORD_STORE
+Esp32BaseRecordStore* g_businessRecordStores[Esp32BaseWeb::MAX_BUSINESS_RECORD_STORES] = {};
+uint8_t g_businessRecordStoreCount = 0;
+#endif
 
-void dispatchToolsFormatFsSuccess(bool mountSuccess, bool fileLogReloadSuccess, bool publishEvent) {
+void dispatchToolsFormatFsSuccess(bool mountSuccess,
+                                  bool fileLogReloadSuccess,
+                                  uint8_t businessRecordStoreCount,
+                                  uint8_t businessRecordStoreReloadedCount,
+                                  bool publishEvent) {
     Esp32BaseWeb::FormatFsResult result = {
         "tools",
         true,
         mountSuccess,
-        fileLogReloadSuccess
+        fileLogReloadSuccess,
+        businessRecordStoreCount,
+        businessRecordStoreReloadedCount,
+        businessRecordStoreCount == businessRecordStoreReloadedCount
     };
     if (g_afterFormatFsCallback) {
         g_afterFormatFsCallback(result, g_afterFormatFsCallbackUser);
     }
 #if ESP32BASE_ENABLE_BUS
     if (publishEvent) {
-        char data[112];
+        char data[240];
         snprintf(data,
                  sizeof(data),
-                 "{\"source\":\"tools\",\"formatSuccess\":true,\"mountSuccess\":%s,\"fileLogReloadSuccess\":%s}",
+                 "{\"source\":\"tools\",\"formatSuccess\":true,\"mountSuccess\":%s,\"fileLogReloadSuccess\":%s,\"businessRecordStoreCount\":%u,\"businessRecordStoreReloadedCount\":%u,\"businessRecordStoresReloadSuccess\":%s}",
                  mountSuccess ? "true" : "false",
-                 fileLogReloadSuccess ? "true" : "false");
+                 fileLogReloadSuccess ? "true" : "false",
+                 static_cast<unsigned>(businessRecordStoreCount),
+                 static_cast<unsigned>(businessRecordStoreReloadedCount),
+                 businessRecordStoreCount == businessRecordStoreReloadedCount ? "true" : "false");
         Esp32BaseBus::publish(Esp32BaseWeb::EVENT_TOOLS_FORMAT_FS_SUCCESS, data);
     }
 #else
     (void)publishEvent;
 #endif
 }
+}
+
+bool Esp32BaseWeb::registerBusinessRecordStore(Esp32BaseRecordStore& store) {
+#if ESP32BASE_ENABLE_RECORD_STORE
+    Esp32BaseRecordStore::StoreStatus status;
+    if (!store.readStatus(status)) {
+        ESP32BASE_LOG_W("web", "business_record_store_registration_rejected reason=not_initialized");
+        return false;
+    }
+    for (uint8_t i = 0; i < g_businessRecordStoreCount; ++i) {
+        if (g_businessRecordStores[i] == &store) {
+            return true;
+        }
+        Esp32BaseRecordStore::StoreStatus registeredStatus;
+        if (g_businessRecordStores[i] && g_businessRecordStores[i]->readStatus(registeredStatus) &&
+            registeredStatus.path && status.path && strcmp(registeredStatus.path, status.path) == 0) {
+            ESP32BASE_LOG_W("web", "business_record_store_registration_rejected reason=duplicate_path path=%s",
+                            status.path);
+            return false;
+        }
+    }
+    if (g_businessRecordStoreCount >= MAX_BUSINESS_RECORD_STORES) {
+        ESP32BASE_LOG_W("web", "business_record_store_registration_rejected reason=capacity path=%s",
+                        status.path ? status.path : "-");
+        return false;
+    }
+    g_businessRecordStores[g_businessRecordStoreCount++] = &store;
+    ESP32BASE_LOG_I("web", "business_record_store_registered path=%s count=%u",
+                    status.path ? status.path : "-",
+                    static_cast<unsigned>(g_businessRecordStoreCount));
+    return true;
+#else
+    (void)store;
+    return false;
+#endif
 }
 
 void Esp32BaseWeb::setAfterFormatFsCallback(AfterFormatFsCallback cb, void* user) {
@@ -873,7 +927,7 @@ const char* Esp32BaseWeb::nativeTestResponseHeader(const char* name) {
 }
 
 void Esp32BaseWeb::nativeTestNotifyToolsFormatFsSuccess(bool mountSuccess, bool fileLogReloadSuccess) {
-    dispatchToolsFormatFsSuccess(mountSuccess, fileLogReloadSuccess, false);
+    dispatchToolsFormatFsSuccess(mountSuccess, fileLogReloadSuccess, 0, 0, false);
 }
 
 #elif ESP32BASE_ENABLE_WEB
@@ -883,9 +937,25 @@ void Esp32BaseWeb::nativeTestNotifyToolsFormatFsSuccess(bool mountSuccess, bool 
 using namespace esp32base_web;
 
 namespace esp32base_web {
-void notifyToolsFormatFsSuccess(bool mountSuccess, bool fileLogReloadSuccess) {
-    dispatchToolsFormatFsSuccess(mountSuccess, fileLogReloadSuccess, true);
+void notifyToolsFormatFsSuccess(bool mountSuccess,
+                                bool fileLogReloadSuccess,
+                                uint8_t businessRecordStoreCount,
+                                uint8_t businessRecordStoreReloadedCount) {
+    dispatchToolsFormatFsSuccess(mountSuccess,
+                                 fileLogReloadSuccess,
+                                 businessRecordStoreCount,
+                                 businessRecordStoreReloadedCount,
+                                 true);
 }
+#if ESP32BASE_ENABLE_RECORD_STORE
+uint8_t businessRecordStoreCount() {
+    return g_businessRecordStoreCount;
+}
+
+Esp32BaseRecordStore* businessRecordStoreAt(uint8_t index) {
+    return index < g_businessRecordStoreCount ? g_businessRecordStores[index] : nullptr;
+}
+#endif
 }
 
 bool Esp32BaseWeb::begin() {
@@ -968,6 +1038,9 @@ bool Esp32BaseWeb::begin() {
 #endif
     g_server.on("/esp32base/tools/format-fs", HTTP_POST, handleToolsFormatFsPost);
     g_server.on("/esp32base/tools/logs-clear", HTTP_POST, handleToolsLogsClearPost);
+#if ESP32BASE_ENABLE_RECORD_STORE
+    g_server.on("/esp32base/tools/business-records-clear", HTTP_POST, handleToolsBusinessRecordsClearPost);
+#endif
 #if ESP32BASE_ENABLE_APP_EVENTS
     g_server.on("/esp32base/tools/app-events-clear", HTTP_POST, handleToolsAppEventsClearPost);
 #endif

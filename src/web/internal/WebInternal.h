@@ -196,7 +196,14 @@ void sendFileLogRuntimeNotice();
 #endif
 void sendFooterBarModeOption(const char* value, const char* label, Esp32BaseWeb::FooterBarMode mode);
 bool footerBarModeFromArg(const String& raw, Esp32BaseWeb::FooterBarMode& mode);
-void notifyToolsFormatFsSuccess(bool mountSuccess, bool fileLogReloadSuccess);
+void notifyToolsFormatFsSuccess(bool mountSuccess,
+                                bool fileLogReloadSuccess,
+                                uint8_t businessRecordStoreCount,
+                                uint8_t businessRecordStoreReloadedCount);
+#if ESP32BASE_ENABLE_RECORD_STORE
+uint8_t businessRecordStoreCount();
+Esp32BaseRecordStore* businessRecordStoreAt(uint8_t index);
+#endif
 #if ESP32BASE_ENABLE_WATCHDOG
 void sendWatchdogPanel();
 #endif
@@ -250,6 +257,9 @@ void handleToolsRebootPost();
 void handleToolsWatchdogTripResetPost();
 void handleToolsFormatFsPost();
 void handleToolsLogsClearPost();
+#if ESP32BASE_ENABLE_RECORD_STORE
+void handleToolsBusinessRecordsClearPost();
+#endif
 #if ESP32BASE_ENABLE_APP_EVENTS
 void handleToolsAppEventsClearPost();
 #endif
