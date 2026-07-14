@@ -384,7 +384,7 @@ void handleAppEventsPage() {
     if (!ensureAuth()) return;
     AppEventFilter filter;
     if (!readAppEventFilter(filter)) { sendInvalidFilter(false); return; }
-    const uint32_t per = readBoundedUnsignedArg("per", 20, 1, 100);
+    const uint32_t per = readBoundedUnsignedArg("per", 10, 1, 100);
     const uint32_t page = readBoundedUnsignedArg("page", 1, 1, 65535);
     Esp32BaseAppEvents::EventStoreStatus status;
     Esp32BaseAppEvents::readStatus(status);
