@@ -495,7 +495,7 @@ void handleHostnameSubmit() {
         if (apiRequest) {
             sendHostnameJson(400);
         } else {
-            redirectSeeOther("/esp32base/tools?hostname_error=invalid");
+            redirectSeeOther("/esp32base/system?hostname_error=invalid");
         }
         return;
     }
@@ -508,17 +508,13 @@ void handleHostnameSubmit() {
     if (apiRequest) {
         sendHostnameJson(ok ? 200 : 500);
     } else {
-        redirectSeeOther(ok ? "/esp32base/tools?hostname_saved=1" : "/esp32base/tools?hostname_error=save_failed");
+        redirectSeeOther(ok ? "/esp32base/system?hostname_saved=1" : "/esp32base/system?hostname_error=save_failed");
     }
 }
 
-void handleRoot() {
+void handleStatusPage() {
     markRequest();
     if (!ensureAuth()) {
-        return;
-    }
-    if (useAppHome()) {
-        redirectSeeOther(configuredHomePath());
         return;
     }
     Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_HOME]);
@@ -741,7 +737,7 @@ void handleRoot() {
     }
 #endif
     sendInfoRowStart("OTA & partition details");
-    sendChunk(details ? "<a class='btnlink secondary' href='/esp32base'>Hide OTA &amp; partition details</a>" : "<a class='btnlink info' href='/esp32base?details=1'>Show OTA &amp; partition details</a>");
+    sendChunk(details ? "<a class='btnlink secondary' href='/esp32base/status'>Hide OTA &amp; partition details</a>" : "<a class='btnlink info' href='/esp32base/status?details=1'>Show OTA &amp; partition details</a>");
     sendInfoRowEnd();
     if (details) {
         sendFirmwareOtaDetails();
@@ -769,6 +765,8 @@ void handleRoot() {
     sendInfoRow("eFuse MAC", mac);
     sendStatusSectionEnd();
     sendChunk("</div>");
+
+    sendChunk("<section class='panel appsection'><h2>System settings</h2><p class='muted'>Open device settings and maintenance even when the footer bar is hidden.</p><div class='actions'><a class='btnlink' href='/esp32base/system'>Open System</a></div></section>");
 
     if (g_homeMode == Esp32BaseWeb::HOME_ESP32BASE && appNavCount() > 0) {
         sendChunk("<section class='panel appsection'><h2>Application</h2>");

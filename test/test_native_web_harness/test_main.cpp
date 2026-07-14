@@ -44,6 +44,20 @@ static void routedHandler() {
     Esp32BaseWeb::sendText(200, "routed");
 }
 
+static void irrigationHandler() {
+    Esp32BaseWeb::sendHtml(200, "<h1>Irrigation</h1>");
+}
+
+static void combinedRootHandler() {
+    Esp32BaseWeb::sendHtml(200, "<h1>Combined home</h1>");
+}
+
+static void assertRedirect(const char* path, const char* expectedLocation) {
+    TEST_ASSERT_TRUE(Esp32BaseWeb::nativeTestDispatch(path, Esp32BaseWeb::METHOD_GET));
+    TEST_ASSERT_EQUAL(302, Esp32BaseWeb::nativeTestResponse().code);
+    TEST_ASSERT_EQUAL_STRING(expectedLocation, Esp32BaseWeb::nativeTestResponseHeader("Location"));
+}
+
 struct AfterFormatState {
     uint8_t calls;
     Esp32BaseWeb::FormatFsResult last;
@@ -201,6 +215,113 @@ void test_native_dispatch_runs_registered_route_without_losing_request_inputs() 
     TEST_ASSERT_EQUAL_STRING("routed", Esp32BaseWeb::nativeTestResponse().body.c_str());
 }
 
+void test_builtin_routes_home_esp32base_use_canonical_status() {
+    Esp32BaseWeb::nativeTestReset();
+    Esp32BaseWeb::setHomeMode(Esp32BaseWeb::HOME_ESP32BASE);
+
+    assertRedirect("/", "/esp32base/status");
+    assertRedirect("/esp32base", "/esp32base/status");
+    TEST_ASSERT_EQUAL_STRING("no-store", Esp32BaseWeb::nativeTestResponseHeader("Cache-Control"));
+    assertRedirect("/esp32base/", "/esp32base/status");
+
+    TEST_ASSERT_TRUE(Esp32BaseWeb::nativeTestDispatch("/esp32base/status", Esp32BaseWeb::METHOD_GET));
+    TEST_ASSERT_EQUAL(200, Esp32BaseWeb::nativeTestResponse().code);
+    TEST_ASSERT_NOT_EQUAL(-1, static_cast<int>(Esp32BaseWeb::nativeTestResponse().body.find("<h1>Status</h1>")));
+}
+
+void test_builtin_routes_home_app_keep_business_root_and_system_status() {
+    Esp32BaseWeb::nativeTestReset();
+    Esp32BaseWeb::setHomeMode(Esp32BaseWeb::HOME_APP);
+    TEST_ASSERT_TRUE(Esp32BaseWeb::setHomePath("/irrigation"));
+    TEST_ASSERT_TRUE(Esp32BaseWeb::addPage("/irrigation", "Irrigation", irrigationHandler));
+
+    assertRedirect("/", "/irrigation");
+    assertRedirect("/esp32base", "/esp32base/status");
+    assertRedirect("/esp32base/", "/esp32base/status");
+    TEST_ASSERT_TRUE(Esp32BaseWeb::nativeTestDispatch("/esp32base/status", Esp32BaseWeb::METHOD_GET));
+    TEST_ASSERT_EQUAL(200, Esp32BaseWeb::nativeTestResponse().code);
+    TEST_ASSERT_EQUAL(-1, static_cast<int>(Esp32BaseWeb::nativeTestResponse().body.find("/irrigation")));
+    TEST_ASSERT_NOT_EQUAL(-1, static_cast<int>(Esp32BaseWeb::nativeTestResponse().body.find("href='/esp32base/status'")));
+}
+
+void test_builtin_routes_home_combined_preserve_business_home_behavior() {
+    Esp32BaseWeb::nativeTestReset();
+    Esp32BaseWeb::setHomeMode(Esp32BaseWeb::HOME_COMBINED);
+    TEST_ASSERT_TRUE(Esp32BaseWeb::setHomePath("/irrigation"));
+    TEST_ASSERT_TRUE(Esp32BaseWeb::addPage("/irrigation", "Irrigation", irrigationHandler));
+
+    assertRedirect("/", "/irrigation");
+    assertRedirect("/esp32base", "/esp32base/status");
+    TEST_ASSERT_TRUE(Esp32BaseWeb::nativeTestDispatch("/esp32base/status", Esp32BaseWeb::METHOD_GET));
+    TEST_ASSERT_EQUAL(200, Esp32BaseWeb::nativeTestResponse().code);
+
+    Esp32BaseWeb::nativeTestReset();
+    Esp32BaseWeb::setHomeMode(Esp32BaseWeb::HOME_COMBINED);
+    TEST_ASSERT_TRUE(Esp32BaseWeb::setHomePath("/"));
+    TEST_ASSERT_TRUE(Esp32BaseWeb::addRoute("/", Esp32BaseWeb::METHOD_GET, combinedRootHandler));
+    TEST_ASSERT_TRUE(Esp32BaseWeb::nativeTestDispatch("/", Esp32BaseWeb::METHOD_GET));
+    TEST_ASSERT_EQUAL(200, Esp32BaseWeb::nativeTestResponse().code);
+    TEST_ASSERT_EQUAL_STRING("<h1>Combined home</h1>", Esp32BaseWeb::nativeTestResponse().body.c_str());
+}
+
+void test_status_redirect_preserves_and_encodes_query_parameters() {
+    Esp32BaseWeb::nativeTestReset();
+    Esp32BaseWeb::nativeTestBeginRequest(Esp32BaseWeb::METHOD_GET, "/esp32base");
+    Esp32BaseWeb::nativeTestSetParam("details", "1");
+    TEST_ASSERT_TRUE(Esp32BaseWeb::nativeTestDispatch("/esp32base", Esp32BaseWeb::METHOD_GET));
+    TEST_ASSERT_EQUAL_STRING("/esp32base/status?details=1", Esp32BaseWeb::nativeTestResponseHeader("Location"));
+
+    Esp32BaseWeb::nativeTestBeginRequest(Esp32BaseWeb::METHOD_GET, "/esp32base");
+    Esp32BaseWeb::nativeTestSetParam("details", "1");
+    Esp32BaseWeb::nativeTestSetParam("label", "pump room/1");
+    TEST_ASSERT_TRUE(Esp32BaseWeb::nativeTestDispatch("/esp32base", Esp32BaseWeb::METHOD_GET));
+    TEST_ASSERT_EQUAL_STRING("/esp32base/status?details=1&label=pump%20room%2F1",
+                             Esp32BaseWeb::nativeTestResponseHeader("Location"));
+}
+
+void test_status_auth_footer_recovery_and_system_routes() {
+    Esp32BaseWeb::nativeTestReset();
+    Esp32BaseWeb::nativeTestBeginRequest(Esp32BaseWeb::METHOD_GET, "/esp32base/status");
+    Esp32BaseWeb::nativeTestSetAuthenticated(false);
+    TEST_ASSERT_TRUE(Esp32BaseWeb::nativeTestDispatch("/esp32base/status", Esp32BaseWeb::METHOD_GET));
+    TEST_ASSERT_EQUAL(401, Esp32BaseWeb::nativeTestResponse().code);
+
+    Esp32BaseWeb::nativeTestReset();
+    Esp32BaseWeb::setFooterBarMode(Esp32BaseWeb::FOOTER_BAR_OFF);
+    TEST_ASSERT_TRUE(Esp32BaseWeb::nativeTestDispatch("/esp32base/status", Esp32BaseWeb::METHOD_GET));
+    TEST_ASSERT_EQUAL(-1, static_cast<int>(Esp32BaseWeb::nativeTestResponse().body.find("<footer")));
+    TEST_ASSERT_NOT_EQUAL(-1, static_cast<int>(Esp32BaseWeb::nativeTestResponse().body.find("href='/esp32base/system'")));
+
+    TEST_ASSERT_TRUE(Esp32BaseWeb::nativeTestDispatch("/esp32base/system", Esp32BaseWeb::METHOD_GET));
+    TEST_ASSERT_EQUAL(200, Esp32BaseWeb::nativeTestResponse().code);
+    static const char* actions[] = {
+        "hostname", "filelog", "footer-bar", "reboot", "watchdog-trip-reset",
+        "format-fs", "logs-clear", "business-records-clear", "app-events-clear"
+    };
+    for (const char* action : actions) {
+        std::string expected = "action='/esp32base/system/";
+        expected += action;
+        expected += "'";
+        TEST_ASSERT_NOT_EQUAL(-1, static_cast<int>(Esp32BaseWeb::nativeTestResponse().body.find(expected)));
+    }
+    TEST_ASSERT_FALSE(Esp32BaseWeb::nativeTestDispatch("/esp32base/tools", Esp32BaseWeb::METHOD_GET));
+    TEST_ASSERT_EQUAL(404, Esp32BaseWeb::nativeTestResponse().code);
+    TEST_ASSERT_FALSE(Esp32BaseWeb::nativeTestDispatch("/esp32base/tools/reboot", Esp32BaseWeb::METHOD_POST));
+    TEST_ASSERT_EQUAL(404, Esp32BaseWeb::nativeTestResponse().code);
+}
+
+void test_other_builtin_page_routes_remain_available() {
+    Esp32BaseWeb::nativeTestReset();
+    static const char* paths[] = {
+        "/esp32base/logs", "/esp32base/app-events", "/esp32base/app-config",
+        "/esp32base/wifi", "/esp32base/auth", "/esp32base/ota", "/esp32base/fs"
+    };
+    for (const char* path : paths) {
+        TEST_ASSERT_TRUE(Esp32BaseWeb::nativeTestDispatch(path, Esp32BaseWeb::METHOD_GET));
+        TEST_ASSERT_EQUAL(200, Esp32BaseWeb::nativeTestResponse().code);
+    }
+}
+
 void test_native_after_format_callback_reports_tools_success_details() {
     Esp32BaseWeb::nativeTestReset();
     AfterFormatState state = {};
@@ -263,6 +384,12 @@ int main(int, char**) {
     RUN_TEST(test_native_post_guard_captures_method_auth_and_origin_failures);
     RUN_TEST(test_native_redirect_see_other_is_captured);
     RUN_TEST(test_native_dispatch_runs_registered_route_without_losing_request_inputs);
+    RUN_TEST(test_builtin_routes_home_esp32base_use_canonical_status);
+    RUN_TEST(test_builtin_routes_home_app_keep_business_root_and_system_status);
+    RUN_TEST(test_builtin_routes_home_combined_preserve_business_home_behavior);
+    RUN_TEST(test_status_redirect_preserves_and_encodes_query_parameters);
+    RUN_TEST(test_status_auth_footer_recovery_and_system_routes);
+    RUN_TEST(test_other_builtin_page_routes_remain_available);
     RUN_TEST(test_native_static_asset_serves_cached_content);
     RUN_TEST(test_native_static_asset_respects_auth_when_required);
     RUN_TEST(test_native_static_asset_rejects_invalid_registration);

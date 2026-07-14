@@ -142,7 +142,7 @@ void sendWatchdogPanel() {
         sendInfoRow("Trip resets", count);
     }
     sendInfoRow("Trip reset at", resetAt);
-    sendChunk("</table></div><form method='post' action='/esp32base/tools/watchdog-trip-reset' onsubmit=\"return confirm('Reset Watchdog trip counter? Lifetime resets are kept.')&&once(this)\"><div class='actions'><input type='submit' value='Reset Watchdog Trip'></div></form></section>");
+    sendChunk("</table></div><form method='post' action='/esp32base/system/watchdog-trip-reset' onsubmit=\"return confirm('Reset Watchdog trip counter? Lifetime resets are kept.')&&once(this)\"><div class='actions'><input type='submit' value='Reset Watchdog Trip'></div></form></section>");
 }
 #endif
 
@@ -188,7 +188,7 @@ void sendBusinessRecordStoresClearPanel() {
     }
     sendChunk("</table></div>");
     if (allReady) {
-        sendChunk("<form method='post' action='/esp32base/tools/business-records-clear' onsubmit=\"return confirm('Clear all registered current-version business records? IDs will continue increasing.')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Clear Business Records'></div></form>");
+        sendChunk("<form method='post' action='/esp32base/system/business-records-clear' onsubmit=\"return confirm('Clear all registered current-version business records? IDs will continue increasing.')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Clear Business Records'></div></form>");
     } else {
         sendChunk("<p class='notice warn'>No records will be cleared while any registered Store is unavailable or structurally invalid.</p><div class='actions'><input class='danger' type='submit' value='Clear Business Records' disabled></div>");
     }
@@ -282,13 +282,13 @@ void handleToolsPage() {
     } else {
         sendChunk("no");
     }
-    sendChunk("</span></div><form class='editform' method='post' action='/esp32base/tools/hostname' onsubmit=\"var h=this.hostname.value.trim();if(!/^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/.test(h)){alert('Use 1-32 lowercase letters, digits and hyphen. No leading or trailing hyphen. Do not include .local.');return false;}this.hostname.value=h;return once(this);\"><div class='hostedit'>");
+    sendChunk("</span></div><form class='editform' method='post' action='/esp32base/system/hostname' onsubmit=\"var h=this.hostname.value.trim();if(!/^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/.test(h)){alert('Use 1-32 lowercase letters, digits and hyphen. No leading or trailing hyphen. Do not include .local.');return false;}this.hostname.value=h;return once(this);\"><div class='hostedit'>");
     sendChunk("<div class='field'><label for='host'>New hostname</label><input id='host' name='hostname' maxlength='32' autocomplete='off' value='");
     sendEscapedHtmlChunk(hasStoredHostname && storedHostname[0] ? storedHostname : Esp32Base::hostname());
     sendChunk("'><small>Saved hostname takes effect after restart.</small></div><div class='actions'><input type='submit' value='Save Hostname'></div></div></form></section>");
     sendChunk("<section class='panel actionpanel'><h2>Footer bar</h2><div class='tablewrap'><table class='kv'>");
     sendInfoRow("Current mode", Esp32BaseWeb::footerBarModeName());
-    sendChunk("</table></div><form method='post' action='/esp32base/tools/footer-bar' onsubmit=\"return once(this)\"><div class='radioopts'>");
+    sendChunk("</table></div><form method='post' action='/esp32base/system/footer-bar' onsubmit=\"return once(this)\"><div class='radioopts'>");
     sendFooterBarModeOption("off", "Off", Esp32BaseWeb::FOOTER_BAR_OFF);
     sendFooterBarModeOption("status", "Status only", Esp32BaseWeb::FOOTER_BAR_STATUS_ONLY);
     sendFooterBarModeOption("full", "Links + status", Esp32BaseWeb::FOOTER_BAR_FULL);
@@ -300,7 +300,7 @@ void handleToolsPage() {
     sendInfoRow("Path", Esp32BaseFileLog::path());
     sendChunk("</table></div>");
     sendFileLogRuntimeNotice();
-    sendChunk("<form method='post' action='/esp32base/tools/filelog' onsubmit=\"return once(this)\"><div class='radioopts'>");
+    sendChunk("<form method='post' action='/esp32base/system/filelog' onsubmit=\"return once(this)\"><div class='radioopts'>");
     sendFileLogModeOption("off", "Off", Esp32BaseFileLog::OFF);
 #if ESP32BASE_LOG_LEVEL >= ESP32BASE_LOG_ERROR
     sendFileLogModeOption("error", "ERROR", Esp32BaseFileLog::ERROR);
@@ -319,9 +319,9 @@ void handleToolsPage() {
     sendWatchdogPanel();
 #endif
     sendChunk("</div><div class='toolgrid'>");
-    sendChunk("<section class='panel dangerpanel'><h2>Restart device</h2><p class='muted'>Restart the device through the normal lifecycle path.</p><form method='post' action='/esp32base/tools/reboot' onsubmit=\"return confirm('Reboot device now?')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Restart device'></div></form></section>");
+    sendChunk("<section class='panel dangerpanel'><h2>Restart device</h2><p class='muted'>Restart the device through the normal lifecycle path.</p><form method='post' action='/esp32base/system/reboot' onsubmit=\"return confirm('Reboot device now?')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Restart device'></div></form></section>");
 #if ESP32BASE_ENABLE_FILELOG
-    sendChunk("<section class='panel dangerpanel'><h2>Clear system logs</h2><p class='dangertext'>Delete all system diagnostic log contents. Runtime settings and WiFi credentials are not changed.</p><form method='post' action='/esp32base/tools/logs-clear' onsubmit=\"return confirm('Clear system logs?')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Clear System Logs'></div></form></section>");
+    sendChunk("<section class='panel dangerpanel'><h2>Clear system logs</h2><p class='dangertext'>Delete all system diagnostic log contents. Runtime settings and WiFi credentials are not changed.</p><form method='post' action='/esp32base/system/logs-clear' onsubmit=\"return confirm('Clear system logs?')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Clear System Logs'></div></form></section>");
 #else
     sendChunk("<section class='panel actionpanel'><h2>Clear system logs</h2><p class='muted'>System diagnostic logs are unavailable in this profile.</p></section>");
 #endif
@@ -329,10 +329,10 @@ void handleToolsPage() {
     sendBusinessRecordStoresClearPanel();
 #endif
 #if ESP32BASE_ENABLE_APP_EVENTS
-    sendChunk("<section class='panel dangerpanel'><h2>Clear App Events</h2><p class='dangertext'>Delete the application event log store. System diagnostic logs, runtime settings and WiFi credentials are not changed.</p><form method='post' action='/esp32base/tools/app-events-clear' onsubmit=\"return confirm('Clear App Events?')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Clear App Events'></div></form></section>");
+    sendChunk("<section class='panel dangerpanel'><h2>Clear App Events</h2><p class='dangertext'>Delete the application event log store. System diagnostic logs, runtime settings and WiFi credentials are not changed.</p><form method='post' action='/esp32base/system/app-events-clear' onsubmit=\"return confirm('Clear App Events?')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Clear App Events'></div></form></section>");
 #endif
 #if ESP32BASE_ENABLE_FS
-    sendChunk("<section class='panel dangerpanel'><h2>Format LittleFS</h2><p class='dangertext'>This deletes logs and all files stored in LittleFS. WiFi, Web Auth and NVS config are not cleared.</p><form method='post' action='/esp32base/tools/format-fs' onsubmit=\"return confirm('Format LittleFS? This deletes logs and all files stored in LittleFS.')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Format LittleFS'></div></form></section>");
+    sendChunk("<section class='panel dangerpanel'><h2>Format LittleFS</h2><p class='dangertext'>This deletes logs and all files stored in LittleFS. WiFi, Web Auth and NVS config are not cleared.</p><form method='post' action='/esp32base/system/format-fs' onsubmit=\"return confirm('Format LittleFS? This deletes logs and all files stored in LittleFS.')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Format LittleFS'></div></form></section>");
 #else
     sendChunk("<section class='panel actionpanel'><h2>Format LittleFS</h2><p class='muted'>LittleFS is unavailable in this profile.</p></section>");
 #endif
@@ -349,16 +349,16 @@ void handleToolsFileLogPost() {
     Esp32BaseFileLog::Mode mode = Esp32BaseFileLog::OFF;
     if (!fileLogModeFromArg(g_server.arg("mode"), mode)) {
         ESP32BASE_LOG_W("web", "filelog_mode_rejected source=tools value=%s", g_server.arg("mode").c_str());
-        redirectSeeOther("/esp32base/tools?error=filelog_invalid_mode");
+        redirectSeeOther("/esp32base/system?error=filelog_invalid_mode");
         return;
     }
     ESP32BASE_LOG_W("web", "filelog_mode_requested source=tools from=%s to=%s",
                     Esp32BaseFileLog::modeName(),
                     fileLogModeName(mode));
     const bool ok = Esp32BaseFileLog::setMode(mode);
-    redirectSeeOther(ok ? "/esp32base/tools?filelog_saved=1" : "/esp32base/tools?error=filelog_save_failed");
+    redirectSeeOther(ok ? "/esp32base/system?filelog_saved=1" : "/esp32base/system?error=filelog_save_failed");
 #else
-    redirectSeeOther("/esp32base/tools?error=filelog_unavailable");
+    redirectSeeOther("/esp32base/system?error=filelog_unavailable");
 #endif
 }
 
@@ -370,14 +370,14 @@ void handleToolsFooterBarPost() {
     Esp32BaseWeb::FooterBarMode mode = Esp32BaseWeb::FOOTER_BAR_FULL;
     if (!footerBarModeFromArg(g_server.arg("mode"), mode)) {
         ESP32BASE_LOG_W("web", "footer_bar_mode_rejected source=tools value=%s", g_server.arg("mode").c_str());
-        redirectSeeOther("/esp32base/tools?error=footer_bar_invalid_mode");
+        redirectSeeOther("/esp32base/system?error=footer_bar_invalid_mode");
         return;
     }
     ESP32BASE_LOG_W("web", "footer_bar_mode_requested source=tools from=%s to=%s",
                     Esp32BaseWeb::footerBarModeName(),
                     footerBarModeName(mode));
     const bool ok = Esp32BaseWeb::setFooterBarMode(mode);
-    redirectSeeOther(ok ? "/esp32base/tools?footer_saved=1" : "/esp32base/tools?error=footer_bar_save_failed");
+    redirectSeeOther(ok ? "/esp32base/system?footer_saved=1" : "/esp32base/system?error=footer_bar_save_failed");
 }
 
 void handleToolsRebootPost() {
@@ -387,9 +387,9 @@ void handleToolsRebootPost() {
     }
     ESP32BASE_LOG_W("web", "restart_requested source=tools");
     Esp32BaseWeb::sendHeader("Rebooting");
-    sendChunk("<script>history.replaceState(null,'','/esp32base/tools?restarting=1');</script>");
+    sendChunk("<script>history.replaceState(null,'','/esp32base/system?restarting=1');</script>");
     Esp32BaseWeb::sendPageTitle("Rebooting", "Device restart was accepted.");
-    sendChunk("<section class='panel actionpanel'><h2>Restart requested</h2><p class='muted'>Device is restarting. Please wait a few seconds, then reload the System page.</p><div class='actions'><a class='btnlink' href='/esp32base/tools'>Reload System</a></div></section>");
+    sendChunk("<section class='panel actionpanel'><h2>Restart requested</h2><p class='muted'>Device is restarting. Please wait a few seconds, then reload the System page.</p><div class='actions'><a class='btnlink' href='/esp32base/system'>Reload System</a></div></section>");
     Esp32BaseWeb::sendFooter();
     delay(100);
     Esp32BaseSystem::restart("web");
@@ -412,7 +412,7 @@ void handleToolsWatchdogTripResetPost() {
                     static_cast<unsigned long>(lifetime),
                     static_cast<unsigned long>(resetTime),
                     ok ? "success" : "failed");
-    redirectSeeOther(ok ? "/esp32base/tools?watchdog_trip_reset=1" : "/esp32base/tools?error=watchdog_trip_reset_failed");
+    redirectSeeOther(ok ? "/esp32base/system?watchdog_trip_reset=1" : "/esp32base/system?error=watchdog_trip_reset_failed");
 }
 #endif
 
@@ -475,18 +475,18 @@ void handleToolsFormatFsPost() {
 #endif
         && businessStoresReloaded == businessStoreCount
     ) {
-        redirectSeeOther("/esp32base/tools?formatted=1");
+        redirectSeeOther("/esp32base/system?formatted=1");
     } else {
-        redirectSeeOther(!formatted ? "/esp32base/tools?error=format_failed" :
-                         !mounted ? "/esp32base/tools?error=mount_failed" :
+        redirectSeeOther(!formatted ? "/esp32base/system?error=format_failed" :
+                         !mounted ? "/esp32base/system?error=mount_failed" :
 #if ESP32BASE_ENABLE_APP_EVENTS
-                         !appEventsRecreated ? "/esp32base/tools?error=app_events_recreate_failed" :
+                         !appEventsRecreated ? "/esp32base/system?error=app_events_recreate_failed" :
 #endif
-                         "/esp32base/tools?error=business_record_stores_recreate_failed");
+                         "/esp32base/system?error=business_record_stores_recreate_failed");
     }
 #else
     ESP32BASE_LOG_W("web", "fs_format_requested source=tools result=unavailable");
-    redirectSeeOther("/esp32base/tools?error=fs_unavailable");
+    redirectSeeOther("/esp32base/system?error=fs_unavailable");
 #endif
 }
 
@@ -497,9 +497,9 @@ void handleToolsLogsClearPost() {
     }
 #if ESP32BASE_ENABLE_FILELOG
     const bool ok = Esp32BaseFileLog::clear();
-    redirectSeeOther(ok ? "/esp32base/tools?logs_cleared=1" : "/esp32base/tools?error=logs_clear_failed");
+    redirectSeeOther(ok ? "/esp32base/system?logs_cleared=1" : "/esp32base/system?error=logs_clear_failed");
 #else
-    redirectSeeOther("/esp32base/tools?error=logs_unavailable");
+    redirectSeeOther("/esp32base/system?error=logs_unavailable");
 #endif
 }
 
@@ -512,7 +512,7 @@ void handleToolsBusinessRecordsClearPost() {
     const uint8_t total = businessRecordStoreCount();
     if (total == 0) {
         ESP32BASE_LOG_W("web", "business_records_clear_rejected reason=no_registered_stores");
-        redirectSeeOther("/esp32base/tools?business_records_not_ready=1");
+        redirectSeeOther("/esp32base/system?business_records_not_ready=1");
         return;
     }
     for (uint8_t i = 0; i < total; ++i) {
@@ -522,7 +522,7 @@ void handleToolsBusinessRecordsClearPost() {
             ESP32BASE_LOG_W("web", "business_records_clear_rejected reason=store_not_ready path=%s state=%s",
                             store && store->path() ? store->path() : "-",
                             store ? Esp32BaseRecordStore::storeStateName(store->state()) : "missing");
-            redirectSeeOther("/esp32base/tools?business_records_not_ready=1");
+            redirectSeeOther("/esp32base/system?business_records_not_ready=1");
             return;
         }
     }
@@ -564,12 +564,12 @@ void handleToolsBusinessRecordsClearPost() {
     char location[128];
     if (cleared == total) {
         snprintf(location, sizeof(location),
-                 "/esp32base/tools?business_records_cleared=%u%s",
+                 "/esp32base/system?business_records_cleared=%u%s",
                  static_cast<unsigned>(cleared),
                  cleanupWarnings ? "&cleanup_warning=1" : "");
     } else {
         snprintf(location, sizeof(location),
-                 "/esp32base/tools?business_records_clear_failed=1&cleared=%u&total=%u",
+                 "/esp32base/system?business_records_clear_failed=1&cleared=%u&total=%u",
                  static_cast<unsigned>(cleared),
                  static_cast<unsigned>(total));
     }
@@ -588,7 +588,7 @@ void handleToolsAppEventsClearPost() {
         return;
     }
     const bool ok = Esp32BaseAppEvents::clear();
-    redirectSeeOther(ok ? "/esp32base/tools?app_events_cleared=1" : "/esp32base/tools?error=app_events_clear_failed");
+    redirectSeeOther(ok ? "/esp32base/system?app_events_cleared=1" : "/esp32base/system?error=app_events_clear_failed");
 }
 #endif
 

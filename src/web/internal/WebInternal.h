@@ -70,7 +70,6 @@ uint8_t navItemCount();
 bool navPathExists(const char* path);
 uint8_t appNavCount();
 const char* configuredHomePath();
-bool useAppHome();
 bool isBuiltinWebPath(const char* path);
 bool shouldSendHeadExtra();
 bool navPathMatches(const char* navPath, const char* currentPath);
@@ -265,6 +264,7 @@ void handleToolsAppEventsClearPost();
 #endif
 void handleCaptiveProbe();
 void handleRootRedirect();
+void handleStatusRedirect();
 void handleNoContent();
 void handleUiCss();
 void handleNotFound();
@@ -276,7 +276,7 @@ void handleOtaUpload();
 void handleOtaRawUpload();
 void handleOtaApi();
 #endif
-void handleRoot();
+void handleStatusPage();
 #if ESP32BASE_ENABLE_FS
 void handleFsPage();
 void handleFsDownloadGet();

@@ -335,7 +335,7 @@ void handleMaintenancePage() {
     Esp32BaseWeb::sendPageTitle("诊断维护", "只读优先，危险动作进入确认保护页。");
     Esp32BaseWeb::beginPanel("系统诊断");
     Esp32BaseWeb::sendInfoRowCompact("WiFi", "连接状态、RSSI、IP。", "正常");
-    Esp32BaseWeb::sendInfoRowCompactLink("维护任务", "导出、扫描、重启等长任务显示状态和下一步。", "空闲", "/esp32base/tools", "查看");
+    Esp32BaseWeb::sendInfoRowCompactLink("维护任务", "导出、扫描、重启等长任务显示状态和下一步。", "空闲", "/esp32base/system", "查看");
     Esp32BaseWeb::sendInfoRowCompactLink("访问控制", "登录、权限不足、会话失效和只读受限状态。", nullptr, "/ui-status/access", "查看");
     Esp32BaseWeb::sendInfoRowCompactLink("空状态", "列表、记录或配置项暂不存在时的基准表达。", nullptr, "/ui-records/empty", "查看");
     Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_INFO, "原始数据受控", "限制长度，可复制或导出，不做无限滚动调试平台。");
@@ -348,7 +348,7 @@ void handleAccessPage() {
     Esp32BaseWeb::sendPageTitle("访问控制", "覆盖登录、权限不足、会话失效和只读受限状态。");
     Esp32BaseWeb::beginPanel("受限状态");
     Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_WARN, "需要登录", "登录后可以继续执行配置和维护操作。");
-    Esp32BaseWeb::sendInfoRowCompactLink("只读访问", "无权限时展示原因和可继续查看的内容。", "允许", "/esp32base", "返回状态");
+    Esp32BaseWeb::sendInfoRowCompactLink("只读访问", "无权限时展示原因和可继续查看的内容。", "允许", "/esp32base/status", "返回状态");
     Esp32BaseWeb::endPanel();
     Esp32BaseWeb::sendFooter();
 }

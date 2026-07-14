@@ -331,6 +331,134 @@ void sendEscapedJsonNative(const char* text) {
     }
 }
 
+const char* configuredHomePathNative() {
+    NativeTestState& state = nativeState();
+    if (!state.homePath.empty()) {
+        return state.homePath.c_str();
+    }
+    for (const Esp32BaseWeb::NativeTestHeader& item : state.navItems) {
+        if (item.name == "/index") {
+            return item.name.c_str();
+        }
+    }
+    for (const NativeTestRoute& route : state.routes) {
+        if (route.appPage && route.path == "/index") {
+            return route.path.c_str();
+        }
+    }
+    for (const Esp32BaseWeb::NativeTestHeader& item : state.navItems) {
+        if (!item.name.empty()) {
+            return item.name.c_str();
+        }
+    }
+    for (const NativeTestRoute& route : state.routes) {
+        if (route.appPage) {
+            return route.path.c_str();
+        }
+    }
+    return "/esp32base/status";
+}
+
+void appendUrlEncodedNative(std::string& output, const std::string& value) {
+    static const char hex[] = "0123456789ABCDEF";
+    for (unsigned char c : value) {
+        const bool unreserved = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                                (c >= '0' && c <= '9') || c == '-' || c == '.' ||
+                                c == '_' || c == '~';
+        if (unreserved) {
+            output.push_back(static_cast<char>(c));
+        } else {
+            output.push_back('%');
+            output.push_back(hex[(c >> 4) & 0x0F]);
+            output.push_back(hex[c & 0x0F]);
+        }
+    }
+}
+
+void nativeStatusRedirect() {
+    std::string location = "/esp32base/status";
+    NativeTestState& state = nativeState();
+    for (size_t i = 0; i < state.params.size(); ++i) {
+        location.push_back(i == 0 ? '?' : '&');
+        appendUrlEncodedNative(location, state.params[i].name);
+        location.push_back('=');
+        appendUrlEncodedNative(location, state.params[i].value);
+    }
+    setResponseHeader("Location", location.c_str());
+    setResponseHeader("Cache-Control", "no-store");
+    setResponse(302, "text/plain", "", true);
+}
+
+void nativeSimplePage() {
+    if (!Esp32BaseWeb::checkAuth()) {
+        return;
+    }
+    Esp32BaseWeb::sendHeader("Esp32Base");
+    Esp32BaseWeb::sendChunk("<h1>Esp32Base page</h1>");
+    Esp32BaseWeb::sendFooter();
+}
+
+void nativeStatusPage() {
+    if (!Esp32BaseWeb::checkAuth()) {
+        return;
+    }
+    Esp32BaseWeb::sendHeader("Status");
+    Esp32BaseWeb::sendChunk("<h1>Status</h1><section><h2>System settings</h2><a href='/esp32base/system'>Open System</a></section>");
+    Esp32BaseWeb::sendFooter();
+}
+
+void nativeSystemPage() {
+    if (!Esp32BaseWeb::checkAuth()) {
+        return;
+    }
+    Esp32BaseWeb::sendHeader("System");
+    Esp32BaseWeb::sendChunk("<h1>System</h1>");
+    static const char* actions[] = {
+        "hostname", "filelog", "footer-bar", "reboot", "watchdog-trip-reset",
+        "format-fs", "logs-clear", "business-records-clear", "app-events-clear"
+    };
+    for (const char* action : actions) {
+        Esp32BaseWeb::sendChunk("<form method='post' action='/esp32base/system/");
+        Esp32BaseWeb::sendChunk(action);
+        Esp32BaseWeb::sendChunk("'></form>");
+    }
+    Esp32BaseWeb::sendFooter();
+}
+
+void nativeRootRedirect() {
+    NativeTestState& state = nativeState();
+    const char* home = state.homeMode == Esp32BaseWeb::HOME_ESP32BASE
+                           ? "/esp32base/status"
+                           : configuredHomePathNative();
+    if (state.homeMode != Esp32BaseWeb::HOME_ESP32BASE && std::strcmp(home, "/") == 0) {
+        for (auto it = state.routes.rbegin(); it != state.routes.rend(); ++it) {
+            if (it->path == "/" && it->handler != nativeRootRedirect &&
+                routeMatches(it->method, Esp32BaseWeb::METHOD_GET)) {
+                it->handler();
+                return;
+            }
+        }
+        home = "/esp32base/status";
+    }
+    setResponseHeader("Location", home);
+    setResponse(302, "text/plain", "", true);
+}
+
+void registerNativeBuiltinRoutes() {
+    addNativeRoute("/", nullptr, Esp32BaseWeb::METHOD_GET, nativeRootRedirect, false);
+    addNativeRoute("/esp32base", nullptr, Esp32BaseWeb::METHOD_GET, nativeStatusRedirect, false);
+    addNativeRoute("/esp32base/", nullptr, Esp32BaseWeb::METHOD_GET, nativeStatusRedirect, false);
+    addNativeRoute("/esp32base/status", "Status", Esp32BaseWeb::METHOD_GET, nativeStatusPage, false);
+    addNativeRoute("/esp32base/system", "System", Esp32BaseWeb::METHOD_GET, nativeSystemPage, false);
+    addNativeRoute("/esp32base/logs", "System Logs", Esp32BaseWeb::METHOD_GET, nativeSimplePage, false);
+    addNativeRoute("/esp32base/app-events", "App Events", Esp32BaseWeb::METHOD_GET, nativeSimplePage, false);
+    addNativeRoute("/esp32base/app-config", "App Config", Esp32BaseWeb::METHOD_GET, nativeSimplePage, false);
+    addNativeRoute("/esp32base/wifi", "WiFi", Esp32BaseWeb::METHOD_GET, nativeSimplePage, false);
+    addNativeRoute("/esp32base/auth", "Auth", Esp32BaseWeb::METHOD_GET, nativeSimplePage, false);
+    addNativeRoute("/esp32base/ota", "OTA", Esp32BaseWeb::METHOD_GET, nativeSimplePage, false);
+    addNativeRoute("/esp32base/fs", "File system", Esp32BaseWeb::METHOD_GET, nativeSimplePage, false);
+}
+
 } // namespace
 
 bool Esp32BaseWeb::begin() {
@@ -544,6 +672,11 @@ void Esp32BaseWeb::sendHeader(const char* title) {
 }
 
 void Esp32BaseWeb::sendFooter() {
+    if (nativeState().footerBarMode == FOOTER_BAR_FULL) {
+        sendChunk("<footer><a href='/esp32base/status'>Status</a><a href='/esp32base/system'>System</a></footer>");
+    } else if (nativeState().footerBarMode == FOOTER_BAR_STATUS_ONLY) {
+        sendChunk("<footer>Free heap: test</footer>");
+    }
     sendChunk("</main></body></html>");
     endResponse();
 }
@@ -776,7 +909,7 @@ void Esp32BaseWeb::sendJson(int code, const char* json) {
 }
 
 void Esp32BaseWeb::redirectSeeOther(const char* url) {
-    setResponseHeader("Location", url ? url : "/esp32base");
+    setResponseHeader("Location", url ? url : "/esp32base/status");
     setResponseHeader("Cache-Control", "no-store");
     setResponse(303, "text/plain", "", true);
 }
@@ -818,6 +951,7 @@ void Esp32BaseWeb::nativeTestReset() {
     state.staticAssets.clear();
     state.navItems.clear();
     clearResponse();
+    registerNativeBuiltinRoutes();
 }
 
 void Esp32BaseWeb::nativeTestBeginRequest(Method method, const char* path) {
@@ -996,7 +1130,9 @@ bool Esp32BaseWeb::begin() {
     g_footerBarMode = readFooterBarMode();
     g_server.collectHeaders(g_headerKeys, sizeof(g_headerKeys) / sizeof(g_headerKeys[0]));
     g_server.on("/", HTTP_GET, handleRootRedirect);
-    g_server.on("/esp32base", HTTP_GET, handleRoot);
+    g_server.on("/esp32base", HTTP_GET, handleStatusRedirect);
+    g_server.on("/esp32base/", HTTP_GET, handleStatusRedirect);
+    g_server.on("/esp32base/status", HTTP_GET, handleStatusPage);
     g_server.on("/esp32base/api/status", HTTP_GET, handleStatus);
     g_server.on("/esp32base/api/chip", HTTP_GET, handleChip);
     g_server.on("/esp32base/api/firmware", HTTP_GET, handleFirmware);
@@ -1024,25 +1160,25 @@ bool Esp32BaseWeb::begin() {
 #endif
     g_server.on("/esp32base/auth", HTTP_GET, handleAuthPage);
     g_server.on("/esp32base/auth", HTTP_POST, handleAuthSubmit);
-    g_server.on("/esp32base/tools", HTTP_GET, handleToolsPage);
+    g_server.on("/esp32base/system", HTTP_GET, handleToolsPage);
 #if ESP32BASE_ENABLE_APP_CONFIG
     g_server.on("/esp32base/app-config", HTTP_GET, handleAppConfigPage);
     g_server.on("/esp32base/app-config", HTTP_POST, handleAppConfigSubmit);
 #endif
-    g_server.on("/esp32base/tools/hostname", HTTP_POST, handleHostnameSubmit);
-    g_server.on("/esp32base/tools/filelog", HTTP_POST, handleToolsFileLogPost);
-    g_server.on("/esp32base/tools/footer-bar", HTTP_POST, handleToolsFooterBarPost);
-    g_server.on("/esp32base/tools/reboot", HTTP_POST, handleToolsRebootPost);
+    g_server.on("/esp32base/system/hostname", HTTP_POST, handleHostnameSubmit);
+    g_server.on("/esp32base/system/filelog", HTTP_POST, handleToolsFileLogPost);
+    g_server.on("/esp32base/system/footer-bar", HTTP_POST, handleToolsFooterBarPost);
+    g_server.on("/esp32base/system/reboot", HTTP_POST, handleToolsRebootPost);
 #if ESP32BASE_ENABLE_WATCHDOG
-    g_server.on("/esp32base/tools/watchdog-trip-reset", HTTP_POST, handleToolsWatchdogTripResetPost);
+    g_server.on("/esp32base/system/watchdog-trip-reset", HTTP_POST, handleToolsWatchdogTripResetPost);
 #endif
-    g_server.on("/esp32base/tools/format-fs", HTTP_POST, handleToolsFormatFsPost);
-    g_server.on("/esp32base/tools/logs-clear", HTTP_POST, handleToolsLogsClearPost);
+    g_server.on("/esp32base/system/format-fs", HTTP_POST, handleToolsFormatFsPost);
+    g_server.on("/esp32base/system/logs-clear", HTTP_POST, handleToolsLogsClearPost);
 #if ESP32BASE_ENABLE_RECORD_STORE
-    g_server.on("/esp32base/tools/business-records-clear", HTTP_POST, handleToolsBusinessRecordsClearPost);
+    g_server.on("/esp32base/system/business-records-clear", HTTP_POST, handleToolsBusinessRecordsClearPost);
 #endif
 #if ESP32BASE_ENABLE_APP_EVENTS
-    g_server.on("/esp32base/tools/app-events-clear", HTTP_POST, handleToolsAppEventsClearPost);
+    g_server.on("/esp32base/system/app-events-clear", HTTP_POST, handleToolsAppEventsClearPost);
 #endif
     g_server.on("/esp32base/api/restart", HTTP_POST, handleRestart);
     g_server.on("/generate_204", HTTP_GET, handleCaptiveProbe);
@@ -1854,7 +1990,7 @@ void Esp32BaseWeb::sendJson(int code, const char* json) {
 }
 
 void Esp32BaseWeb::redirectSeeOther(const char* url) {
-    ::redirectSeeOther(url ? url : "/esp32base");
+    ::redirectSeeOther(url ? url : "/esp32base/status");
 }
 
 void Esp32BaseWeb::beginJson(int code) {

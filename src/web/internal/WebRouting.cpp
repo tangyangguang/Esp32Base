@@ -555,11 +555,7 @@ const char* configuredHomePath() {
             return g_routes[i].path;
         }
     }
-    return "/esp32base";
-}
-
-bool useAppHome() {
-    return g_homeMode == Esp32BaseWeb::HOME_APP && strcmp(configuredHomePath(), "/esp32base") != 0;
+    return "/esp32base/status";
 }
 
 bool isBuiltinWebPath(const char* path) {
@@ -618,21 +614,27 @@ const char* activeNavPath(bool includeSystemLinks) {
         }
     }
     if (includeSystemLinks) {
-        updateActivePath("/esp32base", currentPath, activePath, activeLen);
+        updateActivePath("/esp32base/status", currentPath, activePath, activeLen);
         if (navPathMatches("/esp32base/wifi", currentPath) ||
             navPathMatches("/esp32base/auth", currentPath)
+#if ESP32BASE_ENABLE_FS
+            || navPathMatches("/esp32base/fs", currentPath)
+#endif
 #if ESP32BASE_ENABLE_OTA
             || navPathMatches("/esp32base/ota", currentPath)
 #endif
         ) {
-            activePath = "/esp32base/tools";
+            activePath = "/esp32base/system";
             activeLen = strlen(activePath);
         }
         updateActivePath("/esp32base/logs", currentPath, activePath, activeLen);
+#if ESP32BASE_ENABLE_APP_EVENTS
+        updateActivePath("/esp32base/app-events", currentPath, activePath, activeLen);
+#endif
 #if ESP32BASE_ENABLE_APP_CONFIG
         updateActivePath("/esp32base/app-config", currentPath, activePath, activeLen);
 #endif
-        updateActivePath("/esp32base/tools", currentPath, activePath, activeLen);
+        updateActivePath("/esp32base/system", currentPath, activePath, activeLen);
     }
     return activePath;
 }
@@ -732,16 +734,47 @@ void handleCaptiveProbe() {
 
 void handleRootRedirect() {
     markRequest();
-    const char* location = g_homeMode == Esp32BaseWeb::HOME_ESP32BASE ? "/esp32base" : configuredHomePath();
+    const char* location = g_homeMode == Esp32BaseWeb::HOME_ESP32BASE ? "/esp32base/status" : configuredHomePath();
     if (g_homeMode != Esp32BaseWeb::HOME_ESP32BASE && strcmp(configuredHomePath(), "/") == 0) {
         Route* route = findRoute("/", Esp32BaseWeb::METHOD_GET);
         if (route && route->handler) {
             dispatchRoute(*route);
             return;
         }
-        location = "/esp32base";
+        location = "/esp32base/status";
     }
     g_server.sendHeader("Location", location, true);
+    g_server.send(302, "text/plain", "");
+}
+
+void appendUrlEncoded(String& output, const String& value) {
+    static const char hex[] = "0123456789ABCDEF";
+    for (size_t i = 0; i < value.length(); ++i) {
+        const uint8_t c = static_cast<uint8_t>(value[i]);
+        const bool unreserved = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                                (c >= '0' && c <= '9') || c == '-' || c == '.' ||
+                                c == '_' || c == '~';
+        if (unreserved) {
+            output += static_cast<char>(c);
+        } else {
+            output += '%';
+            output += hex[(c >> 4) & 0x0F];
+            output += hex[c & 0x0F];
+        }
+    }
+}
+
+void handleStatusRedirect() {
+    markRequest();
+    String location = "/esp32base/status";
+    for (int i = 0; i < g_server.args(); ++i) {
+        location += i == 0 ? '?' : '&';
+        appendUrlEncoded(location, g_server.argName(i));
+        location += '=';
+        appendUrlEncoded(location, g_server.arg(i));
+    }
+    g_server.sendHeader("Location", location, true);
+    g_server.sendHeader("Cache-Control", "no-store");
     g_server.send(302, "text/plain", "");
 }
 

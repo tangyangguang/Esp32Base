@@ -246,7 +246,7 @@ void sendAppLinks(bool paragraph, const char* activePath) {
 }
 
 void sendSystemLinks(bool paragraph, const char* activePath = nullptr) {
-    sendNavLink("/esp32base", g_builtinLabels[Esp32BaseWeb::BUILTIN_HOME], paragraph, activePath);
+    sendNavLink("/esp32base/status", g_builtinLabels[Esp32BaseWeb::BUILTIN_HOME], paragraph, activePath);
     sendNavLink("/esp32base/logs", g_builtinLabels[Esp32BaseWeb::BUILTIN_LOGS], paragraph, activePath);
 #if ESP32BASE_ENABLE_APP_EVENTS
     sendNavLink("/esp32base/app-events", g_builtinLabels[Esp32BaseWeb::BUILTIN_APP_EVENTS], paragraph, activePath);
@@ -254,13 +254,16 @@ void sendSystemLinks(bool paragraph, const char* activePath = nullptr) {
 #if ESP32BASE_ENABLE_APP_CONFIG
     sendNavLink("/esp32base/app-config", "App Config", paragraph, activePath);
 #endif
-    sendNavLink("/esp32base/tools", g_builtinLabels[Esp32BaseWeb::BUILTIN_TOOLS], paragraph, activePath);
+    sendNavLink("/esp32base/system", g_builtinLabels[Esp32BaseWeb::BUILTIN_TOOLS], paragraph, activePath);
 }
 
 void sendMainNav() {
     const char* activePath = activeNavPath(g_systemNavMode == Esp32BaseWeb::SYSTEM_NAV_TOP);
+    const char* brandPath = g_homeMode == Esp32BaseWeb::HOME_ESP32BASE
+                                ? "/esp32base/status"
+                                : configuredHomePath();
     sendChunk("<nav>");
-    sendNavLink(configuredHomePath(), g_deviceName, false, activePath, "brand");
+    sendNavLink(brandPath, g_deviceName, false, activePath, "brand");
     if (g_homeMode != Esp32BaseWeb::HOME_ESP32BASE) {
         sendAppLinks(false, activePath);
     }

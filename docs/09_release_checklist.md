@@ -249,11 +249,11 @@
 - `addPage()` / `addNavItem()` 注册的业务入口进入业务导航且不重复业务首页入口。
 - 内置 Status/WiFi/OTA/System Logs/Tools/Auth 标签可覆盖，用于本地化；底层枚举名仍为 `BUILTIN_LOGS`。
 - Tools 维护页中的重启和格式化 FS 按钮都有二次确认。
-- `POST /esp32base/tools/business-records-clear` 必须需要 Basic Auth、POST 和同源检查；GET不得清空，业务页面不应再提供平行的业务记录清空入口。
+- `POST /esp32base/system/business-records-clear` 必须需要 Basic Auth、POST 和同源检查；GET不得清空，业务页面不应再提供平行的业务记录清空入口。
 - Tools 维护页可保存 hostname，显示当前值、默认值、已保存值和重启需求；保存后不热切换当前运行时 hostname。
 - 启用 `ESP32BASE_ENABLE_APP_CONFIG` 后，System 页显示 App Config 入口，`/esp32base/app-config` 可按 group 展示业务参数。
 - 启用 `ESP32BASE_ENABLE_APP_EVENTS` 后，系统导航显示 App Events 入口，`/esp32base/app-events`、`/esp32base/api/app-events`、`/esp32base/app-events.csv` 可用；内置页面的状态、筛选、分页列表和逐条详情在桌面及窄屏下均不得挤压、重叠或丢失字段。
-- `POST /esp32base/tools/app-events-clear` 必须需要 Basic Auth、POST 和同源检查；GET 不得清空，App Events 页面不得保留清空入口。
+- `POST /esp32base/system/app-events-clear` 必须需要 Basic Auth、POST 和同源检查；GET 不得清空，App Events 页面不得保留清空入口。
 - 业务 `METHOD_ANY` 危险 handler 调用 `Esp32BaseWeb::checkPostAllowed(context)` 时，GET 必须返回 405 且不执行副作用。
 - `/esp32base/logs` 不包含 App Events，仍只展示 FileLog 系统日志。
 - App Config 注册校验覆盖非法 namespace、重复 `ns/key`、非法长度/范围/step/decimal scale/enum option 和超容量。

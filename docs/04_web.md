@@ -118,7 +118,7 @@ OTA 规则：
 - `METHOD_ANY` 路由进入应用 handler 前会先建立请求上下文，应用不需要直接访问底层 `WebServer`。
 - handler 内 `Esp32BaseWeb::currentMethod()` 可区分 `METHOD_GET` / `METHOD_POST`；handler 外返回 `METHOD_UNKNOWN`。
 - `addPage()` 注册业务页面并进入业务导航；`addNavItem()` 只注册导航项，不注册路由。
-- `setHomeMode()` 控制 `/` 和 `/esp32base` 的首页模型：基础库首页、业务首页优先或融合首页。
+- `setHomeMode()` 只控制裸 `/` 的首页模型：基础库首页、业务首页优先或融合首页；`/esp32base` 和 `/esp32base/` 固定重定向到 `/esp32base/status`。
 - `setSystemNavMode()` 控制 Status、System Logs、System 等系统入口在顶部、底部或底部紧凑系统工具区展示；默认使用底部紧凑系统工具区，让顶部主要服务业务导航。
 - `setFooterBarMode()` 控制 `sendFooter()` 输出的底部横条：Off 不显示，Status only 只显示右侧运行摘要，Links + status 同时显示左侧系统入口和右侧运行摘要。
 - `setBuiltinLabel()` 可覆盖 Status/WiFi/OTA/System Logs/App Events/System/Auth 标签，用于应用统一本地化；系统诊断日志底层枚举仍是 `BUILTIN_LOGS`，系统维护页统一使用 `BUILTIN_TOOLS`，不提供旧 Reboot 历史别名。
@@ -152,7 +152,9 @@ Esp32BaseWeb::addStaticAsset("/assets/app.css",
 
 Web:
 
-- `GET /esp32base`
+- `GET /esp32base`，302 到 `/esp32base/status` 并保留查询参数
+- `GET /esp32base/`，302 到 `/esp32base/status` 并保留查询参数
+- `GET /esp32base/status`，Status 页唯一规范地址
 - `GET /esp32base/api/status`
 - `GET /esp32base/api/chip`
 - `GET /esp32base/api/firmware`
@@ -187,7 +189,7 @@ App Events，仅 `ESP32BASE_ENABLE_APP_EVENTS=1`：
 
 System:
 
-- `GET /esp32base/tools`
+- `GET /esp32base/system`
 - `GET /esp32base/fs`，仅 `ESP32BASE_ENABLE_FS=1`，LittleFS 文件占用诊断；默认只读，文件树提供单文件下载，`?manage=1` 进入单文件删除管理模式
 - `GET /esp32base/fs/check?dir=/data&name=file.bin`，仅 `ESP32BASE_ENABLE_FS=1`，上传前检查目标路径；上传保留本地文件名，可选择任何已有目录，不创建目录
 - `GET /esp32base/fs/download?path=/file`，仅 `ESP32BASE_ENABLE_FS=1`，下载一个 LittleFS 文件；需要认证，目录和非法路径不会下载
@@ -195,15 +197,15 @@ System:
 - `POST /esp32base/fs/upload`，仅 `ESP32BASE_ENABLE_FS=1`，上传一个 LittleFS 文件；需要认证和同源 POST，目标存在时必须显式覆盖，可写入任何已有目录
 - `GET /esp32base/app-config`，仅 `ESP32BASE_ENABLE_APP_CONFIG=1`
 - `POST /esp32base/app-config`，仅 `ESP32BASE_ENABLE_APP_CONFIG=1`
-- `POST /esp32base/tools/hostname`
-- `POST /esp32base/tools/reboot`
-- `POST /esp32base/tools/footer-bar`
-- `POST /esp32base/tools/filelog`
-- `POST /esp32base/tools/logs-clear`，System 页面主入口，成功后回到 System 页面
-- `POST /esp32base/tools/business-records-clear`，仅 `ESP32BASE_ENABLE_RECORD_STORE=1`，逻辑清空所有通过 `registerBusinessRecordStore()` 登记的当前版本业务 Store；需要认证、同源 POST 和用户二次确认
-- `POST /esp32base/tools/app-events-clear`，仅 `ESP32BASE_ENABLE_APP_EVENTS=1`，清空事件日志；System 页面危险操作入口，成功后回到 System 页面
-- `POST /esp32base/tools/watchdog-trip-reset`
-- `POST /esp32base/tools/format-fs`，仅 `ESP32BASE_ENABLE_FS=1`，只格式化 LittleFS；格式化成功后通知 after-format 回调/事件，不清任何 NVS
+- `POST /esp32base/system/hostname`
+- `POST /esp32base/system/reboot`
+- `POST /esp32base/system/footer-bar`
+- `POST /esp32base/system/filelog`
+- `POST /esp32base/system/logs-clear`，System 页面主入口，成功后回到 System 页面
+- `POST /esp32base/system/business-records-clear`，仅 `ESP32BASE_ENABLE_RECORD_STORE=1`，逻辑清空所有通过 `registerBusinessRecordStore()` 登记的当前版本业务 Store；需要认证、同源 POST 和用户二次确认
+- `POST /esp32base/system/app-events-clear`，仅 `ESP32BASE_ENABLE_APP_EVENTS=1`，清空事件日志；System 页面危险操作入口，成功后回到 System 页面
+- `POST /esp32base/system/watchdog-trip-reset`
+- `POST /esp32base/system/format-fs`，仅 `ESP32BASE_ENABLE_FS=1`，只格式化 LittleFS；格式化成功后通知 after-format 回调/事件，不清任何 NVS
 - `POST /esp32base/api/restart`
 
 OTA 路由只在启用 OTA 且认证条件满足时注册。
@@ -246,11 +248,11 @@ System 维护页：
 
 Status 页：
 
-- `/esp32base` 默认作为只读设备体检页，不承载配置保存和危险操作。
+- `/esp32base/status` 是只读设备体检页的唯一规范地址，不承载配置保存和危险操作；`/esp32base` 与 `/esp32base/` 只负责重定向。
 - 第一屏不再额外做 `System Overview` 预览块，避免和相邻详细分区重复；常用信息直接按 Device、Network、Runtime Health、Storage & Logs、Firmware & OTA、Hardware 排序。
 - Status 页不做 LittleFS 全量文件树扫描、文件可读性检查或 top files 统计；Storage & Logs 只显示一次 LittleFS 信息查询得到的 O(1) 容量摘要和 FileLog 配置摘要，不打开 FileLog 段文件统计已用大小，完整 FS inventory 位于 `/esp32base/fs`。
 - 同一数据不应在相邻分区同名同值重复展示；需要高频查看的信息应前置为正式分区，而不是再做一层摘要。
-- Partition Table 属于低频详细信息，只在 `/esp32base?details=1` 显示。
+- Partition Table 属于低频详细信息，只在 `/esp32base/status?details=1` 显示。
 - 系统诊断日志（`Esp32BaseFileLog`）属于 Storage & Logs，不作为健康摘要项；状态页默认显示日志级别、轮转文件数、容量上限和路径，不打开段文件统计当前大小，避免慢 FS 文件打开拖慢首屏。
 
 App Config 页面：
@@ -306,7 +308,7 @@ App Events 页面：
 - 筛选条件包括等级、时间类型、`eventCode` 和 `reasonCode`；HTML、JSON API、CSV共用同一组数值筛选语义。
 - 列表紧凑展示ID、完成时间及相对时间、等级、事件码、原因码、对象ID、两个value和flags；每条事件提供详情入口，按Identity & level、Timing、Event fields、Values & flags分组展示全部公开字段。CRC损坏或不完整记录绝不展示，只在存储状态中报告数量和错误；CRC、slot、magic和commit等内部存储字段不属于事件详情。
 - 有可信epoch或本次boot可解析时显示真实完成时间；否则显示 `boot N uptime N s`，不伪造日期。
-- 清空事件日志是危险操作，只在 System 页面提供 `POST /esp32base/tools/app-events-clear`，必须通过 Web Auth 和同源检查，成功后 303 回到 System 页面。
+- 清空事件日志是危险操作，只在 System 页面提供 `POST /esp32base/system/app-events-clear`，必须通过 Web Auth 和同源检查，成功后 303 回到 System 页面。
 - JSON事件包含通用记录时间、`eventCode/reasonCode/objectId/value1/value2/flags/level`，并给出可解析的开始和完成epoch；0表示无法解析。
 - JSON API只输出CRC有效的事件。业务页面负责把数字代码和flags映射为业务语言。
 - CSV导出同样只包含有效语义字段，不输出slot、magic、CRC或commit等内部布局。
@@ -321,15 +323,15 @@ App Events 页面：
 
 系统首页：
 
-- `/esp32base` 是只读设备体检页，采用诊断优先结构：默认按 Device、Network、Runtime Health、Storage & Logs、Firmware & OTA、Hardware 展示调试信息，不额外显示相邻重复的总览预览块；低频分区表和运行 ELF SHA 位于 `/esp32base?details=1`。
+- `/esp32base/status` 是只读设备体检页，采用诊断优先结构：默认按 Device、Network、Runtime Health、Storage & Logs、Firmware & OTA、Hardware 展示调试信息，不额外显示相邻重复的总览预览块；低频分区表和运行 ELF SHA 位于 `/esp32base/status?details=1`。页面正文始终提供 `/esp32base/system` 入口，使 Footer Bar 关闭后仍可恢复系统设置。
 - Status 页展示设备身份、网络、运行健康、存储与日志、固件 OTA 和硬件摘要。多值信息使用紧凑子指标，避免逗号串联造成阅读困难。
-- Status 页不打开日志段文件、不扫描完整文件树、不统计 Top 文件列表；低频或较重的文件细节放在 `/esp32base/fs`，运行 ELF SHA 和分区表放在 `/esp32base?details=1`。
+- Status 页不打开日志段文件、不扫描完整文件树、不统计 Top 文件列表；低频或较重的文件细节放在 `/esp32base/fs`，运行 ELF SHA 和分区表放在 `/esp32base/status?details=1`。
 - `/esp32base/fs` 默认是只读 LittleFS 详情页，展示容量摘要、主要文件和文件树。文件树应区分普通文件、不可读文件和基础库管理文件；不可读文件不能给出会生成 0 字节伪成功的下载入口。当 FS used 明显大于可见文件合计时，应提示可能存在内部、历史或不可见占用。业务侧如果使用 `Esp32BaseFs` 读写文件，也必须检查返回值；逻辑大小存在不代表内容块一定可读。
 - `/esp32base/fs?manage=1` 增加单文件删除和受限上传，不提供目录删除、批量删除、编辑、重命名、移动或任意路径输入；删除必须通过 `POST /esp32base/fs/delete -> 303 -> GET`，格式化仍只在 System 页危险操作区。上传保留本地文件名，只写入已有目录；覆盖上传必须显式确认，并避免上传中断时先清空旧文件。基础库管理文件应在文件树中给出维护提醒；维护操作修改 FileLog 或 App Events store 后，应刷新对应运行态。
 - Firmware & OTA 默认显示运行 app slot、下一 OTA slot、Max OTA upload、rollback 状态，以及仅在存在错误时显示的 Last OTA error；默认状态页不调用当前镜像 size 校验，也不计算 `OTA headroom`。Max OTA upload 是下一 OTA slot 的上传硬上限。
 - 启用 Watchdog 时显示 `enabled, lifetime resets N, trip resets M` 或 invalid baseline 和 trip reset time；Reset Trip 保存时间使用和页面 Time 行一致的可信 epoch 判断，无可用时间则显示 `unknown (time unavailable)`。
 - 启用 Time 时，Status 页显示统一 `Time` 行，包含当前来源 `uptime/rtc/ntp`、可信状态、当前时间和 uptime；启用 RTC 时额外显示 `RTC` 行，包含驱动、状态、最近读取 epoch 和读取时的 uptime；启用 NTP 时显示 `NTP` 行，只表示联网对时客户端自身状态。
-- `/esp32base?details=1` 使用运行时分区表展示 Name、Type、SubType、Offset、Size、Role；Role 用于标识 running app、next OTA、app data、NVS config、OTA state、coredump 等。
+- `/esp32base/status?details=1` 使用运行时分区表展示 Name、Type、SubType、Offset、Size、Role；Role 用于标识 running app、next OTA、app data、NVS config、OTA state、coredump 等。
 - 未启用的模块不显示对应行，避免非 FULL profile 引入额外依赖。
 
 页面风格：
@@ -446,7 +448,7 @@ Esp32BaseWeb::addPage("/config", "配置", handleConfigPage);
 - `SYSTEM_NAV_SECTION` 会在页面底部以小字系统入口与 `Free heap`、`Up`、`RSSI` 同行展示；窄屏下系统入口和状态摘要可自然换行，避免遮挡和横向滚动。
 - Footer bar 可在 System 页面运行时切换 Off、Status only、Links + status；关闭底部横条时系统页面仍可通过直达 URL 访问。
 - 基础库页面复用同一套导航框架，业务页和系统页保持一致入口结构。
-- `/esp32base` 系统页按设备、网络、运行健康、存储日志、固件 OTA 和硬件维度展示调试信息；运行 ELF SHA 与运行时分区表只在 `/esp32base?details=1` 显示。
+- `/esp32base/status` Status 页按设备、网络、运行健康、存储日志、固件 OTA 和硬件维度展示调试信息；运行 ELF SHA 与运行时分区表只在 `/esp32base/status?details=1` 显示。
 - `/esp32base/api/status` 保留 `resetReason` / `wakeReason` 原始字段，并提供 `resetReasonText` / `wakeReasonText` 中文说明字段；`wifi.rssi` 返回当前 WiFi RSSI，未连接时为 `0`。
 - `/esp32base/api/hostname` 返回 `currentHostname`、`defaultHostname`、`storedHostname`、`storedValid`、`restartRequired` 和校验规则；POST 参数 `hostname` 必须符合 1-32 位小写字母、数字和短横线规则，不能首尾短横线，不能包含 `.local`。
 
