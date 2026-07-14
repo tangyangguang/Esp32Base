@@ -52,7 +52,7 @@ void setup() {
     definition.recordTypeName = "door-opening";
     definition.storeVersion = 1;
     definition.payloadSizeBytes = 8;
-    definition.maximumFileBytes = 32UL * 1024UL;
+    definition.maximumStoreBytes = 32UL * 1024UL;
     definition.minimumFileSystemFreeBytes = 8UL * 1024UL;
     if (!g_doorOpeningRecords.begin(definition)) {
         ESP32BASE_LOG_E("example", "record_store_begin_failed error=%s", g_doorOpeningRecords.lastErrorReason());

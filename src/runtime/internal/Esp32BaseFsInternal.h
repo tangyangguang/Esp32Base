@@ -23,6 +23,14 @@ bool fsWriteSegmentsAt(const char* path,
                        const FsWriteSegment* segments,
                        size_t segmentCount);
 
+bool fsCreateWithSegments(const char* path,
+                          const FsWriteSegment* segments,
+                          size_t segmentCount);
+
+bool fsAppendSegments(const char* path,
+                      const FsWriteSegment* segments,
+                      size_t segmentCount);
+
 bool fsVisitBytesAt(const char* path,
                     uint32_t offset,
                     uint32_t length,

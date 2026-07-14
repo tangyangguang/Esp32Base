@@ -225,17 +225,19 @@ Esp32BaseRecordStore::StoreDefinition definition;
 definition.recordTypeName = "door-opening";
 definition.storeVersion = 1;
 definition.payloadSizeBytes = 8;
-definition.maximumFileBytes = 32UL * 1024UL;
+definition.maximumStoreBytes = 32UL * 1024UL;
 definition.minimumFileSystemFreeBytes = 8UL * 1024UL;
 ```
 
 文件路径由基础库生成：
 
 ```text
-/esp32base/records/<recordTypeName>.v<storeVersion>.bin
+/esp32base/records/<recordTypeName>.v<storeVersion>/
+  control.bin
+  <firstRecordId>.seg
 ```
 
-`recordTypeName` 只允许小写字母、数字和内部连字符，最大32字符。`storeVersion=0`、空负载或不足以容纳一条记录的预算无效。版本同时进入文件名和文件头，但不在每条记录中重复。
+`recordTypeName` 只允许小写字母、数字和内部连字符，最大32字符。`storeVersion=0`、空负载或不足以容纳一条记录的预算无效。版本同时进入目录名和控制头/段头，但不在每条记录中重复。不同业务类型、不同版本使用独立目录和独立ID序列。
 
 固定槽位采用明确的小端编码：
 
@@ -253,11 +255,11 @@ definition.minimumFileSystemFreeBytes = 8UL * 1024UL;
 
 ```text
 slotSizeBytes = payloadSizeBytes + 24
-capacity = floor((maximumFileBytes - 128) / slotSizeBytes)
-actualFileBytes = 128 + capacity * slotSizeBytes
 ```
 
-文件包含两个64字节header。正常追加只覆盖一个槽位并读回验证，不在每次追加时提交header；启动或 `reload()` 只用固定次数打开文件并批量扫描有限槽位恢复运行态，最新分页在单次打开中读取，不能按槽位反复打开文件。新文件先完整创建和验证 `.tmp`，再重命名为正式文件。正式文件存在但尺寸、版本、payload长度或header不匹配时进入结构故障，绝不自动重写。
+`maximumStoreBytes` 是包含128字节控制文件、32字节段头和所有槽位的最大逻辑预算，不预分配大文件。基础库按预算自动选择LittleFS CTZ有效段上限，使预计段数不超过33；初始化日志和 `StoreStatus.capacity` 给出该固定定义下的估算容量。容量轮换按完整最老段淘汰，因此实际记录数会在“估算容量减去一个段容量”到估算容量之间波动。
+
+`control.bin` 包含两个64字节带CRC的控制头，普通追加不更新它。段按首个记录ID命名，顺序追加到当前段；新段先完整创建和验证 `.tmp`，再重命名为 `.seg`。达到预算后删除最老完整段，不搬移或重写其他段。启动或 `reload()` 批量扫描有限段恢复运行态，最新分页按段倒序读取，不能按槽位反复打开文件。正式控制文件定义不匹配、段范围重叠或目录结构未知时进入结构故障，绝不自动重写。
 
 核心API：
 
@@ -303,24 +305,26 @@ ID和轮换：
 - 每个“记录类型 + storeVersion”文件使用独立32位ID，从1开始。
 - 自动淘汰和逻辑清空都不重置ID；到达 `UINT32_MAX` 后停止追加，不回卷。
 - 如果断电时已经写入了可识别的下一ID但整条记录未完成，该ID会被保留为空洞而不重复使用；分页和按ID读取仍不会返回不完整记录。
-- 槽位为 `(recordId - 1) % capacity`，所以按ID读取不需要字段索引。
-- 容量满后覆盖最早槽位，不搬移其他记录。
+- 段文件名和段内固定偏移共同定位ID，不建立字段索引。
+- 容量满后删除最老完整段，不覆盖或搬移其他段；淘汰粒度是一段而不是一条。
 - 不支持单条删除、更新、字段查询、事务或可变长度记录。
 
 失败和状态：
 
 - CRC错误或不完整槽位不会返回；单槽损坏进入 `Degraded`，其他有效记录仍可读取。
 - 写入或写后验证失败进入 `WriteFault`，已有记录仍可读取；应用可在排除原因后显式 `reload()`。
-- 双header无效、正式文件尺寸/定义不匹配进入 `StructuralFault`，不自动清空。
+- 双控制头无效、定义不匹配、段范围重叠或目录结构未知进入 `StructuralFault`，不自动清空。
 - `minimumFileSystemFreeBytes` 在创建和追加前保护业务指定的LittleFS余量；0表示不附加该限制。
-- `StoreStatus` 返回状态、错误、记录数、容量、损坏数、最早/最新/下一个ID、槽位和文件字节数以及LittleFS总量/使用量/剩余量。
-- `clear()` 通过双header提交新的可见边界，不重写数据区，因此不是安全擦除。调用方必须先取得用户明确确认。
+- `StoreStatus` 返回状态、错误、记录数、估算容量、损坏数、最早/最新/下一个ID、槽位大小、段数、段上限、当前/最大逻辑存储字节以及LittleFS总量/使用量/剩余量。
+- `clear()` 先通过双控制头提交新的可见边界，再尽力删除旧段；删除失败也不会让旧记录重新可见。它不是安全擦除，调用方必须先取得用户明确确认。
 
 RecordStore对象可全局定义，但构造函数不访问FS、不注册全局表；业务必须在 `Esp32Base::begin()` 成功后调用各实例的 `begin()`。同一路径只能有一个活动实例。API不提供mutex，其他FreeRTOS任务必须通过业务队列回到同一system/loop任务。读取回调中的payload只在本次回调期间有效，且不得重入同一Store。
 
-`appendCompleted()` 是同步持久化操作：返回成功前会写入固定槽位、执行LittleFS flush并做写后验证；正常追加不写header。具体耗时取决于芯片、Arduino Core、LittleFS分区和文件大小；不得从ISR、timer callback或实时控制任务直接调用，应把已完成的浇水、开关门、喂食记录投递到同一system/loop任务保存。不能为了缩短返回时间跳过flush，否则“返回成功”不再代表记录已经提交到Flash。
+`appendCompleted()` 是同步持久化操作：返回成功前会顺序追加当前段、执行LittleFS flush并做写后验证；正常追加不写控制头。具体耗时取决于芯片、Arduino Core、LittleFS分区和段大小；不得从ISR、timer callback或实时控制任务直接调用，应把已完成的浇水、开关门、喂食记录投递到同一system/loop任务保存。不能为了缩短返回时间跳过flush，否则“返回成功”不再代表记录已经提交到Flash。
 
 业务负责固定payload的编码、解码、字段版本、业务校验和显示。不得直接持久化含指针、`String`、编译器padding或平台相关布局的C++对象。六区域浇水详情应按区域1到区域6的固定位置连续编码；位置已经表达区域编号时不重复保存编号。
+
+详细磁盘格式、容量规划、失败矩阵和实机性能数据见 [Record Store 设计、接入与实机基准](12_record_store.md)。
 
 ### 3.6 Esp32BaseAppEvents
 
@@ -346,10 +350,10 @@ struct EventInput {
 };
 ```
 
-加上RecordStore的24字节公共元数据后，每条App Event为48字节。100 KiB预算可保存2130条，实际文件102368字节，路径为：
+加上RecordStore的24字节公共元数据后，每条App Event为48字节。100 KiB逻辑预算的估算容量为2113条；按约4 KiB完整段轮换时实际保留约2029～2113条，路径为：
 
 ```text
-/esp32base/records/app-events.v1.bin
+/esp32base/records/app-events.v1/
 ```
 
 `Esp32BaseAppEvents` 提供：
@@ -1181,7 +1185,7 @@ Route 缓冲机制：
 - `/esp32base/fs?manage=1` 进入单文件删除和受限上传管理模式；`POST /esp32base/fs/delete` 只接受一个已存在文件路径，复用 Basic Auth、同源检查和 `POST -> 303 -> GET`，不提供目录删除、批量删除、编辑或任意路径输入。不可读文件仍允许删除，便于清理损坏文件；删除不以文件内容可读为前提。基础库管理文件会在文件树中给出维护提醒；维护操作修改 FileLog 或 App Events store 后，应刷新对应运行态。
 - `/esp32base/fs/check?dir=/data&name=records.bin` 是上传前检查接口，复用 Basic Auth，按“已有目录 + 本地文件名”计算目标路径，返回目标是否存在、是否是目录以及是否允许上传；路径拼接如果超过内部路径上限会直接拒绝，不截断成另一个目标。
 - `POST /esp32base/fs/upload` 是 multipart 上传接口，复用 Basic Auth 和同源检查；上传保留本地文件名，可以写入任何已有目录，不创建目录。目标文件存在时必须传 `overwrite=1` 才会覆盖；覆盖上传必须避免上传中断时先清空旧文件。路径过长、缺少文件、目标非法或写入失败会返回错误，不会复用上一笔上传状态。上传只负责写入 LittleFS，不校验业务数据语义、索引、NVS 状态或运行时缓存。
-- `/esp32base/tools` System 页承载低频维护入口和操作，App Config 启用时作为首个入口显示，后面是 WiFi Setup、Web Auth、Firmware OTA、File system 直达入口、hostname 保存、Watchdog trip reset、重启设备；启用 FS 的 profile 还提供手动格式化 LittleFS 操作，会清除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth、业务 namespace 或任何 NVS 配置。格式化成功后会重新 mount FS、reload FileLog，并在 App Events 启用时重新创建 `/esp32base/records/app-events.v1.bin`；业务如需重新创建或 reload 自己的 RecordStore、同步业务统计、文件索引或缓存，应注册 `setAfterFormatFsCallback()` 或订阅 `EVENT_TOOLS_FORMAT_FS_SUCCESS` 自行处理。
+- `/esp32base/tools` System 页承载低频维护入口和操作，App Config 启用时作为首个入口显示，后面是 WiFi Setup、Web Auth、Firmware OTA、File system 直达入口、hostname 保存、Watchdog trip reset、重启设备；启用 FS 的 profile 还提供手动格式化 LittleFS 操作，会清除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth、业务 namespace 或任何 NVS 配置。格式化成功后会重新 mount FS、reload FileLog，并在 App Events 启用时重新创建 `/esp32base/records/app-events.v1/`；业务如需重新创建或 reload 自己的 RecordStore、同步业务统计、文件索引或缓存，应注册 `setAfterFormatFsCallback()` 或订阅 `EVENT_TOOLS_FORMAT_FS_SUCCESS` 自行处理。
 - `/esp32base/auth` 是内置认证管理页面，受当前 Basic Auth 保护，提交成功后新账号密码立即生效。
 - Web Auth 认证优先级为：已保存认证 > 应用默认认证。未设置应用默认认证且没有已保存认证时，Web 服务不会启动。
 - 内置 Web 不提供首次登录强制改密；量产或可被他人访问的设备必须在业务启动时调用 `setDefaultAuth()`，或通过业务流程先保存认证。

@@ -235,7 +235,7 @@ void sendStoreSummary(const Esp32BaseAppEvents::EventStoreStatus& status) {
     snprintf(value, sizeof(value), "%lu / %lu", static_cast<unsigned long>(status.storage.recordCount), static_cast<unsigned long>(status.storage.capacity));
     sendInfoRow("Records", value);
     snprintf(value, sizeof(value), "%lu", static_cast<unsigned long>(status.storage.damagedRecordCount)); sendInfoRow("Damaged", value);
-    formatReadableBytes(status.storage.actualFileBytes, value, sizeof(value)); sendInfoRow("File size", value);
+    formatReadableBytes(status.storage.currentStoreBytes, value, sizeof(value)); sendInfoRow("Store size", value);
     sendInfoRow("Path", status.storage.path ? status.storage.path : "-");
     sendInfoRow("Last error", status.storage.errorReason ? status.storage.errorReason : "none");
     sendChunk("</div></section>");

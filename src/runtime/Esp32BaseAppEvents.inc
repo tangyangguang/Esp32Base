@@ -102,7 +102,7 @@ bool Esp32BaseAppEvents::begin() {
     definition.recordTypeName = kAppEventRecordTypeName;
     definition.storeVersion = kAppEventStoreVersion;
     definition.payloadSizeBytes = kAppEventPayloadBytes;
-    definition.maximumFileBytes = ESP32BASE_APP_EVENT_STORE_MAX_BYTES;
+    definition.maximumStoreBytes = ESP32BASE_APP_EVENT_STORE_MAX_BYTES;
     definition.minimumFileSystemFreeBytes = 0;
     const bool ok = g_appEventStore.begin(definition);
     if (!ok) {

@@ -63,11 +63,11 @@
 ## 6. RecordStore 边界
 
 - 每个Store只支持一种固定长度负载，不支持可变记录、字段查询、索引、事务、更新或单条删除。
-- ID只在单个“记录类型 + storeVersion”文件内唯一；不同文件可以出现相同ID。32位ID到达上限后停止追加，不回卷。
-- 文件创建后不自动扩缩容。改变负载或容量时使用新storeVersion，或由用户明确清理旧文件后重建。
-- 清空是header控制的逻辑清空，不会立即覆盖旧槽位，不提供安全擦除保证。
-- 启动会扫描配置容量内的全部槽位；业务应根据嵌入式设备实际保留需求设置合理预算，不把它当成无限数据库。
-- 追加是同步持久化操作，包含LittleFS flush和写后验证，延迟取决于芯片、Core、分区及文件大小。经典ESP32、Arduino Core 2.0.16、100 KiB App Events文件的实机测量约为1.1秒/条，主要耗时在LittleFS flush；这不适合实时控制路径，业务应通过队列交给system/loop任务。基础库保留flush以维持明确的成功与断电恢复语义，不为这一延迟引入分段文件或异步事务层。
+- ID只在单个“记录类型 + storeVersion”目录内唯一；不同Store可以出现相同ID。32位ID到达上限后停止追加，不回卷。
+- `maximumStoreBytes` 是最大逻辑预算，不预分配大文件；调大预算可在下次 `begin()`/`reload()` 生效，改变payload长度或字段版本应使用新storeVersion。
+- 清空由双控制头提交逻辑可见边界，再尽力删除旧段，不提供安全擦除保证。
+- 启动会扫描当前有限段内的全部候选槽位；业务应根据嵌入式设备实际保留需求设置合理预算，不把它当成无限数据库。
+- 追加是同步持久化操作，包含LittleFS flush和写后验证。经典ESP32、Arduino Core 2.0.16实测：旧100KiB单文件同步覆盖约1.08～1.11秒；当前分段方案在100KiB～1MiB总预算下普通追加P50约46～54ms，但P95/最大值仍可达数百毫秒或偶发超过1秒。这不适合实时控制路径，业务应通过队列交给system/loop任务。详细条件和完整数据见 [Record Store 设计、接入与实机基准](12_record_store.md)。
 - 动作过程中断电且尚未调用`appendCompleted()`时，不存在可恢复的完成记录。需要持久化“进行中动作”的业务必须自行设计恢复状态。
 
 ## 7. 存储边界
@@ -90,8 +90,8 @@ App Events 边界：
 ## 8. 文件系统边界
 
 - LittleFS 用于小型配置文件、诊断文件和 Web 静态小资源。
-- 系统诊断日志默认位于 `/esp32base/logs/system.log`，App Events store 默认位于 `/esp32base/records/app-events.v1.bin`；业务 RecordStore 也位于 `/esp32base/records/**`，其他业务文件应放在 `/app/**`、`/data/**` 或项目自定义目录。
-- 业务需要二进制定长日志时，应通过 `Esp32BaseFs::readBytesAt()` / `writeBytesAt()` 做分页读取和固定位置覆盖，不直接依赖 LittleFS 或 Arduino `File`。
+- 系统诊断日志默认位于 `/esp32base/logs/system.log`，App Events store 默认位于 `/esp32base/records/app-events.v1/`；业务 RecordStore 也位于 `/esp32base/records/**`，其他业务文件应放在 `/app/**`、`/data/**` 或项目自定义目录。
+- 业务需要可靠、轮换、分页的固定长度历史时应优先使用 `Esp32BaseRecordStore`；只有其语义不适用时才直接使用 `Esp32BaseFs` 设计自己的文件结构。
 - `writeBytesAt()` 只覆盖已有文件内容，不创建、不扩展文件；环形文件容量应由 `createFixedFile()` 初始化或校验。
 - `createFixedFile()` 会在文件不存在、大小不匹配或同尺寸但末端不可读时重建固定大小文件；同尺寸且可读时保留原内容，避免启动期清空持久环形记录。`appendBytes()` 适合低频追加，不适合循环零填充大文件。
 - 大块读写会在 Esp32BaseFs 层分块并定期让出调度，降低同步 LittleFS I/O 触发 task watchdog 的风险；但 LittleFS/Web/OTA/FileLog 仍是同步阻塞操作，实时任务仍应通过队列投递给 loop/system task 处理。

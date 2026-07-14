@@ -1,8 +1,10 @@
 # Record Store Demo
 
-This example stores fixed-length door-opening history records. The application encodes only its eight-byte business payload. `Esp32BaseRecordStore` adds the record ID, completion time, duration and CRC, then rotates the oldest records inside a fixed 32 KiB file.
+This example stores fixed-length door-opening history records. The application encodes only its eight-byte business payload. `Esp32BaseRecordStore` adds the record ID, completion time, boot/uptime, duration and CRC, then appends and rotates complete segments inside a 32 KiB logical store budget.
 
 The example intentionally writes fields at explicit byte offsets instead of persisting a C++ object. A watering project can use the same pattern for six fixed zone-detail blocks; a feeding project can create a separate store with a different payload size and file budget.
+
+The store directory is `/esp32base/records/door-opening.v1/`. See [`docs/12_record_store.md`](../../docs/12_record_store.md) for capacity planning, failure behavior and measured classic ESP32 performance.
 
 Build all representative chips:
 

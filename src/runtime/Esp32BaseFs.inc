@@ -422,6 +422,59 @@ bool esp32base_internal::fsWriteSegmentsAt(const char* path,
     return ok && verifyFileSize(path, fileSize);
 }
 
+namespace {
+bool writeSegmentSequence(const char* path,
+                          const esp32base_internal::FsWriteSegment* segments,
+                          size_t segmentCount,
+                          const char* mode,
+                          bool requireMissing) {
+    if (!g_fsReady || !validPath(path) || (!segments && segmentCount > 0) ||
+        (requireMissing && LittleFS.exists(path))) {
+        return false;
+    }
+    uint64_t total = 0;
+    for (size_t i = 0; i < segmentCount; ++i) {
+        if (!segments[i].data && segments[i].length > 0) return false;
+        total += segments[i].length;
+        if (total > UINT32_MAX) return false;
+    }
+    const int64_t before = mode[0] == 'a' ? Esp32BaseFs::fileSize(path) : 0;
+    if (before < 0 || static_cast<uint64_t>(before) + total > UINT32_MAX) return false;
+    if (mode[0] == 'a' && before > 0 &&
+        !verifyReadableByte(path, static_cast<uint64_t>(before - 1))) {
+        return false;
+    }
+    Esp32BaseLongOperation::LongOperationScope scope;
+    File file = LittleFS.open(path, mode);
+    if (!file) return false;
+    bool ok = true;
+    for (size_t i = 0; i < segmentCount && ok; ++i) {
+        size_t written = 0;
+        ok = segments[i].length == 0 ||
+             (writeOpenFileChunked(file, segments[i].data, segments[i].length, &written) &&
+              written == segments[i].length);
+        Esp32BaseLongOperation::service();
+    }
+    flushOpenFile(file);
+    file.close();
+    const uint64_t expected = static_cast<uint64_t>(before) + total;
+    return ok && verifyFileSize(path, expected) &&
+           (expected == 0 || verifyReadableByte(path, expected - 1U));
+}
+}
+
+bool esp32base_internal::fsCreateWithSegments(const char* path,
+                                               const FsWriteSegment* segments,
+                                               size_t segmentCount) {
+    return writeSegmentSequence(path, segments, segmentCount, "w", true);
+}
+
+bool esp32base_internal::fsAppendSegments(const char* path,
+                                           const FsWriteSegment* segments,
+                                           size_t segmentCount) {
+    return writeSegmentSequence(path, segments, segmentCount, "a", false);
+}
+
 bool esp32base_internal::fsVisitBytesAt(const char* path,
                                         uint32_t offset,
                                         uint32_t length,

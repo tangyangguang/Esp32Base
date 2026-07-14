@@ -172,7 +172,7 @@
 - FileLog OFF 后 System Logs 页面仍能查看已有历史 segment。
 - `GET /esp32base/logs` 和 `GET /esp32base/logs/raw` 必须只读，不得主动 `flush()`、创建、清空、重建或改变 FileLog fault 状态；需要写入/清理/格式化的维护动作必须走 POST。
 - System 页格式化 LittleFS 成功后必须触发 after-format 回调/事件，结果应说明格式化、重新挂载和 FileLog reload 状态；格式化失败不得触发。
-- System 页格式化 LittleFS 成功并重新 mount 后，启用 App Events 时必须重新创建 `/esp32base/records/app-events.v1.bin`，后续 append/read 不得沿用格式化前的运行态。
+- System 页格式化 LittleFS 成功并重新 mount 后，启用 App Events 时必须重新创建 `/esp32base/records/app-events.v1/`，后续 append/read 不得沿用格式化前的运行态。
 - `setSerialLevel(NONE)` 后 Serial 不输出，但 FileLog 仍按当前模式写入。
 - `setRuntimeLevel(NONE)` 后 Serial 和 FileLog 都停止。
 - WARN/ERROR 立即写入。
@@ -199,13 +199,13 @@
 - `writeBytesAt()` 支持已有文件固定位置覆盖，文件不存在和写越界返回失败，不隐式扩展文件；覆盖后文件大小不变且覆盖范围可读。
 - FS 已满或存在不可读文件时，Web 诊断返回错误不应触发 task WDT 重启。
 - `listDirInfo()` 返回 name、size、isDir 和 Last modified epoch；`/esp32base/fs` 文件树应展示修改时间和可读性/维护状态。Last modified 不是创建时间，时间明显不可信时应明确标识。
-- 启用RecordStore时，文件名包含记录类型和版本；不同Store、不同版本互不覆盖，容量由最大文件字节数和固定负载计算。
-- 新Store必须先完成并验证 `.tmp` 文件再重命名；正式文件存在时不得用临时文件覆盖。已有正式文件尺寸、版本或负载不匹配时进入结构故障，不自动重写。
-- RecordStore双header损坏进入结构故障；单槽CRC错误跳过并进入degraded，读取绝不返回损坏数据。
-- RecordStore启动扫描和reload必须只用固定次数打开文件并批量遍历槽位，最新分页必须在单次打开中读取；不得按记录反复打开文件，千条容量的Store不能造成数十秒启动延迟。
+- 启用RecordStore时，目录名包含记录类型和版本；不同Store、不同版本互不覆盖，容量由最大逻辑Store预算、固定负载和段头开销计算。
+- 新段必须先完成并验证 `.tmp` 文件再重命名；已有正式段不得用临时文件覆盖。已有控制文件定义不匹配、目录成员未知或段范围重叠时进入结构故障，不自动重写。
+- RecordStore双控制头损坏进入结构故障；单槽CRC错误跳过并进入degraded，读取绝不返回损坏数据。
+- RecordStore启动扫描和reload必须按段批量遍历槽位，最新分页必须按段倒序批量读取；不得按记录反复打开文件，千条容量的Store不能造成数十秒启动延迟。
 - `readLatest()`、`readById()`、`readStatus()`不得从只读路径隐式创建或重写Store。
-- `clear()`通过双header逻辑清空，清空后保留递增ID并可继续写入；它不是安全擦除。
-- App Events默认100KiB、单条48字节、容量2130条，并在业务Store之前创建。
+- `clear()`通过双控制头提交逻辑可见边界，再尽力删除旧段；清空后保留递增ID并可继续写入，它不是安全擦除。
+- App Events默认100KiB、单条48字节、估算容量2113条、实际按段保留约2029～2113条，并在业务Store之前创建。
 - `/esp32base/records/**`在FS管理页可查看和下载，但禁止上传覆盖和直接删除。
 - App Events HTML/API/CSV只输出有效语义字段和状态，不输出损坏槽位或内部CRC布局。
 - `/esp32base/fs?manage=1` 对 `unreadable` 文件仍必须提供单文件删除入口，但不能提供下载入口。

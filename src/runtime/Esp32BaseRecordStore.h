@@ -28,9 +28,12 @@ public:
         FileSizeMismatch,
         HeaderInvalid,
         DefinitionMismatch,
+        TooManySegments,
+        SegmentOverlap,
         ReadFailed,
         WriteFailed,
         VerifyFailed,
+        CleanupFailed,
         InvalidStartTime,
         InvalidPayload,
         IdExhausted
@@ -48,7 +51,7 @@ public:
         const char* recordTypeName = nullptr;
         uint16_t storeVersion = 1;
         uint32_t payloadSizeBytes = 0;
-        uint32_t maximumFileBytes = 0;
+        uint32_t maximumStoreBytes = 0;
         uint32_t minimumFileSystemFreeBytes = 0;
     };
 
@@ -88,8 +91,10 @@ public:
         uint32_t newestRecordId = 0;
         uint32_t nextRecordId = 1;
         uint32_t slotSizeBytes = 0;
-        uint32_t actualFileBytes = 0;
-        uint32_t maximumFileBytes = 0;
+        uint32_t segmentCount = 0;
+        uint32_t segmentFileLimitBytes = 0;
+        uint32_t currentStoreBytes = 0;
+        uint32_t maximumStoreBytes = 0;
         size_t fileSystemTotalBytes = 0;
         size_t fileSystemUsedBytes = 0;
         size_t fileSystemFreeBytes = 0;
@@ -134,26 +139,59 @@ public:
     static const char* storeErrorName(StoreError error);
 
 private:
+    static constexpr size_t MAX_RUNTIME_SEGMENTS = 40;
+
+    struct SegmentRuntime {
+        uint32_t firstRecordId = 0;
+        uint32_t fileBytes = 0;
+        uint32_t fileLimitBytes = 0;
+        uint32_t candidateSlots = 0;
+        uint32_t fullSlots = 0;
+        uint32_t validCount = 0;
+        uint32_t damagedCount = 0;
+        uint32_t oldestValidId = 0;
+        uint32_t newestValidId = 0;
+        bool headerValid = false;
+        bool sealed = true;
+    };
+
     bool loadOrCreate();
     bool loadExisting();
     bool createNew();
-    bool scanRecords();
+    bool scanSegments();
+    bool scanOneSegment(SegmentRuntime& segment);
     bool appendWithDuration(uint32_t durationSec, const uint8_t* payload, size_t payloadSizeBytes);
-    bool writeHeader(uint8_t copyIndex, uint32_t firstVisibleId, uint32_t sequence);
+    bool appendToExistingSegment(SegmentRuntime& segment,
+                                 const uint8_t* metadata,
+                                 const uint8_t* payload,
+                                 const uint8_t* crcBytes);
+    bool createSegmentWithRecord(const uint8_t* metadata,
+                                 const uint8_t* payload,
+                                 const uint8_t* crcBytes);
+    bool removeOldestSegment();
+    bool ensureBudgetForAppend(bool& appendExisting);
+    bool writeControlHeader(uint8_t copyIndex,
+                            uint32_t firstVisibleId,
+                            uint32_t nextRecordIdHint,
+                            uint32_t sequence);
+    void recalculateRuntimeCounts();
     void setError(StoreError error, StoreState state);
     void resetRuntime();
 
     char recordTypeName_[MAX_RECORD_TYPE_NAME_LENGTH + 1];
     char path_[MAX_STORE_PATH_LENGTH];
+    char controlPath_[MAX_STORE_PATH_LENGTH];
     char tempPath_[MAX_STORE_PATH_LENGTH];
     uint16_t storeVersion_;
     uint32_t payloadSizeBytes_;
-    uint32_t maximumFileBytes_;
+    uint32_t maximumStoreBytes_;
     uint32_t minimumFileSystemFreeBytes_;
     uint32_t slotSizeBytes_;
     uint32_t capacity_;
-    uint32_t actualFileBytes_;
+    uint32_t segmentFileLimitBytes_;
+    uint32_t currentStoreBytes_;
     uint32_t firstVisibleId_;
+    uint32_t controlNextRecordId_;
     uint32_t headerSequence_;
     uint8_t activeHeader_;
     uint32_t recordCount_;
@@ -161,6 +199,8 @@ private:
     uint32_t oldestRecordId_;
     uint32_t newestRecordId_;
     uint32_t nextRecordId_;
+    SegmentRuntime segments_[MAX_RUNTIME_SEGMENTS];
+    uint8_t segmentCount_;
     StoreState state_;
     StoreError error_;
     bool definitionSet_;
