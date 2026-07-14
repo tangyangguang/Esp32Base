@@ -3,6 +3,7 @@
 #if ESP32BASE_ENABLE_FS
 
 #include "Esp32BaseFs.h"
+#include "internal/Esp32BaseFsInternal.h"
 #include "../core/Esp32BaseLog.h"
 #include "internal/Esp32BaseLongOperation.h"
 
@@ -377,6 +378,144 @@ bool Esp32BaseFs::writeBytesAt(const char* path, uint32_t offset, const uint8_t*
     }
     const uint64_t verifyOffset = static_cast<uint64_t>(offset) + len - 1U;
     return verifyReadableByte(path, verifyOffset);
+}
+
+bool esp32base_internal::fsWriteSegmentsAt(const char* path,
+                                           uint32_t offset,
+                                           const FsWriteSegment* segments,
+                                           size_t segmentCount) {
+    if (!g_fsReady || !validPath(path) || (!segments && segmentCount > 0)) {
+        return false;
+    }
+    uint64_t total = 0;
+    for (size_t i = 0; i < segmentCount; ++i) {
+        if (!segments[i].data && segments[i].length > 0) {
+            return false;
+        }
+        total += segments[i].length;
+        if (total > UINT32_MAX) {
+            return false;
+        }
+    }
+
+    Esp32BaseLongOperation::LongOperationScope scope;
+    File file = LittleFS.open(path, "r+");
+    if (!file) {
+        return false;
+    }
+    const size_t fileSize = file.size();
+    if (offset > fileSize || total > fileSize - offset || !file.seek(offset, SeekSet)) {
+        file.close();
+        return false;
+    }
+
+    bool ok = true;
+    for (size_t i = 0; i < segmentCount && ok; ++i) {
+        size_t written = 0;
+        ok = segments[i].length == 0 ||
+             (writeOpenFileChunked(file, segments[i].data, segments[i].length, &written) &&
+              written == segments[i].length);
+        Esp32BaseLongOperation::service();
+    }
+    flushOpenFile(file);
+    file.close();
+    return ok && verifyFileSize(path, fileSize);
+}
+
+bool esp32base_internal::fsVisitBytesAt(const char* path,
+                                        uint32_t offset,
+                                        uint32_t length,
+                                        FsReadVisitor visitor,
+                                        void* user) {
+    if (!g_fsReady || !validPath(path) || !visitor) {
+        return false;
+    }
+    Esp32BaseLongOperation::LongOperationScope scope;
+    File file = LittleFS.open(path, "r");
+    if (!file) {
+        return false;
+    }
+    const size_t fileSize = file.size();
+    if (offset > fileSize || length > fileSize - offset || !file.seek(offset, SeekSet)) {
+        file.close();
+        return false;
+    }
+
+    uint8_t buffer[kFsIoChunkSize];
+    uint32_t remaining = length;
+    bool ok = true;
+    while (remaining > 0 && ok) {
+        const size_t chunk = remaining > sizeof(buffer) ? sizeof(buffer) : static_cast<size_t>(remaining);
+        const size_t read = file.read(buffer, chunk);
+        if (read != chunk || !visitor(buffer, read, user)) {
+            ok = false;
+            break;
+        }
+        remaining -= static_cast<uint32_t>(read);
+        Esp32BaseLongOperation::service();
+    }
+    file.close();
+    return ok && remaining == 0;
+}
+
+bool esp32base_internal::fsVisitFixedSlots(const char* path,
+                                           uint32_t dataOffset,
+                                           uint32_t slotSize,
+                                           uint32_t capacity,
+                                           uint32_t firstSlot,
+                                           uint32_t slotCount,
+                                           bool descending,
+                                           FsFixedSlotVisitor visitor,
+                                           void* user) {
+    if (!g_fsReady || !validPath(path) || slotSize == 0 || capacity == 0 ||
+        firstSlot >= capacity || slotCount > capacity || !visitor) {
+        return false;
+    }
+    const uint64_t dataBytes = static_cast<uint64_t>(slotSize) * capacity;
+    if (dataBytes > UINT32_MAX || static_cast<uint64_t>(dataOffset) + dataBytes > UINT32_MAX) {
+        return false;
+    }
+    Esp32BaseLongOperation::LongOperationScope scope;
+    File file = LittleFS.open(path, "r");
+    if (!file) {
+        return false;
+    }
+    const size_t fileSize = file.size();
+    if (static_cast<uint64_t>(dataOffset) + dataBytes > fileSize) {
+        file.close();
+        return false;
+    }
+
+    uint8_t buffer[kFsIoChunkSize];
+    uint32_t slot = firstSlot;
+    bool ok = true;
+    for (uint32_t visited = 0; visited < slotCount && ok; ++visited) {
+        const uint32_t absoluteOffset = dataOffset + slot * slotSize;
+        if (!file.seek(absoluteOffset, SeekSet)) {
+            ok = false;
+            break;
+        }
+        uint32_t slotOffset = 0;
+        while (slotOffset < slotSize) {
+            const size_t chunk = slotSize - slotOffset > sizeof(buffer)
+                ? sizeof(buffer)
+                : static_cast<size_t>(slotSize - slotOffset);
+            const size_t read = file.read(buffer, chunk);
+            if (read != chunk || !visitor(slot, slotOffset, buffer, read, user)) {
+                ok = false;
+                break;
+            }
+            slotOffset += static_cast<uint32_t>(read);
+            Esp32BaseLongOperation::service();
+        }
+        if (descending) {
+            slot = slot == 0 ? capacity - 1U : slot - 1U;
+        } else {
+            slot = slot + 1U == capacity ? 0 : slot + 1U;
+        }
+    }
+    file.close();
+    return ok;
 }
 
 Esp32BaseFs::RemoveFileResult Esp32BaseFs::removeFileWithRecovery(const char* path) {

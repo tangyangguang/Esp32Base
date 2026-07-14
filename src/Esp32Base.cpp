@@ -103,18 +103,6 @@ void logBootSessionStart() {
     ESP32BASE_LOG_I("boot", "============================================================");
 }
 
-#if ESP32BASE_ENABLE_APP_EVENTS && ESP32BASE_ENABLE_TIME
-Esp32BaseAppEventLog::TimeSnapshot appEventLogTimeFromBaseTime() {
-    const Esp32BaseTime::Snapshot time = Esp32BaseTime::snapshot();
-    Esp32BaseAppEventLog::TimeSnapshot value = {};
-    value.synced = time.synced;
-    value.epochSec = time.epochSec;
-    value.bootId = time.bootId;
-    value.uptimeSec = time.uptimeSec;
-    return value;
-}
-#endif
-
 void flushRuntimeBeforeLifecycleStop() {
 #if ESP32BASE_ENABLE_FILELOG
     Esp32BaseFileLog::flush();
@@ -173,10 +161,6 @@ bool Esp32Base::begin() {
 #if ESP32BASE_ENABLE_NTP
     Esp32BaseNtp::initBootSession();
 #endif
-#if ESP32BASE_ENABLE_APP_EVENTS && ESP32BASE_ENABLE_TIME
-    Esp32BaseAppEventLog::setTimeProvider(appEventLogTimeFromBaseTime);
-#endif
-
 #if ESP32BASE_ENABLE_BUS
     ESP32BASE_LOG_D("base", "module_begin name=bus");
     {
@@ -196,7 +180,7 @@ bool Esp32Base::begin() {
 #if ESP32BASE_ENABLE_APP_EVENTS
     ESP32BASE_LOG_D("base", "module_begin name=app_events");
     {
-        const bool ok = Esp32BaseAppEventLog::begin();
+        const bool ok = Esp32BaseAppEvents::begin();
         if (!optionalOk(ok, "app_events")) return false;
         if (ok) ESP32BASE_LOG_D("base", "module_ready name=app_events");
     }
@@ -423,8 +407,11 @@ void Esp32Base::logResources() {
 #if ESP32BASE_ENABLE_FS
 #include "runtime/Esp32BaseFs.inc"
 #endif
+#if ESP32BASE_ENABLE_RECORD_STORE
+#include "runtime/Esp32BaseRecordStore.inc"
+#endif
 #if ESP32BASE_ENABLE_APP_EVENTS
-#include "runtime/Esp32BaseAppEventLog.inc"
+#include "runtime/Esp32BaseAppEvents.inc"
 #endif
 #if ESP32BASE_ENABLE_FILELOG
 #include "runtime/Esp32BaseFileLog.inc"

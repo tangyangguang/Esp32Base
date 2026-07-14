@@ -89,13 +89,18 @@ void sendFsPathTooLongRow(const char* dir, const char* name, bool isDir) {
 
 #if ESP32BASE_ENABLE_APP_EVENTS
 bool appEventsOwnsPath(const char* path) {
-    return path && strcmp(path, Esp32BaseAppEventLog::path()) == 0;
+    return path && strcmp(path, Esp32BaseAppEvents::path()) == 0;
 }
 
 void sendFsAppEventsTag() {
     sendStatusTag(Esp32BaseWeb::UI_INFO, "app events store");
 }
 #endif
+
+bool recordStoreOwnsPath(const char* path) {
+    static const char prefix[] = "/esp32base/records/";
+    return path && strncmp(path, prefix, sizeof(prefix) - 1U) == 0;
+}
 
 bool esp32BaseOwnsPath(const char* path) {
     return path && (strcmp(path, "/esp32base") == 0 || strncmp(path, "/esp32base/", 11) == 0);
@@ -154,7 +159,7 @@ void sendFsDirStatus(const char* path) {
 void sendFsFileActions(const char* path, bool manage) {
     sendChunk("<div class='fsactions'>");
     sendFsDownloadForm(path);
-    if (manage) {
+    if (manage && !recordStoreOwnsPath(path)) {
         sendFsDeleteForm(path);
     }
     sendChunk("</div>");
@@ -162,7 +167,7 @@ void sendFsFileActions(const char* path, bool manage) {
 
 void sendFsUnreadableActions(const char* path, bool manage) {
     sendChunk("<div class='fsactions'>");
-    if (manage) {
+    if (manage && !recordStoreOwnsPath(path)) {
         sendFsDeleteForm(path);
     } else {
         sendChunk("-");
@@ -439,7 +444,6 @@ void fsResetUploadState() {
     g_fsUploadStartFailed = false;
     g_fsUploadReceived = false;
     g_fsUploadModified = false;
-    g_fsUploadAppEventsTarget = false;
     g_fsUploadFileLogTarget = false;
     g_fsUploadActive = false;
     g_fsUploadOverwrite = false;
@@ -449,23 +453,13 @@ void fsResetUploadState() {
     g_fsUploadError[0] = '\0';
 }
 
-bool fsReloadUploadRuntime(const char* path, bool appEventsTarget, bool fileLogTarget, const char** errorOut) {
+bool fsReloadUploadRuntime(const char* path, bool fileLogTarget, const char** errorOut) {
     if (errorOut) {
         *errorOut = nullptr;
     }
     bool ok = true;
     (void)path;
-    (void)appEventsTarget;
     (void)fileLogTarget;
-#if ESP32BASE_ENABLE_APP_EVENTS
-    if (appEventsTarget && !Esp32BaseAppEventLog::reload()) {
-        ESP32BASE_LOG_W("web", "fs_upload_reload_failed path=%s target=app_events error=%s", path && path[0] ? path : "-", Esp32BaseAppEventLog::lastError());
-        if (errorOut && !*errorOut) {
-            *errorOut = "App Events store reload failed";
-        }
-        ok = false;
-    }
-#endif
 #if ESP32BASE_ENABLE_FILELOG
     if (fileLogTarget && !Esp32BaseFileLog::begin()) {
         ESP32BASE_LOG_W("web", "fs_upload_reload_failed path=%s target=filelog", path && path[0] ? path : "-");
@@ -478,12 +472,12 @@ bool fsReloadUploadRuntime(const char* path, bool appEventsTarget, bool fileLogT
     return ok;
 }
 
-void fsRecoverModifiedUploadRuntime(const char* path, bool modified, bool appEventsTarget, bool fileLogTarget) {
-    if (!modified || (!appEventsTarget && !fileLogTarget)) {
+void fsRecoverModifiedUploadRuntime(const char* path, bool modified, bool fileLogTarget) {
+    if (!modified || !fileLogTarget) {
         return;
     }
     const char* ignoredError = nullptr;
-    fsReloadUploadRuntime(path, appEventsTarget, fileLogTarget, &ignoredError);
+    fsReloadUploadRuntime(path, fileLogTarget, &ignoredError);
 }
 
 bool fsUploadTargetIsDirectory(const char* path) {
@@ -913,6 +907,10 @@ void handleFsCheckGet() {
         fsSendUploadJson(400, false, "Invalid filename or target path", nullptr);
         return;
     }
+    if (recordStoreOwnsPath(path)) {
+        fsSendUploadJson(403, false, "Record store files are managed by Esp32Base", path);
+        return;
+    }
     if (fsUploadTargetIsDirectory(path)) {
         fsSendUploadJson(400, false, "Target is a directory", path, false, true);
         return;
@@ -931,7 +929,6 @@ void handleFsUploadDone() {
     const bool forbidden = g_fsUploadForbidden;
     const bool startFailed = g_fsUploadStartFailed;
     const bool overwrite = g_fsUploadOverwrite;
-    const bool uploadAppEventsTarget = g_fsUploadAppEventsTarget;
     const bool uploadFileLogTarget = g_fsUploadFileLogTarget;
     const size_t uploadBytes = g_fsUploadBytes;
     char uploadPath[96];
@@ -950,7 +947,7 @@ void handleFsUploadDone() {
     if (startFailed || uploadError[0]) {
         ESP32BASE_LOG_W("web", "fs_upload_rejected path=%s error=%s", uploadPath[0] ? uploadPath : "-", uploadError[0] ? uploadError : "upload rejected");
         fsRemoveUploadTempIfPresent(uploadTempPath);
-        fsRecoverModifiedUploadRuntime(uploadPath, false, uploadAppEventsTarget, uploadFileLogTarget);
+        fsRecoverModifiedUploadRuntime(uploadPath, false, uploadFileLogTarget);
         fsResetUploadState();
         fsSendUploadJson(400, false, uploadError[0] ? uploadError : "upload rejected", uploadPath);
         return;
@@ -966,14 +963,14 @@ void handleFsUploadDone() {
         static_cast<uint64_t>(actualSize) != uploadBytes ||
         !fsUploadFileReadableEnd(uploadTempPath, static_cast<uint64_t>(actualSize))) {
         fsRemoveUploadTempIfPresent(uploadTempPath);
-        fsRecoverModifiedUploadRuntime(uploadPath, false, uploadAppEventsTarget, uploadFileLogTarget);
+        fsRecoverModifiedUploadRuntime(uploadPath, false, uploadFileLogTarget);
         fsResetUploadState();
         fsSendUploadJson(500, false, "Upload verification failed", uploadPath);
         return;
     }
     if (!fsCommitUploadedTemp(uploadTempPath, uploadPath, overwrite)) {
         fsRemoveUploadTempIfPresent(uploadTempPath);
-        fsRecoverModifiedUploadRuntime(uploadPath, false, uploadAppEventsTarget, uploadFileLogTarget);
+        fsRecoverModifiedUploadRuntime(uploadPath, false, uploadFileLogTarget);
         fsResetUploadState();
         fsSendUploadJson(500, false, "Upload commit failed", uploadPath);
         return;
@@ -984,7 +981,7 @@ void handleFsUploadDone() {
 #else
     const bool reloadFileLog = uploadFileLogTarget;
 #endif
-    if (!fsReloadUploadRuntime(uploadPath, uploadAppEventsTarget, reloadFileLog, &reloadError)) {
+    if (!fsReloadUploadRuntime(uploadPath, reloadFileLog, &reloadError)) {
         fsResetUploadState();
         fsSendUploadJson(500, false, reloadError ? reloadError : "Runtime reload failed", uploadPath);
         return;
@@ -1046,9 +1043,12 @@ void handleFsUpload() {
             fsSetUploadError("Invalid filename or target path");
             return;
         }
-#if ESP32BASE_ENABLE_APP_EVENTS
-        g_fsUploadAppEventsTarget = appEventsOwnsPath(g_fsUploadPath);
-#endif
+        if (recordStoreOwnsPath(g_fsUploadPath)) {
+            g_fsUploadForbidden = true;
+            g_fsUploadStartFailed = true;
+            fsSetUploadError("Record store files are managed by Esp32Base");
+            return;
+        }
 #if ESP32BASE_ENABLE_FILELOG
         g_fsUploadFileLogTarget = fileLogOwnsPath(g_fsUploadPath);
 #endif
@@ -1134,9 +1134,11 @@ void handleFsDeletePost() {
         redirectSeeOther("/esp32base/fs?manage=1&error=delete_missing");
         return;
     }
-#if ESP32BASE_ENABLE_APP_EVENTS
-    const bool targetIsAppEvents = appEventsOwnsPath(path);
-#endif
+    if (recordStoreOwnsPath(path)) {
+        ESP32BASE_LOG_W("web", "fs_delete_rejected path=%s reason=record_store_managed", path);
+        redirectSeeOther("/esp32base/fs?manage=1&error=delete_managed");
+        return;
+    }
 #if ESP32BASE_ENABLE_FILELOG
     const bool targetIsFileLog = fileLogOwnsPath(path);
     const bool retryFileLogAfterDelete = Esp32BaseFileLog::faulted();
@@ -1165,16 +1167,6 @@ void handleFsDeletePost() {
     }
 #else
     ESP32BASE_LOG_W("web", "fs_delete_requested path=%s result=%s", path, ok ? "success" : "failed");
-#endif
-#if ESP32BASE_ENABLE_APP_EVENTS
-    if (deleteOk && targetIsAppEvents) {
-        const bool reloadOk = fileClearedOnly
-            ? Esp32BaseAppEventLog::clear()
-            : Esp32BaseAppEventLog::reload();
-        if (!reloadOk) {
-            ok = false;
-        }
-    }
 #endif
     redirectSeeOther(ok ? (fileClearedOnly ? "/esp32base/fs?manage=1&deleted=cleared" : "/esp32base/fs?manage=1&deleted=1")
                         : "/esp32base/fs?manage=1&error=delete_failed");

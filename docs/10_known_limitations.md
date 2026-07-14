@@ -58,8 +58,19 @@
 - `Esp32BaseBus::publish()` 只允许在 Arduino loop 任务调用。
 - WiFi callback、timer callback、ISR、LWIP 回调不得直接 publish，只能入队后在 `handle()` 中处理。
 - 本库不提供跨任务事件总线，不包装 FreeRTOS 队列作为公开通用消息系统。
+- `Esp32BaseRecordStore` 和 `Esp32BaseAppEvents` 同样不是线程安全或回调可重入API；其他任务必须把追加、读取、reload和清空请求投递到同一system/loop任务。
 
-## 6. 存储边界
+## 6. RecordStore 边界
+
+- 每个Store只支持一种固定长度负载，不支持可变记录、字段查询、索引、事务、更新或单条删除。
+- ID只在单个“记录类型 + storeVersion”文件内唯一；不同文件可以出现相同ID。32位ID到达上限后停止追加，不回卷。
+- 文件创建后不自动扩缩容。改变负载或容量时使用新storeVersion，或由用户明确清理旧文件后重建。
+- 清空是header控制的逻辑清空，不会立即覆盖旧槽位，不提供安全擦除保证。
+- 启动会扫描配置容量内的全部槽位；业务应根据嵌入式设备实际保留需求设置合理预算，不把它当成无限数据库。
+- 追加是同步持久化操作，包含LittleFS flush和写后验证，延迟取决于芯片、Core、分区及文件大小。经典ESP32、Arduino Core 2.0.16、100 KiB App Events文件的实机测量约为1.1秒/条，主要耗时在LittleFS flush；这不适合实时控制路径，业务应通过队列交给system/loop任务。基础库保留flush以维持明确的成功与断电恢复语义，不为这一延迟引入分段文件或异步事务层。
+- 动作过程中断电且尚未调用`appendCompleted()`时，不存在可恢复的完成记录。需要持久化“进行中动作”的业务必须自行设计恢复状态。
+
+## 7. 存储边界
 
 - Config 后端为 ESP32 NVS，只适合小配置，不适合大量数据或高频日志。
 - Config 字符串 API 支持最大 3999 字节可见内容，并使用固定 scratch buffer 读取和比较，避免 Arduino `String` 造成 heap 碎片；它仍然不适合大量数据或高频日志。
@@ -71,15 +82,15 @@
 
 App Events 边界：
 
-- App Events 是固定容量环形事件日志，适合低频关键业务事件，不是业务长期数据模型。
+- App Events 是基于 RecordStore 的固定容量事件记录，适合低频关键业务事件；完整的浇水、开关门、喂食历史应使用各自的业务 RecordStore。
 - 用水量统计、报表数据、累计量、传感器采样历史、完整执行历史、大 payload、高频明细和不允许覆盖的业务数据，应由业务自己的数据文件或存储结构负责。
-- `/esp32base/app-events/events.bin` 是基础库内部 store；普通 FS 管理页会显示 `app events store` 提醒，但仍允许测试和维护时上传、覆盖或删除，操作后会重新加载 App Events 运行态。常规清空事件仍建议使用 System 页的 App Events 清空动作。
+- `/esp32base/records/**` 是基础库管理的 RecordStore 容器；FS 管理页允许下载检查，但不允许上传、覆盖或删除，以免绕过结构和完整性约束。App Events 只能通过 System 页取得用户确认后逻辑清空；业务 RecordStore 的清空确认和入口由业务项目负责。
 - App Events 也不是第二套系统诊断日志。boot/reset/restart reason、WiFi、NTP、OTA、LittleFS、FileLog fault、基础库健康状态等 Esp32Base 系统事件仍归 Status、System diagnostics 和 FileLog；App Events 只记录应用业务决策或业务可解释事件。同一故障可同时有系统诊断日志和 App Event，但前者写技术事实和内部错误链路，后者写业务影响、保护动作、跳过原因、用户维护结果或外部决策结果。
 
-## 7. 文件系统边界
+## 8. 文件系统边界
 
 - LittleFS 用于小型配置文件、诊断文件和 Web 静态小资源。
-- 系统诊断日志默认位于 `/esp32base/logs/system.log`，App Events store 默认位于 `/esp32base/app-events/events.bin`；业务文件应放在 `/app/**`、`/data/**` 或项目自定义目录。
+- 系统诊断日志默认位于 `/esp32base/logs/system.log`，App Events store 默认位于 `/esp32base/records/app-events.v1.bin`；业务 RecordStore 也位于 `/esp32base/records/**`，其他业务文件应放在 `/app/**`、`/data/**` 或项目自定义目录。
 - 业务需要二进制定长日志时，应通过 `Esp32BaseFs::readBytesAt()` / `writeBytesAt()` 做分页读取和固定位置覆盖，不直接依赖 LittleFS 或 Arduino `File`。
 - `writeBytesAt()` 只覆盖已有文件内容，不创建、不扩展文件；环形文件容量应由 `createFixedFile()` 初始化或校验。
 - `createFixedFile()` 会在文件不存在、大小不匹配或同尺寸但末端不可读时重建固定大小文件；同尺寸且可读时保留原内容，避免启动期清空持久环形记录。`appendBytes()` 适合低频追加，不适合循环零填充大文件。
@@ -90,21 +101,21 @@ App Events 边界：
 - 不保证在 OTA 写 flash 时并行执行大量 FS 写入的实时性。
 - Fs 没有 maintenance handle；挂载后按显式 API 操作。
 
-## 8. 资源边界
+## 9. 资源边界
 
 - 当前版本不依赖 PSRAM。
 - 即使板子有 PSRAM，默认资源预算也按无 PSRAM 设计。
 - ESP32-C3 单核、内存和 wake source 更受限，部分模块默认容量更保守；Web route 默认仍统一为 24，应用可按自身 route 数量显式调小。
 - FULL profile 必须通过实机容量验证确认，不能只看依赖声明。
 
-## 9. 兼容边界
+## 10. 兼容边界
 
 - 支持 Arduino ESP32 Core 2.0.14+ 和 3.0.4+。
 - Watchdog、WiFi event、mDNS、brownout 控制必须使用版本条件编译隔离。
 - mDNS `stop()` 对外语义是停止广告，不承诺释放底层 mDNS 全部资源。
 - ESP32-C3 不支持的 wake source 返回 false 并输出 warn。
 
-## 10. OTA 边界
+## 11. OTA 边界
 
 - OTA 只支持整包升级。
 - 未提供 SHA256 时允许跳过完整性校验；提供时必须严格校验。
@@ -112,7 +123,7 @@ App Events 边界：
 - SHA256 规则仅适用于 Web OTA；espota 继续使用 ArduinoOTA 协议内建 MD5。
 - 默认不关闭 brownout detector；临时关闭 brownout 仅作为显式开启的风险选项。
 
-## 11. 日志边界
+## 12. 日志边界
 
 - Core Log 只输出 Serial 和可选 sink callback，不依赖 FS。
 - 系统诊断日志由 Runtime/FS 的 `Esp32BaseFileLog` 提供；CORE 和默认 NET 不具备该能力。FileLog 是实现/API 名称，业务文档和页面默认称为 System Logs 或系统诊断日志。

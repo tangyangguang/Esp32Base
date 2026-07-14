@@ -70,23 +70,25 @@
 
 ### 3.5 App Events
 
-应用事件日志默认关闭，仅在 `ESP32BASE_ENABLE_APP_EVENTS=1` 时编译并初始化，依赖 FS。默认容量：
+App Events默认关闭，仅在 `ESP32BASE_ENABLE_APP_EVENTS=1` 时编译并初始化，依赖RecordStore、FS和Time。默认最大文件预算：
 
 ```cpp
-#define ESP32BASE_APP_EVENT_LOG_CAPACITY 1024
+#define ESP32BASE_APP_EVENT_STORE_MAX_BYTES (100UL * 1024UL)
 ```
 
-单条记录固定 188 bytes，默认数据区约 188 KiB；加上两个 64-byte header 后文件大小约 188.1 KiB，路径为 `/esp32base/app-events/events.bin`。该容量面向长期运行设备保留约千条可解释业务事件，定位是“近期关键事件窗口”，比 16KB/32KB 小环更适合排查低频业务决策，同时仍明显小于常见 1MB+ LittleFS 分区。
+App Event业务负载24字节，RecordStore公共元数据24字节，单条固定48字节。两个64字节header后可保存2130条，实际文件102368字节，路径为 `/esp32base/records/app-events.v1.bin`。App Events在业务RecordStore之前创建，不提供单独最低剩余空间配置。
 
-可按项目调整为 `64..2048` 条。若业务事件频率高于“用户可解释的关键事件”，应降低写入频率或把高频明细放到业务自己的数据文件；App Events 不替代调试日志、传感器采样、大 payload、用水量长期统计、报表、累计量、完整执行历史或不允许覆盖的业务数据。
+旧临时实现为每条188字节、默认1024条、文件192640字节；当前最终方案每条减少140字节（约74.5%），默认容量增加到2130条，同时文件减少90272字节（约46.9%）。旧文件不迁移、不自动删除，也不参与新模块读取。
+
+项目可以覆盖最大字节预算。若事件频率高于“用户可解释的关键事件”，应降低写入频率或把完整浇水、开关门、喂食历史放到独立RecordStore。
 
 记录字段空间分配：
 
-- `object[56]` 最大，用于业务对象引用。
-- `type[24]`、`reason[24]` 用于机器可读分类。
-- `source[12]` 用于模块或子系统名。
-- `text[32]` 只放短说明，可 UTF-8 截断。
-- `value1..value3` 三个 `int32_t` 数值槽，配合 `valueMask` 标记有效性。
+- `eventCode`、`reasonCode`、`objectId` 各4字节。
+- `value1`、`value2` 各4字节。
+- `flags`、`level` 各2字节。
+
+通用RecordStore文件大小为 `128 + capacity × (payloadSizeBytes + 24)`。业务应在设计固定负载后根据LittleFS分区一次性确定各文件预算；基础库不建立全局预算管理器。
 
 ### 3.6 Health
 

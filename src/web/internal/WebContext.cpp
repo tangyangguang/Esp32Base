@@ -344,7 +344,6 @@ WebContext::WebContext()
       fsUploadStartFailed(false),
       fsUploadReceived(false),
       fsUploadModified(false),
-      fsUploadAppEventsTarget(false),
       fsUploadFileLogTarget(false),
       fsUploadActive(false),
       fsUploadOverwrite(false),
@@ -414,7 +413,6 @@ bool& g_fsUploadForbidden = ctx().fsUploadForbidden;
 bool& g_fsUploadStartFailed = ctx().fsUploadStartFailed;
 bool& g_fsUploadReceived = ctx().fsUploadReceived;
 bool& g_fsUploadModified = ctx().fsUploadModified;
-bool& g_fsUploadAppEventsTarget = ctx().fsUploadAppEventsTarget;
 bool& g_fsUploadFileLogTarget = ctx().fsUploadFileLogTarget;
 bool& g_fsUploadActive = ctx().fsUploadActive;
 bool& g_fsUploadOverwrite = ctx().fsUploadOverwrite;

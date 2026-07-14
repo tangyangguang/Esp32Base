@@ -4,84 +4,33 @@
 namespace {
 uint32_t g_manualEventId = 0;
 
-bool appendDemoEvent(Esp32BaseAppEventLog::Level level,
-                     const char* source,
-                     const char* type,
-                     const char* reason,
-                     const char* object,
-                     uint16_t code,
+bool appendDemoEvent(Esp32BaseAppEvents::Level level,
+                     uint32_t eventCode,
+                     uint32_t reasonCode,
+                     uint32_t objectId,
                      int32_t value1,
                      int32_t value2,
-                     int32_t value3,
-                     uint8_t valueMask,
-                     const char* text) {
-    Esp32BaseAppEventLog::Event event;
+                     uint16_t flags) {
+    Esp32BaseAppEvents::EventInput event;
     event.level = level;
-    event.source = source;
-    event.type = type;
-    event.reason = reason;
-    event.object = object;
-    event.code = code;
+    event.eventCode = eventCode;
+    event.reasonCode = reasonCode;
+    event.objectId = objectId;
     event.value1 = value1;
     event.value2 = value2;
-    event.value3 = value3;
-    event.valueMask = valueMask;
-    event.text = text;
-    const bool ok = Esp32BaseAppEventLog::append(event);
+    event.flags = flags;
+    const bool ok = Esp32BaseAppEvents::append(event);
     if (!ok) {
-        ESP32BASE_LOG_W("demo", "app_event_append_failed error=%s", Esp32BaseAppEventLog::lastError());
+        ESP32BASE_LOG_W("demo", "app_event_append_failed error=%s", Esp32BaseAppEvents::lastErrorReason());
     }
     return ok;
 }
 
 void seedDemoEvents() {
-    appendDemoEvent(Esp32BaseAppEventLog::LEVEL_INFO,
-                    "config",
-                    "state_ready",
-                    "sample_config_loaded",
-                    "config:demo",
-                    1,
-                    3,
-                    0,
-                    0,
-                    Esp32BaseAppEventLog::VALUE1,
-                    "sample config ready");
-
-    appendDemoEvent(Esp32BaseAppEventLog::LEVEL_INFO,
-                    "scheduler",
-                    "job_skipped",
-                    "manual",
-                    "job:alpha",
-                    100,
-                    15,
-                    0,
-                    0,
-                    Esp32BaseAppEventLog::VALUE1,
-                    "sample schedule decision");
-
-    appendDemoEvent(Esp32BaseAppEventLog::LEVEL_INFO,
-                    "api",
-                    "external_decision",
-                    "accepted",
-                    "decision:42",
-                    200,
-                    7,
-                    2,
-                    0,
-                    Esp32BaseAppEventLog::VALUE1 | Esp32BaseAppEventLog::VALUE2,
-                    "external system accepted");
-
-    appendDemoEvent(Esp32BaseAppEventLog::LEVEL_WARN,
-                    "monitor",
-                    "anomaly_detected",
-                    "missing_signal",
-                    "sensor:meter-a",
-                    300,
-                    0,
-                    30,
-                    1,
-                    Esp32BaseAppEventLog::VALUE1 | Esp32BaseAppEventLog::VALUE2 | Esp32BaseAppEventLog::VALUE3,
-                    "sample warning event");
+    appendDemoEvent(Esp32BaseAppEvents::Level::Info, 1001, 0, 1, 30, 820, 0);
+    appendDemoEvent(Esp32BaseAppEvents::Level::Warning, 1002, 2101, 1, 1450, 2, 0x0001);
+    appendDemoEvent(Esp32BaseAppEvents::Level::Warning, 2001, 2201, 2, 0, 0, 0);
+    appendDemoEvent(Esp32BaseAppEvents::Level::Warning, 3001, 2301, 3, 12, 20, 0x0002);
 }
 
 void handleDemoEventsPage() {
@@ -93,7 +42,7 @@ void handleDemoEventsPage() {
     if (Esp32BaseWeb::hasParam("posted")) {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "Demo event written");
     } else if (Esp32BaseWeb::hasParam("error")) {
-        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_DANGER, "Demo event failed", Esp32BaseAppEventLog::lastError());
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_DANGER, "Demo event failed", Esp32BaseAppEvents::lastErrorReason());
     }
     Esp32BaseWeb::beginPanel("Manual Event");
     Esp32BaseWeb::sendChunk("<form method='post' action='/demo/events/add' onsubmit=\"return once(this)\"><div class='actions'><input type='submit' value='Write Demo Event'></div></form>");
@@ -107,17 +56,13 @@ void handleDemoEventAdd() {
         return;
     }
     ++g_manualEventId;
-    const bool ok = appendDemoEvent(Esp32BaseAppEventLog::LEVEL_INFO,
-                                    "demo",
-                                    "manual_event",
-                                    "web_post",
-                                    "demo:manual",
-                                    10,
+    const bool ok = appendDemoEvent(Esp32BaseAppEvents::Level::Info,
+                                    9001,
+                                    0,
+                                    1,
                                     static_cast<int32_t>(g_manualEventId),
                                     static_cast<int32_t>(millis() / 1000UL),
-                                    0,
-                                    Esp32BaseAppEventLog::VALUE1 | Esp32BaseAppEventLog::VALUE2,
-                                    "posted from demo route");
+                                    0);
     Esp32BaseWeb::redirectSeeOther(ok ? "/demo/events?posted=1" : "/demo/events?error=1");
 }
 } // namespace

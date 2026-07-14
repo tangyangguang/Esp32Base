@@ -21,7 +21,7 @@
 #include "../../runtime/Esp32BaseFileLog.h"
 #endif
 #if ESP32BASE_ENABLE_APP_EVENTS
-#include "../../runtime/Esp32BaseAppEventLog.h"
+#include "../../runtime/Esp32BaseAppEvents.h"
 #endif
 #if ESP32BASE_ENABLE_FS
 #include "../../runtime/Esp32BaseFs.h"
@@ -228,7 +228,6 @@ struct WebContext {
     bool fsUploadStartFailed;
     bool fsUploadReceived;
     bool fsUploadModified;
-    bool fsUploadAppEventsTarget;
     bool fsUploadFileLogTarget;
     bool fsUploadActive;
     bool fsUploadOverwrite;
@@ -295,7 +294,6 @@ extern bool& g_fsUploadForbidden;
 extern bool& g_fsUploadStartFailed;
 extern bool& g_fsUploadReceived;
 extern bool& g_fsUploadModified;
-extern bool& g_fsUploadAppEventsTarget;
 extern bool& g_fsUploadFileLogTarget;
 extern bool& g_fsUploadActive;
 extern bool& g_fsUploadOverwrite;

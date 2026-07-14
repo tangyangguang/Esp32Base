@@ -22,6 +22,7 @@ ESP32BASE_PROFILE_CORE
 - `ESP32BASE_ENABLE_SLEEP`
 - `ESP32BASE_ENABLE_FS`
 - `ESP32BASE_ENABLE_FILELOG`
+- `ESP32BASE_ENABLE_RECORD_STORE`
 - `ESP32BASE_ENABLE_APP_EVENTS`
 - `ESP32BASE_ENABLE_RS485_PORT`
 - `ESP32BASE_ENABLE_HEALTH`
@@ -75,11 +76,12 @@ Profile 默认值不能覆盖用户显式 `-D`。
 - `ARDUINO_OTA` 需要 `OTA`，默认值跟随 `OTA`；启用 OTA 的 profile 默认同时支持 Web OTA 和 espota。
 - `DNS` 需要 `WIFI`。
 - `NTP` 需要 `WIFI`。
-- `NTP` 和 `RTC` 需要 `TIME`；`TIME` 在启用 NTP、RTC、App Events 或 Web 时默认启用。
+- `NTP`、`RTC` 和 `RECORD_STORE` 需要 `TIME`；`TIME` 在启用 NTP、RTC、RecordStore、App Events 或 Web 时默认启用。
 - `RTC` 默认关闭，通过 `ESP32BASE_ENABLE_RTC=1` 显式启用。
 - `MDNS` 需要 `WIFI`。
 - `FILELOG` 需要 `FS`。
-- `APP_EVENTS` 需要 `FS`，默认关闭，不随任何 profile 自动开启。
+- `APP_EVENTS` 需要 `RECORD_STORE`（因此也需要 `FS` 和 `TIME`），默认关闭，不随任何 profile 自动开启。
+- `RECORD_STORE` 需要 `FS` 和 `TIME`，默认关闭；启用 App Events 时自动启用 RecordStore。
 - `APP_CONFIG` 需要 `WEB`，默认关闭，不随任何 profile 自动开启。
 - `RS485_PORT` 无 Esp32Base 内部硬依赖，默认关闭，不随任何 profile 自动开启；业务通过 `ESP32BASE_ENABLE_RS485_PORT=1` 显式启用，并自行选择 `HardwareSerial`、RX/TX/DE 引脚和串口参数。
 
@@ -97,7 +99,9 @@ Profile 默认值不能覆盖用户显式 `-D`。
 
 启用 FS 的 profile 默认启用系统诊断日志。底层实现/API 名称仍为 FileLog（`Esp32BaseFileLog`）；用户仍可显式关闭 `ESP32BASE_ENABLE_FILELOG`。
 
-应用事件日志通过 `ESP32BASE_ENABLE_APP_EVENTS=1` 显式启用，默认容量 `ESP32BASE_APP_EVENT_LOG_CAPACITY=1024`，允许范围 `64..2048`。该能力使用 LittleFS 固定文件存储，适合结构化业务事件，不作为系统诊断日志、调试日志或业务长期数据模型。
+通用固定业务记录通过 `ESP32BASE_ENABLE_RECORD_STORE=1` 显式启用。应用为每个记录类型在运行时提供固定负载大小、存储版本、最大文件字节数和可选LittleFS最低剩余空间，不新增Profile。
+
+App Events通过 `ESP32BASE_ENABLE_APP_EVENTS=1` 显式启用，并复用RecordStore。`ESP32BASE_APP_EVENT_STORE_MAX_BYTES` 默认 `100 * 1024` 字节；App Events在 `Esp32Base::begin()` 内优先创建，不提供单独最低剩余空间配置。
 
 RS485 半双工基础串口通过 `ESP32BASE_ENABLE_RS485_PORT=1` 显式启用。它只负责 `HardwareSerial` 初始化、DE 方向脚切换、发送后 `flush()` 等待和轮询读取，不创建后台任务，不分配协议缓冲，不解析帧，也不内置 Modbus/RTU、CRC、重试或业务命令。
 

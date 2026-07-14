@@ -367,7 +367,7 @@ void handleToolsFormatFsPost() {
 #endif
 #if ESP32BASE_ENABLE_APP_EVENTS
     if (mounted) {
-        appEventsRecreated = Esp32BaseAppEventLog::clear();
+        appEventsRecreated = Esp32BaseAppEvents::reload();
     }
 #endif
     ESP32BASE_LOG_W("web", "fs_format_completed source=tools format=%s mount=%s filelog_reload=%s app_events_recreate=%s",
@@ -414,7 +414,7 @@ void handleToolsAppEventsClearPost() {
     if (!ensurePostAllowed("tools_app_events_clear")) {
         return;
     }
-    const bool ok = Esp32BaseAppEventLog::clear();
+    const bool ok = Esp32BaseAppEvents::clear();
     redirectSeeOther(ok ? "/esp32base/tools?app_events_cleared=1" : "/esp32base/tools?error=app_events_clear_failed");
 }
 #endif

@@ -61,7 +61,8 @@ Core 不包含 Event Bus。Bus 是 Runtime 可选模块。
 - `Esp32BaseSleep`
 - `Esp32BaseFs`
 - `Esp32BaseFileLog`
-- `Esp32BaseAppEventLog`
+- `Esp32BaseRecordStore`
+- `Esp32BaseAppEvents`
 - `Esp32BaseTime`
 - `Esp32BaseRtc`
 - `Esp32BaseRs485Port`

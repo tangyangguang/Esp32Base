@@ -214,171 +214,181 @@ void loop() {
 }
 ```
 
-### 3.5 Esp32BaseAppEventLog
+### 3.5 Esp32BaseRecordStore
 
-仅在 `ESP32BASE_ENABLE_APP_EVENTS=1` 时可用，依赖 `ESP32BASE_ENABLE_FS=1`。该能力默认关闭，不随 FULL profile 自动开启。默认容量：
+仅在 `ESP32BASE_ENABLE_RECORD_STORE=1` 时可用，依赖 FS 和 Time。它为固定长度、不透明业务负载提供多实例可靠记录存储；浇水、开关门、喂食等业务分别定义自己的字节布局和文件预算，基础库不理解字段语义。
+
+每个实例使用：
 
 ```cpp
-#define ESP32BASE_APP_EVENT_LOG_CAPACITY 1024
+Esp32BaseRecordStore::StoreDefinition definition;
+definition.recordTypeName = "door-opening";
+definition.storeVersion = 1;
+definition.payloadSizeBytes = 8;
+definition.maximumFileBytes = 32UL * 1024UL;
+definition.minimumFileSystemFreeBytes = 8UL * 1024UL;
 ```
 
-单条 `Esp32BaseAppEventRecord` 固定 188 bytes，默认约 188 KiB，容量允许范围为 `64..2048`。文件路径固定为 `/esp32base/app-events/events.bin`。基础库只理解通用结构，不理解业务语义；应用负责决定事件何时写入、类型如何命名和页面文案如何解释。
+文件路径由基础库生成：
 
-LittleFS 中的 `/esp32base/**` 是基础库管理命名空间。系统诊断日志默认在 `/esp32base/logs/system.log`，App Events store 默认在 `/esp32base/app-events/events.bin`；业务持久化文件应使用 `/app/**`、`/data/**` 或项目自定义目录。
+```text
+/esp32base/records/<recordTypeName>.v<storeVersion>.bin
+```
+
+`recordTypeName` 只允许小写字母、数字和内部连字符，最大32字符。`storeVersion=0`、空负载或不足以容纳一条记录的预算无效。版本同时进入文件名和文件头，但不在每条记录中重复。
+
+固定槽位采用明确的小端编码：
+
+| 偏移 | 字段 | 大小 |
+| ---: | --- | ---: |
+| 0 | recordId | 4 |
+| 4 | completedEpochSec | 4 |
+| 8 | completedBootId | 4 |
+| 12 | completedUptimeSec | 4 |
+| 16 | durationSec | 4 |
+| 20 | 业务payload | N |
+| 20 + N | CRC32 | 4 |
+
+因此：
+
+```text
+slotSizeBytes = payloadSizeBytes + 24
+capacity = floor((maximumFileBytes - 128) / slotSizeBytes)
+actualFileBytes = 128 + capacity * slotSizeBytes
+```
+
+文件包含两个64字节header。正常追加只覆盖一个槽位并读回验证，不在每次追加时提交header；启动或 `reload()` 只用固定次数打开文件并批量扫描有限槽位恢复运行态，最新分页在单次打开中读取，不能按槽位反复打开文件。新文件先完整创建和验证 `.tmp`，再重命名为正式文件。正式文件存在但尺寸、版本、payload长度或header不匹配时进入结构故障，绝不自动重写。
+
+核心API：
 
 ```cpp
-struct Esp32BaseAppEventRecord {
-    uint32_t magic;
-    uint32_t id;
-    uint32_t epochSec;
-    uint32_t bootId;
-    uint32_t uptimeSec;
+class Esp32BaseRecordStore {
+public:
+    struct StoreDefinition;
+    struct RecordStartTime;
+    struct RecordTiming;
+    struct RecordView;
+    struct RecordMetadata;
+    struct StoreStatus;
+
+    bool begin(const StoreDefinition&);
+    bool reload();
+
+    bool captureStartTime(RecordStartTime&);
+    bool appendInstant(const uint8_t* payload, size_t payloadBytes);
+    bool appendCompleted(const RecordStartTime&, const uint8_t* payload, size_t payloadBytes);
+
+    bool readLatest(uint32_t offset, uint32_t limit,
+                    uint8_t* scratch, size_t scratchBytes,
+                    ReadCallback callback, void* user = nullptr);
+    RecordReadResult readById(uint32_t recordId,
+                              uint8_t* payloadOut, size_t payloadBytes,
+                              RecordMetadata& recordOut);
+
+    bool readStatus(StoreStatus&) const;
+    bool clear();
+};
+```
+
+时间约定：
+
+- `appendInstant()` 自动保存完成快照，`durationSec=0`。
+- 实际业务动作开始时调用 `captureStartTime()`，动作得到正常或异常结果后调用 `appendCompleted()`。
+- 开始和完成必须属于同一个boot；跨boot调用被拒绝。
+- 有可信RTC/NTP时间时保存epoch，否则保存 `bootId + uptimeSec`；`resolveCompletedEpoch()` 和 `resolveStartedEpoch()` 只在能够可靠解析时返回真实时间。
+- 计划时间不是通用实际动作时间；业务确实需要时放入自己的payload。
+
+ID和轮换：
+
+- 每个“记录类型 + storeVersion”文件使用独立32位ID，从1开始。
+- 自动淘汰和逻辑清空都不重置ID；到达 `UINT32_MAX` 后停止追加，不回卷。
+- 如果断电时已经写入了可识别的下一ID但整条记录未完成，该ID会被保留为空洞而不重复使用；分页和按ID读取仍不会返回不完整记录。
+- 槽位为 `(recordId - 1) % capacity`，所以按ID读取不需要字段索引。
+- 容量满后覆盖最早槽位，不搬移其他记录。
+- 不支持单条删除、更新、字段查询、事务或可变长度记录。
+
+失败和状态：
+
+- CRC错误或不完整槽位不会返回；单槽损坏进入 `Degraded`，其他有效记录仍可读取。
+- 写入或写后验证失败进入 `WriteFault`，已有记录仍可读取；应用可在排除原因后显式 `reload()`。
+- 双header无效、正式文件尺寸/定义不匹配进入 `StructuralFault`，不自动清空。
+- `minimumFileSystemFreeBytes` 在创建和追加前保护业务指定的LittleFS余量；0表示不附加该限制。
+- `StoreStatus` 返回状态、错误、记录数、容量、损坏数、最早/最新/下一个ID、槽位和文件字节数以及LittleFS总量/使用量/剩余量。
+- `clear()` 通过双header提交新的可见边界，不重写数据区，因此不是安全擦除。调用方必须先取得用户明确确认。
+
+RecordStore对象可全局定义，但构造函数不访问FS、不注册全局表；业务必须在 `Esp32Base::begin()` 成功后调用各实例的 `begin()`。同一路径只能有一个活动实例。API不提供mutex，其他FreeRTOS任务必须通过业务队列回到同一system/loop任务。读取回调中的payload只在本次回调期间有效，且不得重入同一Store。
+
+`appendCompleted()` 是同步持久化操作：返回成功前会写入固定槽位、执行LittleFS flush并做写后验证；正常追加不写header。具体耗时取决于芯片、Arduino Core、LittleFS分区和文件大小；不得从ISR、timer callback或实时控制任务直接调用，应把已完成的浇水、开关门、喂食记录投递到同一system/loop任务保存。不能为了缩短返回时间跳过flush，否则“返回成功”不再代表记录已经提交到Flash。
+
+业务负责固定payload的编码、解码、字段版本、业务校验和显示。不得直接持久化含指针、`String`、编译器padding或平台相关布局的C++对象。六区域浇水详情应按区域1到区域6的固定位置连续编码；位置已经表达区域编号时不重复保存编号。
+
+### 3.6 Esp32BaseAppEvents
+
+仅在 `ESP32BASE_ENABLE_APP_EVENTS=1` 时可用；它自动启用RecordStore，并由 `Esp32Base::begin()` 在业务Store之前创建。默认预算：
+
+```cpp
+#define ESP32BASE_APP_EVENT_STORE_MAX_BYTES (100UL * 1024UL)
+```
+
+App Events不提供单独最低剩余空间宏。业务应在App Events创建后，根据LittleFS剩余空间规划自己的Store。
+
+固定24字节事件payload：
+
+```cpp
+struct EventInput {
+    uint32_t eventCode;   // 0 无效
+    uint32_t reasonCode;  // 0 表示无
+    uint32_t objectId;    // 0 表示无
     int32_t value1;
     int32_t value2;
-    int32_t value3;
-    uint16_t code;
-    uint8_t level;
-    uint8_t flags;
-    uint8_t valueMask;
-    uint8_t reserved;
-    uint16_t crc16;
-    char source[12];
-    char type[24];
-    char reason[24];
-    char object[56];
-    char text[32];
-};
-
-class Esp32BaseAppEventLog {
-public:
-    enum Level : uint8_t { LEVEL_INFO = 1, LEVEL_WARN = 2, LEVEL_ERROR = 3 };
-    enum ValueMask : uint8_t { VALUE1 = 1 << 0, VALUE2 = 1 << 1, VALUE3 = 1 << 2 };
-    enum Flags : uint8_t { FLAG_TIME_SYNCED = 1 << 0, FLAG_TEXT_TRUNCATED = 1 << 1 };
-    enum StoreRecordStatus : uint8_t {
-        STORE_RECORD_OK,
-        STORE_RECORD_EMPTY,
-        STORE_RECORD_INVALID_MAGIC,
-        STORE_RECORD_INVALID_LEVEL,
-        STORE_RECORD_CRC_MISMATCH,
-        STORE_RECORD_UNCOMMITTED,
-        STORE_RECORD_READ_FAILED
-    };
-
-    struct Event {
-        Level level;
-        const char* source;
-        const char* type;
-        const char* reason;
-        const char* object;
-        uint16_t code;
-        int32_t value1;
-        int32_t value2;
-        int32_t value3;
-        uint8_t valueMask;
-        const char* text;
-    };
-
-    struct TimeSnapshot {
-        bool synced;
-        uint32_t epochSec;
-        uint32_t bootId;
-        uint32_t uptimeSec;
-    };
-
-    struct StoreInfo { /* path/fileSize/capacity/count/validCount/head/nextId/sequence/header sizes */ };
-    struct StoreRecord { /* record/status/slot/index/offset/storedCrc16/calculatedCrc16/readOk/magicOk/levelOk/crcOk/committed */ };
-
-    using TimeProvider = TimeSnapshot (*)();
-    using ReadCallback = void (*)(const Esp32BaseAppEventRecord& event, void* user);
-    using StoreRecordCallback = void (*)(const StoreRecord& item, void* user);
-
-    static bool begin();
-    static bool reload();
-    static bool append(const Event& event);
-    static bool readLatest(uint16_t offset, uint16_t limit, ReadCallback cb, void* user = nullptr);
-    static bool readStoreInfo(StoreInfo& info);
-    static bool readStoreRecords(uint16_t offset, uint16_t limit, StoreRecordCallback cb, void* user = nullptr);
-    static bool clear();
-    static void setTimeProvider(TimeProvider provider);
-    static bool isReady();
-    static bool faulted();
-    static const char* lastError();
-    static uint16_t count();
-    static uint16_t capacity();
-    static uint32_t nextId();
-    static const char* path();
-    static const char* levelName(Level level);
-    static const char* storeRecordStatusName(StoreRecordStatus status);
+    uint16_t flags;       // 完全由业务定义
+    Level level;          // uint16_t: Info/Warning/Error
 };
 ```
 
-字段约定：
+加上RecordStore的24字节公共元数据后，每条App Event为48字节。100 KiB预算可保存2130条，实际文件102368字节，路径为：
 
-- `source` 和 `type` 必填；`reason`、`object` 可空。四者是机器可读 token，只允许字母、数字、`_`、`-`、`.`、`:`、`/`、`@`、`#`，且不会被静默截断。
-- `object[56]` 用于业务对象引用，例如设备、计划、任务、传感器、外部决策 id；不用于保存业务大 payload。
-- `text[32]` 是短说明，可 UTF-8 安全截断，并用 `FLAG_TEXT_TRUNCATED` 标记。
-- `value1..value3` 是三个通用 `int32_t` 数值槽；`valueMask` 表示哪个值有效，避免把缺失误读为 0。
-- `code` 是应用自定义短数值码，基础库不解释。
-- `Esp32BaseTime` 当前有可信真实时间时写入 `epochSec` 并设置 `FLAG_TIME_SYNCED`；否则保存 `bootId + uptimeSec`。可信时间可来自 RTC 或 NTP，NTP 优先级高于 RTC。Web/API 展示会额外给出派生的 `uptimeMs = uptimeSec * 1000`，用于避免把相对运行时间误读成真实日期。
-- 当前 boot 后续由 RTC 或 NTP 建立可信时间时，Web/API 会通过 `Esp32BaseTime::resolveCurrentBootEvent()` 把同一 boot 的未同步事件解析为 `resolvedEpochSec`；历史 boot 或无法确认的事件仍显示相对 uptime。
-- `Esp32BaseAppEventLog` 不是跨任务并发 API；建议只在 loop/system task、Web handler 或同一业务执行上下文中调用。其他 FreeRTOS task 需要写业务事件时，应通过业务 queue 投递回 loop/system task，避免 append/read/clear 并发修改同一文件和全局状态。
-- `reload()` 面向维护入口或测试导入场景：当 `/esp32base/app-events/events.bin` 被 FS 管理页上传、覆盖或删除后，先清理运行态 `ready/fault/head/count/nextId`，再按当前 store 重新加载；普通业务写入不需要调用它。
+```text
+/esp32base/records/app-events.v1.bin
+```
 
-术语和适用边界：
+`Esp32BaseAppEvents` 提供：
 
-- App Events 用于“近期关键事件窗口”：记录用户能理解、低频、可解释的业务行为，例如计划跳过、保护触发、运行异常、外部 API 决策和用户清除告警。
-- App Events 不是业务长期数据模型。统计、报表、累计量、传感器采样历史、完整执行历史、大 payload、高频明细和不允许覆盖的业务数据，应继续放在业务自己的数据模型和文件中。
-- 若一个记录需要被用户长期查询、聚合或参与业务计算，它通常不是 App Events；若它只用于解释“为什么刚才/最近发生了某个业务行为”，才适合写入 App Events。
-- System Diagnostic Logs（系统诊断日志，实现/API 名称 `Esp32BaseFileLog`）记录设备和基础库运行过程中的技术事实：boot/reset/restart reason、WiFi、NTP、OTA、LittleFS mount/write fault、FileLog fault、基础库健康状态和内部错误链路。它面向开发、维护和运维排障，不面向业务枚举解释。
-- App Events（应用业务事件，实现/API 名称 `Esp32BaseAppEventLog`）记录业务事实、业务决策、业务影响和用户可理解结果。应用项目不要把 Esp32Base 系统事件原样写入 App Events。
-- 同一个底层故障可以同时有系统诊断日志和 App Event，但不能机械重复。判断方法是分层：系统诊断日志回答“设备内部发生了什么、技术原因是什么、维护人员如何排障”；App Event 回答“业务流程受到了什么影响、系统采取了什么业务动作、用户看到的结果是什么”。硬件或存储异常如果只是底层诊断，归 System Diagnostic Logs/Status/System diagnostics；只有当它导致业务保护、跳过、停机、业务告警、用户维护或外部决策时，才写 App Events，并且事件类型应表达业务决策，例如 `action_blocked`、`protection_triggered`、`alarm_acknowledged`，而不是重复 `fs_write_failed`、`boot` 这类系统日志语义。
+```cpp
+begin();
+reload();
+append(const EventInput&);
+readLatest(offset, limit, callback, user);
+readById(recordId, EventRecord&);
+readStatus(EventStoreStatus&);
+clear();
+```
 
-| 能力 | API/路径 | 主要受众 | 回答的问题 |
-| --- | --- | --- | --- |
-| System Diagnostic Logs / 系统诊断日志 | `Esp32BaseFileLog`、`/esp32base/logs` | 开发、维护、运维排障 | 设备内部发生了什么，技术原因和错误链路是什么 |
-| App Events / 应用业务事件 | `Esp32BaseAppEventLog`、`/esp32base/app-events`、`/esp32base/api/app-events` | 业务页面、现场用户、业务排查 | 业务流程受到了什么影响，系统做出了什么业务动作，用户应理解什么结果 |
+`eventCode`、`reasonCode` 和 `flags` 的编号与位含义完全由业务定义；基础库不保存source/type/reason/object/text字符串，也不建立代码文字注册中心。`value1/value2` 没有存在位，业务根据eventCode确定含义，未使用时写0。App Events是瞬时业务事件，公共 `durationSec=0`。
 
-存储和失败语义：
+System Logs、App Events和完整业务记录的边界：
 
-- 固定文件双 header，记录带 `crc16`，header 带 `crc32`。
-- append 先写记录槽，再写 inactive header；未满时断电最多丢失未提交的新记录，不破坏上一版 header。
-- 满环覆盖最老槽时，如果断电发生在 record 写入后、header 提交前，恢复时会识别该未提交槽并从可见范围移除；结果可能丢失被覆盖的最老记录和未提交的新记录，但不会把整个日志打入 fault。
-- 首次没有 `/esp32base/app-events/events.bin` 时，`begin()` 会创建固定容量事件文件；如果路径已存在但文件尺寸不匹配或不可读，则视为结构性故障进入 `faulted()`，不会自动删除或重建，避免升级或损坏场景静默丢失事件。
-- 双 header 都无效、文件尺寸不匹配、创建/删除/写 header 失败或写后校验失败属于结构性故障，会进入 `faulted()`。
-- 单条 record CRC 损坏或未提交 future record 不会进入全局 fault；业务读取 `readLatest()` 会跳过该槽，`begin()` 和完整 `readLatest(0, count(), ...)` 扫描会把 `count()` 收敛到可读取的有效记录数，append 仍可继续覆盖后续槽。
-- `readLatest()`、`readStoreInfo()` 和 `readStoreRecords()` 是只读路径，不会隐式调用 `begin()`、创建文件或重建 store；未 ready 时返回失败并暴露 `not_ready` 或当前 fault。
-- `readStoreInfo()` / `readStoreRecords()` 是事件日志内置页面使用的存储级读取能力。它用于查看事件日志文件内容和存储状态，会返回槽位、偏移、CRC/提交状态和可读性诊断，不作为业务事件列表的默认数据源。
-- FS 未 ready、空间不足、读写失败或记录跳过时通过 `lastError()` 暴露原因；读路径遇到不可读 I/O 会返回 `false`，但不会自动清空。
-- `clear()` 重建空文件，默认保留递增 `nextId()`；业务恢复出厂或清空业务记录时可显式调用。
-- 每次 `append()` 会写入一个 188 bytes record，再提交一个 64 bytes header 副本并做读回校验。该模式适合低频关键业务事件，不适合传感器采样、流水明细、统计累积或秒级状态上报；这些场景应由业务使用自己的批量、环形或聚合存储模型。
+| 能力 | 记录内容 |
+| --- | --- |
+| `Esp32BaseFileLog` | boot、WiFi、OTA、LittleFS等技术诊断文本 |
+| `Esp32BaseAppEvents` | 开门受阻、喂食因缺料跳过、浇水因缺水停止等低频业务决策和影响 |
+| `Esp32BaseRecordStore` | 完整开关门、喂食、浇水历史事实 |
 
-两套使用方向：
-
-- 内置 `/esp32base/app-events` 是事件日志页面。它展示业务事件日志内容、容量和存储诊断，面向维护人员和开发人员；它不解释业务语义，也不把 `source/type/reason/code/value` 翻译成业务话术。
-- 业务系统自己的业务事件列表和详情页应使用 `readLatest()` 或 `/esp32base/api/app-events` 获取有效事件，再用业务语言解释。业务页面通常只展示时间、等级、业务对象、业务动作、业务结果和必要数值，不展示 `magic/crc16/reserved/valueMask/flags` 等内部字段。基础库不提供业务枚举表、不内置业务文案，也不要求业务系统复用内置页面。
-
-Web/API 查询：
-
-- HTML 页面 `/esp32base/app-events` 支持 `page`、`per` 以及常用筛选：`level=info|warn|error`、`time=real|uptime`、`source`、`type`、`reason`、`q`。`source/type/reason` 是精确匹配，并复用事件 token 的长度和字符校验；超长或非法筛选返回 `400 invalid_filter`，不会截断后误匹配。`q` 在 `source/type/reason/object/text` 内做大小写不敏感关键词匹配。该页面和 CSV 使用存储级记录读取，因此 CRC 损坏但能读出的记录也会展示并标记状态。
-- JSON API `/esp32base/api/app-events` 支持 `offset`、`limit` 和同一组筛选条件，返回 `count`、`total`、`filters` 和最新优先的 `events`；筛选请求单次扫描完成当前页输出和匹配计数。
-- 每条 JSON 事件包含 `epochSec`、`resolvedEpochSec`、`bootId`、`uptimeSec`、`uptimeMs`、`level/source/type/reason/object/code/value1..value3/valueMask/flags/text`。`uptimeSec` 是存储稳定字段，`uptimeMs` 是 64-bit 派生展示值；`resolvedEpochSec=0` 表示没有可信真实时间。
-- CSV `/esp32base/app-events.csv` 使用同一组筛选条件，并导出事件字段和必要存储诊断字段。如果导出过程中读取失败，响应末尾追加可见错误行暴露失败原因。
+内置HTML、JSON和CSV只输出CRC有效事件，支持最新优先分页以及level、真实/相对时间、eventCode和reasonCode筛选。页面显示数字字段，不替业务映射中文说明；损坏记录只在Store状态中计数，不作为事件返回。
 
 示例：
 
 ```cpp
-Esp32BaseAppEventLog::Event event;
-event.level = Esp32BaseAppEventLog::LEVEL_WARN;
-event.source = "scheduler";
-event.type = "job_skipped";
-event.reason = "manual";
-event.object = "job:alpha";
-event.value1 = 15;
-event.valueMask = Esp32BaseAppEventLog::VALUE1;
-event.text = "sample schedule decision";
-Esp32BaseAppEventLog::append(event);
+Esp32BaseAppEvents::EventInput event;
+event.level = Esp32BaseAppEvents::Level::Warning;
+event.eventCode = 1002;   // 业务定义：开门受阻
+event.reasonCode = 2101;  // 业务定义：电流过高
+event.objectId = 1;       // 门1
+event.value1 = 1450;      // 业务定义：峰值mA
+event.value2 = 2;         // 业务定义：重试次数
+event.flags = 0x0001;     // 业务定义
+Esp32BaseAppEvents::append(event);
 ```
-
 ## 4. Esp32BaseConfig
 
 后端：ESP32 NVS。
@@ -1171,7 +1181,7 @@ Route 缓冲机制：
 - `/esp32base/fs?manage=1` 进入单文件删除和受限上传管理模式；`POST /esp32base/fs/delete` 只接受一个已存在文件路径，复用 Basic Auth、同源检查和 `POST -> 303 -> GET`，不提供目录删除、批量删除、编辑或任意路径输入。不可读文件仍允许删除，便于清理损坏文件；删除不以文件内容可读为前提。基础库管理文件会在文件树中给出维护提醒；维护操作修改 FileLog 或 App Events store 后，应刷新对应运行态。
 - `/esp32base/fs/check?dir=/data&name=records.bin` 是上传前检查接口，复用 Basic Auth，按“已有目录 + 本地文件名”计算目标路径，返回目标是否存在、是否是目录以及是否允许上传；路径拼接如果超过内部路径上限会直接拒绝，不截断成另一个目标。
 - `POST /esp32base/fs/upload` 是 multipart 上传接口，复用 Basic Auth 和同源检查；上传保留本地文件名，可以写入任何已有目录，不创建目录。目标文件存在时必须传 `overwrite=1` 才会覆盖；覆盖上传必须避免上传中断时先清空旧文件。路径过长、缺少文件、目标非法或写入失败会返回错误，不会复用上一笔上传状态。上传只负责写入 LittleFS，不校验业务数据语义、索引、NVS 状态或运行时缓存。
-- `/esp32base/tools` System 页承载低频维护入口和操作，App Config 启用时作为首个入口显示，后面是 WiFi Setup、Web Auth、Firmware OTA、File system 直达入口、hostname 保存、Watchdog trip reset、重启设备；启用 FS 的 profile 还提供手动格式化 LittleFS 操作，会清除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth、业务 namespace 或任何 NVS 配置。格式化成功后会重新 mount FS、reload FileLog，并在 App Events 启用时重新创建 `/esp32base/app-events/events.bin`；业务如需同步清业务统计、文件索引或缓存，应注册 `setAfterFormatFsCallback()` 或订阅 `EVENT_TOOLS_FORMAT_FS_SUCCESS` 自行处理。
+- `/esp32base/tools` System 页承载低频维护入口和操作，App Config 启用时作为首个入口显示，后面是 WiFi Setup、Web Auth、Firmware OTA、File system 直达入口、hostname 保存、Watchdog trip reset、重启设备；启用 FS 的 profile 还提供手动格式化 LittleFS 操作，会清除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth、业务 namespace 或任何 NVS 配置。格式化成功后会重新 mount FS、reload FileLog，并在 App Events 启用时重新创建 `/esp32base/records/app-events.v1.bin`；业务如需重新创建或 reload 自己的 RecordStore、同步业务统计、文件索引或缓存，应注册 `setAfterFormatFsCallback()` 或订阅 `EVENT_TOOLS_FORMAT_FS_SUCCESS` 自行处理。
 - `/esp32base/auth` 是内置认证管理页面，受当前 Basic Auth 保护，提交成功后新账号密码立即生效。
 - Web Auth 认证优先级为：已保存认证 > 应用默认认证。未设置应用默认认证且没有已保存认证时，Web 服务不会启动。
 - 内置 Web 不提供首次登录强制改密；量产或可被他人访问的设备必须在业务启动时调用 `setDefaultAuth()`，或通过业务流程先保存认证。

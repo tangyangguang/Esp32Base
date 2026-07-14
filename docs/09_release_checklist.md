@@ -172,7 +172,7 @@
 - FileLog OFF 后 System Logs 页面仍能查看已有历史 segment。
 - `GET /esp32base/logs` 和 `GET /esp32base/logs/raw` 必须只读，不得主动 `flush()`、创建、清空、重建或改变 FileLog fault 状态；需要写入/清理/格式化的维护动作必须走 POST。
 - System 页格式化 LittleFS 成功后必须触发 after-format 回调/事件，结果应说明格式化、重新挂载和 FileLog reload 状态；格式化失败不得触发。
-- System 页格式化 LittleFS 成功并重新 mount 后，启用 App Events 时必须重新创建 `/esp32base/app-events/events.bin`，后续 append/read 不得沿用旧 head/count。
+- System 页格式化 LittleFS 成功并重新 mount 后，启用 App Events 时必须重新创建 `/esp32base/records/app-events.v1.bin`，后续 append/read 不得沿用格式化前的运行态。
 - `setSerialLevel(NONE)` 后 Serial 不输出，但 FileLog 仍按当前模式写入。
 - `setRuntimeLevel(NONE)` 后 Serial 和 FileLog 都停止。
 - WARN/ERROR 立即写入。
@@ -199,14 +199,15 @@
 - `writeBytesAt()` 支持已有文件固定位置覆盖，文件不存在和写越界返回失败，不隐式扩展文件；覆盖后文件大小不变且覆盖范围可读。
 - FS 已满或存在不可读文件时，Web 诊断返回错误不应触发 task WDT 重启。
 - `listDirInfo()` 返回 name、size、isDir 和 Last modified epoch；`/esp32base/fs` 文件树应展示修改时间和可读性/维护状态。Last modified 不是创建时间，时间明显不可信时应明确标识。
-- 启用 `ESP32BASE_ENABLE_APP_EVENTS=1` 时，`/esp32base/app-events/events.bin` 按配置容量创建成功；重复写入后环形覆盖，重启后仍可分页读取。
-- 已存在 `/esp32base/app-events/events.bin` 但文件尺寸不匹配或不可读时必须进入 fault，不得自动删除或重建；只有文件缺失时 `begin()` 才可创建空 store。
-- App Events 双 header 损坏进入 fault，不自动扫描或清空；单条 record CRC 错误应跳过并暴露可诊断状态，完整扫描后 `count()` 收敛到可读记录数，I/O 读取失败才使 `readLatest()` 返回 false。
-- `readLatest()`、`readStoreInfo()` 和 `readStoreRecords()` 不得从只读路径隐式调用 `begin()` 或创建 store。
-- `Esp32BaseAppEventLog::clear()` 幂等，清空后保留递增 id 并可继续写入。
-- App Events 成功 `begin/append/read/clear` 后不得保留旧 `lastError()`；损坏记录提示只在本次读取确实跳过记录时出现。
-- FS 管理页上传、覆盖或删除 App Events store 后必须重新加载 App Events 运行态；文件树应给出基础库管理文件提醒。
-- CSV 文本字段必须防护 spreadsheet formula 前缀，不能只做 CSV 引号转义。
+- 启用RecordStore时，文件名包含记录类型和版本；不同Store、不同版本互不覆盖，容量由最大文件字节数和固定负载计算。
+- 新Store必须先完成并验证 `.tmp` 文件再重命名；正式文件存在时不得用临时文件覆盖。已有正式文件尺寸、版本或负载不匹配时进入结构故障，不自动重写。
+- RecordStore双header损坏进入结构故障；单槽CRC错误跳过并进入degraded，读取绝不返回损坏数据。
+- RecordStore启动扫描和reload必须只用固定次数打开文件并批量遍历槽位，最新分页必须在单次打开中读取；不得按记录反复打开文件，千条容量的Store不能造成数十秒启动延迟。
+- `readLatest()`、`readById()`、`readStatus()`不得从只读路径隐式创建或重写Store。
+- `clear()`通过双header逻辑清空，清空后保留递增ID并可继续写入；它不是安全擦除。
+- App Events默认100KiB、单条48字节、容量2130条，并在业务Store之前创建。
+- `/esp32base/records/**`在FS管理页可查看和下载，但禁止上传覆盖和直接删除。
+- App Events HTML/API/CSV只输出有效语义字段和状态，不输出损坏槽位或内部CRC布局。
 - `/esp32base/fs?manage=1` 对 `unreadable` 文件仍必须提供单文件删除入口，但不能提供下载入口。
 - 单文件删除失败后应尝试截断为 0；如果因此释放可见文件占用，页面应区分“已清空”和“彻底失败”。
 - 清理文件后如果 FileLog 处于写入故障保护，应重新加载当前 FileLog 模式以便恢复写入。
@@ -279,6 +280,7 @@
 - `examples/web_logs_ota` 可在自身目录 `pio run`。
 - `examples/net_runtime` 可在自身目录 `pio run`。
 - `examples/app_events_demo` 可在自身目录 `pio run`，并演示 App Events 写入、分页查看、JSON/CSV 和 POST 写入。
+- `examples/record_store_demo` 至少完成 ESP32 / ESP32-S3 / ESP32-C3 和 Arduino Core 3.x 构建，并演示固定payload编码、动作开始快照、完成记录和最新优先读取。
 - `examples/rtc_time_source` 可在自身目录分别构建 DS3231 和 PCF8563 env，并清楚演示构建期二选一、I2C 初始化所有权和业务使用 `Esp32BaseTime` 的接入方式。
 - 所有启用 FS 的示例不应通过构建参数覆盖系统诊断日志默认模式；默认保持 ERROR，现场排查时再显式切到 WARN/INFO。
 

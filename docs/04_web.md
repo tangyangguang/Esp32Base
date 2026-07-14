@@ -181,8 +181,8 @@ System Logs:
 
 App Events，仅 `ESP32BASE_ENABLE_APP_EVENTS=1`：
 
-- `GET /esp32base/app-events`，独立应用业务事件页面，不混入系统诊断日志；支持 `page/per/level/time/source/type/reason/q` 筛选参数，非法筛选返回 `400 invalid_filter`。
-- `GET /esp32base/api/app-events?offset=0&limit=50`，按最新优先分页输出 JSON；支持 `level/time/source/type/reason/q` 筛选参数，事件对象同时包含 `uptimeSec` 和 64-bit 派生 `uptimeMs`，非法筛选返回 `400 {"ok":false,"error":"invalid_filter"}`。
+- `GET /esp32base/app-events`，独立应用业务事件页面，不混入系统诊断日志；支持 `page/per/level/time/eventCode/reasonCode` 筛选参数，非法筛选返回 `400 invalid_filter`。
+- `GET /esp32base/api/app-events?offset=0&limit=50`，按最新优先分页输出 JSON；支持 `level/time/eventCode/reasonCode` 筛选参数，非法筛选返回 `400 {"ok":false,"error":"invalid_filter"}`。
 - `GET /esp32base/app-events.csv`，导出当前筛选后的应用事件 CSV；非法筛选返回 `400 invalid_filter`。
 
 System:
@@ -234,9 +234,9 @@ System 维护页：
 - 启用 Watchdog 的 profile 显示 Watchdog lifetime/trip 小计维护；当 `wdt_trip_base` 大于 lifetime 时显示 `invalid baseline`，Reset Watchdog Trip 写入并回读确认 `eb_sys.wdt_trip_base` 和 `eb_sys.wdt_trip_time`，不清 `eb_sys.wdt_cnt`。
 - 启用 FS 的 profile 显示 `Format LittleFS`，该操作会删除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth、业务 namespace 或任何 NVS 配置。
 - 启用 FileLog 的 profile 显示系统诊断日志模式设置、运行态和 `Clear system logs`；模式设置只接受 OFF、ERROR、WARN、INFO，保存后立即生效并写入 `eb_log.mode`，清空日志只接受 POST，成功后回到 System 页面显示结果。运行态为 `write fault` 时表示配置模式仍开启，但 FileLog 因 FS 写入故障被运行期保护停写；已有日志仍可能可读，不应显示成 `disabled`。运行态为 `unavailable` 时表示配置模式开启但 FS/init 前置条件未满足。运行态为 `disabled` 时明确 FileLog 模式为 OFF，新日志不会写入。
-- 系统诊断日志默认文件为 `/esp32base/logs/system.log`，App Events store 默认文件为 `/esp32base/app-events/events.bin`；二者都位于 `/esp32base/**` 基础库管理命名空间。
-- 启用 App Events 的 profile 显示 `Clear App Events` 危险操作；它只清空 `/esp32base/app-events/events.bin` 应用业务事件日志，不清系统诊断日志、WiFi、Web Auth、NVS 配置或其他 LittleFS 文件。
-- 格式化 FS 是显式 POST 操作；执行前 flush 系统诊断日志，格式化成功后重新 mount FS、重新加载 FileLog 模式，并在 App Events 启用时重新创建 `/esp32base/app-events/events.bin`；成功提示应明确显示在 System 页面，同时输出 WARN 级维护日志记录请求、format/mount/FileLog reload/App Events recreate 结果。只有 `Esp32BaseFs::format()` 成功时才触发 `Esp32BaseWeb::setAfterFormatFsCallback()` 注册的回调和 `EVENT_TOOLS_FORMAT_FS_SUCCESS` 事件；格式化失败、启动挂载失败和其他 FS 维护动作不触发。回调结果包含 `source=tools`、`formatSuccess`、`mountSuccess`、`fileLogReloadSuccess`；业务如需同步清业务统计、文件索引或运行时缓存，应在该回调/事件里自行处理。重启请求同样输出 WARN 级维护日志。
+- 系统诊断日志默认文件为 `/esp32base/logs/system.log`，App Events store 默认文件为 `/esp32base/records/app-events.v1.bin`；二者都位于 `/esp32base/**` 基础库管理命名空间。
+- 启用 App Events 的 profile 显示 `Clear App Events` 危险操作；它只对 App Events store 做逻辑清空，不重写数据区，也不清系统诊断日志、WiFi、Web Auth、NVS 配置或其他 LittleFS 文件。
+- 格式化 FS 是显式 POST 操作；执行前 flush 系统诊断日志，格式化成功后重新 mount FS、重新加载 FileLog 模式，并在 App Events 启用时重新创建 `/esp32base/records/app-events.v1.bin`；成功提示应明确显示在 System 页面，同时输出 WARN 级维护日志记录请求、format/mount/FileLog reload/App Events recreate 结果。只有 `Esp32BaseFs::format()` 成功时才触发 `Esp32BaseWeb::setAfterFormatFsCallback()` 注册的回调和 `EVENT_TOOLS_FORMAT_FS_SUCCESS` 事件；格式化失败、启动挂载失败和其他 FS 维护动作不触发。回调结果包含 `source=tools`、`formatSuccess`、`mountSuccess`、`fileLogReloadSuccess`；业务如需重新创建或 reload 自己的 RecordStore、同步业务统计、文件索引或运行时缓存，应在该回调/事件里自行处理。重启请求同样输出 WARN 级维护日志。
 - 普通 `GET` 页面慢请求只输出 DEBUG；`POST` 等操作慢请求输出 INFO，默认 ERROR 系统日志不记录，现场排查时可切到 INFO 查看。
 - API 层仍建议要求 POST，不使用 GET 触发重启。
 - 内置危险 POST 包括 WiFi 保存/清除、App Config 保存、Hostname 保存、Auth 保存、重启、System 操作、System Logs clear、Web OTA upload/done；跨站 `Origin` 或 `Referer` 会被拒绝。
@@ -286,7 +286,7 @@ System Logs 页面：
 - Clear system logs POST 后通过 303 回到 System Logs 页，并在页面顶部显示成功或失败提示；刷新页面不重复提交。
 - FileLog 模式为 OFF 时，System Logs 页面仍展示已有历史日志；OFF 只表示停止后续写入。
 - `GET /esp32base/logs` 和 `GET /esp32base/logs/raw` 必须保持只读，只读取已经落盘的系统诊断日志快照，不主动 `flush()`、创建、清空或重建文件。页面会展示当前 buffer used/total，尚在缓存中的 INFO 日志可等待常规 flush interval；清空、格式化、重启等维护副作用仍必须通过 POST，不通过 GET 触发。
-- System Logs 页面只面向 Esp32Base 系统诊断日志，不读取 `Esp32BaseAppEventLog`，也不展示业务事件。页面命名面向用户，`Esp32BaseFileLog` 是底层实现/API 名称。
+- System Logs 页面只面向 Esp32Base 系统诊断日志，不读取 `Esp32BaseAppEvents`，也不展示业务事件。页面命名面向用户，`Esp32BaseFileLog` 是底层实现/API 名称。
 - 显示系统诊断日志的启用状态、路径、模式、轮转、缓冲区和容量摘要；容量值用 KB/MB/B 人性化格式展示，不重复暴露 raw bytes。
 - 页面提供 current 和历史 segment 的切换入口，并展示各 segment 的文件名和大小。
 - 默认显示 `current-0`；可通过 `?segment=N` 查看单个历史文件，非法或越界 segment 回落到 `current-0`。
@@ -299,16 +299,15 @@ System Logs 页面：
 App Events 页面：
 
 - 仅在 `ESP32BASE_ENABLE_APP_EVENTS=1` 时注册，标题和导航标签为 `App Events`，可通过 `setBuiltinLabel(BUILTIN_APP_EVENTS, "...")` 覆盖。
-- 这是应用业务事件日志的内置系统视图，用偏底层的维护视角展示事件日志内容、管理和存储状态；它不属于 System Logs，也不替业务系统解释业务语义。
-- 页面显示事件容量、文件大小、有效事件数、next id、存储路径、header 状态、筛选、CSV 导出、分页列表和事件详情。
-- 筛选条件包括等级、时间类型、来源、类型、原因和关键词；HTML、JSON API、CSV 共用同一组筛选语义。`source/type/reason` 必须符合事件 token 的字符和长度约束，避免超长参数被截断后误匹配。筛选请求不额外做独立 count 扫描，而是在输出当前页时统计匹配总数。
-- 表格展示状态、位置、时间、等级、事件、对象和详情入口。CRC 损坏、magic 异常、level 异常、未提交或空槽等只要能读出 record 字节就客观展示并标记状态；字符串字段按固定长度安全显示，不假设损坏记录带有 `\0`。
-- 详情弹层展示事件字段和必要存储诊断字段，便于维护人员判断记录是否可读、是否提交、时间是否可解析；内部字段使用弱化样式。
-- `epochSec` 可用时按本地时间显示；否则如果本次 boot 后续已由 RTC 或 NTP 建立可信真实时间，则解析并显示真实时间；仍无法解析时显示 `uptime N ms` 和 `boot N`，不伪造日期。
+- 这是App Events的数值诊断视图，不属于System Logs，也不注册业务代码到显示文字的映射。
+- 页面显示状态、容量、文件大小、有效记录数、损坏记录数、存储路径、筛选、CSV和最新优先分页。
+- 筛选条件包括等级、时间类型、`eventCode` 和 `reasonCode`；HTML、JSON API、CSV共用同一组数值筛选语义。
+- 表格展示ID、完成时间、持续时间、等级、事件码、原因码、对象ID、两个value和flags。CRC损坏或不完整记录绝不展示，只在存储状态中报告数量和错误。
+- 有可信epoch或本次boot可解析时显示真实完成时间；否则显示 `boot N uptime N s`，不伪造日期。
 - 清空事件日志是危险操作，只在 System 页面提供 `POST /esp32base/tools/app-events-clear`，必须通过 Web Auth 和同源检查，成功后 303 回到 System 页面。
-- JSON API 事件包含 `epochSec`、`resolvedEpochSec`、`bootId`、`uptimeSec` 和 64-bit 派生 `uptimeMs`；`resolvedEpochSec=0` 表示没有可信真实时间。
-- JSON API 继续只输出有效事件，适合业务系统创建自己的业务事件列表和详情页；业务页面应使用业务语言解释事件，只展示业务需要的字段，不展示 `magic/crc16/reserved/valueMask/flags` 等内部字段。
-- JSON API 和 HTML 页面都必须使用统一 JSON/HTML escape；CSV 导出使用 CSV escape 和 spreadsheet formula 前缀防护，保留当前筛选条件，并包含 slot/status/crc 等存储字段。CSV 读取失败时必须在输出中追加可见错误行，避免客户端误以为 200 响应是完整导出。
+- JSON事件包含通用记录时间、`eventCode/reasonCode/objectId/value1/value2/flags/level`，并给出可解析的开始和完成epoch；0表示无法解析。
+- JSON API只输出CRC有效的事件。业务页面负责把数字代码和flags映射为业务语言。
+- CSV导出同样只包含有效语义字段，不输出slot、magic、CRC或commit等内部布局。
 - 该页面明确和 `/esp32base/logs` 分离：`/esp32base/logs` 是 System Logs，展示 `Esp32BaseFileLog` 系统诊断日志，记录启动、联网、OTA、基础库运行等系统信息；`/esp32base/app-events` 是应用业务事件日志，记录应用显式写入的业务事件。
 - 应用页面不应把 boot/reset、WiFi、NTP、OTA、LittleFS、FileLog fault 或基础库健康状态重复写入 App Events；这些系统诊断信息继续由 Status、System diagnostics 和 FileLog 展示。同一故障如果同时影响业务，App Events 应只表达业务影响、保护动作、跳过原因、用户维护结果或外部决策结果。App Events 页面只用于查看应用因业务原因写入的事件。
 
