@@ -145,6 +145,107 @@ void sendEventJson(const Esp32BaseAppEvents::EventRecord& event) {
     sendChunk("}");
 }
 
+void sendDetailRowText(const char* label, const char* value, const char* help = nullptr) {
+    sendChunk("<div><b>");
+    sendEscapedHtmlChunk(label);
+    sendChunk("</b><code>");
+    sendEscapedHtmlChunk(value && value[0] ? value : "-");
+    sendChunk("</code>");
+    if (help && help[0]) {
+        sendChunk("<small>");
+        sendEscapedHtmlChunk(help);
+        sendChunk("</small>");
+    }
+    sendChunk("</div>");
+}
+
+void sendDetailRowUint(const char* label, uint32_t value, const char* help = nullptr) {
+    char text[16];
+    snprintf(text, sizeof(text), "%lu", static_cast<unsigned long>(value));
+    sendDetailRowText(label, text, help);
+}
+
+void sendDetailRowInt(const char* label, int32_t value, const char* help = nullptr) {
+    char text[16];
+    snprintf(text, sizeof(text), "%ld", static_cast<long>(value));
+    sendDetailRowText(label, text, help);
+}
+
+void sendDetailGroupStart(const char* title, const char* help) {
+    sendChunk("<section class='appevdetailgroup'><h3>");
+    sendEscapedHtmlChunk(title);
+    sendChunk("</h3>");
+    if (help && help[0]) {
+        sendChunk("<p>");
+        sendEscapedHtmlChunk(help);
+        sendChunk("</p>");
+    }
+    sendChunk("<div class='appevdetailgrid'>");
+}
+
+void sendDetailGroupEnd() {
+    sendChunk("</div></section>");
+}
+
+void formatStartedTime(const Esp32BaseAppEvents::EventRecord& event, char* out, size_t length) {
+    const uint32_t epoch = resolvedStartedEpoch(event);
+    if (epoch != 0 && Esp32BaseTime::formatEpoch(epoch, out, length, "%Y-%m-%d %H:%M:%S")) return;
+    if (event.timing.durationSec <= event.timing.completedUptimeSec) {
+        snprintf(out, length, "boot %lu uptime %lu s",
+                 static_cast<unsigned long>(event.timing.completedBootId),
+                 static_cast<unsigned long>(event.timing.completedUptimeSec - event.timing.durationSec));
+        return;
+    }
+    snprintf(out, length, "unavailable");
+}
+
+void sendAppEventDetailDialog(const Esp32BaseAppEvents::EventRecord& event, const char* dialogId) {
+    char completed[48];
+    char started[48];
+    char flagsHex[12];
+    formatAppEventTime(event, completed, sizeof(completed));
+    formatStartedTime(event, started, sizeof(started));
+    snprintf(flagsHex, sizeof(flagsHex), "0x%04x", static_cast<unsigned>(event.flags));
+
+    sendChunk("<dialog id='");
+    sendEscapedHtmlChunk(dialogId);
+    sendChunk("' class='panel eb-modal appevdialog' data-eb-light-dismiss='1'><h2>App Event #");
+    sendUintChunk(event.recordId);
+    sendChunk("</h2>");
+
+    sendDetailGroupStart("Identity & level", "Record identity and the generic event severity stored by Esp32Base.");
+    sendDetailRowUint("recordId", event.recordId, "Monotonic ID within this App Events store version.");
+    sendDetailRowText("levelName", Esp32BaseAppEvents::levelName(event.level));
+    sendDetailRowUint("level", static_cast<uint16_t>(event.level));
+    sendDetailGroupEnd();
+
+    sendDetailGroupStart("Timing", "Completion metadata supplied by Record Store. Started time is derived from completion and duration.");
+    sendDetailRowText("completed", completed);
+    sendDetailRowText("started", started);
+    sendDetailRowUint("completedEpochSec", event.timing.completedEpochSec, "0 means no trusted epoch was available when written.");
+    sendDetailRowUint("resolvedCompletedEpochSec", resolvedCompletedEpoch(event));
+    sendDetailRowUint("resolvedStartedEpochSec", resolvedStartedEpoch(event));
+    sendDetailRowUint("completedBootId", event.timing.completedBootId);
+    sendDetailRowUint("completedUptimeSec", event.timing.completedUptimeSec);
+    sendDetailRowUint("durationSec", event.timing.durationSec);
+    sendDetailGroupEnd();
+
+    sendDetailGroupStart("Event fields", "Application-defined numeric fields. Esp32Base stores them without interpreting business meaning.");
+    sendDetailRowUint("eventCode", event.eventCode);
+    sendDetailRowUint("reasonCode", event.reasonCode);
+    sendDetailRowUint("objectId", event.objectId);
+    sendDetailGroupEnd();
+
+    sendDetailGroupStart("Values & flags", "Application-defined numeric values and bit flags.");
+    sendDetailRowInt("value1", event.value1);
+    sendDetailRowInt("value2", event.value2);
+    sendDetailRowUint("flags", event.flags);
+    sendDetailRowText("flagsHex", flagsHex);
+    sendDetailGroupEnd();
+
+    sendChunk("<form method='dialog' class='actions'><button class='secondary'>Close</button></form></dialog>");
+}
+
 void sendHtmlEvent(const Esp32BaseAppEvents::EventRecord& event, void* user) {
     AppEventOutputState* state = static_cast<AppEventOutputState*>(user);
     if (!state || !appEventMatches(event, *state->filter)) return;
@@ -153,16 +254,26 @@ void sendHtmlEvent(const Esp32BaseAppEvents::EventRecord& event, void* user) {
     ++state->emitted;
     char time[48];
     formatAppEventTime(event, time, sizeof(time));
-    sendChunk("<tr><td>"); sendUintChunk(event.recordId);
-    sendChunk("</td><td>"); sendEscapedHtmlChunk(time);
-    sendChunk("</td><td>"); sendUintChunk(event.timing.durationSec); sendChunk(" s</td><td>");
+    sendChunk("<tr><td class='appevid'>"); sendUintChunk(event.recordId);
+    sendChunk("</td><td class='appevtime'><span>"); sendEscapedHtmlChunk(time);
+    sendChunk("</span><small>boot "); sendUintChunk(event.timing.completedBootId);
+    sendChunk(" / uptime "); sendUintChunk(event.timing.completedUptimeSec);
+    sendChunk(" s / duration "); sendUintChunk(event.timing.durationSec); sendChunk(" s</small></td><td>");
     sendStatusTag(appEventTone(event.level), Esp32BaseAppEvents::levelName(event.level));
-    sendChunk("</td><td>"); sendUintChunk(event.eventCode);
-    sendChunk("</td><td>"); sendUintChunk(event.reasonCode);
-    sendChunk("</td><td>"); sendUintChunk(event.objectId);
-    sendChunk("</td><td>"); sendIntChunk(event.value1);
-    sendChunk("</td><td>"); sendIntChunk(event.value2);
-    sendChunk("</td><td>"); sendUintChunk(event.flags);
+    sendChunk("</td><td><span class='appevmain'>Event "); sendUintChunk(event.eventCode);
+    sendChunk("</span><small class='appevsub'>Reason "); sendUintChunk(event.reasonCode);
+    sendChunk("</small></td><td class='appevobject'>"); sendUintChunk(event.objectId);
+    sendChunk("</td><td class='appevvalues'><div class='appevchips'><span class='appevchip'>v1 ");
+    sendIntChunk(event.value1);
+    sendChunk("</span><span class='appevchip'>v2 "); sendIntChunk(event.value2);
+    sendChunk("</span><span class='appevchip'>flags "); sendUintChunk(event.flags);
+    sendChunk("</span></div></td><td>");
+    char dialogId[24];
+    snprintf(dialogId, sizeof(dialogId), "appev-%lu", static_cast<unsigned long>(event.recordId));
+    sendChunk("<button type='button' class='btnlink compact' onclick=\"document.getElementById('");
+    sendEscapedHtmlChunk(dialogId);
+    sendChunk("').showModal()\">Details</button>");
+    sendAppEventDetailDialog(event, dialogId);
     sendChunk("</td></tr>");
 }
 
@@ -204,41 +315,66 @@ void sendInvalidFilter(bool json) {
 }
 
 void sendFilterPanel(const AppEventFilter& filter, uint32_t per) {
-    sendChunk("<section class='panel formpanel'><h2>Filter &amp; Export</h2><form method='get' action='/esp32base/app-events' class='editform'>");
-    sendChunk("<input type='hidden' name='per' value='"); sendUintChunk(per); sendChunk("'><div class='fieldgrid'>");
-    sendChunk("<label>Level<select name='level'><option value=''>All</option>");
+    sendChunk("<section class='panel formpanel appevfilters'><h2>Filter &amp; Export</h2><form method='get' action='/esp32base/app-events' class='editform'>");
+    sendChunk("<input type='hidden' name='per' value='"); sendUintChunk(per); sendChunk("'><div class='fieldgrid appevfiltergrid'>");
+    sendChunk("<div class='field'><label for='appev-level'>Level</label><select id='appev-level' name='level'><option value=''>All</option>");
     const char* levels[] = {"info", "warning", "error"};
     for (size_t i = 0; i < 3; ++i) {
         sendChunk("<option value='"); sendChunk(levels[i]); sendChunk("'");
         if ((filter.level == 1 && i == 0) || (filter.level == 2 && i == 1) || (filter.level == 3 && i == 2)) sendChunk(" selected");
         sendChunk(">"); sendChunk(levels[i]); sendChunk("</option>");
     }
-    sendChunk("</select></label><label>Time<select name='time'><option value=''>All</option><option value='real'");
+    sendChunk("</select></div><div class='field'><label for='appev-time'>Time</label><select id='appev-time' name='time'><option value=''>All</option><option value='real'");
     if (filter.time == APP_EVENT_TIME_REAL) sendChunk(" selected");
     sendChunk(">Real time</option><option value='uptime'");
     if (filter.time == APP_EVENT_TIME_UPTIME) sendChunk(" selected");
-    sendChunk(">Uptime</option></select></label><label>Event code<input name='eventCode' inputmode='numeric' value='");
+    sendChunk(">Uptime</option></select></div><div class='field'><label for='appev-event-code'>Event code</label><input id='appev-event-code' name='eventCode' inputmode='numeric' value='");
     if (filter.hasEventCode) sendUintChunk(filter.eventCode);
-    sendChunk("'></label><label>Reason code<input name='reasonCode' inputmode='numeric' value='");
+    sendChunk("'></div><div class='field'><label for='appev-reason-code'>Reason code</label><input id='appev-reason-code' name='reasonCode' inputmode='numeric' value='");
     if (filter.hasReasonCode) sendUintChunk(filter.reasonCode);
-    sendChunk("'></label></div><div class='actions'><input type='submit' value='Apply'><a class='btnlink secondary' href='/esp32base/app-events'>Reset</a><a class='btnlink' href='/esp32base/app-events.csv");
+    sendChunk("'></div></div><div class='actions appevactions'><input type='submit' value='Apply'><a class='btnlink secondary' href='/esp32base/app-events'>Reset</a><a class='btnlink' href='/esp32base/app-events.csv");
     if (filter.query[0]) { sendChunk("?"); sendEscapedHtmlChunk(filter.query); }
     sendChunk("'>Export CSV</a></div></form></section>");
 }
 
 void sendStoreSummary(const Esp32BaseAppEvents::EventStoreStatus& status) {
-    char value[48];
-    sendChunk("<section class='panel'><h2>Storage</h2><div class='infotable'>");
+    char value[64];
+    char capacity[24];
+    char damaged[24];
+    char currentSize[24];
+    char maximumSize[24];
+    char storeSize[64];
+    snprintf(value, sizeof(value), "%lu", static_cast<unsigned long>(status.storage.recordCount));
+    snprintf(capacity, sizeof(capacity), "%lu", static_cast<unsigned long>(status.storage.capacity));
+    snprintf(damaged, sizeof(damaged), "%lu", static_cast<unsigned long>(status.storage.damagedRecordCount));
+    formatReadableBytes(status.storage.currentStoreBytes, currentSize, sizeof(currentSize));
+    formatReadableBytes(status.storage.maximumStoreBytes, maximumSize, sizeof(maximumSize));
+    snprintf(storeSize, sizeof(storeSize), "%s / %s", currentSize, maximumSize);
+    Esp32BaseWeb::beginMetricGrid();
+    Esp32BaseWeb::sendMetric("Records", value, "Valid records currently retained.");
+    Esp32BaseWeb::sendMetric("Capacity", capacity, "Estimated peak capacity before segment rotation.");
+    Esp32BaseWeb::sendMetric("Store", storeSize, "Current logical size and configured budget.");
+    Esp32BaseWeb::sendMetric("Damaged", damaged, "Corrupt or incomplete records skipped during reads.");
+    Esp32BaseWeb::endMetricGrid();
+
+    sendChunk("<section class='panel appestore'><h2>Storage</h2><div class='tablewrap'><table class='kv'>");
     sendTaggedInfoRow("State", Esp32BaseRecordStore::storeStateName(status.storage.state),
                       status.storage.state == Esp32BaseRecordStore::StoreState::Ready ? Esp32BaseWeb::UI_OK :
                       (status.storage.state == Esp32BaseRecordStore::StoreState::Degraded ? Esp32BaseWeb::UI_WARN : Esp32BaseWeb::UI_DANGER));
-    snprintf(value, sizeof(value), "%lu / %lu", static_cast<unsigned long>(status.storage.recordCount), static_cast<unsigned long>(status.storage.capacity));
-    sendInfoRow("Records", value);
-    snprintf(value, sizeof(value), "%lu", static_cast<unsigned long>(status.storage.damagedRecordCount)); sendInfoRow("Damaged", value);
-    formatReadableBytes(status.storage.currentStoreBytes, value, sizeof(value)); sendInfoRow("Store size", value);
     sendInfoRow("Path", status.storage.path ? status.storage.path : "-");
+    snprintf(value, sizeof(value), "%lu", static_cast<unsigned long>(status.storage.segmentCount));
+    sendInfoRow("Segments", value);
+    formatReadableBytes(status.storage.segmentFileLimitBytes, value, sizeof(value));
+    sendInfoRow("Segment limit", value);
+    snprintf(value, sizeof(value), "%lu B", static_cast<unsigned long>(status.storage.slotSizeBytes));
+    sendInfoRow("Record size", value);
+    snprintf(value, sizeof(value), "%lu / %lu / %lu",
+             static_cast<unsigned long>(status.storage.oldestRecordId),
+             static_cast<unsigned long>(status.storage.newestRecordId),
+             static_cast<unsigned long>(status.storage.nextRecordId));
+    sendInfoRow("Oldest / newest / next ID", value);
     sendInfoRow("Last error", status.storage.errorReason ? status.storage.errorReason : "none");
-    sendChunk("</div></section>");
+    sendChunk("</table></div></section>");
 }
 
 } // namespace
@@ -254,19 +390,20 @@ void handleAppEventsPage() {
     Esp32BaseAppEvents::readStatus(status);
 
     Esp32BaseWeb::sendHeader(g_builtinLabels[Esp32BaseWeb::BUILTIN_APP_EVENTS]);
-    Esp32BaseWeb::sendPageTitle(g_builtinLabels[Esp32BaseWeb::BUILTIN_APP_EVENTS], "Compact application event records.");
+    Esp32BaseWeb::sendPageTitle(g_builtinLabels[Esp32BaseWeb::BUILTIN_APP_EVENTS], "Numeric application events stored by Esp32Base.");
     if (!status.storage.ready) Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_DANGER, "App Events unavailable", status.storage.errorReason);
     else if (status.storage.state == Esp32BaseRecordStore::StoreState::Degraded) Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_WARN, "App Events degraded", "Damaged records are skipped.");
     sendStoreSummary(status);
     sendFilterPanel(filter, per);
-    sendChunk("<section class='panel'><h2>Events</h2><div class='tablewrap'><table><tr><th>ID</th><th>Completed</th><th>Duration</th><th>Level</th><th>Event code</th><th>Reason code</th><th>Object ID</th><th>Value 1</th><th>Value 2</th><th>Flags</th></tr>");
+    sendChunk("<section class='panel'><h2>Events</h2><div class='tablewrap'><table class='appevtable'><tr><th>ID</th><th>Completed</th><th>Level</th><th>Event</th><th>Object ID</th><th>Values</th><th>Action</th></tr>");
     AppEventOutputState output = {&filter, (page - 1U) * per, per, 0, 0, true};
     const bool readOk = Esp32BaseAppEvents::readLatest(0, status.storage.recordCount, sendHtmlEvent, &output);
-    if (!readOk) sendChunk("<tr><td colspan='10'>Read failed</td></tr>");
-    else if (output.emitted == 0) sendChunk("<tr><td colspan='10'>No App Events</td></tr>");
-    sendChunk("</table></div></section>");
+    if (!readOk) sendChunk("<tr><td colspan='7'>Read failed</td></tr>");
+    else if (output.emitted == 0) sendChunk("<tr><td colspan='7'>No App Events</td></tr>");
+    sendChunk("</table></div>");
     Esp32BaseWeb::Pagination pagination = {"/esp32base/app-events", filter.query, page, per, output.matched};
     Esp32BaseWeb::sendPagination(pagination);
+    sendChunk("</section>");
     Esp32BaseWeb::sendFooter();
 }
 

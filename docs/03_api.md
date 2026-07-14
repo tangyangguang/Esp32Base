@@ -378,7 +378,7 @@ System Logs、App Events和完整业务记录的边界：
 | `Esp32BaseAppEvents` | 开门受阻、喂食因缺料跳过、浇水因缺水停止等低频业务决策和影响 |
 | `Esp32BaseRecordStore` | 完整开关门、喂食、浇水历史事实 |
 
-内置HTML、JSON和CSV只输出CRC有效事件，支持最新优先分页以及level、真实/相对时间、eventCode和reasonCode筛选。页面显示数字字段，不替业务映射中文说明；损坏记录只在Store状态中计数，不作为事件返回。
+内置HTML、JSON和CSV只输出CRC有效事件，支持最新优先分页以及level、真实/相对时间、eventCode和reasonCode筛选。内置HTML列表按行提供详情弹层，分组展示该事件的全部公开通用时间元数据和数值字段；页面不替业务映射中文说明，也不暴露CRC、slot等内部存储布局。损坏记录只在Store状态中计数，不作为事件返回。
 
 示例：
 

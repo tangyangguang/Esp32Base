@@ -300,9 +300,9 @@ App Events 页面：
 
 - 仅在 `ESP32BASE_ENABLE_APP_EVENTS=1` 时注册，标题和导航标签为 `App Events`，可通过 `setBuiltinLabel(BUILTIN_APP_EVENTS, "...")` 覆盖。
 - 这是App Events的数值诊断视图，不属于System Logs，也不注册业务代码到显示文字的映射。
-- 页面显示状态、容量、文件大小、有效记录数、损坏记录数、存储路径、筛选、CSV和最新优先分页。
+- 页面以分区清楚的状态摘要、筛选区和最新优先分页列表展示容量、文件大小、有效记录数、损坏记录数、存储路径和事件内容，并提供CSV导出。
 - 筛选条件包括等级、时间类型、`eventCode` 和 `reasonCode`；HTML、JSON API、CSV共用同一组数值筛选语义。
-- 表格展示ID、完成时间、持续时间、等级、事件码、原因码、对象ID、两个value和flags。CRC损坏或不完整记录绝不展示，只在存储状态中报告数量和错误。
+- 列表紧凑展示ID、完成时间及相对时间、等级、事件码、原因码、对象ID、两个value和flags；每条事件提供详情入口，按Identity & level、Timing、Event fields、Values & flags分组展示全部公开字段。CRC损坏或不完整记录绝不展示，只在存储状态中报告数量和错误；CRC、slot、magic和commit等内部存储字段不属于事件详情。
 - 有可信epoch或本次boot可解析时显示真实完成时间；否则显示 `boot N uptime N s`，不伪造日期。
 - 清空事件日志是危险操作，只在 System 页面提供 `POST /esp32base/tools/app-events-clear`，必须通过 Web Auth 和同源检查，成功后 303 回到 System 页面。
 - JSON事件包含通用记录时间、`eventCode/reasonCode/objectId/value1/value2/flags/level`，并给出可解析的开始和完成epoch；0表示无法解析。

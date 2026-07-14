@@ -4,7 +4,7 @@ This sample enables `ESP32BASE_ENABLE_APP_EVENTS=1` on `ESP32BASE_PROFILE_FULL`.
 
 It writes compact door-opening, feeding and watering events during boot, then exposes:
 
-- `/esp32base/app-events` for the built-in numeric App Events diagnostic page
+- `/esp32base/app-events` for the built-in numeric App Events diagnostic page, including latest-first pagination and a complete per-event detail dialog
 - `/esp32base/app-events?level=warning&time=real` for common UI filters
 - `/esp32base/api/app-events?offset=0&limit=50&eventCode=1001` for filtered paged JSON
 - `/esp32base/app-events.csv?reasonCode=2101` for filtered CSV export

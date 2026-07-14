@@ -207,7 +207,7 @@
 - `clear()`通过双控制头提交逻辑可见边界，再尽力删除旧段；清空后保留递增ID并可继续写入，它不是安全擦除。
 - App Events默认100KiB、单条48字节、估算容量2113条、实际按段保留约2029～2113条，并在业务Store之前创建。
 - `/esp32base/records/**`在FS管理页可查看和下载，但禁止上传覆盖和直接删除。
-- App Events HTML/API/CSV只输出有效语义字段和状态，不输出损坏槽位或内部CRC布局。
+- App Events HTML/API/CSV只输出有效语义字段和状态，不输出损坏槽位或内部CRC布局；HTML页面必须保持结构清楚的状态摘要、筛选、最新优先分页列表，以及每条记录可打开并覆盖全部公开字段的详情视图。
 - `/esp32base/fs?manage=1` 对 `unreadable` 文件仍必须提供单文件删除入口，但不能提供下载入口。
 - 单文件删除失败后应尝试截断为 0；如果因此释放可见文件占用，页面应区分“已清空”和“彻底失败”。
 - 清理文件后如果 FileLog 处于写入故障保护，应重新加载当前 FileLog 模式以便恢复写入。
@@ -249,7 +249,7 @@
 - Tools 维护页中的重启和格式化 FS 按钮都有二次确认。
 - Tools 维护页可保存 hostname，显示当前值、默认值、已保存值和重启需求；保存后不热切换当前运行时 hostname。
 - 启用 `ESP32BASE_ENABLE_APP_CONFIG` 后，System 页显示 App Config 入口，`/esp32base/app-config` 可按 group 展示业务参数。
-- 启用 `ESP32BASE_ENABLE_APP_EVENTS` 后，系统导航显示 App Events 入口，`/esp32base/app-events`、`/esp32base/api/app-events`、`/esp32base/app-events.csv` 可用。
+- 启用 `ESP32BASE_ENABLE_APP_EVENTS` 后，系统导航显示 App Events 入口，`/esp32base/app-events`、`/esp32base/api/app-events`、`/esp32base/app-events.csv` 可用；内置页面的状态、筛选、分页列表和逐条详情在桌面及窄屏下均不得挤压、重叠或丢失字段。
 - `POST /esp32base/tools/app-events-clear` 必须需要 Basic Auth、POST 和同源检查；GET 不得清空，App Events 页面不得保留清空入口。
 - 业务 `METHOD_ANY` 危险 handler 调用 `Esp32BaseWeb::checkPostAllowed(context)` 时，GET 必须返回 405 且不执行副作用。
 - `/esp32base/logs` 不包含 App Events，仍只展示 FileLog 系统日志。
