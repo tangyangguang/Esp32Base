@@ -318,9 +318,9 @@ ID和轮换：
 - `StoreStatus` 返回状态、错误、记录数、估算容量、损坏数、最早/最新/下一个ID、槽位大小、段数、段上限、当前/最大逻辑存储字节以及LittleFS总量/使用量/剩余量。
 - `clear()` 先通过双控制头提交新的可见边界，再尽力删除旧段；删除失败也不会让旧记录重新可见。它不是安全擦除，调用方必须先取得用户明确确认。
 
-RecordStore对象可全局定义，但构造函数不访问FS、不注册全局表；业务必须在 `Esp32Base::begin()` 成功后调用各实例的 `begin()`。同一路径只能有一个活动实例。API不提供mutex，其他FreeRTOS任务必须通过业务队列回到同一system/loop任务。读取回调中的payload只在本次回调期间有效，且不得重入同一Store。
+RecordStore构造函数不访问FS，也不会自动登记到Web。业务在 `Esp32Base::begin()` 成功后调用各实例的 `begin()`；同一路径只能有一个活动实例。API不提供mutex，同一Store的begin/reload/append/read/clear必须由业务串行调用，最简单的做法是集中在同一loop/system task；业务也可以使用自己的等效串行化机制。读取回调中的payload只在本次回调期间有效，且不得在回调中重入同一Store。
 
-启用 Web 时，当前版本业务 Store 应在每次 `begin()` 调用完成后登记到 System 工具页。即使 `begin()` 因已有 Store 损坏而返回失败，只要定义已经建立，登记仍可成功并在 System 页展示故障；必须分别检查两个返回值：
+启用Web并希望由基础库System页统一展示、清空和格式化后恢复业务记录时，每个当前版本Store只需在首次 `begin()` 调用完成后登记一次。重复登记同一对象是幂等的。即使 `begin()` 因已有Store损坏而返回失败，只要定义已经建立，登记仍可成功并展示故障；无效定义会使两者都失败。应用应分别检查两个返回值：
 
 ```cpp
 const bool storeReady = wateringRecords.begin(wateringDefinition);
@@ -334,9 +334,9 @@ if (!storeReady) {
 }
 ```
 
-登记只保存对象指针，因此对象必须具有全局或等同于设备运行期的生命周期。业务只登记当前实际使用的版本；未登记历史版本不属于 `Clear Business Records`，其删除属于独立文件维护流程，不由本 API 处理。清空前基础库预检全部已登记 Store；任一 Store 未初始化或结构故障时一个都不清。执行中发生 I/O 失败时停止后续 Store 并报告已完成数量。成功清空直接更新原 Store 对象的可见边界、计数、状态和 `nextRecordId`，业务不应销毁、重新 `begin()` 或重置 ID，可继续使用同一对象追加和分页读取。Web 清空运行在基础库的 loop/system task；业务不得从其他 FreeRTOS task 并发调用 append/read/clear，仍应通过队列回到同一任务。App Events 使用独立入口，不进入业务 Store 登记表。
+登记只保存对象指针且当前不提供反登记，因此对象从登记成功起必须持续有效到设备重启；全局对象、静态对象或由应用长期持有的成员对象都可以，不要求采用某一种代码组织方式。只登记当前实际使用的版本；未登记历史版本不属于 `Clear Business Records`。清空前基础库预检全部已登记Store；任一Store未初始化或结构故障时一个都不清。执行中发生I/O失败时停止后续Store并报告已完成数量，不能承诺多个独立文件之间的事务原子性。成功清空会直接更新原对象的可见边界、计数、状态和 `nextRecordId`，应用继续使用该对象即可，无需重新 `begin()`，也不得自行把ID重置为1。App Events使用独立入口，不进入业务Store登记表。
 
-`appendCompleted()` 是同步持久化操作：返回成功前会顺序追加当前段、执行LittleFS flush并做写后验证；正常追加不写控制头。具体耗时取决于芯片、Arduino Core、LittleFS分区和段大小；不得从ISR、timer callback或实时控制任务直接调用，应把已完成的浇水、开关门、喂食记录投递到同一system/loop任务保存。不能为了缩短返回时间跳过flush，否则“返回成功”不再代表记录已经提交到Flash。
+`appendCompleted()` 是同步持久化操作：返回成功前会顺序追加当前段、执行LittleFS flush并做写后验证；正常追加不写控制头。具体耗时取决于芯片、Arduino Core、LittleFS分区和段大小；不得从ISR或timer callback调用，也不适合阻塞实时控制任务。通常把已完成的浇水、开关门、喂食记录投递到负责串行存储的任务；如果应用本身就在非实时loop中运行，也可以直接调用。不能为了缩短返回时间跳过flush，否则“返回成功”不再代表记录已经提交到Flash。
 
 业务负责固定payload的编码、解码、字段版本、业务校验和显示。不得直接持久化含指针、`String`、编译器padding或平台相关布局的C++对象。六区域浇水详情应按区域1到区域6的固定位置连续编码；位置已经表达区域编号时不重复保存编号。
 
@@ -1189,7 +1189,7 @@ Route 缓冲机制：
 - title 最大可见长度为 23 字节；空 title 返回 false。
 - `addRoute()` 和 `addApi()` 不进入业务入口列表，避免 API 或隐藏路由污染导航。
 - `addStaticAsset()` 注册业务 CSS/JS/图片等固件内固定资源，使用独立固定容量表，不消耗应用 route 表；path 必须以 `/` 开头且最大可见长度为 47 字节，不能位于 `/esp32base/**` 内置命名空间，content type 最大 63 字节，data 指针和 content type 字符串必须在固件生命周期内有效。默认 `authRequired=true`，响应包含固定 `Content-Length`、`X-Content-Type-Options: nosniff` 和 `Cache-Control`；受保护资源使用 `private, max-age=...`，公开资源使用 `public, max-age=...`，`cacheMaxAgeSec=0` 时发送 `no-store`。业务静态资源应优先用该 API 注册，不应绕开 Esp32Base WebServer。
-- `registerBusinessRecordStore(store)` 仅在 RecordStore 启用时有效。业务应在该 Store 的 `begin()` 调用完成后登记当前版本实例，并检查登记返回值；基础库最多保存 8 个生命周期覆盖设备运行期的实例指针，重复登记同一对象幂等，不同对象登记同一路径会被拒绝。System 页只管理这些已登记实例，不扫描目录，不登记 App Events，也不处理未登记历史版本。登记成功后基础库统一提供状态展示、全量逻辑清空，并在 System 页格式化 LittleFS 后自动 `reload()` 当前 Store。
+- `registerBusinessRecordStore(store)` 仅在RecordStore启用时有效，用于把当前版本Store交给基础库System页管理。首次 `begin()` 完成后登记一次并检查返回值即可；最多登记8个对象，重复登记同一对象幂等，不同对象登记同一路径会被拒绝。登记表只保存指针且不提供反登记，因此对象在登记后必须持续有效到设备重启。System页不扫描目录、不登记App Events，也不处理未登记历史版本；它统一提供状态展示、全量逻辑清空，并在System页格式化LittleFS后自动 `reload()` 已登记Store。
 - `setDeviceName()` 设置导航品牌和默认标题；`setHomePath()` 设置业务首页路径。
 - `setHomeMode(HOME_ESP32BASE)` 保持基础库首页默认行为，`/` 跳转 `/esp32base`；`HOME_APP` 和 `HOME_COMBINED` 让 `/` 进入业务首页，并保留 `/esp32base` 系统入口。未显式 `setHomePath()` 时优先使用已注册的 `/index` 业务页作为首页；显式 `setHomePath("/")` 且注册 GET `/` 业务页时，裸 `/` 直接调用业务 handler，不产生自跳转。
 - `setSystemNavMode()` 控制系统入口位置：顶部、底部或底部紧凑系统工具区；默认使用 `SYSTEM_NAV_SECTION`，把 Status、System Logs、System 作为小字链接与 `Free heap`、`Up`、`RSSI` 放在同一 footer 区域，窄屏可自然换行；启用 App Config 或 App Events 时系统入口同时显示对应直达链接。System Logs 是 `/esp32base/logs` 的默认用户标签，底层枚举仍是 `BUILTIN_LOGS`。

@@ -16,9 +16,10 @@ Record Store 是固定长度、仅追加、按段淘汰的业务历史容器，�
 业务项目负责：
 
 - 字段、定宽小端编码、解码、业务校验、版本含义、代码到文字的映射。
-- 列表、详情、CSV、筛选和清空确认页面。
+- 列表、详情、筛选，以及确有需要时的业务CSV导出。
 - 根据分区和保留需求一次性确定每个 Store 的 `maximumStoreBytes`。
-- 把同步存储请求从实时任务投递到同一 loop/system task。
+- 串行调用同一Store；通常把实时任务产生的记录投递给loop/system task保存。
+- 启用Web时登记当前Store，由基础库System页统一提供清空确认和执行入口。
 
 一个 Store 只接受一种固定 payload 长度。浇水记录和喂食记录的字段或长度不同，就创建两个独立实例，各有自己的类型名、版本、预算、ID 序列和目录。六个区域的浇水详情应在 payload 中按区域 1 到区域 6 的固定位置连续编码；未启用区域写约定的空值，不需要嵌套对象格式、字段名或可变长度编码。
 
@@ -93,9 +94,54 @@ Record Store 是固定长度、仅追加、按段淘汰的业务历史容器，�
 
 业务规划步骤：先设计最紧凑的固定 payload，再用 `payload + 24` 得到单条槽位，按希望保留的记录数估算数据量，加上每段 32 字节和控制文件 128 字节，最后结合 FileLog、App Events、其他业务 Store、OTA 后临时需求和 LittleFS 安全余量确定预算。它是设计阶段的人为决策，不是运行时“按条数申请”的 API。
 
-启用 Web 的项目应在当前版本 Store 调用 `begin()` 后，再调用 `Esp32BaseWeb::registerBusinessRecordStore(store)` 并检查两个返回值。System 页只管理已登记对象：显示状态和记录数，统一提供 `Clear Business Records`，并在 System 格式化 LittleFS 后自动 `reload()`。登记不扫描目录，因此不会把 App Events 或未登记历史版本误纳入；Store 对象必须在整个设备运行期持续有效。基础库不提供业务记录CSV或通用下载，因为它不理解不透明payload的字段、单位和版本语义；业务如需要可读导出仍自行实现。
+### 5.1 Web项目的最小接入
 
-统一清空先预检全部已登记 Store。任一 Store 未初始化或结构故障时不修改任何 Store；执行过程中发生 I/O 失败时停止后续清空并报告部分完成。成功清空沿用 `clear()` 的控制头提交语义，原对象立即反映0条记录并保留递增ID，可继续追加，不需要重新 `begin()`。删除旧段失败时历史记录仍不可见，但状态会保留 `CleanupFailed/Degraded` 供 System 页和业务诊断。
+希望使用基础库System页统一管理业务记录时，每个当前版本Store只需要完成初始化和登记：
+
+- 构建时启用 `ESP32BASE_ENABLE_RECORD_STORE=1` 和Web能力。
+- 无Web的项目不调用登记API；它仍可使用RecordStore，但调用 `clear()` 前要由自己的维护流程取得用户明确确认。
+- App Events由基础库单独管理，历史版本不登记。
+
+```cpp
+Esp32BaseRecordStore wateringRecords;  // 全局、static或应用长期成员均可
+
+void beginWateringRecords() {
+    const bool ready = wateringRecords.begin(wateringRecordDefinition);
+    const bool registered =
+        Esp32BaseWeb::registerBusinessRecordStore(wateringRecords);
+
+    if (!ready) {
+        ESP32BASE_LOG_E("watering", "record_store_begin_failed error=%s",
+                        wateringRecords.lastErrorReason());
+    }
+    if (!registered) {
+        ESP32BASE_LOG_E("watering", "record_store_web_registration_failed");
+    }
+}
+```
+
+调用顺序只有三个要求：先成功初始化 `Esp32Base`，再调用Store的 `begin()`，最后登记该Store。首次启动流程登记一次即可；同一对象重复登记不会增加条目。登记保存的是对象指针且当前没有反登记API，所以对象在登记后必须持续有效到设备重启，但不要求一定写成全局变量。
+
+有多种业务记录时分别初始化和登记，例如浇水记录、喂食记录各使用一个Store；它们可以具有不同payload长度、版本和预算。System页会把所有已登记的当前Store列在同一个危险操作框中，最多登记8个。
+
+接入规则一览：
+
+| 事项 | 实际要求 |
+| --- | --- |
+| Store对象 | 登记成功后持续有效到设备重启；可以是全局、static或应用长期成员 |
+| 调用任务 | 不限定具体任务，但同一Store的操作不能并发；推荐集中到loop/system task |
+| 登记次数 | 首次 `begin()` 后一次即可；重复登记同一对象幂等 |
+| 多种记录 | 每种固定payload使用独立Store，分别设置版本和预算并逐个登记 |
+| 清空入口 | Web项目使用System页统一入口，不再由业务重复实现 |
+| FS格式化 | 基础库自动reload已登记Store；业务只同步自己的派生状态 |
+| App Events和历史版本 | 不登记；它们不属于当前业务Store统一清空范围 |
+| 下载或CSV | 基础库不提供；仅在产品确有需求时由业务按自身字段实现 |
+
+System页只管理已登记对象：显示状态和记录数，统一提供 `Clear Business Records`，并在System页格式化LittleFS后自动 `reload()`。因此业务页面不再建立平行的清空按钮或路由，也不需要在after-format回调里再次初始化Store；回调只用于同步业务自己的统计、缓存或派生索引。
+
+只登记当前实际使用的版本。基础库不扫描目录，所以不会把App Events或未登记历史版本误纳入。基础库也不提供业务记录CSV或通用下载，因为它不理解不透明payload的字段、单位和版本语义；业务确实需要可读导出时自行实现。
+
+统一清空先预检全部已登记Store。任一Store未初始化或结构故障时不修改任何Store；执行过程中发生I/O失败时停止后续清空并报告部分完成。不同Store是独立文件，基础库不为这项维护操作增加跨文件事务。成功清空沿用 `clear()` 的控制头提交语义，原对象立即反映0条记录并保留递增ID，可继续追加，不需要重新 `begin()`。删除旧段失败时历史记录仍不可见，但状态会保留 `CleanupFailed/Degraded` 供System页和业务诊断。
 
 App Events 默认先创建，预算固定为 `ESP32BASE_APP_EVENT_STORE_MAX_BYTES = 100 KiB`，不提供单独的最小剩余空间宏。业务应在它之后规划其他 Store。100 KiB 预算、24 字节事件 payload、48 字节槽位时，估算容量为 2113 条；实际保留量会在 2029～2113 条之间波动，因为轮换时淘汰一个约 4 KiB 的完整最老段。
 
@@ -109,7 +155,7 @@ App Events 默认先创建，预算固定为 `ESP32BASE_APP_EVENT_STORE_MAX_BYTE
 - 淘汰删除失败：停止需要空间的新写入并报告 `CleanupFailed`，不改写其他文件。
 - 清空：先用双控制头提交新的可见 ID 边界，再删除旧段。即使删除失败，旧记录也不会重新可见；它不是安全擦除。
 
-Record Store 只操作自己的版本目录，不删除或改写 FileLog、其他 Record Store、App Events、业务配置或 NVS。业务必须检查所有返回值和 `StoreStatus`，不能把存储失败等同于业务动作失败或反过来。
+Record Store只操作自己的版本目录，不删除或改写FileLog、其他Record Store、App Events、业务配置或NVS。业务应检查可能影响后续处理的返回值；启动、保存或读取失败时再读取 `StoreStatus` 和错误原因用于诊断。存储失败表示历史记录没有可靠提交，不应被自动解释成浇水、开关门或喂食动作本身失败，反过来也一样。
 
 ## 7. 经典 ESP32 实机基准（2026-07-14）
 
@@ -183,7 +229,7 @@ App Events 使用同一个 Record Store，只是基础库预先规定了 24 字�
 4. `Esp32Base::begin()` 后，按 App Events、再业务 Store 的顺序初始化；检查 `begin()` 和状态。
 5. 瞬时记录调用 `appendInstant()`；过程记录开始时捕获、结束时追加完整结果。
 6. 用 `readLatest()` 构建最新优先分页，用 `readById()` 构建详情；业务负责解码和展示。
-7. 清空入口必须取得用户明确确认；不提供单条删除或修改。
-8. FS 格式化后，在 after-format callback 中重新 `begin()`/`reload()` 各业务 Store。
-9. 将 append 放在同一 loop/system task，实时任务只投递消息。
+7. Web项目在 `begin()` 后登记每个当前版本Store，由System页统一清空；业务不再建立平行清空入口。
+8. System页格式化FS后会自动reload已登记Store；after-format callback只同步业务派生状态。
+9. 保证同一Store的操作串行；推荐由同一loop/system task执行，实时任务只投递消息。
 10. 在目标分区和目标芯片上验证容量日志、启动扫描、轮换、掉电重启和 Web/OTA 并行边界。

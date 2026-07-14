@@ -13,7 +13,7 @@ const bool ready = doorOpeningRecords.begin(definition);
 const bool registered = Esp32BaseWeb::registerBusinessRecordStore(doorOpeningRecords);
 ```
 
-Check both results. Keep the Store object alive for the complete device runtime, do not build a second business clear endpoint, and do not register inactive historical versions.
+Check both results. Registration stores a pointer, so keep the Store object alive after successful registration; a global, static, or application-owned long-lived member is sufficient. Register only the current active version and do not build a second business clear endpoint. The built-in System page clears registered Stores and automatically reloads them after a System-page LittleFS format.
 
 Build all representative chips:
 
