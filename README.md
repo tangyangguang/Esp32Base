@@ -81,7 +81,7 @@ build_flags =
   -D ESP32BASE_ENABLE_APP_EVENTS=1
 ```
 
-条件跟踪默认随 App Events 开启。离散动作调用 `appendDiscreteEvent()`，每次调用都独立保存；周期检测到的持续故障使用应用长期持有的 `ConditionStateTracker` 调用 `observeConditionState()`，只在确认生效和确认恢复时写事件及一个 `eb_app_events.active_id_bits` NVS整数。确认时间只判断应用连续上报的状态，不负责轮询硬件。条件ID范围固定为1～32；如项目只需离散事件，可显式设置 `ESP32BASE_ENABLE_APP_EVENT_CONDITIONS=0`，不会链接条件跟踪的NVS和状态机代码。
+条件跟踪默认随 App Events 开启。离散动作调用 `appendDiscreteEvent()`，每次调用都独立保存；周期检测到的持续故障使用应用长期持有的 `ConditionStateTracker` 调用 `observeConditionState()`，只在确认生效和确认恢复时写事件及一个 `eb_app_events.active_id_bits` NVS整数。确认时间只判断应用连续上报的状态，不负责轮询硬件。条件ID范围固定为1～32，并且是跨重启、跨保留NVS固件升级的持久化schema；同一ID不能在未清理旧状态时改成另一种业务含义。如项目只需离散事件，可显式设置 `ESP32BASE_ENABLE_APP_EVENT_CONDITIONS=0`，不会链接条件跟踪的NVS和状态机代码。
 
 内置入口为 `/esp32base/app-events`，JSON API 为 `/esp32base/api/app-events?offset=0&limit=50`，CSV 导出为 `/esp32base/app-events.csv`，清空入口位于 System 页危险操作区。页面/API/CSV 支持等级、时间类型、事件码和原因码筛选；损坏记录不会返回，只在状态中报告。该能力独立于 `/esp32base/logs` 的系统诊断日志。样例见 `examples/app_events_demo`。
 

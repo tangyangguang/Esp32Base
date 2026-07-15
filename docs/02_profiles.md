@@ -103,7 +103,7 @@ Profile 默认值不能覆盖用户显式 `-D`。
 
 通用固定业务记录通过 `ESP32BASE_ENABLE_RECORD_STORE=1` 显式启用。应用为每个记录类型在运行时提供固定负载大小、存储版本、最大逻辑Store字节预算和可选LittleFS最低剩余空间，不新增Profile。
 
-App Events通过 `ESP32BASE_ENABLE_APP_EVENTS=1` 显式启用，并复用RecordStore。`ESP32BASE_APP_EVENT_STORE_MAX_BYTES` 默认 `100 * 1024` 字节；App Events在 `Esp32Base::begin()` 内优先创建，不提供单独最低剩余空间配置。`ESP32BASE_ENABLE_APP_EVENT_CONDITIONS` 默认跟随App Events启用，不新增Profile，也不提供容量宏；固定1～32号条件使用一个32位NVS位图。
+App Events通过 `ESP32BASE_ENABLE_APP_EVENTS=1` 显式启用，并复用RecordStore。`ESP32BASE_APP_EVENT_STORE_MAX_BYTES` 默认 `100 * 1024` 字节；App Events在 `Esp32Base::begin()` 内优先创建，不提供单独最低剩余空间配置。`ESP32BASE_ENABLE_APP_EVENT_CONDITIONS` 默认跟随App Events启用，不新增Profile，也不提供容量宏；固定1～32号条件使用一个32位NVS位图，ID含义属于保留该NVS状态的固件版本共同遵守的持久化schema。
 
 RS485 半双工基础串口通过 `ESP32BASE_ENABLE_RS485_PORT=1` 显式启用。它只负责 `HardwareSerial` 初始化、DE 方向脚切换、发送后 `flush()` 等待和轮询读取，不创建后台任务，不分配协议缓冲，不解析帧，也不内置 Modbus/RTU、CRC、重试或业务命令。
 

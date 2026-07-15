@@ -87,8 +87,10 @@ App Events 边界：
 - `/esp32base/records/**` 是基础库管理的 RecordStore 容器；FS 管理页允许下载检查，但不允许上传、覆盖或删除，以免绕过结构和完整性约束。App Events 通过自己的 System 危险操作逻辑清空；当前业务 RecordStore 在应用显式调用 `Esp32BaseWeb::registerBusinessRecordStore()` 后，由 System 页统一预检并逻辑清空。未登记历史版本不在该操作范围内；其目录级删除需要独立、安全的文件维护流程，当前 FS 管理页尚不提供。
 - App Events 也不是第二套系统诊断日志。boot/reset/restart reason、WiFi、NTP、OTA、LittleFS、FileLog fault、基础库健康状态等 Esp32Base 系统事件仍归 Status、System diagnostics 和 FileLog；App Events 只记录应用业务决策或业务可解释事件。同一故障可同时有系统诊断日志和 App Event，但前者写技术事实和内部错误链路，后者写业务影响、保护动作、跳过原因、用户维护结果或外部决策结果。
 - `appendDiscreteEvent()` 不去重；调用方把周期故障误当离散事件反复提交，仍会产生事件风暴。周期状态必须使用 `observeConditionState()`，方法名和返回枚举用于显式区分两种语义。
+- `conditionId` 是持久化位图schema，不是可以随固件版本任意复用的临时编号。保留 `eb_app_events` NVS 的升级必须维持ID含义；需要改变映射时由应用安排显式状态清理或迁移。
 - 条件确认依赖应用继续调用 `observeConditionState()`，基础库不调度下一次硬件访问。确认时间最大为 `INT32_MAX` 毫秒；正常秒/分钟级配置可跨越约49.7天的 `millis()` 回绕。已经确认且长期不恢复的条件不继续计时，因此不会在49天后失效。
 - 条件事件先提交LittleFS，再更新 `eb_app_events.active_id_bits`。若事件写入成功后、NVS提交前掉电，重启后可能额外产生一次相同转换；基础库不为消除这一极小窗口增加事务日志。NVS写失败会显式返回部分失败并阻止后续条件转换，直到 `reload()` 保存成功。
+- `factoryReset()`清除条件NVS但不反向调用Runtime。若RAM中正有事件已写而条件状态待保存，随后调用`reload()`会优先重试该状态并重新写入NVS；完整出厂重置应在清理成功后重启，不能在这一失败状态下用`reload()`代替重启。
 
 ## 8. 文件系统边界
 

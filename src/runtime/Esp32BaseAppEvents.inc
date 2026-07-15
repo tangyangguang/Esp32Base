@@ -378,6 +378,7 @@ bool Esp32BaseAppEvents::forgetConditionState(uint8_t conditionId) {
     }
     const uint32_t bit = appEventsConditionBit(conditionId);
     if ((g_activeConditionIdBits & bit) == 0) {
+        appEventsAdvanceConditionRevision();
         return true;
     }
     const uint32_t previousBits = g_activeConditionIdBits;

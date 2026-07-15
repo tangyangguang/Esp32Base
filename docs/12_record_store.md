@@ -145,7 +145,7 @@ System页只管理已登记对象：显示状态和记录数，统一提供 `Cle
 
 App Events 默认先创建，预算固定为 `ESP32BASE_APP_EVENT_STORE_MAX_BYTES = 100 KiB`，不提供单独的最小剩余空间宏。业务应在它之后规划其他 Store。100 KiB 预算、24 字节事件 payload、48 字节槽位时，估算容量为 2113 条；实际保留量会在 2029～2113 条之间波动，因为轮换时淘汰一个约 4 KiB 的完整最老段。
 
-App Events v2仍使用24字节payload和48字节槽位，只把末尾4字节定义为 `flags/level/eventKind/conditionId` 四个1字节字段。条件观察不改写现有记录：确认生效或恢复时各追加一条普通v2记录，再把全部活动条件保存为 `eb_app_events.active_id_bits` 一个 `uint32_t` NVS整数。状态不变、未知观察和确认等待不写任何持久存储；NVS整数不是Blob，只占一个NVS entry且不随条件数量扩大。
+App Events v2仍使用24字节payload和48字节槽位，只把末尾4字节定义为 `flags/level/eventKind/conditionId` 四个1字节字段。条件观察不改写现有记录：确认生效或恢复时各追加一条普通v2记录，再把全部活动条件保存为 `eb_app_events.active_id_bits` 一个 `uint32_t` NVS整数。状态不变、未知观察和确认等待不写任何持久存储；NVS整数不是Blob，只占一个NVS entry且不随条件数量扩大。位图位置本身就是持久格式，因此保留该NVS namespace的固件升级必须保持conditionId含义稳定，改变映射前应由应用执行明确的状态清理或迁移。
 
 ## 6. 失败与恢复
 

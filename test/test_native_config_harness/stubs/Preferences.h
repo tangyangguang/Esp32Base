@@ -35,9 +35,15 @@ inline unsigned& writeCount() {
     return count;
 }
 
+inline std::string& openFailureNamespace() {
+    static std::string value;
+    return value;
+}
+
 inline void reset() {
     store().clear();
     writeCount() = 0;
+    openFailureNamespace().clear();
 }
 
 inline bool namespaceExists(const char* ns) {

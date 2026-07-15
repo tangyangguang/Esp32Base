@@ -943,6 +943,44 @@ void test_forget_condition_state_does_not_create_recovery_event() {
     TEST_ASSERT_EQUAL_UINT8(0, status.activeConditionCount);
 }
 
+void test_forget_inactive_condition_allows_replacing_its_tracker() {
+    TEST_ASSERT_TRUE(Esp32BaseAppEvents::begin());
+    const Esp32BaseAppEvents::EventInput event = conditionEvent(6101);
+    Esp32BaseAppEvents::ConditionStateTracker original(10, 1000, 1000);
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::ConditionUnchanged,
+                      Esp32BaseAppEvents::observeConditionState(
+                          original, Esp32BaseAppEvents::ObservedConditionState::Inactive, event));
+    TEST_ASSERT_TRUE(Esp32BaseAppEvents::forgetConditionState(10));
+    TEST_ASSERT_EQUAL_UINT32(0, g_conditionStateWriteCount);
+
+    Esp32BaseAppEvents::ConditionStateTracker replacement(10, 1000, 1000);
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::ConditionUnchanged,
+                      Esp32BaseAppEvents::observeConditionState(
+                          replacement, Esp32BaseAppEvents::ObservedConditionState::Inactive, event));
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::InvalidArgument,
+                      Esp32BaseAppEvents::observeConditionState(
+                          original, Esp32BaseAppEvents::ObservedConditionState::Inactive, event));
+}
+
+void test_forget_all_condition_states_clears_bits_without_events() {
+    TEST_ASSERT_TRUE(Esp32BaseAppEvents::begin());
+    const Esp32BaseAppEvents::EventInput event = conditionEvent(6201);
+    Esp32BaseAppEvents::ConditionStateTracker first(11, 0, 0);
+    Esp32BaseAppEvents::ConditionStateTracker second(12, 0, 0);
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::ActivationEventStored,
+                      Esp32BaseAppEvents::observeConditionState(
+                          first, Esp32BaseAppEvents::ObservedConditionState::Active, event));
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::ActivationEventStored,
+                      Esp32BaseAppEvents::observeConditionState(
+                          second, Esp32BaseAppEvents::ObservedConditionState::Active, event));
+    TEST_ASSERT_TRUE(Esp32BaseAppEvents::forgetAllConditionStates());
+    TEST_ASSERT_EQUAL_HEX32(0, g_persistedActiveConditionIdBits);
+    TEST_ASSERT_EQUAL_UINT32(2, Esp32BaseAppEvents::eventCount());
+    Esp32BaseAppEvents::AppEventsStatus status;
+    TEST_ASSERT_TRUE(Esp32BaseAppEvents::readStatus(status));
+    TEST_ASSERT_EQUAL_UINT8(0, status.activeConditionCount);
+}
+
 int main(int argc, char** argv) {
     UNITY_BEGIN();
     RUN_TEST(test_create_calculates_capacity_and_store_budget);
@@ -977,5 +1015,7 @@ int main(int argc, char** argv) {
     RUN_TEST(test_clear_format_and_reload_preserve_confirmed_condition_state);
     RUN_TEST(test_condition_arguments_and_duplicate_ids_are_rejected);
     RUN_TEST(test_forget_condition_state_does_not_create_recovery_event);
+    RUN_TEST(test_forget_inactive_condition_allows_replacing_its_tracker);
+    RUN_TEST(test_forget_all_condition_states_clears_bits_without_events);
     return UNITY_END();
 }

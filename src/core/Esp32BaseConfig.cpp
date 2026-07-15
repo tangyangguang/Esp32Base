@@ -49,14 +49,29 @@ bool validName(const char* value) {
     return len >= 1 && len <= 15;
 }
 
-bool namespaceExists(const char* ns) {
+enum class NamespaceLookupResult : uint8_t {
+    Found,
+    NotFound,
+    Error
+};
+
+NamespaceLookupResult lookupNamespace(const char* ns) {
+    if (!validName(ns)) {
+        return NamespaceLookupResult::Error;
+    }
     nvs_handle_t handle = 0;
     const esp_err_t err = nvs_open(ns, NVS_READONLY, &handle);
     if (err == ESP_OK) {
         nvs_close(handle);
-        return true;
+        return NamespaceLookupResult::Found;
     }
-    return false;
+    return err == ESP_ERR_NVS_NOT_FOUND
+               ? NamespaceLookupResult::NotFound
+               : NamespaceLookupResult::Error;
+}
+
+bool namespaceExists(const char* ns) {
+    return lookupNamespace(ns) == NamespaceLookupResult::Found;
 }
 
 bool readStoredString(const char* ns, const char* key, char* out, size_t len, bool* found) {
@@ -355,14 +370,14 @@ bool esp32base_internal::writeConfigUInt32(const char* ns, const char* key, uint
     if (!validName(ns) || !validName(key)) {
         return false;
     }
+    uint32_t storedValue = 0;
+    const ConfigUInt32ReadResult readResult = readConfigUInt32(ns, key, storedValue);
+    if (readResult == ConfigUInt32ReadResult::Found && storedValue == value) {
+        return true;
+    }
     Preferences prefs;
     if (!prefs.begin(ns, false)) {
         return false;
-    }
-    const bool hadOld = prefs.isKey(key);
-    if (hadOld && prefs.getUInt(key, value) == value) {
-        prefs.end();
-        return true;
     }
     const bool ok = prefs.putUInt(key, value) > 0;
     prefs.end();
@@ -858,7 +873,11 @@ bool Esp32BaseConfig::clearNamespace(const char* ns) {
     if (!validName(ns)) {
         return false;
     }
-    if (!namespaceExists(ns)) {
+    const NamespaceLookupResult lookup = lookupNamespace(ns);
+    if (lookup == NamespaceLookupResult::Error) {
+        return false;
+    }
+    if (lookup == NamespaceLookupResult::NotFound) {
         clearPendingNamespace(ns);
         return true;
     }
@@ -884,7 +903,11 @@ bool Esp32BaseConfig::clearWebAuthConfig() {
 
 bool Esp32BaseConfig::clearSystemConfig() {
     clearPendingKey("eb_sys", "hostname");
-    if (!namespaceExists("eb_sys")) {
+    const NamespaceLookupResult lookup = lookupNamespace("eb_sys");
+    if (lookup == NamespaceLookupResult::Error) {
+        return false;
+    }
+    if (lookup == NamespaceLookupResult::NotFound) {
         return true;
     }
     Preferences prefs;

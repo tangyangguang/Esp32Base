@@ -10,7 +10,7 @@ It writes compact discrete door-opening, feeding and watering events during boot
 - `/esp32base/app-events.csv?reasonCode=2101` for filtered CSV export
 - `/demo/events` for a small demo page with a POST button that writes one more event
 
-Application code that needs a business event list or detail page should use `Esp32BaseAppEvents::readLatest()` or `/esp32base/api/app-events`, then map `eventCode`, `reasonCode` and `flags` to business language. Use `appendDiscreteEvent()` for independent actions and a long-lived `ConditionStateTracker` plus `observeConditionState()` for polled persistent conditions. The built-in page intentionally shows numeric fields and does not register business labels.
+Application code that needs a business event list or detail page should use `Esp32BaseAppEvents::readLatest()` or `/esp32base/api/app-events`, then map `eventCode`, `reasonCode` and `flags` to business language. Use `appendDiscreteEvent()` for independent actions and a long-lived `ConditionStateTracker` plus `observeConditionState()` for polled persistent conditions. A condition ID is a persistent schema identifier and must keep the same meaning across firmware updates that retain NVS. The sketch reacts to every actionable observation result but logs only when the result changes, so an unavailable store cannot create a second warning storm. The built-in page intentionally shows numeric fields and does not register business labels.
 
 The Completed column shows wall-clock time when RTC/NTP or the current boot mapping can resolve it. Otherwise it shows uptime plus the boot id, so relative startup events are not confused with real dates.
 

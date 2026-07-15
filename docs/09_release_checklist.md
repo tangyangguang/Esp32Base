@@ -147,6 +147,8 @@
 - 单项清理 API 只影响对应配置范围；`clearSystemConfig()` 只清 hostname，不清统计诊断 key。
 - namespace 不存在时出厂重置返回成功，不创建空 namespace。
 - `factoryReset()` 不误删业务 namespace，不格式化 LittleFS，不删除 FileLog 日志文件内容。
+- `factoryReset()` 只把NVS namespace确实不存在视为无需清理；namespace打开失败或清除失败必须返回false。
+- `factoryReset()`成功后完整出厂重置流程必须重启设备；条件状态存在NVS待保存失败时，不得用App Events `reload()`替代重启。
 - `clearLibraryNamespaces()` 与 `factoryReset()` 行为一致。
 - `enableConfigAudit(true)` / `enableConfigReadAudit(true)` 在 `Esp32Base::begin()` 前开启时能覆盖基础库初始化配置读写。
 - 未配置 `ESP32BASE_DEFAULT_HOSTNAME` 时默认 hostname 为 `esp32base`。
@@ -253,7 +255,7 @@
 - Tools 维护页可保存 hostname，显示当前值、默认值、已保存值和重启需求；保存后不热切换当前运行时 hostname。
 - 启用 `ESP32BASE_ENABLE_APP_CONFIG` 后，System 页显示 App Config 入口，`/esp32base/app-config` 可按 group 展示业务参数。
 - 启用 `ESP32BASE_ENABLE_APP_EVENTS` 后，系统导航显示 App Events 入口，`/esp32base/app-events`、`/esp32base/api/app-events`、`/esp32base/app-events.csv` 可用；内置页面的状态、筛选、分页列表和逐条详情在桌面及窄屏下均不得挤压、重叠或丢失字段。
-- App Events默认启用条件跟踪；持续观察、瞬时失败、确认生效、恢复、再次发生、多条件隔离、相同离散事件、`millis()`回绕、跨重启、NVS失败、Event Store失败、清空/格式化/reload均有原生测试。显式关闭 `ESP32BASE_ENABLE_APP_EVENT_CONDITIONS` 后仍能编译离散事件，且不得保留条件NVS和Web状态符号。
+- App Events默认启用条件跟踪；持续观察、瞬时失败、确认生效、恢复、再次发生、多条件隔离、相同离散事件、`millis()`回绕、跨重启、NVS失败、Event Store失败、清空/格式化/reload、忘记活动/非活动/全部状态及替换tracker均有原生测试。NVS同值写必须跳过，错误类型不得被同值判断掩盖。显式关闭 `ESP32BASE_ENABLE_APP_EVENT_CONDITIONS` 后仍能编译离散事件，且不得保留条件NVS和Web状态符号。
 - `POST /esp32base/system/app-events-clear` 必须需要 Basic Auth、POST 和同源检查；GET 不得清空，App Events 页面不得保留清空入口。清空只删除事件历史，必须保留NVS条件活动状态并在页面明确提示。
 - 业务 `METHOD_ANY` 危险 handler 调用 `Esp32BaseWeb::checkPostAllowed(context)` 时，GET 必须返回 405 且不执行副作用。
 - `/esp32base/logs` 不包含 App Events，仍只展示 FileLog 系统日志。

@@ -410,7 +410,7 @@ clearEventHistory();
 
 ```cpp
 Esp32BaseAppEvents::ConditionStateTracker rtcUnavailableCondition(
-    1,      // conditionId: 1..32，在本固件内唯一且稳定
+    1,      // conditionId: 1..32，在保留该NVS状态的固件版本间唯一且稳定
     5000,   // activationConfirmationMs
     10000   // recoveryConfirmationMs
 );
@@ -429,7 +429,7 @@ const auto result = Esp32BaseAppEvents::observeConditionState(
 
 `ConditionStateTracker`只保存当前确认过程，不执行轮询、不持有硬件对象、不创建任务；它不可复制，必须是全局、静态或由应用长期持有且覆盖全部观察调用的成员对象。应用仍按自己的周期访问RTC或传感器。第一次观察到相反状态时开始确认，应用后续调用继续观察到同一状态且达到确认时间，才在该次调用中提交转换。确认时间为0表示立即确认，最大为 `INT32_MAX` 毫秒。计时使用无符号 `millis()` 差值，秒/分钟级确认可正常跨越约49.7天回绕；条件确认后不再计时，持续故障超过49天不会失效。`Unknown`取消尚未完成的确认，但保留已经确认的活动状态且不写存储。
 
-条件ID固定为1～32；0保留给离散事件。基础库没有固定10槽数组：每个实际条件由应用持有一个tracker，库内只用32位活动ID位图和32位已登记ID位图。首次使用tracker时登记ID，重复ID返回 `InvalidArgument`。`EventKind`固定为 `Discrete`、`ConditionActivated`、`ConditionRecovered`，读取记录时同时返回 `conditionId`；激活和恢复可以使用相同或不同业务eventCode。
+条件ID固定为1～32；0保留给离散事件。它不是临时数组下标，而是 `active_id_bits` 的持久化schema：只要升级时保留 `eb_app_events` NVS，同一ID就必须继续表示同一个条件。计划删除或改变条件映射时，应用应在受控升级流程中先调用 `forgetConditionState()`/`forgetAllConditionStates()`或执行明确的基础库配置重置，不能直接复用仍可能活动的旧ID。基础库没有固定10槽数组：每个实际条件由应用持有一个tracker，库内只用32位活动ID位图和32位已登记ID位图。首次使用tracker时登记ID，重复ID返回 `InvalidArgument`。`EventKind`固定为 `Discrete`、`ConditionActivated`、`ConditionRecovered`，读取记录时同时返回 `conditionId`；激活和恢复可以使用相同或不同业务eventCode。
 
 `ConditionObservationResult`明确区分：状态不变、激活/恢复确认中、激活/恢复事件已保存、未知观察、参数错误、Event Store不可用/写失败、条件NVS状态不可用、事件已保存但条件状态保存失败，以及因待保存状态而阻止转换。调用方不得把确认中、状态不变或部分失败伪装成“事件写入成功”。
 
@@ -441,7 +441,7 @@ eb_app_events.active_id_bits
 
 状态不变、`Unknown`和确认等待均不写LittleFS或NVS。App Event写失败时不改变条件状态，RecordStore沿用 `WriteFault` 锁定，后续观察不继续尝试Flash写入；显式 `reload()` 后才恢复。事件成功但NVS失败时，返回 `EventStoredButConditionStateSaveFailed`，RAM保留新状态并阻止其他条件转换；`reload()`优先重试该位图。若在事件提交成功、NVS提交前掉电，重启后最多可能额外记录一次转换；为保持轻量不增加事务日志。
 
-启动时NVS key不存在表示全部条件未确认；NVS读取错误不能按不存在处理，条件观察返回不可用，但离散事件仍可使用。重启后已活动条件再次观察为Active不会重复写；观察为Inactive则经过恢复确认。`forgetConditionState()`和`forgetAllConditionStates()`行政性忘记状态，不生成恢复事件。`clearEventHistory()`只清LittleFS历史并保留条件NVS；LittleFS格式化后`reload()`重建v2 Store并重新读取NVS。启用条件跟踪时，`factoryReset()`/`clearLibraryNamespaces()`清除 `eb_app_events`；当前RAM缓存直到重启或`reload()`才重新读取。
+启动时NVS key不存在表示全部条件未确认；NVS读取错误不能按不存在处理，条件观察返回不可用，但离散事件仍可使用。重启后已活动条件再次观察为Active不会重复写；观察为Inactive则经过恢复确认。`forgetConditionState()`和`forgetAllConditionStates()`行政性忘记状态，不生成恢复事件；成功后会使当前进程内所有tracker的登记和未完成确认失效，各长期tracker在下一次观察时自动重新登记。忘记一个本来未活动的ID不写NVS，但同样允许替换该ID原先登记的tracker。`clearEventHistory()`只清LittleFS历史并保留条件NVS；LittleFS格式化后`reload()`重建v2 Store并重新读取NVS。启用条件跟踪时，`factoryReset()`/`clearLibraryNamespaces()`清除 `eb_app_events`，但不反向修改Runtime内存；正常情况下`reload()`重新读取已清空的NVS，若此前正有 `conditionStateSavePending`，`reload()`会按失败恢复契约优先重试RAM待保存状态。因此出厂重置完成后应重启设备，不能在待保存状态下用`reload()`代替重启。
 
 System Logs、App Events和完整业务记录的边界：
 
@@ -558,7 +558,7 @@ deferred 语义：
 - `setXxxDeferred()` 如果 pending 中已有相同值，会返回 true 并保留原 pending/due 时间；如果 NVS 旧值已经相同，会返回 true、清除同 key pending 并跳过新的 NVS 写入。
 - deferred 到期判断使用 `millis()` 差值比较，覆盖正常延迟窗口内的 49 天回绕；不要把 deferred delay 设置为接近或超过 `INT32_MAX` ms 的长期定时任务。
 - OTA 上传期间只暂停 deferred flush；`getXxx()`、`pendingCount()`、`flushAll()` 和 `clearLibraryNamespaces()` 仍按各自语义工作。
-- `factoryReset()` 只清理当前已启用的基础库 NVS 配置（启用条件跟踪时包括 `eb_app_events`），不重启、不格式化 LittleFS、不删除App Event/FileLog内容、不清理业务 namespace，不清理 boot/restart/watchdog 统计诊断资产。App Events运行态缓存需在重启或显式 `Esp32BaseAppEvents::reload()` 后重新读取。
+- `factoryReset()` 只清理当前已启用的基础库 NVS 配置（启用条件跟踪时包括 `eb_app_events`），不重启、不格式化 LittleFS、不删除App Event/FileLog内容、不清理业务 namespace，不清理 boot/restart/watchdog 统计诊断资产。namespace不存在按已清理处理；NVS namespace打开或清除失败必须返回false，不能伪装成不存在。它不直接修改App Events运行态缓存，出厂重置流程应在成功后重启；只有确认不存在条件状态待保存时，才可用显式 `Esp32BaseAppEvents::reload()` 重新读取已清理NVS。
 - `clearWifiConfig()` 清理 `eb_wifi`，包含 WiFi SSID/password。
 - `clearWebAuthConfig()` 清理 `eb_web`，包含 Web Auth user/password。
 - `clearSystemConfig()` 只清理 `eb_sys.hostname`；`eb_sys.rst_cnt`、restart log、`boot_cnt`、`wdt_cnt`、`wdt_trip_base`、`wdt_trip_time` 等统计/诊断 key 必须保留。

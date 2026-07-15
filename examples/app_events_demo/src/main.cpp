@@ -6,6 +6,8 @@ uint32_t g_manualEventId = 0;
 #if ESP32BASE_ENABLE_APP_EVENT_CONDITIONS
 Esp32BaseAppEvents::ConditionStateTracker g_demoSensorUnavailableCondition(1, 5000, 3000);
 uint32_t g_nextConditionObservationMs = 0;
+Esp32BaseAppEvents::ConditionObservationResult g_lastConditionObservationResult =
+    Esp32BaseAppEvents::ConditionObservationResult::ObservationUnknown;
 #endif
 
 bool appendDemoEvent(Esp32BaseAppEvents::Level level,
@@ -59,10 +61,22 @@ void observeDemoCondition() {
             sensorUnavailable ? Esp32BaseAppEvents::ObservedConditionState::Active
                               : Esp32BaseAppEvents::ObservedConditionState::Inactive,
             event);
-    if (result == Esp32BaseAppEvents::ConditionObservationResult::EventStoreWriteFailed ||
-        result == Esp32BaseAppEvents::ConditionObservationResult::EventStoredButConditionStateSaveFailed) {
-        ESP32BASE_LOG_W("demo", "condition_observation_failed error=%s",
-                        Esp32BaseAppEvents::lastErrorReason());
+    if (result != g_lastConditionObservationResult) {
+        switch (result) {
+            case Esp32BaseAppEvents::ConditionObservationResult::InvalidArgument:
+            case Esp32BaseAppEvents::ConditionObservationResult::EventStoreUnavailable:
+            case Esp32BaseAppEvents::ConditionObservationResult::EventStoreWriteFailed:
+            case Esp32BaseAppEvents::ConditionObservationResult::ConditionStateUnavailable:
+            case Esp32BaseAppEvents::ConditionObservationResult::EventStoredButConditionStateSaveFailed:
+            case Esp32BaseAppEvents::ConditionObservationResult::BlockedByPendingConditionStateSave:
+                ESP32BASE_LOG_W("demo", "condition_observation_failed result=%u error=%s",
+                                static_cast<unsigned>(result),
+                                Esp32BaseAppEvents::lastErrorReason());
+                break;
+            default:
+                break;
+        }
+        g_lastConditionObservationResult = result;
     }
 }
 #endif

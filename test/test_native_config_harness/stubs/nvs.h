@@ -32,6 +32,9 @@ inline esp_err_t nvs_open(const char* ns, int, nvs_handle_t* out) {
     if (!ns || !out) {
         return ESP_FAIL;
     }
+    if (native_nvs::openFailureNamespace() == ns) {
+        return ESP_FAIL;
+    }
     if (!native_nvs::namespaceExists(ns)) {
         return ESP_ERR_NVS_NOT_FOUND;
     }
