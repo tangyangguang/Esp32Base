@@ -10,6 +10,7 @@
 #include "runtime/Esp32BaseAppEvents.h"
 #include "runtime/Esp32BaseRecordStore.h"
 #include "runtime/Esp32BaseTime.h"
+#include "core/internal/Esp32BaseConfigInternal.h"
 #include "runtime/internal/Esp32BaseFsInternal.h"
 
 namespace {
@@ -20,6 +21,13 @@ std::set<std::string> g_removeFailurePaths;
 size_t g_totalBytes = 1024 * 1024;
 Esp32BaseTime::Snapshot g_time = {false, Esp32BaseTime::SOURCE_UPTIME, 0, 10, 1, 0};
 uint32_t g_fixedSlotVisitCalls = 0;
+uint32_t g_eventStoreWriteAttempts = 0;
+uint32_t g_persistedActiveConditionIdBits = 0;
+uint32_t g_conditionStateWriteCount = 0;
+bool g_conditionStateExists = false;
+bool g_conditionStateReadFails = false;
+bool g_conditionStateWriteFails = false;
+bool g_fileSystemWriteFails = false;
 
 void resetHarness() {
     g_files.clear();
@@ -29,6 +37,14 @@ void resetHarness() {
     g_totalBytes = 1024 * 1024;
     g_time = {false, Esp32BaseTime::SOURCE_UPTIME, 0, 10, 1, 0};
     g_fixedSlotVisitCalls = 0;
+    g_eventStoreWriteAttempts = 0;
+    g_persistedActiveConditionIdBits = 0;
+    g_conditionStateWriteCount = 0;
+    g_conditionStateExists = false;
+    g_conditionStateReadFails = false;
+    g_conditionStateWriteFails = false;
+    g_fileSystemWriteFails = false;
+    nativeMillisValue() = 0;
 }
 
 Esp32BaseRecordStore::StoreDefinition definition(const char* name = "watering",
@@ -89,6 +105,7 @@ bool Esp32BaseFs::readBytesAt(const char* path, uint32_t offset, uint8_t* out, s
     return true;
 }
 bool Esp32BaseFs::writeBytesAt(const char* path, uint32_t offset, const uint8_t* data, size_t length) {
+    if (g_fileSystemWriteFails) return false;
     auto found = g_files.find(path ? path : "");
     if (found == g_files.end() || (!data && length > 0) || offset > found->second.size() || length > found->second.size() - offset) return false;
     std::copy(data, data + length, found->second.begin() + offset);
@@ -163,6 +180,8 @@ bool esp32base_internal::fsWriteSegmentsAt(const char* path,
                                            uint32_t offset,
                                            const FsWriteSegment* segments,
                                            size_t segmentCount) {
+    ++g_eventStoreWriteAttempts;
+    if (g_fileSystemWriteFails) return false;
     for (size_t i = 0; i < segmentCount; ++i) {
         if (!Esp32BaseFs::writeBytesAt(path, offset, segments[i].data, segments[i].length)) return false;
         offset += static_cast<uint32_t>(segments[i].length);
@@ -173,7 +192,8 @@ bool esp32base_internal::fsWriteSegmentsAt(const char* path,
 bool esp32base_internal::fsCreateWithSegments(const char* path,
                                                const FsWriteSegment* segments,
                                                size_t segmentCount) {
-    if (Esp32BaseFs::exists(path)) return false;
+    ++g_eventStoreWriteAttempts;
+    if (g_fileSystemWriteFails || Esp32BaseFs::exists(path)) return false;
     std::vector<uint8_t> bytes;
     for (size_t i = 0; i < segmentCount; ++i) {
         bytes.insert(bytes.end(), segments[i].data, segments[i].data + segments[i].length);
@@ -185,6 +205,8 @@ bool esp32base_internal::fsCreateWithSegments(const char* path,
 bool esp32base_internal::fsAppendSegments(const char* path,
                                            const FsWriteSegment* segments,
                                            size_t segmentCount) {
+    ++g_eventStoreWriteAttempts;
+    if (g_fileSystemWriteFails) return false;
     auto found = g_files.find(path ? path : "");
     if (found == g_files.end()) return false;
     for (size_t i = 0; i < segmentCount; ++i) {
@@ -235,6 +257,25 @@ Esp32BaseTime::Snapshot Esp32BaseTime::snapshot() { return g_time; }
 bool Esp32BaseTime::resolveCurrentBootEvent(uint32_t bootId, uint32_t uptimeSec, uint32_t* epochSec) {
     if (!epochSec || !g_time.synced || bootId != g_time.bootId || g_time.bootStartEpochSec == 0) return false;
     *epochSec = g_time.bootStartEpochSec + uptimeSec;
+    return true;
+}
+
+esp32base_internal::ConfigUInt32ReadResult esp32base_internal::readConfigUInt32(
+    const char*, const char*, uint32_t& value) {
+    if (g_conditionStateReadFails) return ConfigUInt32ReadResult::Error;
+    if (!g_conditionStateExists) {
+        value = 0;
+        return ConfigUInt32ReadResult::NotFound;
+    }
+    value = g_persistedActiveConditionIdBits;
+    return ConfigUInt32ReadResult::Found;
+}
+
+bool esp32base_internal::writeConfigUInt32(const char*, const char*, uint32_t value) {
+    ++g_conditionStateWriteCount;
+    if (g_conditionStateWriteFails) return false;
+    g_persistedActiveConditionIdBits = value;
+    g_conditionStateExists = true;
     return true;
 }
 
@@ -596,9 +637,11 @@ void collectEvent(const Esp32BaseAppEvents::EventRecord& event, void* user) {
 }
 
 void test_app_events_uses_compact_payload_and_default_budget() {
+    TEST_ASSERT_EQUAL_UINT32(24, sizeof(Esp32BaseAppEvents::EventInput));
+    TEST_ASSERT_EQUAL_UINT32(20, sizeof(Esp32BaseAppEvents::ConditionStateTracker));
     TEST_ASSERT_TRUE(Esp32BaseAppEvents::begin());
-    TEST_ASSERT_EQUAL_UINT32(2113, Esp32BaseAppEvents::capacity());
-    TEST_ASSERT_EQUAL_STRING("/esp32base/records/app-events.v1", Esp32BaseAppEvents::path());
+    TEST_ASSERT_EQUAL_UINT32(2113, Esp32BaseAppEvents::eventCapacity());
+    TEST_ASSERT_EQUAL_STRING("/esp32base/records/app-events.v2", Esp32BaseAppEvents::eventStorePath());
     EventCollector empty;
     TEST_ASSERT_TRUE(Esp32BaseAppEvents::readLatest(0, 10, collectEvent, &empty));
     TEST_ASSERT_EQUAL_UINT32(0, empty.events.size());
@@ -611,7 +654,8 @@ void test_app_events_uses_compact_payload_and_default_budget() {
     input.value2 = 2;
     input.flags = 0x0001;
     input.level = Esp32BaseAppEvents::Level::Warning;
-    TEST_ASSERT_TRUE(Esp32BaseAppEvents::append(input));
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::DiscreteEventAppendResult::Stored,
+                      Esp32BaseAppEvents::appendDiscreteEvent(input));
 
     EventCollector collected;
     TEST_ASSERT_TRUE(Esp32BaseAppEvents::readLatest(0, 10, collectEvent, &collected));
@@ -620,11 +664,283 @@ void test_app_events_uses_compact_payload_and_default_budget() {
     TEST_ASSERT_EQUAL_UINT32(1002, collected.events[0].eventCode);
     TEST_ASSERT_EQUAL_UINT32(2101, collected.events[0].reasonCode);
     TEST_ASSERT_EQUAL_INT32(1450, collected.events[0].value1);
-    TEST_ASSERT_EQUAL_UINT16(0x0001, collected.events[0].flags);
-    Esp32BaseAppEvents::EventStoreStatus status;
+    TEST_ASSERT_EQUAL_UINT8(0x01, collected.events[0].flags);
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::EventKind::Discrete, collected.events[0].eventKind);
+    TEST_ASSERT_EQUAL_UINT8(0, collected.events[0].conditionId);
+    Esp32BaseAppEvents::AppEventsStatus status;
     TEST_ASSERT_TRUE(Esp32BaseAppEvents::readStatus(status));
-    TEST_ASSERT_EQUAL_UINT32(48, status.storage.slotSizeBytes);
-    TEST_ASSERT_EQUAL_UINT32(208, status.storage.currentStoreBytes);
+    TEST_ASSERT_EQUAL_UINT32(48, status.eventStore.slotSizeBytes);
+    TEST_ASSERT_EQUAL_UINT32(208, status.eventStore.currentStoreBytes);
+}
+
+Esp32BaseAppEvents::EventInput conditionEvent(uint32_t eventCode, uint8_t flags = 0) {
+    Esp32BaseAppEvents::EventInput event;
+    event.eventCode = eventCode;
+    event.flags = flags;
+    event.level = Esp32BaseAppEvents::Level::Warning;
+    return event;
+}
+
+void test_discrete_events_with_identical_values_are_each_stored() {
+    TEST_ASSERT_TRUE(Esp32BaseAppEvents::begin());
+    const Esp32BaseAppEvents::EventInput event = conditionEvent(4001);
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::DiscreteEventAppendResult::Stored,
+                      Esp32BaseAppEvents::appendDiscreteEvent(event));
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::DiscreteEventAppendResult::Stored,
+                      Esp32BaseAppEvents::appendDiscreteEvent(event));
+    TEST_ASSERT_EQUAL_UINT32(2, Esp32BaseAppEvents::eventCount());
+}
+
+void test_condition_activation_recovery_and_reactivation_are_debounced() {
+    TEST_ASSERT_TRUE(Esp32BaseAppEvents::begin());
+    Esp32BaseAppEvents::ConditionStateTracker tracker(1, 1000, 2000);
+    const Esp32BaseAppEvents::EventInput activated = conditionEvent(5001, 1);
+    const Esp32BaseAppEvents::EventInput recovered = conditionEvent(5002, 2);
+
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::ActivationConfirmationPending,
+                      Esp32BaseAppEvents::observeConditionState(
+                          tracker, Esp32BaseAppEvents::ObservedConditionState::Active, activated));
+    nativeMillisValue() = 999;
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::ActivationConfirmationPending,
+                      Esp32BaseAppEvents::observeConditionState(
+                          tracker, Esp32BaseAppEvents::ObservedConditionState::Active, activated));
+    nativeMillisValue() = 1000;
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::ActivationEventStored,
+                      Esp32BaseAppEvents::observeConditionState(
+                          tracker, Esp32BaseAppEvents::ObservedConditionState::Active, activated));
+    TEST_ASSERT_EQUAL_UINT32(1, Esp32BaseAppEvents::eventCount());
+    TEST_ASSERT_EQUAL_UINT32(1, g_conditionStateWriteCount);
+
+    nativeMillisValue() = 2000;
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::ConditionUnchanged,
+                      Esp32BaseAppEvents::observeConditionState(
+                          tracker, Esp32BaseAppEvents::ObservedConditionState::Active, activated));
+    TEST_ASSERT_EQUAL_UINT32(1, Esp32BaseAppEvents::eventCount());
+    TEST_ASSERT_EQUAL_UINT32(1, g_conditionStateWriteCount);
+
+    nativeMillisValue() = 3000;
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::RecoveryConfirmationPending,
+                      Esp32BaseAppEvents::observeConditionState(
+                          tracker, Esp32BaseAppEvents::ObservedConditionState::Inactive, recovered));
+    nativeMillisValue() = 4999;
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::RecoveryConfirmationPending,
+                      Esp32BaseAppEvents::observeConditionState(
+                          tracker, Esp32BaseAppEvents::ObservedConditionState::Inactive, recovered));
+    nativeMillisValue() = 5000;
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::RecoveryEventStored,
+                      Esp32BaseAppEvents::observeConditionState(
+                          tracker, Esp32BaseAppEvents::ObservedConditionState::Inactive, recovered));
+
+    nativeMillisValue() = 6000;
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::ActivationConfirmationPending,
+                      Esp32BaseAppEvents::observeConditionState(
+                          tracker, Esp32BaseAppEvents::ObservedConditionState::Active, activated));
+    nativeMillisValue() = 7000;
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::ActivationEventStored,
+                      Esp32BaseAppEvents::observeConditionState(
+                          tracker, Esp32BaseAppEvents::ObservedConditionState::Active, activated));
+    TEST_ASSERT_EQUAL_UINT32(3, Esp32BaseAppEvents::eventCount());
+    TEST_ASSERT_EQUAL_UINT32(3, g_conditionStateWriteCount);
+
+    EventCollector collected;
+    TEST_ASSERT_TRUE(Esp32BaseAppEvents::readLatest(0, 3, collectEvent, &collected));
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::EventKind::ConditionActivated, collected.events[0].eventKind);
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::EventKind::ConditionRecovered, collected.events[1].eventKind);
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::EventKind::ConditionActivated, collected.events[2].eventKind);
+    TEST_ASSERT_EQUAL_UINT8(1, collected.events[0].conditionId);
+}
+
+void test_unknown_observation_cancels_unconfirmed_transition() {
+    TEST_ASSERT_TRUE(Esp32BaseAppEvents::begin());
+    Esp32BaseAppEvents::ConditionStateTracker tracker(2, 1000, 1000);
+    const Esp32BaseAppEvents::EventInput event = conditionEvent(5101);
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::ActivationConfirmationPending,
+                      Esp32BaseAppEvents::observeConditionState(
+                          tracker, Esp32BaseAppEvents::ObservedConditionState::Active, event));
+    nativeMillisValue() = 500;
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::ObservationUnknown,
+                      Esp32BaseAppEvents::observeConditionState(
+                          tracker, Esp32BaseAppEvents::ObservedConditionState::Unknown, event));
+    nativeMillisValue() = 1000;
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::ActivationConfirmationPending,
+                      Esp32BaseAppEvents::observeConditionState(
+                          tracker, Esp32BaseAppEvents::ObservedConditionState::Active, event));
+    nativeMillisValue() = 1999;
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::ActivationConfirmationPending,
+                      Esp32BaseAppEvents::observeConditionState(
+                          tracker, Esp32BaseAppEvents::ObservedConditionState::Active, event));
+    TEST_ASSERT_EQUAL_UINT32(0, Esp32BaseAppEvents::eventCount());
+    TEST_ASSERT_EQUAL_UINT32(0, g_conditionStateWriteCount);
+}
+
+void test_different_condition_ids_do_not_interfere() {
+    TEST_ASSERT_TRUE(Esp32BaseAppEvents::begin());
+    Esp32BaseAppEvents::ConditionStateTracker first(1, 0, 0);
+    Esp32BaseAppEvents::ConditionStateTracker second(32, 0, 0);
+    const Esp32BaseAppEvents::EventInput event = conditionEvent(5201);
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::ActivationEventStored,
+                      Esp32BaseAppEvents::observeConditionState(
+                          first, Esp32BaseAppEvents::ObservedConditionState::Active, event));
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::ActivationEventStored,
+                      Esp32BaseAppEvents::observeConditionState(
+                          second, Esp32BaseAppEvents::ObservedConditionState::Active, event));
+    Esp32BaseAppEvents::AppEventsStatus status;
+    TEST_ASSERT_TRUE(Esp32BaseAppEvents::readStatus(status));
+    TEST_ASSERT_EQUAL_UINT8(2, status.activeConditionCount);
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::RecoveryEventStored,
+                      Esp32BaseAppEvents::observeConditionState(
+                          first, Esp32BaseAppEvents::ObservedConditionState::Inactive, event));
+    TEST_ASSERT_TRUE(Esp32BaseAppEvents::readStatus(status));
+    TEST_ASSERT_EQUAL_UINT8(1, status.activeConditionCount);
+    TEST_ASSERT_EQUAL_HEX32(0x80000000UL, g_persistedActiveConditionIdBits);
+}
+
+void test_condition_confirmation_handles_millis_wrap() {
+    TEST_ASSERT_TRUE(Esp32BaseAppEvents::begin());
+    Esp32BaseAppEvents::ConditionStateTracker tracker(3, 1000, 0);
+    const Esp32BaseAppEvents::EventInput event = conditionEvent(5301);
+    nativeMillisValue() = UINT32_MAX - 500U;
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::ActivationConfirmationPending,
+                      Esp32BaseAppEvents::observeConditionState(
+                          tracker, Esp32BaseAppEvents::ObservedConditionState::Active, event));
+    nativeMillisValue() = 498;
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::ActivationConfirmationPending,
+                      Esp32BaseAppEvents::observeConditionState(
+                          tracker, Esp32BaseAppEvents::ObservedConditionState::Active, event));
+    nativeMillisValue() = 499;
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::ActivationEventStored,
+                      Esp32BaseAppEvents::observeConditionState(
+                          tracker, Esp32BaseAppEvents::ObservedConditionState::Active, event));
+}
+
+void test_reboot_restores_active_condition_without_duplicate_event() {
+    TEST_ASSERT_TRUE(Esp32BaseAppEvents::begin());
+    const Esp32BaseAppEvents::EventInput event = conditionEvent(5401);
+    Esp32BaseAppEvents::ConditionStateTracker beforeReboot(4, 0, 0);
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::ActivationEventStored,
+                      Esp32BaseAppEvents::observeConditionState(
+                          beforeReboot, Esp32BaseAppEvents::ObservedConditionState::Active, event));
+    TEST_ASSERT_EQUAL_UINT32(1, Esp32BaseAppEvents::eventCount());
+
+    TEST_ASSERT_TRUE(Esp32BaseAppEvents::begin());
+    Esp32BaseAppEvents::ConditionStateTracker afterReboot(4, 0, 0);
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::ConditionUnchanged,
+                      Esp32BaseAppEvents::observeConditionState(
+                          afterReboot, Esp32BaseAppEvents::ObservedConditionState::Active, event));
+    TEST_ASSERT_EQUAL_UINT32(1, Esp32BaseAppEvents::eventCount());
+    TEST_ASSERT_EQUAL_UINT32(1, g_conditionStateWriteCount);
+}
+
+void test_condition_state_save_failure_blocks_until_reload_succeeds() {
+    TEST_ASSERT_TRUE(Esp32BaseAppEvents::begin());
+    Esp32BaseAppEvents::ConditionStateTracker tracker(5, 0, 0);
+    const Esp32BaseAppEvents::EventInput event = conditionEvent(5501);
+    g_conditionStateWriteFails = true;
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::EventStoredButConditionStateSaveFailed,
+                      Esp32BaseAppEvents::observeConditionState(
+                          tracker, Esp32BaseAppEvents::ObservedConditionState::Active, event));
+    TEST_ASSERT_EQUAL_UINT32(1, Esp32BaseAppEvents::eventCount());
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::BlockedByPendingConditionStateSave,
+                      Esp32BaseAppEvents::observeConditionState(
+                          tracker, Esp32BaseAppEvents::ObservedConditionState::Active, event));
+    TEST_ASSERT_FALSE(Esp32BaseAppEvents::reload());
+    g_conditionStateWriteFails = false;
+    TEST_ASSERT_TRUE(Esp32BaseAppEvents::reload());
+    TEST_ASSERT_EQUAL_HEX32(1UL << 4U, g_persistedActiveConditionIdBits);
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::ConditionUnchanged,
+                      Esp32BaseAppEvents::observeConditionState(
+                          tracker, Esp32BaseAppEvents::ObservedConditionState::Active, event));
+    TEST_ASSERT_EQUAL_UINT32(1, Esp32BaseAppEvents::eventCount());
+}
+
+void test_condition_state_load_failure_does_not_block_discrete_events() {
+    g_conditionStateReadFails = true;
+    TEST_ASSERT_FALSE(Esp32BaseAppEvents::begin());
+    const Esp32BaseAppEvents::EventInput event = conditionEvent(5601);
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::DiscreteEventAppendResult::Stored,
+                      Esp32BaseAppEvents::appendDiscreteEvent(event));
+    Esp32BaseAppEvents::ConditionStateTracker tracker(6, 0, 0);
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::ConditionStateUnavailable,
+                      Esp32BaseAppEvents::observeConditionState(
+                          tracker, Esp32BaseAppEvents::ObservedConditionState::Active, event));
+}
+
+void test_event_store_failure_is_latched_without_retry_storm() {
+    TEST_ASSERT_TRUE(Esp32BaseAppEvents::begin());
+    Esp32BaseAppEvents::ConditionStateTracker tracker(7, 0, 0);
+    const Esp32BaseAppEvents::EventInput event = conditionEvent(5701);
+    g_fileSystemWriteFails = true;
+    const uint32_t attemptsBefore = g_eventStoreWriteAttempts;
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::EventStoreWriteFailed,
+                      Esp32BaseAppEvents::observeConditionState(
+                          tracker, Esp32BaseAppEvents::ObservedConditionState::Active, event));
+    const uint32_t attemptsAfterFailure = g_eventStoreWriteAttempts;
+    TEST_ASSERT_TRUE(attemptsAfterFailure > attemptsBefore);
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::EventStoreUnavailable,
+                      Esp32BaseAppEvents::observeConditionState(
+                          tracker, Esp32BaseAppEvents::ObservedConditionState::Active, event));
+    TEST_ASSERT_EQUAL_UINT32(attemptsAfterFailure, g_eventStoreWriteAttempts);
+    TEST_ASSERT_EQUAL_UINT32(0, g_conditionStateWriteCount);
+}
+
+void test_clear_format_and_reload_preserve_confirmed_condition_state() {
+    TEST_ASSERT_TRUE(Esp32BaseAppEvents::begin());
+    Esp32BaseAppEvents::ConditionStateTracker tracker(8, 0, 0);
+    const Esp32BaseAppEvents::EventInput event = conditionEvent(5801);
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::ActivationEventStored,
+                      Esp32BaseAppEvents::observeConditionState(
+                          tracker, Esp32BaseAppEvents::ObservedConditionState::Active, event));
+    TEST_ASSERT_TRUE(Esp32BaseAppEvents::clearEventHistory());
+    TEST_ASSERT_EQUAL_UINT32(0, Esp32BaseAppEvents::eventCount());
+    Esp32BaseAppEvents::AppEventsStatus status;
+    TEST_ASSERT_TRUE(Esp32BaseAppEvents::readStatus(status));
+    TEST_ASSERT_EQUAL_UINT8(1, status.activeConditionCount);
+
+    TEST_ASSERT_TRUE(Esp32BaseFs::format());
+    TEST_ASSERT_TRUE(Esp32BaseAppEvents::reload());
+    TEST_ASSERT_TRUE(Esp32BaseAppEvents::readStatus(status));
+    TEST_ASSERT_EQUAL_UINT8(1, status.activeConditionCount);
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::ConditionUnchanged,
+                      Esp32BaseAppEvents::observeConditionState(
+                          tracker, Esp32BaseAppEvents::ObservedConditionState::Active, event));
+    TEST_ASSERT_EQUAL_UINT32(0, Esp32BaseAppEvents::eventCount());
+}
+
+void test_condition_arguments_and_duplicate_ids_are_rejected() {
+    TEST_ASSERT_TRUE(Esp32BaseAppEvents::begin());
+    const Esp32BaseAppEvents::EventInput event = conditionEvent(5901);
+    Esp32BaseAppEvents::ConditionStateTracker invalidId(0, 0, 0);
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::InvalidArgument,
+                      Esp32BaseAppEvents::observeConditionState(
+                          invalidId, Esp32BaseAppEvents::ObservedConditionState::Active, event));
+    Esp32BaseAppEvents::ConditionStateTracker invalidDuration(
+        1, Esp32BaseAppEvents::MAX_CONFIRMATION_MS + 1U, 0);
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::InvalidArgument,
+                      Esp32BaseAppEvents::observeConditionState(
+                          invalidDuration, Esp32BaseAppEvents::ObservedConditionState::Active, event));
+    Esp32BaseAppEvents::ConditionStateTracker first(2, 0, 0);
+    Esp32BaseAppEvents::ConditionStateTracker duplicate(2, 0, 0);
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::ConditionUnchanged,
+                      Esp32BaseAppEvents::observeConditionState(
+                          first, Esp32BaseAppEvents::ObservedConditionState::Inactive, event));
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::InvalidArgument,
+                      Esp32BaseAppEvents::observeConditionState(
+                          duplicate, Esp32BaseAppEvents::ObservedConditionState::Inactive, event));
+}
+
+void test_forget_condition_state_does_not_create_recovery_event() {
+    TEST_ASSERT_TRUE(Esp32BaseAppEvents::begin());
+    Esp32BaseAppEvents::ConditionStateTracker tracker(9, 0, 0);
+    const Esp32BaseAppEvents::EventInput event = conditionEvent(6001);
+    TEST_ASSERT_EQUAL(Esp32BaseAppEvents::ConditionObservationResult::ActivationEventStored,
+                      Esp32BaseAppEvents::observeConditionState(
+                          tracker, Esp32BaseAppEvents::ObservedConditionState::Active, event));
+    TEST_ASSERT_TRUE(Esp32BaseAppEvents::forgetConditionState(9));
+    TEST_ASSERT_EQUAL_UINT32(1, Esp32BaseAppEvents::eventCount());
+    TEST_ASSERT_EQUAL_HEX32(0, g_persistedActiveConditionIdBits);
+    Esp32BaseAppEvents::AppEventsStatus status;
+    TEST_ASSERT_TRUE(Esp32BaseAppEvents::readStatus(status));
+    TEST_ASSERT_EQUAL_UINT8(0, status.activeConditionCount);
 }
 
 int main(int argc, char** argv) {
@@ -649,5 +965,17 @@ int main(int argc, char** argv) {
     RUN_TEST(test_torn_clear_header_falls_back_to_pre_clear_state);
     RUN_TEST(test_clear_boundary_stays_effective_when_segment_cleanup_fails);
     RUN_TEST(test_app_events_uses_compact_payload_and_default_budget);
+    RUN_TEST(test_discrete_events_with_identical_values_are_each_stored);
+    RUN_TEST(test_condition_activation_recovery_and_reactivation_are_debounced);
+    RUN_TEST(test_unknown_observation_cancels_unconfirmed_transition);
+    RUN_TEST(test_different_condition_ids_do_not_interfere);
+    RUN_TEST(test_condition_confirmation_handles_millis_wrap);
+    RUN_TEST(test_reboot_restores_active_condition_without_duplicate_event);
+    RUN_TEST(test_condition_state_save_failure_blocks_until_reload_succeeds);
+    RUN_TEST(test_condition_state_load_failure_does_not_block_discrete_events);
+    RUN_TEST(test_event_store_failure_is_latched_without_retry_storm);
+    RUN_TEST(test_clear_format_and_reload_preserve_confirmed_condition_state);
+    RUN_TEST(test_condition_arguments_and_duplicate_ids_are_rejected);
+    RUN_TEST(test_forget_condition_state_does_not_create_recovery_event);
     return UNITY_END();
 }

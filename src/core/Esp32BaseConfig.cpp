@@ -1,7 +1,9 @@
 #include "Esp32BaseConfig.h"
 
+#include "../Esp32BaseProfile.h"
 #include "Esp32BaseLog.h"
 #include "Esp32BaseUtil.h"
+#include "internal/Esp32BaseConfigInternal.h"
 
 #include <Preferences.h>
 #include <nvs.h>
@@ -321,6 +323,50 @@ bool flushIndex(uint8_t index) {
     clearPendingItem(g_pending[index]);
     return true;
 }
+}
+
+esp32base_internal::ConfigUInt32ReadResult esp32base_internal::readConfigUInt32(
+    const char* ns,
+    const char* key,
+    uint32_t& value) {
+    if (!validName(ns) || !validName(key)) {
+        return ConfigUInt32ReadResult::Error;
+    }
+    nvs_handle_t handle = 0;
+    const esp_err_t openErr = nvs_open(ns, NVS_READONLY, &handle);
+    if (openErr == ESP_ERR_NVS_NOT_FOUND) {
+        value = 0;
+        return ConfigUInt32ReadResult::NotFound;
+    }
+    if (openErr != ESP_OK) {
+        return ConfigUInt32ReadResult::Error;
+    }
+    const esp_err_t readErr = nvs_get_u32(handle, key, &value);
+    nvs_close(handle);
+    if (readErr == ESP_ERR_NVS_NOT_FOUND) {
+        value = 0;
+        return ConfigUInt32ReadResult::NotFound;
+    }
+    return readErr == ESP_OK ? ConfigUInt32ReadResult::Found
+                             : ConfigUInt32ReadResult::Error;
+}
+
+bool esp32base_internal::writeConfigUInt32(const char* ns, const char* key, uint32_t value) {
+    if (!validName(ns) || !validName(key)) {
+        return false;
+    }
+    Preferences prefs;
+    if (!prefs.begin(ns, false)) {
+        return false;
+    }
+    const bool hadOld = prefs.isKey(key);
+    if (hadOld && prefs.getUInt(key, value) == value) {
+        prefs.end();
+        return true;
+    }
+    const bool ok = prefs.putUInt(key, value) > 0;
+    prefs.end();
+    return ok;
 }
 
 bool Esp32BaseConfig::begin() {
@@ -865,6 +911,9 @@ bool Esp32BaseConfig::factoryReset() {
     ok = clearSystemConfig() && ok;
     ok = clearLogConfig() && ok;
     ok = clearUiConfig() && ok;
+#if ESP32BASE_ENABLE_APP_EVENT_CONDITIONS
+    ok = clearNamespace("eb_app_events") && ok;
+#endif
     return ok;
 }
 

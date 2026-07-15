@@ -76,9 +76,9 @@ App Events默认关闭，仅在 `ESP32BASE_ENABLE_APP_EVENTS=1` 时编译并初�
 #define ESP32BASE_APP_EVENT_STORE_MAX_BYTES (100UL * 1024UL)
 ```
 
-App Event业务负载24字节，RecordStore公共元数据24字节，单条固定48字节。100KiB预算的估算容量为2113条；约4KiB完整段轮换时实际保留约2029～2113条，路径为 `/esp32base/records/app-events.v1/`。App Events在业务RecordStore之前创建，不提供单独最低剩余空间配置。
+App Event业务负载24字节，RecordStore公共元数据和CRC合计24字节，单条固定48字节。100KiB预算的估算容量为2113条；约4KiB完整段轮换时实际保留约2029～2113条，路径为 `/esp32base/records/app-events.v2/`。App Events在业务RecordStore之前创建，不提供单独最低剩余空间配置。
 
-旧临时实现为每条188字节、默认1024条、文件192640字节；当前最终方案每条减少140字节（约74.5%），默认估算容量增加到2113条，默认逻辑预算降为102400字节（减少约46.8%）。旧文件不迁移、不自动删除，也不参与新模块读取。
+App Events v1同样是每条48字节；v2只重新定义payload末尾4字节，不增加单条LittleFS占用或默认预算。v1目录不迁移、不自动删除，也不参与v2读取；试用阶段升级前应先清空旧事件或由用户明确格式化LittleFS。
 
 项目可以覆盖最大字节预算。若事件频率高于“用户可解释的关键事件”，应降低写入频率或把完整浇水、开关门、喂食历史放到独立RecordStore。
 
@@ -86,7 +86,9 @@ App Event业务负载24字节，RecordStore公共元数据24字节，单条固�
 
 - `eventCode`、`reasonCode`、`objectId` 各4字节。
 - `value1`、`value2` 各4字节。
-- `flags`、`level` 各2字节。
+- `flags`、`level`、`eventKind`、`conditionId` 各1字节。
+
+条件跟踪没有固定槽数组。库内常驻两个32位条件ID位图及少量加载/故障状态；应用每实际使用一个条件，长期持有一个不动态分配的 `ConditionStateTracker`。在当前支持的32位ESP32工具链布局下每个tracker为20字节。NVS只保存 `eb_app_events.active_id_bits` 一个 `uint32_t`；普通观察、确认等待和状态不变均不写NVS或LittleFS，只有确认生效/恢复各追加一条48字节事件并更新一次该整数。按照 [ESP-IDF NVS存储格式](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/storage/nvs_flash.html)，整数值占一个32字节entry；更新会顺序追加新entry并使旧值失效，由NVS按page回收，不是每次转换立即擦除一个Flash sector。显式关闭 `ESP32BASE_ENABLE_APP_EVENT_CONDITIONS` 后不编译条件状态机和专属NVS访问。
 
 通用RecordStore的当前逻辑占用为 `128字节控制文件 + 各段32字节段头 + 记录数 × (payloadSizeBytes + 24)`。业务应在设计固定负载后根据LittleFS分区一次性确定各Store预算；基础库不建立全局预算管理器。段大小由预算自适应选择，详细规划和实机数据见 [Record Store 设计、接入与实机基准](12_record_store.md)。
 

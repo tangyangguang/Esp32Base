@@ -10,6 +10,7 @@ namespace native_nvs {
 
 enum class ValueType {
     Int,
+    UInt,
     Bool,
     String,
     Blob,
@@ -18,6 +19,7 @@ enum class ValueType {
 struct Value {
     ValueType type;
     int32_t intValue = 0;
+    uint32_t uintValue = 0;
     bool boolValue = false;
     std::string stringValue;
     std::vector<uint8_t> blobValue;
@@ -90,6 +92,11 @@ public:
         return value && value->type == native_nvs::ValueType::Int ? value->intValue : def;
     }
 
+    uint32_t getUInt(const char* key, uint32_t def) const {
+        const native_nvs::Value* value = native_nvs::findValue(_ns.c_str(), key);
+        return value && value->type == native_nvs::ValueType::UInt ? value->uintValue : def;
+    }
+
     bool getBool(const char* key, bool def) const {
         const native_nvs::Value* value = native_nvs::findValue(_ns.c_str(), key);
         return value && value->type == native_nvs::ValueType::Bool ? value->boolValue : def;
@@ -102,6 +109,18 @@ public:
         native_nvs::Value stored;
         stored.type = native_nvs::ValueType::Int;
         stored.intValue = value;
+        native_nvs::store()[_ns][key] = stored;
+        ++native_nvs::writeCount();
+        return sizeof(value);
+    }
+
+    size_t putUInt(const char* key, uint32_t value) {
+        if (_readOnly || _ns.empty() || !key) {
+            return 0;
+        }
+        native_nvs::Value stored;
+        stored.type = native_nvs::ValueType::UInt;
+        stored.uintValue = value;
         native_nvs::store()[_ns][key] = stored;
         ++native_nvs::writeCount();
         return sizeof(value);

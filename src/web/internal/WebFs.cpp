@@ -89,7 +89,7 @@ void sendFsPathTooLongRow(const char* dir, const char* name, bool isDir) {
 
 #if ESP32BASE_ENABLE_APP_EVENTS
 bool appEventsOwnsPath(const char* path) {
-    return path && strcmp(path, Esp32BaseAppEvents::path()) == 0;
+    return path && strcmp(path, Esp32BaseAppEvents::eventStorePath()) == 0;
 }
 
 void sendFsAppEventsTag() {

@@ -344,15 +344,28 @@ if (!storeReady) {
 
 ### 3.6 Esp32BaseAppEvents
 
-仅在 `ESP32BASE_ENABLE_APP_EVENTS=1` 时可用；它自动启用RecordStore，并由 `Esp32Base::begin()` 在业务Store之前创建。默认预算：
+仅在 `ESP32BASE_ENABLE_APP_EVENTS=1` 时可用；它自动启用RecordStore，并由 `Esp32Base::begin()` 在业务Store之前创建。条件跟踪宏 `ESP32BASE_ENABLE_APP_EVENT_CONDITIONS` 默认跟随App Events开启；显式设为0时仍保留离散事件记录，但不编译条件状态机、专属NVS访问和Web条件状态。默认预算：
 
 ```cpp
 #define ESP32BASE_APP_EVENT_STORE_MAX_BYTES (100UL * 1024UL)
 ```
 
-App Events不提供单独最低剩余空间宏。业务应在App Events创建后，根据LittleFS剩余空间规划自己的Store。
+App Events不提供单独最低剩余空间宏。业务应在App Events创建后，根据LittleFS剩余空间规划自己的Store。v2固定24字节事件payload：
 
-固定24字节事件payload：
+```text
+offset  size  field
+0       4     eventCode
+4       4     reasonCode
+8       4     objectId
+12      4     value1
+16      4     value2
+20      1     flags
+21      1     level
+22      1     eventKind
+23      1     conditionId
+```
+
+调用方输入不包含由基础库填写的 `eventKind/conditionId`：
 
 ```cpp
 struct EventInput {
@@ -361,30 +374,74 @@ struct EventInput {
     uint32_t objectId;    // 0 表示无
     int32_t value1;
     int32_t value2;
-    uint16_t flags;       // 完全由业务定义
-    Level level;          // uint16_t: Info/Warning/Error
+    uint8_t flags;        // 完全由业务定义，8位
+    Level level;          // uint8_t: Info/Warning/Error
 };
 ```
 
-加上RecordStore的24字节公共元数据后，每条App Event为48字节。100 KiB逻辑预算的估算容量为2113条；按约4 KiB完整段轮换时实际保留约2029～2113条，路径为：
+RecordStore的20字节时间/ID元数据位于payload前，CRC32位于payload后，每条App Event仍为48字节。100 KiB逻辑预算估算容量2113条；按约4 KiB完整段轮换时实际保留约2029～2113条，路径为：
 
 ```text
-/esp32base/records/app-events.v1/
+/esp32base/records/app-events.v2/
 ```
 
-`Esp32BaseAppEvents` 提供：
+v1与v2字段语义不同，不迁移、不兼容读取，也不自动删除v1目录；当前试用阶段的升级流程应在安装新固件前清空旧App Events，或由用户明确格式化LittleFS。
+
+主要API：
 
 ```cpp
 begin();
 reload();
-append(const EventInput&);
+appendDiscreteEvent(const EventInput&);
+observeConditionState(ConditionStateTracker&, ObservedConditionState, const EventInput&);
+forgetConditionState(conditionId);
+forgetAllConditionStates();
 readLatest(offset, limit, callback, user);
 readById(recordId, EventRecord&);
-readStatus(EventStoreStatus&);
-clear();
+readStatus(AppEventsStatus&);
+clearEventHistory();
 ```
 
-`eventCode`、`reasonCode` 和 `flags` 的编号与位含义完全由业务定义；基础库不保存source/type/reason/object/text字符串，也不建立代码文字注册中心。`value1/value2` 没有存在位，业务根据eventCode确定含义，未使用时写0。App Events是瞬时业务事件，公共 `durationSec=0`。
+`eventCode`、`reasonCode`、`objectId`、`value1/value2`和`flags`的业务含义完全由应用定义；基础库不解释RTC、缺料、门锁或通信语义，不保存显示文本，也不建立代码文字注册中心。所有App Event的RecordStore公共 `durationSec=0`；条件确认时间不是该字段的含义。
+
+离散事件必须调用 `appendDiscreteEvent()`。每次调用都表示一次独立事实，即使所有字段与上一条完全相同也逐条保存。返回 `DiscreteEventAppendResult`，明确区分 `Stored`、`InvalidEvent`、`EventStoreUnavailable` 与 `EventStoreWriteFailed`；删除旧 `append()`，避免名称掩盖离散语义。
+
+周期检测的持续状态使用一个由应用长期持有的tracker：
+
+```cpp
+Esp32BaseAppEvents::ConditionStateTracker rtcUnavailableCondition(
+    1,      // conditionId: 1..32，在本固件内唯一且稳定
+    5000,   // activationConfirmationMs
+    10000   // recoveryConfirmationMs
+);
+
+Esp32BaseAppEvents::EventInput transitionEvent;
+transitionEvent.eventCode = rtcMissing ? 3001 : 3002;
+transitionEvent.level = rtcMissing ? Esp32BaseAppEvents::Level::Warning
+                                   : Esp32BaseAppEvents::Level::Info;
+
+const auto result = Esp32BaseAppEvents::observeConditionState(
+    rtcUnavailableCondition,
+    rtcMissing ? Esp32BaseAppEvents::ObservedConditionState::Active
+               : Esp32BaseAppEvents::ObservedConditionState::Inactive,
+    transitionEvent);
+```
+
+`ConditionStateTracker`只保存当前确认过程，不执行轮询、不持有硬件对象、不创建任务；它不可复制，必须是全局、静态或由应用长期持有且覆盖全部观察调用的成员对象。应用仍按自己的周期访问RTC或传感器。第一次观察到相反状态时开始确认，应用后续调用继续观察到同一状态且达到确认时间，才在该次调用中提交转换。确认时间为0表示立即确认，最大为 `INT32_MAX` 毫秒。计时使用无符号 `millis()` 差值，秒/分钟级确认可正常跨越约49.7天回绕；条件确认后不再计时，持续故障超过49天不会失效。`Unknown`取消尚未完成的确认，但保留已经确认的活动状态且不写存储。
+
+条件ID固定为1～32；0保留给离散事件。基础库没有固定10槽数组：每个实际条件由应用持有一个tracker，库内只用32位活动ID位图和32位已登记ID位图。首次使用tracker时登记ID，重复ID返回 `InvalidArgument`。`EventKind`固定为 `Discrete`、`ConditionActivated`、`ConditionRecovered`，读取记录时同时返回 `conditionId`；激活和恢复可以使用相同或不同业务eventCode。
+
+`ConditionObservationResult`明确区分：状态不变、激活/恢复确认中、激活/恢复事件已保存、未知观察、参数错误、Event Store不可用/写失败、条件NVS状态不可用、事件已保存但条件状态保存失败，以及因待保存状态而阻止转换。调用方不得把确认中、状态不变或部分失败伪装成“事件写入成功”。
+
+确认转换时先同步提交一条LittleFS App Event，再更新RAM位图并把全部活动条件写入NVS的单个 `uint32_t`：
+
+```text
+eb_app_events.active_id_bits
+```
+
+状态不变、`Unknown`和确认等待均不写LittleFS或NVS。App Event写失败时不改变条件状态，RecordStore沿用 `WriteFault` 锁定，后续观察不继续尝试Flash写入；显式 `reload()` 后才恢复。事件成功但NVS失败时，返回 `EventStoredButConditionStateSaveFailed`，RAM保留新状态并阻止其他条件转换；`reload()`优先重试该位图。若在事件提交成功、NVS提交前掉电，重启后最多可能额外记录一次转换；为保持轻量不增加事务日志。
+
+启动时NVS key不存在表示全部条件未确认；NVS读取错误不能按不存在处理，条件观察返回不可用，但离散事件仍可使用。重启后已活动条件再次观察为Active不会重复写；观察为Inactive则经过恢复确认。`forgetConditionState()`和`forgetAllConditionStates()`行政性忘记状态，不生成恢复事件。`clearEventHistory()`只清LittleFS历史并保留条件NVS；LittleFS格式化后`reload()`重建v2 Store并重新读取NVS。启用条件跟踪时，`factoryReset()`/`clearLibraryNamespaces()`清除 `eb_app_events`；当前RAM缓存直到重启或`reload()`才重新读取。
 
 System Logs、App Events和完整业务记录的边界：
 
@@ -406,9 +463,10 @@ event.reasonCode = 2101;  // 业务定义：电流过高
 event.objectId = 1;       // 门1
 event.value1 = 1450;      // 业务定义：峰值mA
 event.value2 = 2;         // 业务定义：重试次数
-event.flags = 0x0001;     // 业务定义
-Esp32BaseAppEvents::append(event);
+event.flags = 0x01;       // 业务定义
+const auto result = Esp32BaseAppEvents::appendDiscreteEvent(event);
 ```
+
 ## 4. Esp32BaseConfig
 
 后端：ESP32 NVS。
@@ -419,8 +477,8 @@ Esp32BaseAppEvents::append(event);
 - key 长度 `1..15`。
 - string value 可见内容长度不超过 3999 字节。
 - blob value 长度为 `1..256` 字节，用于小型固定大小 POD 元数据，不用于日志、记录正文或大块业务数据。
-- 库内部 namespace 全部使用 `eb_` 前缀，例如 `eb_wifi`、`eb_sys`、`eb_log`、`eb_ui`。
-- namespace 已表达库和模块归属，key 不重复模块前缀，例如 `eb_wifi.ssid`、`eb_wifi.pass`、`eb_sys.rst_cnt`、`eb_sys.wdt_cnt`、`eb_sys.wdt_trip_base`、`eb_sys.wdt_trip_time`、`eb_log.mode`、`eb_web.auth_user`、`eb_web.auth_pass`、`eb_ui.footer_mode`。
+- 库内部 namespace 全部使用 `eb_` 前缀，例如 `eb_wifi`、`eb_sys`、`eb_log`、`eb_ui`、`eb_app_events`。
+- namespace 已表达库和模块归属，key 不重复模块前缀，例如 `eb_wifi.ssid`、`eb_wifi.pass`、`eb_sys.rst_cnt`、`eb_sys.wdt_cnt`、`eb_sys.wdt_trip_base`、`eb_sys.wdt_trip_time`、`eb_log.mode`、`eb_web.auth_user`、`eb_web.auth_pass`、`eb_ui.footer_mode`、`eb_app_events.active_id_bits`。
 - 应用不得使用 `eb_` 前缀，避免被库维护 API 清理。
 - `Esp32BaseConfig` 不是跨任务线程安全 API；推荐和 `Esp32Base::begin()` / `handle()`、Web、Bus 固定在同一个 loop/system task 中调用，其他任务通过队列投递配置变更。
 - 单个 NVS key 写入依赖 NVS 自身的断电保护；多个 key 组成的业务动作不是事务。App Config 多字段提交会逐字段写入，某字段失败后停止继续写后续字段并返回 partial；需要强一致的一组业务配置应合并为单个 POD/blob 或使用业务自定义提交模型。
@@ -500,12 +558,13 @@ deferred 语义：
 - `setXxxDeferred()` 如果 pending 中已有相同值，会返回 true 并保留原 pending/due 时间；如果 NVS 旧值已经相同，会返回 true、清除同 key pending 并跳过新的 NVS 写入。
 - deferred 到期判断使用 `millis()` 差值比较，覆盖正常延迟窗口内的 49 天回绕；不要把 deferred delay 设置为接近或超过 `INT32_MAX` ms 的长期定时任务。
 - OTA 上传期间只暂停 deferred flush；`getXxx()`、`pendingCount()`、`flushAll()` 和 `clearLibraryNamespaces()` 仍按各自语义工作。
-- `factoryReset()` 只清理基础库 NVS 配置，不重启、不格式化 LittleFS、不删除 FileLog 日志文件内容、不清理业务 namespace，不清理 boot/restart/watchdog 统计诊断资产。
+- `factoryReset()` 只清理当前已启用的基础库 NVS 配置（启用条件跟踪时包括 `eb_app_events`），不重启、不格式化 LittleFS、不删除App Event/FileLog内容、不清理业务 namespace，不清理 boot/restart/watchdog 统计诊断资产。App Events运行态缓存需在重启或显式 `Esp32BaseAppEvents::reload()` 后重新读取。
 - `clearWifiConfig()` 清理 `eb_wifi`，包含 WiFi SSID/password。
 - `clearWebAuthConfig()` 清理 `eb_web`，包含 Web Auth user/password。
 - `clearSystemConfig()` 只清理 `eb_sys.hostname`；`eb_sys.rst_cnt`、restart log、`boot_cnt`、`wdt_cnt`、`wdt_trip_base`、`wdt_trip_time` 等统计/诊断 key 必须保留。
 - `clearLogConfig()` 清理 `eb_log`，包含 FileLog 配置。
 - `clearUiConfig()` 清理 `eb_ui`，包含 Footer bar 显示模式。
+- 启用条件跟踪时，`factoryReset()` 和 `clearLibraryNamespaces()` 清理内部 `eb_app_events.active_id_bits`；能力关闭时不引用该namespace，也不提供业务直接写该key的公开API。
 - `clearLibraryNamespaces()` 是库级配置清理入口，当前语义等价于 `factoryReset()`：只清理基础库 NVS 配置，保留统计/诊断资产、业务 namespace 和 LittleFS 内容。
 - `clearNamespace()` 和各出厂重置 API 在 namespace 不存在时返回成功，不创建空 namespace，也不输出底层 `NOT_FOUND` 噪声。
 

@@ -5,7 +5,12 @@
 #include <cstdio>
 #include <cstring>
 
-inline uint32_t millis() { return 0; }
+inline uint32_t& nativeMillisValue() {
+    static uint32_t value = 0;
+    return value;
+}
+
+inline uint32_t millis() { return nativeMillisValue(); }
 inline void yield() {}
 
 inline size_t strlcpy(char* dst, const char* src, size_t size) {

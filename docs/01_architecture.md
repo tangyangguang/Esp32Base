@@ -76,7 +76,7 @@ Core 不包含 Event Bus。Bus 是 Runtime 可选模块。
 - LittleFS。
 - 系统诊断日志 sink（`Esp32BaseFileLog`），依赖 Fs，通过 Core Log 的 line sink 接收日志。
 - 固定长度业务 Record Store，依赖 Fs 和 Time，提供按段追加、完整段淘汰、CRC恢复和分页读取，不解释payload业务语义。
-- App Events 复用 Record Store，是基础库预定义紧凑payload的一类低频业务事件记录，不是第二套系统诊断日志。
+- App Events 复用 Record Store，是基础库预定义紧凑payload的一类低频业务事件记录，不是第二套系统诊断日志。可选条件跟踪位于同一Runtime模块，只接受应用观察结果并用Core NVS保存固定32位活动ID集合；它不依赖或解释RTC、传感器、门锁等业务模块。
 - 统一可信时间门面（`Esp32BaseTime`），整合 uptime、RTC 和 NTP。
 - 外部 RTC 时间源（`Esp32BaseRtc`），支持 DS3231 / PCF8563 构建期二选一。
 - RS485 半双工串口方向控制（`Esp32BaseRs485Port`），封装 `HardwareSerial`、RX/TX/DE 引脚、发送前后 DE 切换和轮询读取，不包含 Modbus 或业务协议。

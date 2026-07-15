@@ -1,6 +1,7 @@
 #include <unity.h>
 
 #include "core/Esp32BaseConfig.h"
+#include "core/internal/Esp32BaseConfigInternal.h"
 #include "Preferences.h"
 
 uint32_t g_nativeMillis = 0;
@@ -96,6 +97,41 @@ void test_deferred_string_same_pending_value_does_not_extend_due_time() {
     TEST_ASSERT_EQUAL_STRING("ready", label);
 }
 
+void test_internal_uint32_state_distinguishes_missing_and_preserves_all_bits() {
+    resetConfigHarness();
+    uint32_t value = 123;
+    TEST_ASSERT_EQUAL(esp32base_internal::ConfigUInt32ReadResult::NotFound,
+                      esp32base_internal::readConfigUInt32("eb_app_events", "active_id_bits", value));
+    TEST_ASSERT_EQUAL_UINT32(0, value);
+    TEST_ASSERT_TRUE(esp32base_internal::writeConfigUInt32(
+        "eb_app_events", "active_id_bits", 0x80000001UL));
+    TEST_ASSERT_EQUAL_UINT(1, native_nvs::writeCount());
+    TEST_ASSERT_TRUE(esp32base_internal::writeConfigUInt32(
+        "eb_app_events", "active_id_bits", 0x80000001UL));
+    TEST_ASSERT_EQUAL_UINT(1, native_nvs::writeCount());
+    TEST_ASSERT_EQUAL(esp32base_internal::ConfigUInt32ReadResult::Found,
+                      esp32base_internal::readConfigUInt32("eb_app_events", "active_id_bits", value));
+    TEST_ASSERT_EQUAL_HEX32(0x80000001UL, value);
+}
+
+void test_internal_uint32_state_rejects_wrong_nvs_type() {
+    resetConfigHarness();
+    TEST_ASSERT_TRUE(Esp32BaseConfig::setInt("eb_app_events", "active_id_bits", 1));
+    uint32_t value = 0;
+    TEST_ASSERT_EQUAL(esp32base_internal::ConfigUInt32ReadResult::Error,
+                      esp32base_internal::readConfigUInt32("eb_app_events", "active_id_bits", value));
+}
+
+void test_factory_reset_clears_app_event_condition_state() {
+    resetConfigHarness();
+    TEST_ASSERT_TRUE(esp32base_internal::writeConfigUInt32(
+        "eb_app_events", "active_id_bits", 1));
+    TEST_ASSERT_TRUE(Esp32BaseConfig::factoryReset());
+    uint32_t value = 123;
+    TEST_ASSERT_EQUAL(esp32base_internal::ConfigUInt32ReadResult::NotFound,
+                      esp32base_internal::readConfigUInt32("eb_app_events", "active_id_bits", value));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_deferred_int_skips_when_nvs_already_has_same_value);
@@ -104,5 +140,8 @@ int main(int, char**) {
     RUN_TEST(test_deferred_int_same_pending_value_does_not_extend_due_time);
     RUN_TEST(test_deferred_bool_same_pending_value_does_not_extend_due_time);
     RUN_TEST(test_deferred_string_same_pending_value_does_not_extend_due_time);
+    RUN_TEST(test_internal_uint32_state_distinguishes_missing_and_preserves_all_bits);
+    RUN_TEST(test_internal_uint32_state_rejects_wrong_nvs_type);
+    RUN_TEST(test_factory_reset_clears_app_event_condition_state);
     return UNITY_END();
 }

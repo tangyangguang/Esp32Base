@@ -86,11 +86,14 @@ App Events 边界：
 - 用水量统计、报表数据、累计量、传感器采样历史、完整执行历史、大 payload、高频明细和不允许覆盖的业务数据，应由业务自己的数据文件或存储结构负责。
 - `/esp32base/records/**` 是基础库管理的 RecordStore 容器；FS 管理页允许下载检查，但不允许上传、覆盖或删除，以免绕过结构和完整性约束。App Events 通过自己的 System 危险操作逻辑清空；当前业务 RecordStore 在应用显式调用 `Esp32BaseWeb::registerBusinessRecordStore()` 后，由 System 页统一预检并逻辑清空。未登记历史版本不在该操作范围内；其目录级删除需要独立、安全的文件维护流程，当前 FS 管理页尚不提供。
 - App Events 也不是第二套系统诊断日志。boot/reset/restart reason、WiFi、NTP、OTA、LittleFS、FileLog fault、基础库健康状态等 Esp32Base 系统事件仍归 Status、System diagnostics 和 FileLog；App Events 只记录应用业务决策或业务可解释事件。同一故障可同时有系统诊断日志和 App Event，但前者写技术事实和内部错误链路，后者写业务影响、保护动作、跳过原因、用户维护结果或外部决策结果。
+- `appendDiscreteEvent()` 不去重；调用方把周期故障误当离散事件反复提交，仍会产生事件风暴。周期状态必须使用 `observeConditionState()`，方法名和返回枚举用于显式区分两种语义。
+- 条件确认依赖应用继续调用 `observeConditionState()`，基础库不调度下一次硬件访问。确认时间最大为 `INT32_MAX` 毫秒；正常秒/分钟级配置可跨越约49.7天的 `millis()` 回绕。已经确认且长期不恢复的条件不继续计时，因此不会在49天后失效。
+- 条件事件先提交LittleFS，再更新 `eb_app_events.active_id_bits`。若事件写入成功后、NVS提交前掉电，重启后可能额外产生一次相同转换；基础库不为消除这一极小窗口增加事务日志。NVS写失败会显式返回部分失败并阻止后续条件转换，直到 `reload()` 保存成功。
 
 ## 8. 文件系统边界
 
 - LittleFS 用于小型配置文件、诊断文件和 Web 静态小资源。
-- 系统诊断日志默认位于 `/esp32base/logs/system.log`，App Events store 默认位于 `/esp32base/records/app-events.v1/`；业务 RecordStore 也位于 `/esp32base/records/**`，其他业务文件应放在 `/app/**`、`/data/**` 或项目自定义目录。
+- 系统诊断日志默认位于 `/esp32base/logs/system.log`，App Events store 默认位于 `/esp32base/records/app-events.v2/`；业务 RecordStore 也位于 `/esp32base/records/**`，其他业务文件应放在 `/app/**`、`/data/**` 或项目自定义目录。
 - 业务需要可靠、轮换、分页的固定长度历史时应优先使用 `Esp32BaseRecordStore`；只有其语义不适用时才直接使用 `Esp32BaseFs` 设计自己的文件结构。
 - `writeBytesAt()` 只覆盖已有文件内容，不创建、不扩展文件；环形文件容量应由 `createFixedFile()` 初始化或校验。
 - `createFixedFile()` 会在文件不存在、大小不匹配或同尺寸但末端不可读时重建固定大小文件；同尺寸且可读时保留原内容，避免启动期清空持久环形记录。`appendBytes()` 适合低频追加，不适合循环零填充大文件。

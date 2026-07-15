@@ -142,7 +142,7 @@
 - deferred pending/NVS 同值去重，不重复推迟 flush 或产生 NVS 写入。
 - restart 前全部落盘。
 - NVS 写满返回 false。
-- `factoryReset()` 清理 `eb_wifi`、`eb_web`、`eb_log`、`eb_ui` 和 `eb_sys.hostname`。
+- `factoryReset()` 清理 `eb_wifi`、`eb_web`、`eb_log`、`eb_ui`、`eb_sys.hostname`，并在条件跟踪启用时清理 `eb_app_events`。
 - `factoryReset()` 保留 `eb_sys` 中的 boot/restart/watchdog 统计诊断 key。
 - 单项清理 API 只影响对应配置范围；`clearSystemConfig()` 只清 hostname，不清统计诊断 key。
 - namespace 不存在时出厂重置返回成功，不创建空 namespace。
@@ -172,7 +172,7 @@
 - FileLog OFF 后 System Logs 页面仍能查看已有历史 segment。
 - `GET /esp32base/logs` 和 `GET /esp32base/logs/raw` 必须只读，不得主动 `flush()`、创建、清空、重建或改变 FileLog fault 状态；需要写入/清理/格式化的维护动作必须走 POST。
 - System 页格式化 LittleFS 成功后必须触发 after-format 回调/事件，结果应说明格式化、重新挂载和 FileLog reload 状态；格式化失败不得触发。
-- System 页格式化 LittleFS 成功并重新 mount 后，启用 App Events 时必须重新创建 `/esp32base/records/app-events.v1/`，并逐个reload已登记的当前业务Store；后续append/read不得沿用格式化前的运行态，任一恢复失败不得提示整体成功。
+- System 页格式化 LittleFS 成功并重新 mount 后，启用 App Events 时必须重新创建 `/esp32base/records/app-events.v2/`，并逐个reload已登记的当前业务Store；条件活动状态保留在NVS，后续append/read不得沿用格式化前的运行态，任一恢复失败不得提示整体成功。
 - `setSerialLevel(NONE)` 后 Serial 不输出，但 FileLog 仍按当前模式写入。
 - `setRuntimeLevel(NONE)` 后 Serial 和 FileLog 都停止。
 - WARN/ERROR 立即写入。
@@ -253,7 +253,8 @@
 - Tools 维护页可保存 hostname，显示当前值、默认值、已保存值和重启需求；保存后不热切换当前运行时 hostname。
 - 启用 `ESP32BASE_ENABLE_APP_CONFIG` 后，System 页显示 App Config 入口，`/esp32base/app-config` 可按 group 展示业务参数。
 - 启用 `ESP32BASE_ENABLE_APP_EVENTS` 后，系统导航显示 App Events 入口，`/esp32base/app-events`、`/esp32base/api/app-events`、`/esp32base/app-events.csv` 可用；内置页面的状态、筛选、分页列表和逐条详情在桌面及窄屏下均不得挤压、重叠或丢失字段。
-- `POST /esp32base/system/app-events-clear` 必须需要 Basic Auth、POST 和同源检查；GET 不得清空，App Events 页面不得保留清空入口。
+- App Events默认启用条件跟踪；持续观察、瞬时失败、确认生效、恢复、再次发生、多条件隔离、相同离散事件、`millis()`回绕、跨重启、NVS失败、Event Store失败、清空/格式化/reload均有原生测试。显式关闭 `ESP32BASE_ENABLE_APP_EVENT_CONDITIONS` 后仍能编译离散事件，且不得保留条件NVS和Web状态符号。
+- `POST /esp32base/system/app-events-clear` 必须需要 Basic Auth、POST 和同源检查；GET 不得清空，App Events 页面不得保留清空入口。清空只删除事件历史，必须保留NVS条件活动状态并在页面明确提示。
 - 业务 `METHOD_ANY` 危险 handler 调用 `Esp32BaseWeb::checkPostAllowed(context)` 时，GET 必须返回 405 且不执行副作用。
 - `/esp32base/logs` 不包含 App Events，仍只展示 FileLog 系统日志。
 - App Config 注册校验覆盖非法 namespace、重复 `ns/key`、非法长度/范围/step/decimal scale/enum option 和超容量。

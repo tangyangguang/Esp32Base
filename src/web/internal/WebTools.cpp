@@ -236,7 +236,11 @@ void handleToolsPage() {
 #endif
 #if ESP32BASE_ENABLE_APP_EVENTS
     } else if (g_server.hasArg("app_events_cleared")) {
-        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "App Events cleared");
+#if ESP32BASE_ENABLE_APP_EVENT_CONDITIONS
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "App Event history cleared", "Confirmed condition states were preserved.");
+#else
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "App Event history cleared");
+#endif
 #endif
     } else if (g_server.hasArg("filelog_saved")) {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "System log mode saved");
@@ -329,7 +333,11 @@ void handleToolsPage() {
     sendBusinessRecordStoresClearPanel();
 #endif
 #if ESP32BASE_ENABLE_APP_EVENTS
-    sendChunk("<section class='panel dangerpanel'><h2>Clear App Events</h2><p class='dangertext'>Delete the application event log store. System diagnostic logs, runtime settings and WiFi credentials are not changed.</p><form method='post' action='/esp32base/system/app-events-clear' onsubmit=\"return confirm('Clear App Events?')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Clear App Events'></div></form></section>");
+#if ESP32BASE_ENABLE_APP_EVENT_CONDITIONS
+    sendChunk("<section class='panel dangerpanel'><h2>Clear App Event History</h2><p class='dangertext'>Delete retained App Event records. Confirmed condition states, system diagnostic logs, runtime settings and WiFi credentials are not changed.</p><form method='post' action='/esp32base/system/app-events-clear' onsubmit=\"return confirm('Clear App Event history?')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Clear App Event History'></div></form></section>");
+#else
+    sendChunk("<section class='panel dangerpanel'><h2>Clear App Event History</h2><p class='dangertext'>Delete retained App Event records. System diagnostic logs, runtime settings and WiFi credentials are not changed.</p><form method='post' action='/esp32base/system/app-events-clear' onsubmit=\"return confirm('Clear App Event history?')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Clear App Event History'></div></form></section>");
+#endif
 #endif
 #if ESP32BASE_ENABLE_FS
     sendChunk("<section class='panel dangerpanel'><h2>Format LittleFS</h2><p class='dangertext'>This deletes logs and all files stored in LittleFS. WiFi, Web Auth and NVS config are not cleared.</p><form method='post' action='/esp32base/system/format-fs' onsubmit=\"return confirm('Format LittleFS? This deletes logs and all files stored in LittleFS.')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Format LittleFS'></div></form></section>");
@@ -587,7 +595,7 @@ void handleToolsAppEventsClearPost() {
     if (!ensurePostAllowed("tools_app_events_clear")) {
         return;
     }
-    const bool ok = Esp32BaseAppEvents::clear();
+    const bool ok = Esp32BaseAppEvents::clearEventHistory();
     redirectSeeOther(ok ? "/esp32base/system?app_events_cleared=1" : "/esp32base/system?error=app_events_clear_failed");
 }
 #endif

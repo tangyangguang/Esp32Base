@@ -3,6 +3,10 @@
 
 namespace {
 uint32_t g_manualEventId = 0;
+#if ESP32BASE_ENABLE_APP_EVENT_CONDITIONS
+Esp32BaseAppEvents::ConditionStateTracker g_demoSensorUnavailableCondition(1, 5000, 3000);
+uint32_t g_nextConditionObservationMs = 0;
+#endif
 
 bool appendDemoEvent(Esp32BaseAppEvents::Level level,
                      uint32_t eventCode,
@@ -10,7 +14,7 @@ bool appendDemoEvent(Esp32BaseAppEvents::Level level,
                      uint32_t objectId,
                      int32_t value1,
                      int32_t value2,
-                     uint16_t flags) {
+                     uint8_t flags) {
     Esp32BaseAppEvents::EventInput event;
     event.level = level;
     event.eventCode = eventCode;
@@ -19,7 +23,8 @@ bool appendDemoEvent(Esp32BaseAppEvents::Level level,
     event.value1 = value1;
     event.value2 = value2;
     event.flags = flags;
-    const bool ok = Esp32BaseAppEvents::append(event);
+    const bool ok = Esp32BaseAppEvents::appendDiscreteEvent(event) ==
+                    Esp32BaseAppEvents::DiscreteEventAppendResult::Stored;
     if (!ok) {
         ESP32BASE_LOG_W("demo", "app_event_append_failed error=%s", Esp32BaseAppEvents::lastErrorReason());
     }
@@ -32,6 +37,35 @@ void seedDemoEvents() {
     appendDemoEvent(Esp32BaseAppEvents::Level::Warning, 2001, 2201, 2, 0, 0, 0);
     appendDemoEvent(Esp32BaseAppEvents::Level::Warning, 3001, 2301, 3, 12, 20, 0x0002);
 }
+
+#if ESP32BASE_ENABLE_APP_EVENT_CONDITIONS
+void observeDemoCondition() {
+    const uint32_t nowMs = millis();
+    if (static_cast<int32_t>(nowMs - g_nextConditionObservationMs) < 0) return;
+    g_nextConditionObservationMs = nowMs + 250;
+
+    // Synthetic demo: unavailable for the first 15 seconds, then recovered.
+    // The application controls this polling schedule; confirmation durations do not poll hardware.
+    const bool sensorUnavailable = nowMs < 15000;
+    Esp32BaseAppEvents::EventInput event;
+    event.level = sensorUnavailable ? Esp32BaseAppEvents::Level::Warning
+                                    : Esp32BaseAppEvents::Level::Info;
+    event.eventCode = sensorUnavailable ? 7001 : 7002;
+    event.reasonCode = sensorUnavailable ? 2701 : 0;
+    event.objectId = 1;
+    const Esp32BaseAppEvents::ConditionObservationResult result =
+        Esp32BaseAppEvents::observeConditionState(
+            g_demoSensorUnavailableCondition,
+            sensorUnavailable ? Esp32BaseAppEvents::ObservedConditionState::Active
+                              : Esp32BaseAppEvents::ObservedConditionState::Inactive,
+            event);
+    if (result == Esp32BaseAppEvents::ConditionObservationResult::EventStoreWriteFailed ||
+        result == Esp32BaseAppEvents::ConditionObservationResult::EventStoredButConditionStateSaveFailed) {
+        ESP32BASE_LOG_W("demo", "condition_observation_failed error=%s",
+                        Esp32BaseAppEvents::lastErrorReason());
+    }
+}
+#endif
 
 void handleDemoEventsPage() {
     if (!Esp32BaseWeb::checkAuth()) {
@@ -81,5 +115,8 @@ void setup() {
 
 void loop() {
     Esp32Base::handle();
+#if ESP32BASE_ENABLE_APP_EVENT_CONDITIONS
+    observeDemoCondition();
+#endif
     delay(10);
 }
