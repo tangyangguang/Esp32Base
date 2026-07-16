@@ -606,7 +606,7 @@ Esp32BaseWeb::endJson();
 - 普通连接失败不自动进入 AP/config portal；只有 STA 安全启动保护触发时才自动回退。
 - 保存的 SSID 为空时视为无有效凭证；密码允许为空，用于开放 WiFi。
 - 持续 STA 重连。
-- 单次 STA 连接尝试有非阻塞超时，默认 `ESP32BASE_WIFI_CONNECT_TIMEOUT_MS=15000`。
+- 单次 STA 关联尝试有非阻塞超时，默认 `ESP32BASE_WIFI_CONNECT_TIMEOUT_MS=15000`；已关联 AP 但尚未获得 IPv4 时改用 `ESP32BASE_WIFI_DHCP_TIMEOUT_MS=120000`，保留关联等待上级 DHCP 恢复，不因互联网不可用而重连。
 - 前几次短间隔重连，连续失败后进入长间隔 backoff。
 - backoff 必须非阻塞，不影响 `Esp32Base::handle()` 和 sleep 决策。
 

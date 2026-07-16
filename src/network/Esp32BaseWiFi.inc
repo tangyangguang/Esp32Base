@@ -19,6 +19,9 @@
 #ifndef ESP32BASE_WIFI_CONNECT_TIMEOUT_MS
 #define ESP32BASE_WIFI_CONNECT_TIMEOUT_MS 15000
 #endif
+#ifndef ESP32BASE_WIFI_DHCP_TIMEOUT_MS
+#define ESP32BASE_WIFI_DHCP_TIMEOUT_MS 120000
+#endif
 #ifndef ESP32BASE_WIFI_RETRY_FAST_MS
 #define ESP32BASE_WIFI_RETRY_FAST_MS 5000
 #endif
@@ -39,8 +42,10 @@ char g_wifiSsid[33] = "";
 char g_wifiPassword[65] = "";
 char g_configPortalSsid[32] = "";
 uint32_t g_wifiAttemptStartMs = 0;
+uint32_t g_wifiDhcpWaitStartMs = 0;
 uint32_t g_wifiNextRetryMs = 0;
 uint8_t g_wifiRetryCount = 0;
+bool g_wifiWaitingForIp = false;
 bool g_wifiPowerSave = false;
 bool g_staGuardActive = false;
 bool g_staCredentialsPaused = false;
@@ -418,6 +423,8 @@ bool beginSta() {
         WiFi.begin(g_wifiSsid);
     }
     g_wifiAttemptStartMs = millis();
+    g_wifiDhcpWaitStartMs = 0;
+    g_wifiWaitingForIp = false;
     g_wifiState = Esp32BaseWiFi::CONNECTING;
     ESP32BASE_LOG_I("wifi", "station_connecting ssid=%s password_set=%s status=%s status_code=%u",
                     g_wifiSsid,
@@ -428,6 +435,8 @@ bool beginSta() {
 }
 
 void scheduleRetry(uint32_t now, const char* reason) {
+    g_wifiDhcpWaitStartMs = 0;
+    g_wifiWaitingForIp = false;
     g_wifiState = Esp32BaseWiFi::RETRY_BACKOFF;
     const uint32_t delayMs = retryDelayMs();
     const bool slowBackoff = g_wifiRetryCount >= ESP32BASE_WIFI_RETRY_FAST_COUNT;
@@ -502,6 +511,8 @@ void Esp32BaseWiFi::handle() {
     const wl_status_t status = WiFi.status();
     const uint32_t now = millis();
     if ((g_wifiState == CONNECTING || g_wifiState == RETRY_BACKOFF) && status == WL_CONNECTED) {
+        g_wifiDhcpWaitStartMs = 0;
+        g_wifiWaitingForIp = false;
         g_wifiState = CONNECTED;
         g_wifiRetryCount = 0;
         clearStaSafeBootState("connected");
@@ -510,11 +521,46 @@ void Esp32BaseWiFi::handle() {
         return;
     }
     if (g_wifiState == CONNECTED && status != WL_CONNECTED) {
+        if (status == WL_IDLE_STATUS) {
+            g_wifiState = CONNECTING;
+            g_wifiAttemptStartMs = now;
+            g_wifiDhcpWaitStartMs = now;
+            g_wifiWaitingForIp = true;
+            ESP32BASE_LOG_W("wifi", "station_ip_lost status=%s status_code=%u action=wait_for_dhcp timeout=%lu ms rssi=%ld",
+                            wlStatusName(status),
+                            static_cast<unsigned>(status),
+                            static_cast<unsigned long>(ESP32BASE_WIFI_DHCP_TIMEOUT_MS),
+                            static_cast<long>(WiFi.RSSI()));
+            publish(EVENT_DISCONNECTED);
+            return;
+        }
         ESP32BASE_LOG_W("wifi", "station_disconnected status=%s status_code=%u rssi=%ld",
                         wlStatusName(status), static_cast<unsigned>(status), static_cast<long>(WiFi.RSSI()));
         publish(EVENT_DISCONNECTED);
         scheduleRetry(now, "connection lost");
         return;
+    }
+    if (g_wifiState == CONNECTING && status == WL_IDLE_STATUS) {
+        if (!g_wifiWaitingForIp) {
+            g_wifiDhcpWaitStartMs = now;
+            g_wifiWaitingForIp = true;
+            ESP32BASE_LOG_I("wifi", "station_associated_waiting_for_ip ssid=%s timeout=%lu ms rssi=%ld",
+                            g_wifiSsid,
+                            static_cast<unsigned long>(ESP32BASE_WIFI_DHCP_TIMEOUT_MS),
+                            static_cast<long>(WiFi.RSSI()));
+        }
+        if (static_cast<int32_t>(now - g_wifiDhcpWaitStartMs) >= ESP32BASE_WIFI_DHCP_TIMEOUT_MS) {
+            ESP32BASE_LOG_W("wifi", "station_dhcp_timeout ssid=%s elapsed=%lu ms rssi=%ld",
+                            g_wifiSsid,
+                            static_cast<unsigned long>(now - g_wifiDhcpWaitStartMs),
+                            static_cast<long>(WiFi.RSSI()));
+            scheduleRetry(now, "dhcp timeout");
+        }
+        return;
+    }
+    if (g_wifiWaitingForIp) {
+        g_wifiDhcpWaitStartMs = 0;
+        g_wifiWaitingForIp = false;
     }
     if (g_wifiState == CONNECTING && status != WL_CONNECTED &&
         static_cast<int32_t>(now - g_wifiAttemptStartMs) >= ESP32BASE_WIFI_CONNECT_TIMEOUT_MS) {

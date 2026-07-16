@@ -763,6 +763,9 @@ WiFi 凭证和重连策略：
 - 有效凭证要求 SSID 非空且不超过 32 字节，密码可为空且不超过 64 字节；超限输入返回 false，不静默截断。
 - 有已保存凭证但连接失败时，不自动进入 AP/config portal，而是持续重连。
 - 单次 STA 连接尝试有非阻塞超时，默认 `ESP32BASE_WIFI_CONNECT_TIMEOUT_MS=15000`。
+- `WL_IDLE_STATUS` 表示 STA 已关联 AP、正在等待 IPv4 地址时，不按普通连接超时反复调用 `WiFi.begin()`；基础库保留关联并等待 DHCP，默认 `ESP32BASE_WIFI_DHCP_TIMEOUT_MS=120000`。这适用于 DHCP 位于上级路由、Mesh 或中继上联可能短时不可用的网络。超时后才进入既有 backoff，backoff 期间若异步获得地址仍立即进入 `CONNECTED`。
+- 已处于 `CONNECTED` 时如果丢失 IPv4 但 STA 仍关联，发布一次 `wifi.disconnected` 并进入 DHCP 等待；只有关联也丢失或 DHCP 等待超时后才按普通重连策略处理。
+- `CONNECTED` 只表示 STA 已获得 IP，不表示互联网可用；NTP 或公网访问失败不触发 WiFi 断开或重连。
 - 前几次重连使用短间隔，连续失败后进入长间隔 backoff；backoff 必须非阻塞，不影响 `handle()`、Watchdog feed 和必要休眠。
 - 初期连接失败和短间隔重试保留 WARN，便于现场排查切到 WARN 时捕获首次故障；进入慢速 backoff 后，重复的连接超时和重试排程日志降为 INFO，避免长期离线设备在默认 ERROR FileLog 下持续写 Flash。
 - WiFi 初始化安全启动保护：`begin()` 在任何 Arduino `WiFi.*` 初始化/模式调用前写入 `eb_wifi.init_guard`。如果下一次启动发现该标记仍存在，且 reset reason 是 `brownout`、`panic`、watchdog 类复位或 WiFi 初始化期常见的 `software` 复位，则累计 `eb_wifi.init_rst`；连续达到 `ESP32BASE_WIFI_SAFE_BOOT_MAX_RESETS` 后设置 `eb_wifi.init_pause=true`，本轮跳过 `WiFi.persistent()`、`WiFi.setSleep()`、`WiFi.mode()`、`WiFi.begin()` 和 AP 初始化，让系统至少进入无 WiFi 诊断状态。

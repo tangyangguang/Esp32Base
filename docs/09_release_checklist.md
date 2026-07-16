@@ -128,6 +128,8 @@
 - 提交凭证后切换 STA。
 - 错误密码进入 backoff。
 - 路由器恢复后重连。
+- STA 已关联但上级 DHCP 暂时不可用时保持关联，不在普通 15 秒连接超时后反复调用 `WiFi.begin()`；DHCP 恢复后获得 IP 并启动 Web/mDNS，超过独立 DHCP 超时后才进入 backoff。
+- 已连接后只丢失 IPv4 时发布断开事件并等待 DHCP 恢复；互联网或 NTP 单独不可用不得改变 WiFi `CONNECTED` 状态。
 
 ## 9. 存储检查
 
