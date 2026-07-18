@@ -262,7 +262,7 @@ App Config 页面：
 - 业务必须在 `Esp32Base::begin()` 前用 `Esp32BaseAppConfig` 注册 group 和字段；字段直接绑定业务 `Esp32BaseConfig` namespace/key；注册传入的字符串和 enum option 数组必须保持固件生命周期有效。
 - 启用后必须显式设置 `ESP32BASE_APP_CONFIG_MAX_GROUPS` 和 `ESP32BASE_APP_CONFIG_MAX_FIELDS`，硬上限为 16 组、128 字段。
 - 未注册 group 或字段时页面显示轻量空状态，提示应用尚未注册配置字段。
-- 支持 string、int、decimal 定点数、bool、enum；string 最大 256 bytes，enum value 最大 31 bytes，label/option label 最大 31 bytes，help 最大 96 bytes，unit 最大 12 bytes，decimal 使用 `int32_t raw` 和 `scale=0..6`。
+- 支持 string、int、decimal 定点数、bool、enum；string 最大 256 bytes，enum value 最大 31 bytes，label/option label 最大 31 bytes，help 最大 192 bytes，unit 最大 12 bytes，decimal 使用 `int32_t raw` 和 `scale=0..6`。显示文本长度按 UTF-8 编码后的字节数计算；超限输入拒绝注册且不静默截断。
 - 页面按 group 展示字段，字段默认直接可编辑；点击 Save 时前端只展示变更核对清单，不作为服务端事实来源。
 - 变更核对清单只用于提交前确认；只有实际保存结果才作为成功或失败反馈。
 - POST 保存时后端重新解析、执行内置校验、执行字段级和页面级业务校验、读取当前 NVS 并计算实际变化字段。

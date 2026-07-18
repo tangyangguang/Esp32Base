@@ -68,7 +68,11 @@
 
 系统诊断日志仅在 FS profile 中启用，底层实现/API 名称是 `Esp32BaseFileLog`。默认路径为 `/esp32base/logs/system.log`，默认 `4 × 32KB = 128KB`，低优先级缓存 1KB，flush interval 2s。默认模式 ERROR，用于让全功能固件在无业务数据、应用事件或显式调试需求时保持很低的 Flash 写入量；现场排查可显式切到 WARN 或 INFO。Core 和默认 NET 不链接 LittleFS，也不产生 FileLog 静态状态。
 
-### 3.5 App Events
+### 3.5 App Config
+
+App Config 注册字符串和 enum option 数组只保存指针，不按 label、help 或 unit 的最大长度为每个字段预留 RAM，也不把这些显示文字写入 NVS 或 LittleFS。help 最大 192 个 UTF-8 字节；提高或使用该上限不会扩大固定 512 字节 Web 流式输出缓冲。固件 Flash 和页面传输量只按业务实际提供的文字长度增加，注册时的长度校验和页面 HTML 转义时间也随实际长度线性增加。
+
+### 3.6 App Events
 
 App Events默认关闭，仅在 `ESP32BASE_ENABLE_APP_EVENTS=1` 时编译并初始化，依赖RecordStore、FS和Time。默认最大逻辑存储预算：
 
@@ -94,14 +98,14 @@ App Events v1同样是每条48字节；v2只重新定义payload末尾4字节，�
 
 同时启用 Web 和 RecordStore 时，System 工具页为最多8个当前业务Store保留固定指针登记表，在32位ESP32上为32字节指针空间外加1字节计数；不复制Store状态、payload或记录内容。未启用RecordStore时不编译对应管理页面和处理逻辑。
 
-### 3.6 Health
+### 3.7 Health
 
 ```cpp
 ESP32BASE_HEALTH_TICK_INTERVAL_MS=30000
 ESP32BASE_HEALTH_DEBUG_LOG_INTERVAL_MS=1800000
 ```
 
-### 3.7 Restart log
+### 3.8 Restart log
 
 ```cpp
 ESP32BASE_RESTART_LOG_CAPACITY=4

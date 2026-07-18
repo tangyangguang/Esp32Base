@@ -9,7 +9,7 @@ public:
     static constexpr uint16_t STRING_MAX_LENGTH = 256;
     static constexpr uint8_t ENUM_VALUE_MAX_LENGTH = 31;
     static constexpr uint8_t LABEL_MAX_LENGTH = 31;
-    static constexpr uint8_t HELP_MAX_LENGTH = 96;
+    static constexpr uint8_t HELP_MAX_LENGTH = 192;
     static constexpr uint8_t UNIT_MAX_LENGTH = 12;
     static constexpr uint8_t DECIMAL_SCALE_MAX = 6;
 

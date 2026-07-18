@@ -236,6 +236,7 @@
 必须通过：
 
 - Basic Auth。
+- App Config help 按 UTF-8 字节计数，192 字节可注册，193 字节拒绝且日志明确报告 `reason=help_too_long`、实际长度和上限；不得静默截断。
 - 状态 API。
 - chip API。
 - firmware API。

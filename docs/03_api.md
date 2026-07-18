@@ -1343,7 +1343,7 @@ ESP32BASE_APP_CONFIG_MAX_FIELDS
 - `BoolField`。
 - `EnumField`：option value 最大 31 bytes。
 
-显示文本限制：group title、字段 label、enum option label 最大 31 bytes；help 最大 96 bytes；unit 最大 12 bytes。
+显示文本限制：group title、字段 label、enum option label 最大 31 bytes；help 最大 192 bytes；unit 最大 12 bytes。长度按 UTF-8 编码后的字节数计算；超限输入拒绝注册且不静默截断。
 
 回调：
 
