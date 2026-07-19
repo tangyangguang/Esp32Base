@@ -2,6 +2,7 @@
 
 #include "core/Esp32BaseConfig.h"
 #include "core/internal/Esp32BaseConfigInternal.h"
+#include "network/internal/Esp32BaseRecoveryButton.h"
 #include "Preferences.h"
 
 uint32_t g_nativeMillis = 0;
@@ -15,6 +16,33 @@ static void resetConfigHarness() {
     Esp32BaseConfig::enableConfigReadAudit(false);
     Esp32BaseConfig::clearNamespace("app_cfg");
     TEST_ASSERT_EQUAL_UINT8(0, Esp32BaseConfig::pendingCount());
+}
+
+void test_recovery_button_triggers_at_threshold_once_per_press() {
+    esp32base_internal::RecoveryButtonTracker tracker;
+    tracker.reset(0);
+    TEST_ASSERT_FALSE(tracker.update(true, 0, 50, 10000));
+    TEST_ASSERT_FALSE(tracker.update(true, 49, 50, 10000));
+    TEST_ASSERT_FALSE(tracker.update(true, 50, 50, 10000));
+    TEST_ASSERT_FALSE(tracker.update(true, 10049, 50, 10000));
+    TEST_ASSERT_TRUE(tracker.update(true, 10050, 50, 10000));
+    TEST_ASSERT_FALSE(tracker.update(true, 20000, 50, 10000));
+}
+
+void test_recovery_button_release_and_bounce_restart_hold_window() {
+    esp32base_internal::RecoveryButtonTracker tracker;
+    tracker.reset(0);
+    TEST_ASSERT_FALSE(tracker.update(true, 0, 50, 10000));
+    TEST_ASSERT_FALSE(tracker.update(false, 20, 50, 10000));
+    TEST_ASSERT_FALSE(tracker.update(true, 40, 50, 10000));
+    TEST_ASSERT_FALSE(tracker.update(true, 90, 50, 10000));
+    TEST_ASSERT_FALSE(tracker.update(true, 10089, 50, 10000));
+    TEST_ASSERT_TRUE(tracker.update(true, 10090, 50, 10000));
+    TEST_ASSERT_FALSE(tracker.update(false, 10100, 50, 10000));
+    TEST_ASSERT_FALSE(tracker.update(false, 10150, 50, 10000));
+    TEST_ASSERT_FALSE(tracker.update(true, 10200, 50, 10000));
+    TEST_ASSERT_FALSE(tracker.update(true, 10250, 50, 10000));
+    TEST_ASSERT_TRUE(tracker.update(true, 20250, 50, 10000));
 }
 
 void test_deferred_int_skips_when_nvs_already_has_same_value() {
@@ -137,9 +165,15 @@ void test_internal_uint32_write_repairs_wrong_nvs_type() {
 
 void test_factory_reset_clears_app_event_condition_state() {
     resetConfigHarness();
+    const uint8_t recoveryConfig[] = {1, 1, 0, 0x10, 0x27, 0, 0};
+    TEST_ASSERT_TRUE(Esp32BaseConfig::setBlob(
+        "eb_wifi_rcv", "button", recoveryConfig, sizeof(recoveryConfig)));
     TEST_ASSERT_TRUE(esp32base_internal::writeConfigUInt32(
         "eb_app_events", "active_id_bits", 1));
     TEST_ASSERT_TRUE(Esp32BaseConfig::factoryReset());
+    uint8_t recovered[sizeof(recoveryConfig)] = {};
+    TEST_ASSERT_FALSE(Esp32BaseConfig::getBlob(
+        "eb_wifi_rcv", "button", recovered, sizeof(recovered)));
     uint32_t value = 123;
     TEST_ASSERT_EQUAL(esp32base_internal::ConfigUInt32ReadResult::NotFound,
                       esp32base_internal::readConfigUInt32("eb_app_events", "active_id_bits", value));
@@ -158,8 +192,24 @@ void test_factory_reset_reports_condition_namespace_open_failure() {
     TEST_ASSERT_EQUAL_UINT32(1, value);
 }
 
+void test_factory_reset_reports_wifi_recovery_namespace_open_failure() {
+    resetConfigHarness();
+    const uint8_t recoveryConfig[] = {1, 1, 0, 0x10, 0x27, 0, 0};
+    TEST_ASSERT_TRUE(Esp32BaseConfig::setBlob(
+        "eb_wifi_rcv", "button", recoveryConfig, sizeof(recoveryConfig)));
+    native_nvs::openFailureNamespace() = "eb_wifi_rcv";
+    TEST_ASSERT_FALSE(Esp32BaseConfig::factoryReset());
+    native_nvs::openFailureNamespace().clear();
+    uint8_t recovered[sizeof(recoveryConfig)] = {};
+    TEST_ASSERT_TRUE(Esp32BaseConfig::getBlob(
+        "eb_wifi_rcv", "button", recovered, sizeof(recovered)));
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(recoveryConfig, recovered, sizeof(recoveryConfig));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
+    RUN_TEST(test_recovery_button_triggers_at_threshold_once_per_press);
+    RUN_TEST(test_recovery_button_release_and_bounce_restart_hold_window);
     RUN_TEST(test_deferred_int_skips_when_nvs_already_has_same_value);
     RUN_TEST(test_deferred_bool_skips_when_nvs_already_has_same_value);
     RUN_TEST(test_deferred_string_skips_when_nvs_already_has_same_value);
@@ -171,5 +221,6 @@ int main(int, char**) {
     RUN_TEST(test_internal_uint32_write_repairs_wrong_nvs_type);
     RUN_TEST(test_factory_reset_clears_app_event_condition_state);
     RUN_TEST(test_factory_reset_reports_condition_namespace_open_failure);
+    RUN_TEST(test_factory_reset_reports_wifi_recovery_namespace_open_failure);
     return UNITY_END();
 }

@@ -930,6 +930,7 @@ bool Esp32BaseConfig::clearUiConfig() {
 bool Esp32BaseConfig::factoryReset() {
     bool ok = true;
     ok = clearWifiConfig() && ok;
+    ok = clearNamespace("eb_wifi_rcv") && ok;
     ok = clearWebAuthConfig() && ok;
     ok = clearSystemConfig() && ok;
     ok = clearLogConfig() && ok;

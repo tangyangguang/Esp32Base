@@ -7,6 +7,7 @@
 #include "../core/Esp32BaseConfig.h"
 #include "../core/Esp32BaseLog.h"
 #include "../core/Esp32BaseResetReason.h"
+#include "internal/Esp32BaseRecoveryButton.h"
 
 #if ESP32BASE_ENABLE_BUS
 #include "../runtime/Esp32BaseBus.h"
@@ -34,6 +35,9 @@
 #ifndef ESP32BASE_WIFI_SAFE_BOOT_MAX_RESETS
 #define ESP32BASE_WIFI_SAFE_BOOT_MAX_RESETS 3
 #endif
+#ifndef ESP32BASE_WIFI_RECOVERY_BUTTON_DEBOUNCE_MS
+#define ESP32BASE_WIFI_RECOVERY_BUTTON_DEBOUNCE_MS 50UL
+#endif
 
 namespace {
 bool g_wifiReady = false;
@@ -53,6 +57,13 @@ uint8_t g_staGuardedResetCount = 0;
 bool g_wifiInitGuardActive = false;
 bool g_wifiInitPaused = false;
 uint8_t g_wifiInitGuardedResetCount = 0;
+Esp32BaseWiFi::RecoveryButtonConfig g_recoveryButtonConfig = {
+    ESP32BASE_ENABLE_WIFI_RECOVERY_BUTTON && ESP32BASE_WIFI_RECOVERY_BUTTON_DEFAULT_ENABLED,
+    static_cast<int8_t>(ESP32BASE_WIFI_RECOVERY_BUTTON_GPIO),
+    static_cast<uint32_t>(ESP32BASE_WIFI_RECOVERY_BUTTON_HOLD_MS)
+};
+bool g_recoveryButtonTriggeredEver = false;
+esp32base_internal::RecoveryButtonTracker g_recoveryButtonTracker;
 
 constexpr const char* WIFI_NS = "eb_wifi";
 constexpr const char* WIFI_KEY_SSID = "ssid";
@@ -63,6 +74,126 @@ constexpr const char* WIFI_KEY_STA_PAUSE = "sta_pause";
 constexpr const char* WIFI_KEY_INIT_GUARD = "init_guard";
 constexpr const char* WIFI_KEY_INIT_RESET_COUNT = "init_rst";
 constexpr const char* WIFI_KEY_INIT_PAUSE = "init_pause";
+constexpr const char* WIFI_RECOVERY_NS = "eb_wifi_rcv";
+constexpr const char* WIFI_RECOVERY_KEY = "button";
+constexpr uint8_t WIFI_RECOVERY_CONFIG_VERSION = 1;
+constexpr size_t WIFI_RECOVERY_CONFIG_BYTES = 7;
+
+bool usableRecoveryButtonGpio(int gpio) {
+    if (gpio < 0 || gpio > INT8_MAX || !digitalPinIsValid(gpio) || !digitalPinCanOutput(gpio)) {
+        return false;
+    }
+#if defined(CONFIG_IDF_TARGET_ESP32C3)
+    if (gpio >= 11 && gpio <= 17) {
+        return false;
+    }
+#elif defined(CONFIG_IDF_TARGET_ESP32S3)
+    if (gpio >= 26 && gpio <= 32) {
+        return false;
+    }
+#else
+    if (gpio >= 6 && gpio <= 11) {
+        return false;
+    }
+#endif
+    return true;
+}
+
+bool validRecoveryButtonConfig(const Esp32BaseWiFi::RecoveryButtonConfig& config) {
+    return config.holdMs >= 1000UL &&
+           config.holdMs <= 60000UL &&
+           usableRecoveryButtonGpio(config.gpio);
+}
+
+void encodeRecoveryButtonConfig(const Esp32BaseWiFi::RecoveryButtonConfig& config,
+                                uint8_t out[WIFI_RECOVERY_CONFIG_BYTES]) {
+    out[0] = WIFI_RECOVERY_CONFIG_VERSION;
+    out[1] = config.enabled ? 1U : 0U;
+    out[2] = static_cast<uint8_t>(config.gpio);
+    out[3] = static_cast<uint8_t>(config.holdMs);
+    out[4] = static_cast<uint8_t>(config.holdMs >> 8);
+    out[5] = static_cast<uint8_t>(config.holdMs >> 16);
+    out[6] = static_cast<uint8_t>(config.holdMs >> 24);
+}
+
+bool decodeRecoveryButtonConfig(const uint8_t in[WIFI_RECOVERY_CONFIG_BYTES],
+                                Esp32BaseWiFi::RecoveryButtonConfig& config) {
+    if (in[0] != WIFI_RECOVERY_CONFIG_VERSION || in[1] > 1U) {
+        return false;
+    }
+    config.enabled = in[1] != 0;
+    config.gpio = static_cast<int8_t>(in[2]);
+    config.holdMs = static_cast<uint32_t>(in[3]) |
+                    (static_cast<uint32_t>(in[4]) << 8) |
+                    (static_cast<uint32_t>(in[5]) << 16) |
+                    (static_cast<uint32_t>(in[6]) << 24);
+    return validRecoveryButtonConfig(config);
+}
+
+void resetRecoveryButtonRuntime() {
+    g_recoveryButtonTracker.reset(millis());
+}
+
+void applyRecoveryButtonConfig(const Esp32BaseWiFi::RecoveryButtonConfig& config) {
+    if (g_recoveryButtonConfig.enabled && usableRecoveryButtonGpio(g_recoveryButtonConfig.gpio) &&
+        (!config.enabled || config.gpio != g_recoveryButtonConfig.gpio)) {
+        pinMode(g_recoveryButtonConfig.gpio, INPUT);
+    }
+    g_recoveryButtonConfig = config;
+    resetRecoveryButtonRuntime();
+    if (config.enabled) {
+        pinMode(config.gpio, INPUT_PULLUP);
+    }
+}
+
+void loadRecoveryButtonConfig() {
+    Esp32BaseWiFi::RecoveryButtonConfig config = Esp32BaseWiFi::defaultRecoveryButtonConfig();
+    if (!validRecoveryButtonConfig(config)) {
+        ESP32BASE_LOG_E("wifi", "recovery_button_default_invalid gpio=%d hold_ms=%lu action=disable",
+                        static_cast<int>(config.gpio),
+                        static_cast<unsigned long>(config.holdMs));
+        config.enabled = false;
+        config.gpio = 0;
+        config.holdMs = 10000UL;
+    }
+    uint8_t encoded[WIFI_RECOVERY_CONFIG_BYTES];
+    if (Esp32BaseConfig::getBlob(WIFI_RECOVERY_NS, WIFI_RECOVERY_KEY, encoded, sizeof(encoded))) {
+        Esp32BaseWiFi::RecoveryButtonConfig stored;
+        if (decodeRecoveryButtonConfig(encoded, stored)) {
+            config = stored;
+        } else {
+            ESP32BASE_LOG_W("wifi", "recovery_button_config_invalid source=stored action=use_default");
+        }
+    }
+    applyRecoveryButtonConfig(config);
+    ESP32BASE_LOG_I("wifi", "recovery_button_config enabled=%s gpio=%d hold_ms=%lu source=%s",
+                    config.enabled ? "yes" : "no",
+                    static_cast<int>(config.gpio),
+                    static_cast<unsigned long>(config.holdMs),
+                    config.enabled ? "active" : "disabled");
+}
+
+void handleRecoveryButton() {
+    if (!g_recoveryButtonConfig.enabled) {
+        return;
+    }
+    const uint32_t now = millis();
+    const bool rawPressed = digitalRead(g_recoveryButtonConfig.gpio) == LOW;
+    if (!g_recoveryButtonTracker.update(rawPressed,
+                                        now,
+                                        ESP32BASE_WIFI_RECOVERY_BUTTON_DEBOUNCE_MS,
+                                        g_recoveryButtonConfig.holdMs)) {
+        return;
+    }
+    g_recoveryButtonTriggeredEver = true;
+    ESP32BASE_LOG_W("wifi", "recovery_button_triggered gpio=%d hold_ms=%lu action=start_config_portal credentials=preserved",
+                    static_cast<int>(g_recoveryButtonConfig.gpio),
+                    static_cast<unsigned long>(g_recoveryButtonConfig.holdMs));
+    if (!Esp32BaseWiFi::startConfigPortal()) {
+        ESP32BASE_LOG_E("wifi", "recovery_button_action_failed gpio=%d action=start_config_portal",
+                        static_cast<int>(g_recoveryButtonConfig.gpio));
+    }
+}
 
 bool credentialsPresent() {
     return g_wifiSsid[0] != '\0';
@@ -479,6 +610,9 @@ const char* wlStatusName(wl_status_t status) {
 
 bool Esp32BaseWiFi::begin() {
     g_wifiReady = true;
+#if ESP32BASE_ENABLE_WIFI_RECOVERY_BUTTON
+    loadRecoveryButtonConfig();
+#endif
     const bool hasCredentials = loadCredentials();
     loadStaSafeBootState();
     if (!evaluateWiFiInitSafeBootBeforeArduinoWiFi()) {
@@ -508,6 +642,9 @@ void Esp32BaseWiFi::handle() {
     if (!g_wifiReady) {
         return;
     }
+#if ESP32BASE_ENABLE_WIFI_RECOVERY_BUTTON
+    handleRecoveryButton();
+#endif
     const wl_status_t status = WiFi.status();
     const uint32_t now = millis();
     if ((g_wifiState == CONNECTING || g_wifiState == RETRY_BACKOFF) && status == WL_CONNECTED) {
@@ -700,6 +837,61 @@ bool Esp32BaseWiFi::stopConfigPortal() {
         g_wifiState = IDLE;
     }
     return true;
+}
+
+Esp32BaseWiFi::RecoveryButtonConfig Esp32BaseWiFi::recoveryButtonConfig() {
+    return g_recoveryButtonConfig;
+}
+
+Esp32BaseWiFi::RecoveryButtonConfig Esp32BaseWiFi::defaultRecoveryButtonConfig() {
+    RecoveryButtonConfig config = {
+        ESP32BASE_ENABLE_WIFI_RECOVERY_BUTTON && ESP32BASE_WIFI_RECOVERY_BUTTON_DEFAULT_ENABLED,
+        static_cast<int8_t>(ESP32BASE_WIFI_RECOVERY_BUTTON_GPIO),
+        static_cast<uint32_t>(ESP32BASE_WIFI_RECOVERY_BUTTON_HOLD_MS)
+    };
+    return config;
+}
+
+bool Esp32BaseWiFi::setRecoveryButtonConfig(const RecoveryButtonConfig& config) {
+#if !ESP32BASE_ENABLE_WIFI_RECOVERY_BUTTON
+    (void)config;
+    ESP32BASE_LOG_W("wifi", "recovery_button_config_rejected reason=capability_disabled");
+    return false;
+#else
+    if (!isValidRecoveryButtonConfig(config)) {
+        ESP32BASE_LOG_W("wifi", "recovery_button_config_rejected enabled=%s gpio=%d hold_ms=%lu",
+                        config.enabled ? "yes" : "no",
+                        static_cast<int>(config.gpio),
+                        static_cast<unsigned long>(config.holdMs));
+        return false;
+    }
+    uint8_t encoded[WIFI_RECOVERY_CONFIG_BYTES];
+    encodeRecoveryButtonConfig(config, encoded);
+    if (!Esp32BaseConfig::setBlob(WIFI_RECOVERY_NS, WIFI_RECOVERY_KEY, encoded, sizeof(encoded))) {
+        ESP32BASE_LOG_W("wifi", "recovery_button_config_save_failed");
+        return false;
+    }
+    uint8_t verify[WIFI_RECOVERY_CONFIG_BYTES];
+    if (!Esp32BaseConfig::getBlob(WIFI_RECOVERY_NS, WIFI_RECOVERY_KEY, verify, sizeof(verify)) ||
+        memcmp(encoded, verify, sizeof(encoded)) != 0) {
+        ESP32BASE_LOG_W("wifi", "recovery_button_config_verify_failed");
+        return false;
+    }
+    applyRecoveryButtonConfig(config);
+    ESP32BASE_LOG_W("wifi", "recovery_button_config_saved enabled=%s gpio=%d hold_ms=%lu",
+                    config.enabled ? "yes" : "no",
+                    static_cast<int>(config.gpio),
+                    static_cast<unsigned long>(config.holdMs));
+    return true;
+#endif
+}
+
+bool Esp32BaseWiFi::isValidRecoveryButtonConfig(const RecoveryButtonConfig& config) {
+    return validRecoveryButtonConfig(config);
+}
+
+bool Esp32BaseWiFi::recoveryButtonTriggered() {
+    return g_recoveryButtonTriggeredEver;
 }
 
 Esp32BaseWiFi::State Esp32BaseWiFi::state() {

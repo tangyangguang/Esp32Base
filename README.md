@@ -57,6 +57,8 @@ build_flags =
 
 Web/API 保存的 hostname 存储在 `eb_sys.hostname`，重启后覆盖构建默认值，并用于 DHCP client hostname、mDNS 和 OTA；出厂重置清除该配置后恢复 `ESP32BASE_DEFAULT_HOSTNAME`。
 
+启用 WiFi 的 profile 默认启用物理恢复热点：ESP32 / ESP32-S3 使用 GPIO0，ESP32-C3 使用 GPIO9。应用运行后低电平按住默认10秒会立即切换到配置热点（通常为 `192.168.4.1`），保留原 WiFi 凭据且不重启；默认BOOT键如果在复位或上电期间保持按下，仍会按芯片硬件规则进入ROM下载模式。System 页面可立即修改启用状态、GPIO和长按秒数；配置独立保存在 `eb_wifi_rcv`，业务必须确认所选引脚未被板载外设、Flash、PSRAM、USB或应用硬件占用。
+
 示例工程默认使用 `-fno-exceptions` 和 `-flto` 减少 Arduino / C++ 运行时与未使用库代码的链接体积，并移除 PlatformIO 默认的 `-fno-lto`；Core 3.x 示例还移除 `-fuse-cxa-atexit`，避免固件不会用到的进程退出析构注册开销。Esp32Base 与示例代码不使用 C++ `throw/catch`，也不依赖进程退出析构；业务应用如果确实依赖 C++ 异常、特殊链接行为或退出析构语义，应从自己的构建配置中移除对应 flags 并重新评估容量。
 
 底部横条可在 System 页面配置为 Off、Status only 或 Links + status。该设置保存到 `eb_ui.footer_mode`，用于控制 `sendFooter()` 输出的紧凑系统入口和运行摘要。

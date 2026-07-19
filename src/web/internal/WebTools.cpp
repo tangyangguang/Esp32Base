@@ -124,6 +124,52 @@ bool footerBarModeFromArg(const String& raw, Esp32BaseWeb::FooterBarMode& mode) 
     return false;
 }
 
+#if ESP32BASE_ENABLE_WIFI_RECOVERY_BUTTON
+bool parseToolsUnsigned(const String& raw, uint32_t minimum, uint32_t maximum, uint32_t& out) {
+    if (raw.length() == 0 || raw[0] == '-' || raw[0] == '+') {
+        return false;
+    }
+    char* end = nullptr;
+    const unsigned long value = strtoul(raw.c_str(), &end, 10);
+    if (!end || *end != '\0' || value < minimum || value > maximum) {
+        return false;
+    }
+    out = static_cast<uint32_t>(value);
+    return true;
+}
+
+void sendWifiRecoveryPanel() {
+    const Esp32BaseWiFi::RecoveryButtonConfig config = Esp32BaseWiFi::recoveryButtonConfig();
+    const Esp32BaseWiFi::RecoveryButtonConfig defaults = Esp32BaseWiFi::defaultRecoveryButtonConfig();
+    char value[32];
+    sendChunk("<section class='panel actionpanel'><h2>WiFi recovery button</h2><div class='tablewrap'><table class='kv'>");
+    sendInfoRow("Runtime state", config.enabled ? "enabled" : "disabled");
+    snprintf(value, sizeof(value), "GPIO %d", static_cast<int>(config.gpio));
+    sendInfoRow("Current pin", value);
+    snprintf(value, sizeof(value), "%lu seconds", static_cast<unsigned long>(config.holdMs / 1000UL));
+    sendInfoRow("Long press", value);
+    snprintf(value, sizeof(value), "GPIO %d / %lu seconds",
+             static_cast<int>(defaults.gpio),
+             static_cast<unsigned long>(defaults.holdMs / 1000UL));
+    sendInfoRow("Build default", value);
+    sendChunk("</table></div><form class='editform' method='post' action='/esp32base/system/wifi-recovery' onsubmit=\"return once(this)\"><div class='fieldgrid'>");
+    sendChunk("<p class='field short'><label><input type='checkbox' name='enabled' value='1'");
+    if (config.enabled) {
+        sendChunk(" checked");
+    }
+    sendChunk("> Enabled</label><small>Enabled by default on the chip's BOOT button.</small></p>");
+    sendChunk("<p class='field short'><label for='wifi-recovery-gpio'>GPIO</label><input id='wifi-recovery-gpio' name='gpio' type='number' min='0' max='127' value='");
+    sendIntChunk(config.gpio);
+    sendChunk("' required><small>Active low with the internal pull-up.</small></p>");
+    sendChunk("<p class='field short'><label for='wifi-recovery-hold'>Long press</label><input id='wifi-recovery-hold' name='hold_seconds' type='number' min='1' max='60' step='1' value='");
+    sendIntChunk(static_cast<int>(config.holdMs / 1000UL));
+    sendChunk("' required><small>Seconds; the portal starts as soon as the threshold is reached.</small></p></div>");
+    sendChunk("<p class='notice warn'>Changing the GPIO takes effect immediately. Do not select a pin used by flash, PSRAM, USB, a peripheral, or application hardware. Esp32Base rejects invalid and known flash GPIOs, but the application remains responsible for board-level pin conflicts. The default BOOT button must be pressed after the application is running; holding it through reset or power-on enters the ROM download mode.</p>");
+    sendChunk("<p class='muted'>A successful long press preserves saved WiFi credentials and switches this boot session to the configuration hotspot. The usual AP address is 192.168.4.1. Saving WiFi from the portal immediately tries the new network; otherwise restarting retries the previously saved network.</p>");
+    sendChunk("<div class='actions'><input type='submit' value='Save WiFi Recovery'></div></form></section>");
+}
+#endif
+
 #if ESP32BASE_ENABLE_WATCHDOG
 void sendWatchdogPanel() {
     const WatchdogTripState state = readWatchdogTripState();
@@ -246,6 +292,10 @@ void handleToolsPage() {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "System log mode saved");
     } else if (g_server.hasArg("footer_saved")) {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "Footer bar mode saved");
+#if ESP32BASE_ENABLE_WIFI_RECOVERY_BUTTON
+    } else if (g_server.hasArg("wifi_recovery_saved")) {
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "WiFi recovery button saved", "The new GPIO and long-press behavior are active now.");
+#endif
     } else if (g_server.hasArg("watchdog_trip_reset")) {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "Watchdog trip reset");
     } else if (g_server.hasArg("error")) {
@@ -290,6 +340,9 @@ void handleToolsPage() {
     sendChunk("<div class='field'><label for='host'>New hostname</label><input id='host' name='hostname' maxlength='32' autocomplete='off' value='");
     sendEscapedHtmlChunk(hasStoredHostname && storedHostname[0] ? storedHostname : Esp32Base::hostname());
     sendChunk("'><small>Saved hostname takes effect after restart.</small></div><div class='actions'><input type='submit' value='Save Hostname'></div></div></form></section>");
+#if ESP32BASE_ENABLE_WIFI_RECOVERY_BUTTON
+    sendWifiRecoveryPanel();
+#endif
     sendChunk("<section class='panel actionpanel'><h2>Footer bar</h2><div class='tablewrap'><table class='kv'>");
     sendInfoRow("Current mode", Esp32BaseWeb::footerBarModeName());
     sendChunk("</table></div><form method='post' action='/esp32base/system/footer-bar' onsubmit=\"return once(this)\"><div class='radioopts'>");
@@ -347,6 +400,39 @@ void handleToolsPage() {
     sendChunk("</div>");
     Esp32BaseWeb::sendFooter();
 }
+
+#if ESP32BASE_ENABLE_WIFI_RECOVERY_BUTTON
+void handleToolsWifiRecoveryPost() {
+    markRequest();
+    if (!ensurePostAllowed("tools_wifi_recovery")) {
+        return;
+    }
+    uint32_t gpio = 0;
+    uint32_t holdSeconds = 0;
+    if (!parseToolsUnsigned(g_server.arg("gpio"), 0, INT8_MAX, gpio) ||
+        !parseToolsUnsigned(g_server.arg("hold_seconds"), 1, 60, holdSeconds)) {
+        ESP32BASE_LOG_W("web", "wifi_recovery_config_rejected source=tools reason=invalid_number");
+        redirectSeeOther("/esp32base/system?error=wifi_recovery_invalid_value");
+        return;
+    }
+    Esp32BaseWiFi::RecoveryButtonConfig config = {
+        g_server.hasArg("enabled") && g_server.arg("enabled") == "1",
+        static_cast<int8_t>(gpio),
+        holdSeconds * 1000UL
+    };
+    if (!Esp32BaseWiFi::isValidRecoveryButtonConfig(config)) {
+        ESP32BASE_LOG_W("web", "wifi_recovery_config_rejected source=tools reason=invalid_gpio enabled=%s gpio=%lu hold_seconds=%lu",
+                        config.enabled ? "yes" : "no",
+                        static_cast<unsigned long>(gpio),
+                        static_cast<unsigned long>(holdSeconds));
+        redirectSeeOther("/esp32base/system?error=wifi_recovery_invalid_gpio");
+        return;
+    }
+    const bool ok = Esp32BaseWiFi::setRecoveryButtonConfig(config);
+    redirectSeeOther(ok ? "/esp32base/system?wifi_recovery_saved=1" :
+                          "/esp32base/system?error=wifi_recovery_save_failed");
+}
+#endif
 
 void handleToolsFileLogPost() {
     markRequest();

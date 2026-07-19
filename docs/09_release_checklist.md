@@ -144,7 +144,7 @@
 - deferred pending/NVS 同值去重，不重复推迟 flush 或产生 NVS 写入。
 - restart 前全部落盘。
 - NVS 写满返回 false。
-- `factoryReset()` 清理 `eb_wifi`、`eb_web`、`eb_log`、`eb_ui`、`eb_sys.hostname`，并在条件跟踪启用时清理 `eb_app_events`。
+- `factoryReset()` 清理 `eb_wifi`、`eb_wifi_rcv`、`eb_web`、`eb_log`、`eb_ui`、`eb_sys.hostname`，并在条件跟踪启用时清理 `eb_app_events`。
 - `factoryReset()` 保留 `eb_sys` 中的 boot/restart/watchdog 统计诊断 key。
 - 单项清理 API 只影响对应配置范围；`clearSystemConfig()` 只清 hostname，不清统计诊断 key。
 - namespace 不存在时出厂重置返回成功，不创建空 namespace。
@@ -157,6 +157,8 @@
 - 合法 `ESP32BASE_DEFAULT_HOSTNAME` 生效；非法默认 hostname 回退 `esp32base` 并输出 WARN。
 - 合法 `eb_sys.hostname` 覆盖构建默认 hostname；非法持久化 hostname 被忽略并输出 WARN。
 - `factoryReset()` 后重启清除 `eb_sys.hostname`，恢复构建默认 hostname。
+- ESP32 / ESP32-S3恢复按键构建默认GPIO0，ESP32-C3默认GPIO9，默认10000ms；达到阈值立即进入配置热点，不清凭据、不在按下状态重启，同一次按下只触发一次。
+- System页能持久化启用状态、合法GPIO和1～60秒长按时间到`eb_wifi_rcv.button`，保存后立即生效；非法、无内部上拉能力和已知Flash GPIO必须拒绝。
 
 ## 10. 系统诊断日志（FileLog）检查
 

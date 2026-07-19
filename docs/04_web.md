@@ -199,6 +199,7 @@ System:
 - `GET /esp32base/app-config`，仅 `ESP32BASE_ENABLE_APP_CONFIG=1`
 - `POST /esp32base/app-config`，仅 `ESP32BASE_ENABLE_APP_CONFIG=1`
 - `POST /esp32base/system/hostname`
+- `POST /esp32base/system/wifi-recovery`
 - `POST /esp32base/system/reboot`
 - `POST /esp32base/system/footer-bar`
 - `POST /esp32base/system/filelog`
@@ -231,6 +232,7 @@ System 维护页：
 - System 页面应把低频入口、设置项、普通维护项和危险操作分区展示，保证桌面端和手机端都能清楚区分说明、当前状态和操作入口。
 - 启用 App Config 时，System 页面首位仍显示 App Config 入口；App Config 是业务持久化参数配置页，不和基础库维护参数混在 System 长页面中。
 - Hostname 设置区显示当前 hostname、构建默认 hostname、已保存 hostname 和是否需要重启；保存只写入 `eb_sys.hostname`，不热切换当前 DHCP hostname、mDNS、OTA 或 Web 身份，页面必须提示重启后生效。
+- WiFi Recovery设置区显示运行状态、当前GPIO、长按秒数和芯片构建默认值；保存要求认证与同源POST，成功后立即切换GPIO监听。页面必须提醒GPIO冲突由业务板负责，并说明长按只进入通常位于`192.168.4.1`的配置热点，不清除凭据、不重启。
 - Footer bar 模式设置只接受 Off、Status only、Links + status，保存后立即生效并写入 `eb_ui.footer_mode`；该设置只控制底部横条，不关闭直达 URL 或顶部业务导航。
 - 重启按钮必须有二次确认，并通过统一 lifecycle restart 执行；POST 响应必须替换浏览器历史到 GET URL，避免刷新重复提交。
 - `/esp32base/api/restart` 是脚本兼容入口，返回纯文本并立即进入重启流程，不提供 JSON 错误模型。

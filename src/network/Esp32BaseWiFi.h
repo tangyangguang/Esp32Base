@@ -5,6 +5,12 @@
 
 class Esp32BaseWiFi {
 public:
+    struct RecoveryButtonConfig {
+        bool enabled;
+        int8_t gpio;
+        uint32_t holdMs;
+    };
+
     enum State : uint8_t {
         IDLE,
         CONNECTING,
@@ -29,6 +35,11 @@ public:
     static bool retrySavedCredentials();
     static bool startConfigPortal();
     static bool stopConfigPortal();
+    static RecoveryButtonConfig recoveryButtonConfig();
+    static RecoveryButtonConfig defaultRecoveryButtonConfig();
+    static bool setRecoveryButtonConfig(const RecoveryButtonConfig& config);
+    static bool isValidRecoveryButtonConfig(const RecoveryButtonConfig& config);
+    static bool recoveryButtonTriggered();
 
     static State state();
     static const char* stateName();

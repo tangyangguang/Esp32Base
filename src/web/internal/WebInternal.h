@@ -250,6 +250,7 @@ void handleAppConfigPage();
 #endif
 void handleRestart();
 void handleToolsPage();
+void handleToolsWifiRecoveryPost();
 void handleToolsFileLogPost();
 void handleToolsFooterBarPost();
 void handleToolsRebootPost();

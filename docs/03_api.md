@@ -717,6 +717,12 @@ public:
 ```cpp
 class Esp32BaseWiFi {
 public:
+    struct RecoveryButtonConfig {
+        bool enabled;
+        int8_t gpio;
+        uint32_t holdMs;
+    };
+
     enum State : uint8_t {
         IDLE,
         CONNECTING,
@@ -741,6 +747,11 @@ public:
     static bool retrySavedCredentials();
     static bool startConfigPortal();
     static bool stopConfigPortal();
+    static RecoveryButtonConfig recoveryButtonConfig();
+    static RecoveryButtonConfig defaultRecoveryButtonConfig();
+    static bool setRecoveryButtonConfig(const RecoveryButtonConfig&);
+    static bool isValidRecoveryButtonConfig(const RecoveryButtonConfig&);
+    static bool recoveryButtonTriggered();
 
     static State state();
     static const char* stateName();
@@ -760,6 +771,10 @@ WiFi 凭证和重连策略：
 
 - 无已保存凭证时，`begin()` 可进入 `CONFIG_PORTAL`。
 - 默认 config portal AP 不设置密码；SSID 为 `ESP32-Config-XXXX`，其中 `XXXX` 取 eFuse MAC 按常见网络 MAC 顺序显示时的最后两个字节。
+- WiFi恢复按键默认启用：ESP32 / ESP32-S3默认GPIO0，ESP32-C3默认GPIO9，使用内部上拉、低电平有效。应用运行后连续稳定按下达到默认10000ms时立即调用`startConfigPortal()`，无需先松手；同一次按下只触发一次。该动作不清除`eb_wifi`凭据、不重启，避免默认BOOT引脚仍为低电平时进入下载模式；如果按键在复位或上电期间已经按下，芯片仍会先按硬件strapping规则进入ROM下载模式，应用无法接管。
+- 恢复按键能力可由`ESP32BASE_ENABLE_WIFI_RECOVERY_BUTTON=0`完整裁掉；编译能力存在时，构建默认可由`ESP32BASE_WIFI_RECOVERY_BUTTON_DEFAULT_ENABLED`、`ESP32BASE_WIFI_RECOVERY_BUTTON_GPIO`和`ESP32BASE_WIFI_RECOVERY_BUTTON_HOLD_MS`覆盖。运行时配置使用版本化7字节线性编码保存在`eb_wifi_rcv.button`，System页或`setRecoveryButtonConfig()`保存后立即重新配置GPIO；允许的长按范围为1000～60000ms。
+- `isValidRecoveryButtonConfig()`要求GPIO是Arduino ESP32 Core报告的有效、可启用内部上拉的GPIO，并拒绝当前芯片已知的片内Flash GPIO范围。它无法识别具体业务板上的外设、PSRAM、USB或应用引脚冲突，调用方仍必须核对原理图。关闭功能也必须提交合法GPIO，以保证以后重新启用时配置完整。
+- `recoveryButtonTriggered()`表示本次启动中是否至少成功达到过一次长按阈值；它不表示热点当前仍在运行。保存新WiFi会沿用既有“Save & Connect”行为，立即停止热点并尝试新网络；未保存时，重启会再次按保留的旧凭据启动。
 - 有效凭证要求 SSID 非空且不超过 32 字节，密码可为空且不超过 64 字节；超限输入返回 false，不静默截断。
 - 有已保存凭证但连接失败时，不自动进入 AP/config portal，而是持续重连。
 - 单次 STA 连接尝试有非阻塞超时，默认 `ESP32BASE_WIFI_CONNECT_TIMEOUT_MS=15000`。
@@ -773,7 +788,7 @@ WiFi 凭证和重连策略：
 - STA 安全启动保护：有已保存凭证并准备进入 STA 时，库会在 `eb_wifi.sta_guard` 写入 guarded 启动标记；成功连接后清除 `sta_guard`、`sta_rst` 和 `sta_pause`。如果下一次启动发现 guarded 标记仍存在，且本次 reset reason 是 `brownout`、`panic` 或 watchdog 类复位，则累计 `eb_wifi.sta_rst`；连续达到 `ESP32BASE_WIFI_SAFE_BOOT_MAX_RESETS`（默认 3）后设置 `eb_wifi.sta_pause=true`，保留 `ssid/pass`，暂停 STA 并进入 AP/config portal。
 - `sta_pause=true` 时，如果本次 reset reason 仍是 brownout、panic 或 watchdog 类危险复位，`begin()` 会把保存凭据视为暂不可用并进入 `CONFIG_PORTAL`；如果本次是 `poweron`、外部复位或其他非危险复位，库会自动清除 pause/guard/count 并用已保存凭据恢复一次 STA 尝试。
 - `retrySavedCredentials()` 会重新读取已保存凭据，清除 safe boot pause/guard/count，停止 config portal，并用原凭据进入 STA 连接流程；它不要求业务或用户重新保存同一组 SSID/password。WiFi 页面在 safe boot paused 时提供“恢复并重试已保存 WiFi”入口调用该行为。
-- 只有显式 `clearCredentials()`、`startConfigPortal()` 或应用自定义策略，才能进入 AP/config portal。
+- 只有无凭据、STA安全启动保护、恢复按键、显式`startConfigPortal()`或应用自定义策略，才能进入AP/config portal。
 - `clearCredentials()` 只清空库管理的 WiFi 凭证，不立即触发重连、断线或 portal；NVS 清理失败时返回 false。
 - `connect(..., persist=true)` 必须先同步写入 NVS 保存凭证，写入失败时返回 false 且不切换连接；这是显式配置提交的可靠性取舍，避免页面提交后立即重启导致新凭证丢失。
 - WiFi 日志可输出 SSID 和 `password_set` 状态，不输出密码值。

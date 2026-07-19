@@ -32,10 +32,10 @@
 - 有已保存 WiFi 凭证但普通连接失败时，库不会自动进入 AP/config portal，而是持续 STA 重连。
 - WiFi 初始化安全启动保护是更早的保护层：如果设备连续在 Arduino WiFi 初始化最早期发生 guarded brownout、panic、watchdog 或 software reset，达到阈值后会暂停 WiFi 初始化并进入无 WiFi 诊断状态，而不是继续尝试 AP/config portal。日志会用中文提示疑似 WiFi/RF 启动瞬时电流导致供电跌落，建议检查供电链路并考虑在板端 VIN/5V 与 GND 间增加低 ESR 储能电容。该提示不是对“电容不足”的唯一归因，仍需排查电源限流、USB 线压降、稳压器余量和接线接触电阻。
 - STA 安全启动保护是例外：如果上一次已进入 guarded STA 启动阶段，随后连续发生 brownout、panic 或 watchdog 类复位，达到阈值后会暂停 `eb_wifi` 凭据并回退 AP/config portal。后续正常 `poweron`、外部复位或其他非危险复位会自动恢复一次已保存 STA 尝试；Web WiFi 页面也提供重试已保存凭据入口，不要求重新保存同一组密码。该机制用于跳出坏 STA 状态造成的永久重启循环，不用于处理路由器临时离线。
-- 进入 AP/config portal 只发生在无凭证、显式 `startConfigPortal()`、STA 安全启动保护触发或应用自定义策略下。
+- 进入 AP/config portal 只发生在无凭证、恢复按键、显式 `startConfigPortal()`、STA 安全启动保护触发或应用自定义策略下。
 - Config portal AP 默认不设置密码，SSID 为可预测的 `ESP32-Config-XXXX`，其中后缀来自 eFuse MAC 的最后两个字节；应用应只在预期配网窗口进入 portal。
 - 该策略用于防止量产设备在路由器临时故障时被陌生人通过 AP 修改凭证。
-- 如果应用面向消费场景，需要换路由器后自动配网，应由应用在长 backoff 后显式调用 `Esp32BaseWiFi::startConfigPortal()`，并配合按键长按、状态灯或屏幕提示等用户确认方式。
+- 启用WiFi时默认提供物理恢复热点按键：ESP32 / ESP32-S3为GPIO0，ESP32-C3为GPIO9，应用运行后长按10秒进入配置热点且保留凭据。默认键也是芯片BOOT strapping键，复位或上电期间保持按下会进入ROM下载模式，应用层无法改变。System页可关闭或改GPIO/时间；基础库只能拒绝无效和已知Flash GPIO，无法检测具体板卡上的外设、PSRAM、USB或业务引脚冲突，改动前必须核对原理图。deep sleep期间`handle()`不运行，因此按键不检测；需要从deep sleep唤醒的产品由业务配置独立wake source。
 - deep sleep 期间 STA、AP、DNS、Web 均不可访问；唤醒后按新启动流程恢复。
 - Captive Portal DNS 对所有查询返回 AP IP，不提供按域名扩展的 `addCaptiveTarget()`。
 
