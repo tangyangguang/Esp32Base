@@ -326,15 +326,15 @@ App Events 页面：
 
 系统首页：
 
-- `/esp32base/status` 是只读设备体检页，采用诊断优先结构：默认按 Network、Runtime、Persistence、Firmware & OTA、Platform & Security 展示调试信息，不额外显示相邻重复的总览预览块。低频运行 ELF SHA、NVS 和网络信息位于 `/esp32base/status?details=1`；System 设置入口由 Footer Bar 统一提供，正文不重复展示。
+- `/esp32base/status` 是只读设备体检页，采用诊断优先结构：按 Network、Runtime、Persistence、Firmware & OTA、Platform & Security 直接平铺调试信息，不额外显示相邻重复的总览预览块，也不使用容易让用户误判的展开按钮。System 设置入口由 Footer Bar 统一提供，正文不重复展示。
 - Status 页展示设备身份、网络、运行健康、存储与日志、固件 OTA 和硬件摘要。多值信息使用紧凑子指标，避免逗号串联造成阅读困难。
-- Status 页不打开日志段文件、不扫描完整文件树、不统计 Top 文件列表或枚举完整分区表；低频或较重的文件细节放在 `/esp32base/fs`，运行 ELF SHA 放在 `/esp32base/status?details=1`。
+- Status 页不打开日志段文件、不扫描完整文件树、不统计 Top 文件列表、不枚举完整分区表，也不校验整份运行镜像；较重的文件细节放在 `/esp32base/fs`。网络参数、NVS 条目摘要、运行 ELF SHA 和 eFuse MAC 直接显示，均只在本次页面请求中读取。
 - `/esp32base/fs` 默认是只读 LittleFS 详情页，展示容量摘要、主要文件和文件树。文件树应区分普通文件、不可读文件和基础库管理文件；不可读文件不能给出会生成 0 字节伪成功的下载入口。当 FS used 明显大于可见文件合计时，应提示可能存在内部、历史或不可见占用。业务侧如果使用 `Esp32BaseFs` 读写文件，也必须检查返回值；逻辑大小存在不代表内容块一定可读。
 - `/esp32base/fs?manage=1` 增加单文件删除和受限上传，不提供目录删除、批量删除、编辑、重命名、移动或任意路径输入；删除必须通过 `POST /esp32base/fs/delete -> 303 -> GET`，格式化仍只在 System 页危险操作区。上传保留本地文件名，只写入已有目录；覆盖上传必须显式确认，并避免上传中断时先清空旧文件。基础库管理文件应在文件树中给出维护提醒；维护操作修改 FileLog 或 App Events store 后，应刷新对应运行态。
 - Firmware & OTA 默认显示运行 app slot、下一 OTA slot、Max OTA upload、rollback 状态，以及仅在存在错误时显示的 Last OTA error；默认状态页不调用当前镜像 size 校验，也不计算 `OTA headroom`。Max OTA upload 是下一 OTA slot 的上传硬上限。
 - 启用 Watchdog 时显示 `enabled, lifetime resets N, trip resets M` 或 invalid baseline 和 trip reset time；Reset Trip 保存时间使用和页面 Time 行一致的可信 epoch 判断，无可用时间则显示 `unknown (time unavailable)`。
 - 启用 Time 时，Status 页显示统一 `Time` 行，包含当前来源 `uptime/rtc/ntp`、可信状态、当前时间和 uptime；启用 RTC 时额外显示 `RTC` 行，包含驱动、状态、最近读取 epoch 和读取时的 uptime；启用 NTP 时显示 `NTP` 行，只表示联网对时客户端自身状态。
-- `/esp32base/status?details=1` 增加运行 ELF SHA、NVS 条目、网关、子网、DNS、信道和 MAC 等低频信息，不输出完整分区表。
+- 历史 `?details=1` 查询参数不再改变页面内容；Status 只有一套直接平铺的信息结构。
 - 未启用的模块不显示对应行，避免非 FULL profile 引入额外依赖。
 
 页面风格：
@@ -451,7 +451,7 @@ Esp32BaseWeb::addPage("/config", "配置", handleConfigPage);
 - `SYSTEM_NAV_SECTION` 会在页面底部以小字系统入口与 `Free heap`、`Up`、`RSSI` 同行展示；窄屏下系统入口和状态摘要可自然换行，避免遮挡和横向滚动。
 - Footer bar 可在 System 页面运行时切换 Off、Status only、Links + status；关闭底部横条时系统页面仍可通过直达 URL 访问。
 - 基础库页面复用同一套导航框架，业务页和系统页保持一致入口结构。
-- `/esp32base/status` 面向技术管理与现场诊断：顶部先给出固件、主机名、Profile、64 位在线时长和需关注事项，再按 Network、Runtime、Persistence、Firmware & OTA、Platform & Security 组织状态。默认页面只读取常数级运行态；网络参数、NVS 条目统计与运行 ELF SHA 只在 `/esp32base/status?details=1` 读取和显示。
+- `/esp32base/status` 面向技术管理与现场诊断：顶部先给出固件、主机名、Profile、64 位在线时长和需关注事项，再按 Network、Runtime、Persistence、Firmware & OTA、Platform & Security 组织状态。页面直接显示网络参数、NVS 条目统计与运行 ELF SHA，不创建后台采样或自动刷新。
 - Status 同时作为默认基础库首页时，身份摘要下直接显示当前 SSID/IP 或配网状态，并提供显眼但紧凑的 `Configure WiFi` 入口，链接 `/esp32base/wifi`；用户无需理解系统导航即可找到网络设置。
 - Status 页的 `Current image` 来自当前运行分区的镜像元数据。每次启动最多读取一次并缓存结果，不调用会校验完整镜像的 `ESP.getSketchSize()`；读取失败时明确显示 `unavailable`。该值同时用于判断当前镜像能否放入 OTA target slot。
 - `/esp32base/api/status` 保留 `resetReason` / `wakeReason` 原始字段，并提供 `resetReasonText` / `wakeReasonText` 中文说明字段；新增 64 位 `uptimeMs` 与 `firmware.imageSize`（`{bytes,human}`，不可得时为 `null`）。`wifi.rssi` 返回当前 WiFi RSSI，未连接时为 `0`。

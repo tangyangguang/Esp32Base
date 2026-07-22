@@ -247,10 +247,6 @@ void sendAppPartitionsJson() {
     sendChunk("]");
 }
 
-bool statusDetailsMode() {
-    return g_server.hasArg("details") && g_server.arg("details") != "0";
-}
-
 enum class RunningImageSizeState : uint8_t {
     Unread,
     Available,
@@ -563,7 +559,6 @@ void handleStatusPage() {
     char bootSlot[80] = "unknown";
     char otaTargetSlot[80] = "unavailable";
     char flash[48] = "";
-    const bool details = statusDetailsMode();
     Esp32BaseLog::formatUptime64(Esp32BaseSystem::uptimeMs64(), uptime, sizeof(uptime));
     formatReadableBytes(Esp32BaseSystem::freeHeap(), freeHeap, sizeof(freeHeap));
     formatReadableBytes(Esp32BaseSystem::minFreeHeap(), minHeap, sizeof(minHeap));
@@ -706,15 +701,13 @@ void handleStatusPage() {
 #if ESP32BASE_ENABLE_MDNS
     sendTaggedInfoRow("mDNS", Esp32BaseMdns::isRunning() ? "running" : "stopped", Esp32BaseMdns::isRunning() ? Esp32BaseWeb::UI_OK : Esp32BaseWeb::UI_NEUTRAL);
 #endif
-    if (details) {
-        char address[24];
-        formatIpAddress(WiFi.gatewayIP(), address, sizeof(address)); sendInfoRow("Gateway", address);
-        formatIpAddress(WiFi.subnetMask(), address, sizeof(address)); sendInfoRow("Subnet", address);
-        formatIpAddress(WiFi.dnsIP(), address, sizeof(address)); sendInfoRow("DNS", address);
-        snprintf(value, sizeof(value), "%d", WiFi.channel()); sendInfoRow("Channel", value);
-        sendInfoRow("STA MAC", WiFi.macAddress().c_str());
-        sendInfoRow("AP MAC", WiFi.softAPmacAddress().c_str());
-    }
+    char address[24];
+    formatIpAddress(WiFi.gatewayIP(), address, sizeof(address)); sendInfoRow("Gateway", address);
+    formatIpAddress(WiFi.subnetMask(), address, sizeof(address)); sendInfoRow("Subnet", address);
+    formatIpAddress(WiFi.dnsIP(), address, sizeof(address)); sendInfoRow("DNS", address);
+    snprintf(value, sizeof(value), "%d", WiFi.channel()); sendInfoRow("Channel", value);
+    sendInfoRow("STA MAC", WiFi.macAddress().c_str());
+    sendInfoRow("AP MAC", WiFi.softAPmacAddress().c_str());
     sendStatusSectionEnd();
 #endif
 
@@ -907,16 +900,14 @@ void handleStatusPage() {
         sendSubmetricsEnd(); sendInfoRowEnd();
     }
 #endif
-    if (details) {
-        nvs_stats_t nvsStats = {};
-        if (nvs_get_stats(nullptr, &nvsStats) == ESP_OK) {
-            sendInfoRowStart("NVS entries"); sendSubmetricsStart();
-            snprintf(value, sizeof(value), "%lu", static_cast<unsigned long>(nvsStats.used_entries)); sendSubmetric("Used", value);
-            snprintf(value, sizeof(value), "%lu", static_cast<unsigned long>(nvsStats.free_entries)); sendSubmetric("Free", value);
-            snprintf(value, sizeof(value), "%lu", static_cast<unsigned long>(nvsStats.total_entries)); sendSubmetric("Total", value);
-            snprintf(value, sizeof(value), "%lu", static_cast<unsigned long>(nvsStats.namespace_count)); sendSubmetric("Namespaces", value);
-            sendSubmetricsEnd(); sendInfoRowEnd();
-        }
+    nvs_stats_t nvsStats = {};
+    if (nvs_get_stats(nullptr, &nvsStats) == ESP_OK) {
+        sendInfoRowStart("NVS entries"); sendSubmetricsStart();
+        snprintf(value, sizeof(value), "%lu", static_cast<unsigned long>(nvsStats.used_entries)); sendSubmetric("Used", value);
+        snprintf(value, sizeof(value), "%lu", static_cast<unsigned long>(nvsStats.free_entries)); sendSubmetric("Free", value);
+        snprintf(value, sizeof(value), "%lu", static_cast<unsigned long>(nvsStats.total_entries)); sendSubmetric("Total", value);
+        snprintf(value, sizeof(value), "%lu", static_cast<unsigned long>(nvsStats.namespace_count)); sendSubmetric("Namespaces", value);
+        sendSubmetricsEnd(); sendInfoRowEnd();
     }
     sendStatusSectionEnd();
 
@@ -949,9 +940,7 @@ void handleStatusPage() {
         sendInfoRow("Last OTA error", Esp32BaseOta::lastError());
     }
 #endif
-    if (details) {
-        sendFirmwareOtaDetails();
-    }
+    sendFirmwareOtaDetails();
     sendStatusSectionEnd();
 
     char mac[18];
@@ -968,18 +957,10 @@ void handleStatusPage() {
     sendInfoRow("Flash encryption", esp_flash_encryption_enabled() ? "enabled" : "disabled");
     sendInfoRow("Secure boot", esp_secure_boot_enabled() ? "enabled" : "disabled");
     sendInfoRow("Web authentication", Esp32BaseWeb::isAuthEnabled() ? "enabled" : "disabled");
-    if (details) {
-        formatMac(ESP.getEfuseMac(), mac, sizeof(mac));
-        sendInfoRow("eFuse MAC", mac);
-    }
+    formatMac(ESP.getEfuseMac(), mac, sizeof(mac));
+    sendInfoRow("eFuse MAC", mac);
     sendStatusSectionEnd();
     sendChunk("</div>");
-
-    sendChunk("<section class='statusdetailtoggle'><a class='btnlink secondary' href='");
-    sendChunk(details ? "/esp32base/status" : "/esp32base/status?details=1");
-    sendChunk("'>");
-    sendChunk(details ? "Hide low-frequency details" : "Show low-frequency details");
-    sendChunk("</a><span>Detailed mode adds one-time firmware, NVS and network reads.</span></section>");
 
     if (g_homeMode == Esp32BaseWeb::HOME_ESP32BASE && appNavCount() > 0) {
         sendChunk("<section class='panel appsection'><h2>Application</h2>");

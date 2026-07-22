@@ -127,7 +127,7 @@
 
 - 首行回答设备是否正常。
 - 关键指标不超过 4 个。
-- 基础库 Status 页规范地址为 `/esp32base/status`，采用“身份摘要 + 需关注事项 + 诊断域 + 按需详情”的结构。诊断域固定按 Network、Runtime、Persistence、Firmware & OTA、Platform & Security 组织；状态标签用于快速扫视，字段仍保留明确文本。网络参数、NVS 统计和运行 ELF SHA 等低频细节只在 `/esp32base/status?details=1` 显示；完整 Partition Table 和重复的 System 设置入口卡片不在 Status 正文展示。
+- 基础库 Status 页规范地址为 `/esp32base/status`，采用“身份摘要 + 需关注事项 + 诊断域”的单一平铺结构。诊断域固定按 Network、Runtime、Persistence、Firmware & OTA、Platform & Security 组织；状态标签用于快速扫视，字段仍保留明确文本。不使用内容分散、视觉反馈不清楚的展开按钮；网络参数、NVS 统计、运行 ELF SHA 和 eFuse MAC 直接显示。完整 Partition Table 和重复的 System 设置入口卡片不在 Status 正文展示。
 - Status 首页在身份摘要下提供清晰的 Network setup 入口，显示当前 SSID/IP 或配网状态，并直接链接 WiFi 设置页；入口应明显但不使用占据大面积的营销式按钮。宽屏诊断卡布局不得因左右卡片高度差留下整行空洞，长 Runtime 卡跨越两行，移动端恢复自然单列顺序。
 - System 页的 WiFi recovery button 使用紧凑设置卡：运行状态、当前 GPIO/长按时间/构建默认值在顶部摘要中呈现，开关与两个输入字段形成单一编辑区，pin 风险和启动行为分别使用短警告与辅助说明，不使用纵向长表格。
 - 相邻分区不做独立预览块；如果预览和详细区靠得很近且内容重复，优先取消预览，把高频信息按诊断顺序前置。

@@ -1285,7 +1285,7 @@ Route 缓冲机制：
 - 带 `data-eb-ajax` 的 helper 表单会在浏览器支持 `fetch` 时携带 `X-Esp32Base-Ajax: 1` 和 `Accept: application/json` 局部提交；服务端用 `isAjaxRequest()` 判断后返回 `sendAjaxReplace(targetId, html, noticeTitle)` 或 `sendAjaxError(code, error)`。未携带 AJAX header 时，同一 POST endpoint 仍应保留 `POST -> 303 -> GET` fallback。
 - `UiTone` 仅表达语义色：neutral、ok、warn、danger、info。业务项目不得把危险、警告、成功语义当作普通装饰色复用。
 - 导航会给当前匹配项输出 `active` class；匹配规则为 path 完全相等，或当前路径以 `path + "/"` 开头，多个匹配时选择最长 path。`SYSTEM_NAV_SECTION` 下 WiFi/Auth/OTA 二级页会把底部 System 入口标记为 active；App Config 页面在启用时使用自己的底部入口标记 active。
-- `/esp32base/status` Status 页是只读设备体检页，采用诊断优先结构，展示设备身份、网络、运行健康、存储与日志、固件 OTA 和硬件摘要。Status 页不做 LittleFS 全量文件树扫描、文件可读性检查、top files 统计、FileLog 段文件大小统计或完整分区表枚举；较重的文件细节放在 `/esp32base/fs`，低频 `Running ELF SHA256`、NVS 和网络细节只在 `/esp32base/status?details=1` 显示。系统设置通过统一 Footer Bar 的 System 入口访问，不在正文重复放置入口卡片。
+- `/esp32base/status` Status 页是只读设备体检页，采用诊断优先结构，展示设备身份、网络参数、运行健康、存储与日志、NVS 摘要、固件 OTA 和硬件安全摘要。页面不使用展开模式，诊断字段直接平铺；同时不做 LittleFS 全量文件树扫描、文件可读性检查、top files 统计、FileLog 段文件大小统计、完整分区表枚举或全镜像校验。较重的文件细节放在 `/esp32base/fs`。系统设置通过统一 Footer Bar 的 System 入口访问，不在正文重复放置入口卡片。
 - `/esp32base/logs` 和 `/esp32base/logs/raw` 是只读系统诊断日志查看入口，只读取已经落盘的 FileLog segment 快照；GET 读取不得主动 `flush()`、创建、清空、重建文件或改变 FileLog fault 状态。INFO 缓存中的新日志按常规 flush interval 落盘，清空/格式化/重启等维护副作用必须通过 POST 路径。
 - `/esp32base/fs` 是启用 FS profile 时注册的 LittleFS 诊断页，默认只读，展示容量摘要、主要文件和文件树。文件树区分普通文件、不可读文件和基础库管理文件；不可读文件不能给出会生成 0 字节伪成功的下载入口。当 `FS used` 明显大于可见文件合计时，页面应提示可能存在内部、历史或不可见占用。
 - `/esp32base/fs/download?path=/file` 下载一个已存在且可读取的文件，复用 Basic Auth 和路径校验，目录、缺失文件和非法路径不会下载；如果文件声明有大小但无法读取首块，返回 `500 File read failed`。
