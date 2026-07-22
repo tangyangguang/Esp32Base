@@ -108,7 +108,7 @@ build_flags =
   -D ESP32BASE_APP_CONFIG_MAX_FIELDS=8
 ```
 
-App Config 支持 string、int、decimal 定点数、bool 和 enum 字段；保存时后端重新校验并只写入实际变化字段。`setPageValidateCallback()` 用于保存前 veto，`setSaveCallback()` 只用于保存后通知。多字段保存不是跨 key 事务，关键强一致配置应使用单个 POD/blob 或业务自定义提交模型。注册传入的字符串和 enum option 数组需保持固件生命周期有效。标记为重启后生效的字段会在未重启会话内持续提示运行中旧值和已保存新值。
+App Config 支持 string、int、decimal 定点数、bool 和 enum 字段；保存时后端重新校验并只写入实际变化字段。`setPageValidateCallback()` 用于保存前 veto，`setSaveCallback()` 只用于保存后通知。System 页危险操作区提供 `Restore App Config Defaults`：二次确认后只删除已注册字段的 NVS key，使其重新使用当前固件声明的默认值；同 namespace 的未注册 key、WiFi、Web Auth、基础库设置和 LittleFS 均保留。恢复同样执行字段级和页面级校验、触发成功字段的回调并保留待重启提示；多字段恢复和普通保存一样不是跨 key 事务，失败时会明确报告部分完成。关键强一致配置应使用单个 POD/blob 或业务自定义提交模型。注册传入的字符串和 enum option 数组需保持固件生命周期有效。
 
 Web 页面可优先使用 Esp32Base 的 UI baseline、helper 和页面能力；不要在业务项目里为样式问题临时复制 CSS 或绕开基础库壳层。单字段轻量编辑可使用行内编辑 helper，小型 1-3 字段表单可使用弹层表单 helper；二者会在支持 `fetch` 的浏览器中局部提交和局部替换，禁用 JS 时仍回退到普通表单提交。需要业务自控打开/关闭时，也可直接使用原生 `<dialog>` 并复用基础表单和按钮样式。现有页面能力不适合时，业务侧可以做最小局部实现；多个项目确实会复用的模式，再回到 Esp32Base 补通用 helper、样式、示例和文档。
 

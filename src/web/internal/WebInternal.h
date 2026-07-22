@@ -223,6 +223,7 @@ int32_t pow10Int(uint8_t scale);
 bool formatDecimalRaw(int32_t raw, uint8_t scale, char* out, size_t len);
 bool parseDecimalRaw(const char* text, uint8_t scale, int32_t& rawOut);
 void appConfigFieldName(uint8_t index, char* out, size_t len);
+bool getAppConfigDefaultRaw(const AppConfigFieldSlot& field, char* out, size_t len);
 bool getSubmittedRaw(const AppConfigFieldSlot& field, uint8_t index, char* out, size_t len);
 bool findSubmittedRaw(const char* ns, const char* key, char* out, size_t len, const AppConfigFieldSlot** fieldOut);
 void readAppConfigValue(const AppConfigFieldSlot& field, char* textOut, size_t textLen, int32_t& rawOut, bool& boolOut);
@@ -243,10 +244,14 @@ void sendAppConfigPendingRestartNotice();
 void sendAppConfigPage(const char* errorMessage);
 bool validateAllSubmitted(char* error, size_t errorLen);
 bool validateSubmittedField(const AppConfigFieldSlot& field, const char* submitted, char* normalized, size_t normalizedLen,
-                            char* error, size_t errorLen);
+                            int32_t& rawOut, bool& boolOut, char* error, size_t errorLen);
 bool writeSubmittedField(const AppConfigFieldSlot& field, uint8_t index, Esp32BaseAppConfig::SaveSummary& summary);
+bool restoreAppConfigField(const AppConfigFieldSlot& field, uint8_t index,
+                           Esp32BaseAppConfig::SaveSummary& summary, uint8_t& clearedCount);
+bool validateAppConfigDefaults(char* error, size_t errorLen);
 void handleAppConfigSubmit();
 void handleAppConfigPage();
+void handleToolsAppConfigDefaultsPost();
 #endif
 void handleRestart();
 void handleToolsPage();

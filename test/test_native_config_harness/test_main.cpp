@@ -172,6 +172,50 @@ void test_internal_uint32_write_repairs_wrong_nvs_type() {
     TEST_ASSERT_EQUAL_UINT32(1, value);
 }
 
+void test_internal_remove_config_key_preserves_sibling_keys() {
+    resetConfigHarness();
+    TEST_ASSERT_TRUE(Esp32BaseConfig::setStr("app_cfg", "registered", "custom"));
+    TEST_ASSERT_TRUE(Esp32BaseConfig::setInt("app_cfg", "private", 42));
+
+    TEST_ASSERT_EQUAL(esp32base_internal::ConfigKeyRemoveResult::Removed,
+                      esp32base_internal::removeConfigKey("app_cfg", "registered"));
+    char value[16] = "";
+    TEST_ASSERT_FALSE(Esp32BaseConfig::getStr("app_cfg", "registered", value, sizeof(value), "default"));
+    TEST_ASSERT_EQUAL_STRING("default", value);
+    TEST_ASSERT_EQUAL_INT32(42, Esp32BaseConfig::getInt("app_cfg", "private", 0));
+    TEST_ASSERT_EQUAL(esp32base_internal::ConfigKeyRemoveResult::NotFound,
+                      esp32base_internal::removeConfigKey("app_cfg", "registered"));
+}
+
+void test_internal_remove_config_key_cancels_pending_write() {
+    resetConfigHarness();
+    TEST_ASSERT_TRUE(Esp32BaseConfig::setStrDeferred("app_pending", "value", "custom", 1000));
+    TEST_ASSERT_EQUAL_UINT8(1, Esp32BaseConfig::pendingCount());
+
+    TEST_ASSERT_EQUAL(esp32base_internal::ConfigKeyRemoveResult::Removed,
+                      esp32base_internal::removeConfigKey("app_pending", "value"));
+    TEST_ASSERT_EQUAL_UINT8(0, Esp32BaseConfig::pendingCount());
+    TEST_ASSERT_TRUE(Esp32BaseConfig::flushAll());
+    char value[16] = "";
+    TEST_ASSERT_FALSE(Esp32BaseConfig::getStr("app_pending", "value", value, sizeof(value), "default"));
+    TEST_ASSERT_EQUAL_STRING("default", value);
+}
+
+void test_internal_remove_config_key_reports_lookup_failure_without_clearing_pending() {
+    resetConfigHarness();
+    TEST_ASSERT_TRUE(Esp32BaseConfig::setIntDeferred("app_fail", "value", 7, 1000));
+    native_nvs::store()["app_fail"];
+    native_nvs::openFailureNamespace() = "app_fail";
+
+    TEST_ASSERT_EQUAL(esp32base_internal::ConfigKeyRemoveResult::Error,
+                      esp32base_internal::removeConfigKey("app_fail", "value"));
+    TEST_ASSERT_EQUAL_UINT8(1, Esp32BaseConfig::pendingCount());
+    native_nvs::openFailureNamespace().clear();
+    TEST_ASSERT_EQUAL(esp32base_internal::ConfigKeyRemoveResult::Removed,
+                      esp32base_internal::removeConfigKey("app_fail", "value"));
+    TEST_ASSERT_EQUAL_UINT8(0, Esp32BaseConfig::pendingCount());
+}
+
 void test_factory_reset_clears_app_event_condition_state() {
     resetConfigHarness();
     const uint8_t recoveryConfig[] = {1, 1, 0, 0x10, 0x27, 0, 0};
@@ -229,6 +273,9 @@ int main(int, char**) {
     RUN_TEST(test_internal_uint32_state_distinguishes_missing_and_preserves_all_bits);
     RUN_TEST(test_internal_uint32_state_rejects_wrong_nvs_type);
     RUN_TEST(test_internal_uint32_write_repairs_wrong_nvs_type);
+    RUN_TEST(test_internal_remove_config_key_preserves_sibling_keys);
+    RUN_TEST(test_internal_remove_config_key_cancels_pending_write);
+    RUN_TEST(test_internal_remove_config_key_reports_lookup_failure_without_clearing_pending);
     RUN_TEST(test_factory_reset_clears_app_event_condition_state);
     RUN_TEST(test_factory_reset_reports_condition_namespace_open_failure);
     RUN_TEST(test_factory_reset_reports_wifi_recovery_namespace_open_failure);

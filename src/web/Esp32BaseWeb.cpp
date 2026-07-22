@@ -415,7 +415,7 @@ void nativeSystemPage() {
     Esp32BaseWeb::sendChunk("<h1>System</h1>");
     static const char* actions[] = {
         "hostname", "wifi-recovery", "filelog", "footer-bar", "reboot", "watchdog-trip-reset",
-        "format-fs", "logs-clear", "business-records-clear", "app-events-clear"
+        "app-config-defaults", "format-fs", "logs-clear", "business-records-clear", "app-events-clear"
     };
     for (const char* action : actions) {
         Esp32BaseWeb::sendChunk("<form method='post' action='/esp32base/system/");
@@ -1164,6 +1164,7 @@ bool Esp32BaseWeb::begin() {
 #if ESP32BASE_ENABLE_APP_CONFIG
     g_server.on("/esp32base/app-config", HTTP_GET, handleAppConfigPage);
     g_server.on("/esp32base/app-config", HTTP_POST, handleAppConfigSubmit);
+    g_server.on("/esp32base/system/app-config-defaults", HTTP_POST, handleToolsAppConfigDefaultsPost);
 #endif
     g_server.on("/esp32base/system/hostname", HTTP_POST, handleHostnameSubmit);
 #if ESP32BASE_ENABLE_WIFI_RECOVERY_BUTTON

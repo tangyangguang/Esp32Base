@@ -270,6 +270,9 @@
 - App Config 保存只写变化字段，未变化字段不写 NVS；旧页面 revision 提交被拒绝。
 - App Config 修改 `restartRequired` 字段后，未重启会话内重新进入页面仍显示待重启提示、运行中旧值和已保存新值；改回旧值后提示消失。
 - App Config callback 能拿到正确旧值和新值；decimal raw、bool、enum 值语义正确。
+- System 页 `Restore App Config Defaults` 只在存在注册字段时显示为危险操作，并有明确二次确认；POST 必须通过认证和同源检查。
+- App Config 默认恢复先对全部默认候选执行字段级和页面级校验；拒绝时零删除、零回调。成功时只删除注册 key，保留同 namespace 未注册 key、WiFi、Web Auth、基础库设置和 LittleFS；同 key deferred pending 写入必须取消。
+- App Config 默认恢复覆盖五种字段类型、Change/Save 回调、`restartRequired` 提示、显式保存值恰等于默认值、重复执行幂等和 NVS 删除中途失败的 partial 提示。
 - 格式化 FS 等破坏性维护操作必须输出 WARN 级日志，记录发起、结果和关键恢复步骤。
 - 自定义路由 begin 前注册。
 - 自定义路由 Web ready 后注册。

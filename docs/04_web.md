@@ -246,7 +246,7 @@ System 维护页：
 - 格式化 FS 是显式 POST 操作；执行前 flush 系统诊断日志，格式化成功后重新 mount FS、重新加载 FileLog 模式、重新创建 App Events，并逐个 `reload()` 已登记的当前业务 Store；任一 Store 恢复失败都不能提示整体成功。只有 `Esp32BaseFs::format()` 成功时才触发 `Esp32BaseWeb::setAfterFormatFsCallback()` 注册的回调和 `EVENT_TOOLS_FORMAT_FS_SUCCESS` 事件；格式化失败、启动挂载失败和其他 FS 维护动作不触发。回调结果除原字段外还包含 `businessRecordStoreCount`、`businessRecordStoreReloadedCount` 和 `businessRecordStoresReloadSuccess`；业务仍负责在回调/事件里同步自己的派生统计、文件索引或缓存。重启请求同样输出 WARN 级维护日志。
 - 普通 `GET` 页面慢请求只输出 DEBUG；`POST` 等操作慢请求输出 INFO，默认 ERROR 系统日志不记录，现场排查时可切到 INFO 查看。
 - API 层仍建议要求 POST，不使用 GET 触发重启。
-- 内置危险 POST 包括 WiFi 保存/清除、App Config 保存、Hostname 保存、Auth 保存、重启、System 操作、System Logs clear、Business Records clear、App Events clear、Web OTA upload/done；跨站 `Origin` 或 `Referer` 会被拒绝。
+- 内置危险 POST 包括 WiFi 保存/清除、App Config 保存、App Config 恢复默认值、Hostname 保存、Auth 保存、重启、System 操作、System Logs clear、Business Records clear、App Events clear、Web OTA upload/done；跨站 `Origin` 或 `Referer` 会被拒绝。
 - 业务自定义 POST 或危险操作应优先调用 `Esp32BaseWeb::checkPostAllowed(context)`，不要只做 `checkAuth()`；即使业务误把危险 handler 注册为 `METHOD_ANY`，该 helper 也会拒绝非 POST 请求。
 
 Status 页：
@@ -274,6 +274,8 @@ App Config 页面：
 - 保存成功字段会触发 `ChangeCallback`，回调包含旧值和新值；整次保存结束触发 `SaveCallback` summary。
 - 页面带 RAM revision；旧页面提交会被拒绝并提示刷新，避免覆盖已经变化的配置。
 - 字段可标记 `restartRequired`；保存后不会自动重启，但未重启会话内页面会持续提示这些字段仍待重启生效，并显示运行中旧值和已保存新值；极低内存下 string/enum 旧值可能显示为 `unavailable`，提示仍保留到重启。
+- System 页危险操作区在存在注册字段时显示 `Restore App Config Defaults`。确认后，`POST /esp32base/system/app-config-defaults` 先以注册默认值执行相同字段级和页面级校验，再逐个删除注册 key，使读取回到当前固件默认值；同 namespace 未注册 key、WiFi、Web Auth、基础库设置、文件和日志均不改变。
+- 默认恢复只对有效值变化且删除成功的字段触发 change 回调，结束后触发 save 回调；标记为重启生效的字段继续显示待重启差异。NVS 中途失败时已完成字段不回滚，页面明确提示 partial，可安全重试。
 - 当前版本不提供单字段弹窗、多配置页、敏感字段隐藏或 CSRF token；安全边界为 Web Auth、POST only 和 Origin/Referer 同源检查。
 
 OTA 上传页：

@@ -362,6 +362,7 @@ WebContext::WebContext()
       appConfigRevision(1),
       appConfigTitle{"App Config"},
       appConfigSubmitContext(false),
+      appConfigDefaultContext(false),
       appConfigPageValidate(nullptr),
       appConfigChangeCallback(nullptr),
       appConfigSaveCallback(nullptr)
@@ -431,6 +432,7 @@ uint8_t& g_appConfigFieldCount = ctx().appConfigFieldCount;
 uint32_t& g_appConfigRevision = ctx().appConfigRevision;
 char (&g_appConfigTitle)[32] = ctx().appConfigTitle;
 bool& g_appConfigSubmitContext = ctx().appConfigSubmitContext;
+bool& g_appConfigDefaultContext = ctx().appConfigDefaultContext;
 Esp32BaseAppConfig::PageValidateCallback& g_appConfigPageValidate = ctx().appConfigPageValidate;
 Esp32BaseAppConfig::ChangeCallback& g_appConfigChangeCallback = ctx().appConfigChangeCallback;
 Esp32BaseAppConfig::SaveCallback& g_appConfigSaveCallback = ctx().appConfigSaveCallback;

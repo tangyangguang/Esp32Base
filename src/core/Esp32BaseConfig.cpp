@@ -384,6 +384,33 @@ bool esp32base_internal::writeConfigUInt32(const char* ns, const char* key, uint
     return ok;
 }
 
+esp32base_internal::ConfigKeyRemoveResult esp32base_internal::removeConfigKey(const char* ns, const char* key) {
+    if (!validName(ns) || !validName(key)) {
+        return ConfigKeyRemoveResult::Error;
+    }
+    const bool hadPending = findPending(ns, key) >= 0;
+    const NamespaceLookupResult lookup = lookupNamespace(ns);
+    if (lookup == NamespaceLookupResult::Error) {
+        return ConfigKeyRemoveResult::Error;
+    }
+    if (lookup == NamespaceLookupResult::NotFound) {
+        clearPendingKey(ns, key);
+        return hadPending ? ConfigKeyRemoveResult::Removed : ConfigKeyRemoveResult::NotFound;
+    }
+    Preferences prefs;
+    if (!prefs.begin(ns, false)) {
+        return ConfigKeyRemoveResult::Error;
+    }
+    const bool existed = prefs.isKey(key);
+    const bool ok = !existed || prefs.remove(key);
+    prefs.end();
+    if (!ok) {
+        return ConfigKeyRemoveResult::Error;
+    }
+    clearPendingKey(ns, key);
+    return existed || hadPending ? ConfigKeyRemoveResult::Removed : ConfigKeyRemoveResult::NotFound;
+}
+
 bool Esp32BaseConfig::begin() {
     g_ready = true;
     return true;

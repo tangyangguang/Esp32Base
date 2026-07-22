@@ -296,7 +296,7 @@ void test_status_auth_footer_recovery_and_system_routes() {
     TEST_ASSERT_EQUAL(200, Esp32BaseWeb::nativeTestResponse().code);
     static const char* actions[] = {
         "hostname", "wifi-recovery", "filelog", "footer-bar", "reboot", "watchdog-trip-reset",
-        "format-fs", "logs-clear", "business-records-clear", "app-events-clear"
+        "app-config-defaults", "format-fs", "logs-clear", "business-records-clear", "app-events-clear"
     };
     for (const char* action : actions) {
         std::string expected = "action='/esp32base/system/";

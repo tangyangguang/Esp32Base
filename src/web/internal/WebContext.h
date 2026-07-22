@@ -267,6 +267,7 @@ struct WebContext {
     uint32_t appConfigRevision;
     char appConfigTitle[32];
     bool appConfigSubmitContext;
+    bool appConfigDefaultContext;
     Esp32BaseAppConfig::PageValidateCallback appConfigPageValidate;
     Esp32BaseAppConfig::ChangeCallback appConfigChangeCallback;
     Esp32BaseAppConfig::SaveCallback appConfigSaveCallback;
@@ -334,6 +335,7 @@ extern uint8_t& g_appConfigFieldCount;
 extern uint32_t& g_appConfigRevision;
 extern char (&g_appConfigTitle)[32];
 extern bool& g_appConfigSubmitContext;
+extern bool& g_appConfigDefaultContext;
 extern Esp32BaseAppConfig::PageValidateCallback& g_appConfigPageValidate;
 extern Esp32BaseAppConfig::ChangeCallback& g_appConfigChangeCallback;
 extern Esp32BaseAppConfig::SaveCallback& g_appConfigSaveCallback;

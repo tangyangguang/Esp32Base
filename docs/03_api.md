@@ -1292,7 +1292,7 @@ Route 缓冲机制：
 - `/esp32base/fs?manage=1` 进入单文件删除和受限上传管理模式；`POST /esp32base/fs/delete` 只接受一个已存在文件路径，复用 Basic Auth、同源检查和 `POST -> 303 -> GET`，不提供目录删除、批量删除、编辑或任意路径输入。不可读文件仍允许删除，便于清理损坏文件；删除不以文件内容可读为前提。基础库管理文件会在文件树中给出维护提醒；维护操作修改 FileLog 或 App Events store 后，应刷新对应运行态。
 - `/esp32base/fs/check?dir=/data&name=records.bin` 是上传前检查接口，复用 Basic Auth，按“已有目录 + 本地文件名”计算目标路径，返回目标是否存在、是否是目录以及是否允许上传；路径拼接如果超过内部路径上限会直接拒绝，不截断成另一个目标。
 - `POST /esp32base/fs/upload` 是 multipart 上传接口，复用 Basic Auth 和同源检查；上传保留本地文件名，可以写入任何已有目录，不创建目录。目标文件存在时必须传 `overwrite=1` 才会覆盖；覆盖上传必须避免上传中断时先清空旧文件。路径过长、缺少文件、目标非法或写入失败会返回错误，不会复用上一笔上传状态。上传只负责写入 LittleFS，不校验业务数据语义、索引、NVS 状态或运行时缓存。
-- `/esp32base/system` System 页承载低频维护入口和操作，App Config 启用时作为首个入口显示，后面是 WiFi Setup、Web Auth、Firmware OTA、File system 直达入口、hostname 保存、Watchdog trip reset、重启设备；启用 FS 的 profile 还提供手动格式化 LittleFS 操作，会清除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth、业务 namespace 或任何 NVS 配置。格式化成功后会重新 mount FS、reload FileLog、重新创建 App Events，并自动 reload 已登记的当前业务 RecordStore；业务仍应通过 after-format 回调或事件同步自己的派生统计、文件索引或缓存。
+- `/esp32base/system` System 页承载低频维护入口和操作，App Config 启用时作为首个入口显示，后面是 WiFi Setup、Web Auth、Firmware OTA、File system 直达入口、hostname 保存、Watchdog trip reset、重启设备；存在已注册 App Config 字段时，危险操作区提供 `Restore App Config Defaults`，二次确认后只删除注册字段对应的 NVS key，使读取重新落到当前固件默认值，不清同 namespace 的未注册 key，也不清 WiFi、Web Auth、基础库设置或 LittleFS。启用 FS 的 profile 还提供手动格式化 LittleFS 操作，会清除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth、业务 namespace 或任何 NVS 配置。格式化成功后会重新 mount FS、reload FileLog、重新创建 App Events，并自动 reload 已登记的当前业务 RecordStore；业务仍应通过 after-format 回调或事件同步自己的派生统计、文件索引或缓存。
 - `/esp32base/auth` 是内置认证管理页面，受当前 Basic Auth 保护，提交成功后新账号密码立即生效。
 - Web Auth 认证优先级为：已保存认证 > 应用默认认证。未设置应用默认认证且没有已保存认证时，Web 服务不会启动。
 - 内置 Web 不提供首次登录强制改密；量产或可被他人访问的设备必须在业务启动时调用 `setDefaultAuth()`，或通过业务流程先保存认证。
@@ -1383,6 +1383,15 @@ ESP32BASE_APP_CONFIG_MAX_FIELDS
 - 只读状态、未来配置版本或业务版本不兼容等需要拒绝整页保存的业务规则，应放在 `PageValidateCallback`；回调返回 false 时不会进入字段写入循环，也不会触发 `ChangeCallback` 或 `SaveCallback`。
 - 校验全部通过后，只写入后端计算出的变化字段；未变化字段不写 NVS。
 - 部分 NVS 写失败时，已成功字段保留，只对成功字段触发 change 回调。
+
+恢复默认值语义：
+
+- `POST /esp32base/system/app-config-defaults` 是 System 页危险操作，只在 App Config 启用时注册，并要求 Web Auth、同源 POST 和用户二次确认。
+- 恢复前用全部注册默认值执行内置约束、字段级 validator 和页面级 validator；任一校验拒绝时零删除、零 change/save 回调。页面级回调中的 `submittedXxx()` 在该流程中读取默认值候选。
+- 校验通过后逐字段删除注册的 `namespace/key`，不清空整个 namespace；key 不存在按已恢复处理。删除还会取消同 key 的 deferred pending 写入，防止旧值稍后重新写回。
+- 只有有效值实际变化的字段触发 `ChangeCallback`；恢复批次结束触发一次 `SaveCallback`。显式保存但恰好等于默认值的 key 仍会删除，以便未来固件调整默认值后继续跟随新默认。
+- `restartRequired` 字段恢复后沿用运行中旧值/已保存默认值提示，不自动重启设备。
+- 多字段删除不是跨 key 事务；某字段 NVS 删除失败后停止，已删除字段保持默认语义，System 页报告 partial，重复执行可继续恢复剩余字段。
 
 示例：
 

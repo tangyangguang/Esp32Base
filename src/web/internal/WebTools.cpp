@@ -299,6 +299,26 @@ void handleToolsPage() {
 #endif
     } else if (g_server.hasArg("watchdog_trip_reset")) {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "Watchdog trip reset");
+#if ESP32BASE_ENABLE_APP_CONFIG
+    } else if (g_server.hasArg("app_config_defaults_restored")) {
+        char message[144];
+        snprintf(message, sizeof(message),
+                 "%lu stored field(s) were cleared; %lu effective value(s) changed.%s",
+                 static_cast<unsigned long>(strtoul(g_server.arg("cleared").c_str(), nullptr, 10)),
+                 static_cast<unsigned long>(strtoul(g_server.arg("changed").c_str(), nullptr, 10)),
+                 g_server.hasArg("restart") ? " Restart the device for marked values to take effect." : "");
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "App Config defaults restored", message);
+    } else if (g_server.hasArg("app_config_defaults_partial")) {
+        char message[144];
+        snprintf(message, sizeof(message),
+                 "%lu stored field(s) were cleared and %lu effective value(s) changed before a failure. Retry after checking NVS and system logs.",
+                 static_cast<unsigned long>(strtoul(g_server.arg("cleared").c_str(), nullptr, 10)),
+                 static_cast<unsigned long>(strtoul(g_server.arg("changed").c_str(), nullptr, 10)));
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_DANGER, "App Config defaults were only partially restored", message);
+    } else if (g_server.hasArg("app_config_defaults_rejected")) {
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_DANGER, "App Config defaults were not restored",
+                                 "The app rejected its registered defaults during validation. No values were changed.");
+#endif
     } else if (g_server.hasArg("error")) {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_DANGER, "System action failed", g_server.arg("error").c_str());
     } else if (g_server.hasArg("restarting")) {
@@ -377,6 +397,11 @@ void handleToolsPage() {
     sendWatchdogPanel();
 #endif
     sendChunk("</div><div class='toolgrid'>");
+#if ESP32BASE_ENABLE_APP_CONFIG
+    if (g_appConfigFieldCount > 0) {
+        sendChunk("<section class='panel dangerpanel'><h2>Restore App Config Defaults</h2><p class='dangertext'>Remove every stored App Config value registered by the app and return to the defaults declared by this firmware. WiFi, Web Auth, Esp32Base settings, files, logs and unregistered configuration are not changed.</p><form method='post' action='/esp32base/system/app-config-defaults' onsubmit=\"return confirm('Restore all registered App Config values to firmware defaults? This cannot be undone.')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Restore App Config Defaults'></div></form></section>");
+    }
+#endif
     sendChunk("<section class='panel dangerpanel'><h2>Restart device</h2><p class='muted'>Restart the device through the normal lifecycle path.</p><form method='post' action='/esp32base/system/reboot' onsubmit=\"return confirm('Reboot device now?')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Restart device'></div></form></section>");
 #if ESP32BASE_ENABLE_FILELOG
     sendChunk("<section class='panel dangerpanel'><h2>Clear system logs</h2><p class='dangertext'>Delete all system diagnostic log contents. Runtime settings and WiFi credentials are not changed.</p><form method='post' action='/esp32base/system/logs-clear' onsubmit=\"return confirm('Clear system logs?')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Clear System Logs'></div></form></section>");

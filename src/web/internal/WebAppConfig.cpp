@@ -3,6 +3,7 @@
 #if ESP32BASE_ENABLE_WEB && ESP32BASE_ENABLE_APP_CONFIG
 
 #include "WebInternal.h"
+#include "../../core/internal/Esp32BaseConfigInternal.h"
 
 namespace esp32base_web {
 
@@ -230,9 +231,35 @@ void appConfigFieldName(uint8_t index, char* out, size_t len) {
     snprintf(out, len, "f%u", static_cast<unsigned>(index));
 }
 
+bool getAppConfigDefaultRaw(const AppConfigFieldSlot& field, char* out, size_t len) {
+    if (!out || len == 0) {
+        return false;
+    }
+    switch (field.type) {
+        case APP_CFG_STRING:
+            return strlcpy(out, field.spec.stringField.defaultValue, len) < len;
+        case APP_CFG_INT: {
+            const int written = snprintf(out, len, "%ld", static_cast<long>(field.spec.intField.defaultValue));
+            return written >= 0 && static_cast<size_t>(written) < len;
+        }
+        case APP_CFG_DECIMAL:
+            return formatDecimalRaw(field.spec.decimalField.defaultRawValue,
+                                    field.spec.decimalField.scale, out, len);
+        case APP_CFG_BOOL:
+            return strlcpy(out, field.spec.boolField.defaultValue ? "1" : "0", len) < len;
+        case APP_CFG_ENUM:
+            return strlcpy(out, field.spec.enumField.defaultValue, len) < len;
+    }
+    out[0] = '\0';
+    return false;
+}
+
 bool getSubmittedRaw(const AppConfigFieldSlot& field, uint8_t index, char* out, size_t len) {
     if (!out || len == 0) {
         return false;
+    }
+    if (g_appConfigDefaultContext) {
+        return getAppConfigDefaultRaw(field, out, len);
     }
     char name[8];
     appConfigFieldName(index, name, sizeof(name));
@@ -798,6 +825,75 @@ bool writeSubmittedField(const AppConfigFieldSlot& field, uint8_t index, Esp32Ba
     return true;
 }
 
+bool validateAppConfigDefaults(char* error, size_t errorLen) {
+    g_appConfigDefaultContext = true;
+    const bool ok = validateAllSubmitted(error, errorLen);
+    g_appConfigDefaultContext = false;
+    return ok;
+}
+
+bool restoreAppConfigField(const AppConfigFieldSlot& field, uint8_t index,
+                           Esp32BaseAppConfig::SaveSummary& summary, uint8_t& clearedCount) {
+    char candidate[Esp32BaseAppConfig::STRING_MAX_LENGTH + 1];
+    char normalized[Esp32BaseAppConfig::STRING_MAX_LENGTH + 1];
+    char oldText[Esp32BaseAppConfig::STRING_MAX_LENGTH + 1];
+    char error[128] = "";
+    int32_t newRaw = 0;
+    int32_t oldRaw = 0;
+    bool newBool = false;
+    bool oldBool = false;
+    if (!getAppConfigDefaultRaw(field, candidate, sizeof(candidate)) ||
+        !validateSubmittedField(field, candidate, normalized, sizeof(normalized),
+                                newRaw, newBool, error, sizeof(error))) {
+        summary.failedCount++;
+        ESP32BASE_LOG_W("appcfg", "defaults_restore_field_invalid ns=%s key=%s reason=%s",
+                        field.ns, field.key, error[0] ? error : "invalid_default");
+        return false;
+    }
+    readAppConfigValue(field, oldText, sizeof(oldText), oldRaw, oldBool);
+    bool changed = false;
+    switch (field.type) {
+        case APP_CFG_STRING:
+        case APP_CFG_ENUM:
+            changed = strcmp(oldText, normalized) != 0;
+            break;
+        case APP_CFG_INT:
+        case APP_CFG_DECIMAL:
+            changed = oldRaw != newRaw;
+            break;
+        case APP_CFG_BOOL:
+            changed = oldBool != newBool;
+            break;
+    }
+    if (changed) {
+        summary.changedCount++;
+    }
+    const esp32base_internal::ConfigKeyRemoveResult result =
+        esp32base_internal::removeConfigKey(field.ns, field.key);
+    if (result == esp32base_internal::ConfigKeyRemoveResult::Error) {
+        summary.failedCount++;
+        ESP32BASE_LOG_W("appcfg", "defaults_restore_remove_failed ns=%s key=%s", field.ns, field.key);
+        return false;
+    }
+    if (result == esp32base_internal::ConfigKeyRemoveResult::Removed) {
+        ++clearedCount;
+    }
+    if (!changed) {
+        return true;
+    }
+    summary.savedCount++;
+    summary.restartRequired = summary.restartRequired || field.restartRequired;
+    updateAppConfigPendingRestart(field, index, oldText, oldRaw, oldBool, normalized, newRaw, newBool);
+    if (g_appConfigChangeCallback) {
+        Esp32BaseAppConfig::Change change;
+        change.field = makeFieldRef(field);
+        change.oldValue = makeFieldValue(field, oldText, oldRaw, oldBool);
+        change.newValue = makeFieldValue(field, normalized, newRaw, newBool);
+        g_appConfigChangeCallback(change);
+    }
+    return true;
+}
+
 void handleAppConfigSubmit() {
     markRequest();
     if (!ensurePostAllowed("app_config")) {
@@ -836,6 +932,57 @@ void handleAppConfigSubmit() {
 
 void handleAppConfigPage() {
     sendAppConfigPage();
+}
+
+void handleToolsAppConfigDefaultsPost() {
+    markRequest();
+    if (!ensurePostAllowed("tools_app_config_defaults")) {
+        return;
+    }
+    if (g_appConfigFieldCount == 0) {
+        redirectSeeOther("/esp32base/system?error=app_config_defaults_unavailable");
+        return;
+    }
+    char error[128] = "";
+    if (!validateAppConfigDefaults(error, sizeof(error))) {
+        ESP32BASE_LOG_W("appcfg", "defaults_restore_rejected source=tools reason=%s",
+                        error[0] ? error : "app_validation");
+        redirectSeeOther("/esp32base/system?app_config_defaults_rejected=1");
+        return;
+    }
+    ESP32BASE_LOG_W("appcfg", "defaults_restore_requested source=tools fields=%u",
+                    static_cast<unsigned>(g_appConfigFieldCount));
+    Esp32BaseAppConfig::SaveSummary summary = {};
+    uint8_t clearedCount = 0;
+    for (uint8_t i = 0; i < g_appConfigFieldCount; ++i) {
+        if (!restoreAppConfigField(g_appConfigFields[i], i, summary, clearedCount)) {
+            break;
+        }
+    }
+    if (clearedCount > 0) {
+        ++g_appConfigRevision;
+    }
+    if (g_appConfigSaveCallback) {
+        g_appConfigSaveCallback(summary);
+    }
+    ESP32BASE_LOG_W("appcfg",
+                    "defaults_restore_completed source=tools cleared=%u changed=%u failed=%u restart=%s",
+                    static_cast<unsigned>(clearedCount),
+                    static_cast<unsigned>(summary.savedCount),
+                    static_cast<unsigned>(summary.failedCount),
+                    summary.restartRequired ? "yes" : "no");
+    char target[160];
+    if (summary.failedCount > 0) {
+        snprintf(target, sizeof(target),
+                 "/esp32base/system?app_config_defaults_partial=1&cleared=%u&changed=%u",
+                 static_cast<unsigned>(clearedCount), static_cast<unsigned>(summary.savedCount));
+    } else {
+        snprintf(target, sizeof(target),
+                 "/esp32base/system?app_config_defaults_restored=1&cleared=%u&changed=%u%s",
+                 static_cast<unsigned>(clearedCount), static_cast<unsigned>(summary.savedCount),
+                 summary.restartRequired ? "&restart=1" : "");
+    }
+    redirectSeeOther(target);
 }
 
 } // namespace esp32base_web
