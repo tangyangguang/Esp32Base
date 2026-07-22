@@ -127,7 +127,8 @@
 
 - 首行回答设备是否正常。
 - 关键指标不超过 4 个。
-- 基础库 Status 页规范地址为 `/esp32base/status`，采用“常用诊断分区优先 + 紧凑详细分区 + 按需详情”的结构：先显示 Device、Network 等高频现场信息，再进入 Runtime Health、Storage & Logs、Firmware & OTA、Hardware；运行 ELF SHA 和 Partition Table 等低频细节只在 `/esp32base/status?details=1` 显示。
+- 基础库 Status 页规范地址为 `/esp32base/status`，采用“身份摘要 + 需关注事项 + 诊断域 + 按需详情”的结构。诊断域固定按 Network、Runtime、Persistence、Firmware & OTA、Platform & Security 组织；状态标签用于快速扫视，字段仍保留明确文本。网络参数、NVS 统计、运行 ELF SHA 和 Partition Table 等低频细节只在 `/esp32base/status?details=1` 显示。
+- System 页的 WiFi recovery button 使用紧凑设置卡：运行状态、当前 GPIO/长按时间/构建默认值在顶部摘要中呈现，开关与两个输入字段形成单一编辑区，pin 风险和启动行为分别使用短警告与辅助说明，不使用纵向长表格。
 - 相邻分区不做独立预览块；如果预览和详细区靠得很近且内容重复，优先取消预览，把高频信息按诊断顺序前置。
 - 一行包含多个诊断值时使用轻量子指标，而不是逗号串联；长标签应缩短为专业短名，并在值下方补充必要说明。
 - 存储空间异常应给出可定位信息：状态页只显示 O(1) 容量摘要和详情入口；文件/目录数量、已统计文件大小、other/overhead、Top 占用项与完整只读文件树放到详情页，不在状态页堆成文件浏览器。

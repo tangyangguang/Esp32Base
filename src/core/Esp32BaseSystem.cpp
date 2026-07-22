@@ -6,6 +6,7 @@
 #include "Esp32BaseUtil.h"
 
 #include <Preferences.h>
+#include <esp_timer.h>
 #include <esp_system.h>
 #include <esp_sleep.h>
 
@@ -105,6 +106,11 @@ uint32_t Esp32BaseSystem::flashSize() {
 
 uint32_t Esp32BaseSystem::uptimeMs() {
     return millis();
+}
+
+uint64_t Esp32BaseSystem::uptimeMs64() {
+    const int64_t uptimeUs = esp_timer_get_time();
+    return uptimeUs > 0 ? static_cast<uint64_t>(uptimeUs) / 1000ULL : 0;
 }
 
 uint32_t Esp32BaseSystem::bootCount() {

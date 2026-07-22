@@ -142,31 +142,32 @@ void sendWifiRecoveryPanel() {
     const Esp32BaseWiFi::RecoveryButtonConfig config = Esp32BaseWiFi::recoveryButtonConfig();
     const Esp32BaseWiFi::RecoveryButtonConfig defaults = Esp32BaseWiFi::defaultRecoveryButtonConfig();
     char value[32];
-    sendChunk("<section class='panel actionpanel'><h2>WiFi recovery button</h2><div class='tablewrap'><table class='kv'>");
-    sendInfoRow("Runtime state", config.enabled ? "enabled" : "disabled");
-    snprintf(value, sizeof(value), "GPIO %d", static_cast<int>(config.gpio));
-    sendInfoRow("Current pin", value);
+    sendChunk("<section class='panel actionpanel recoverypanel'><div class='paneltitle'><h2>WiFi recovery button</h2>");
+    sendStatusTag(config.enabled ? Esp32BaseWeb::UI_OK : Esp32BaseWeb::UI_NEUTRAL,
+                  config.enabled ? "enabled" : "disabled");
+    sendChunk("</div><p class='muted recoveryintro'>Hold the configured button after startup to open the WiFi configuration hotspot.</p><div class='recoveryfacts'><span><b>GPIO</b><em>");
+    snprintf(value, sizeof(value), "%d", static_cast<int>(config.gpio));
+    sendEscapedHtmlChunk(value);
+    sendChunk("</em></span><span><b>Long press</b><em>");
     snprintf(value, sizeof(value), "%lu seconds", static_cast<unsigned long>(config.holdMs / 1000UL));
-    sendInfoRow("Long press", value);
-    snprintf(value, sizeof(value), "GPIO %d / %lu seconds",
+    sendEscapedHtmlChunk(value);
+    sendChunk("</em></span><span><b>Build default</b><em>");
+    snprintf(value, sizeof(value), "GPIO %d · %lu seconds",
              static_cast<int>(defaults.gpio),
              static_cast<unsigned long>(defaults.holdMs / 1000UL));
-    sendInfoRow("Build default", value);
-    sendChunk("</table></div><form class='editform' method='post' action='/esp32base/system/wifi-recovery' onsubmit=\"return once(this)\"><div class='fieldgrid'>");
-    sendChunk("<p class='field short'><label><input type='checkbox' name='enabled' value='1'");
+    sendEscapedHtmlChunk(value);
+    sendChunk("</em></span></div><form class='editform recoveryform' method='post' action='/esp32base/system/wifi-recovery' onsubmit=\"return once(this)\"><label class='recoverytoggle'><input type='checkbox' name='enabled' value='1'");
     if (config.enabled) {
         sendChunk(" checked");
     }
-    sendChunk("> Enabled</label><small>Enabled by default on the chip's BOOT button.</small></p>");
-    sendChunk("<p class='field short'><label for='wifi-recovery-gpio'>GPIO</label><input id='wifi-recovery-gpio' name='gpio' type='number' min='0' max='127' value='");
+    sendChunk("><span><b>Enable physical recovery</b><small>Uses an active-low input with the internal pull-up.</small></span></label><div class='recoveryfields'><div class='field'><label for='wifi-recovery-gpio'>GPIO</label><input id='wifi-recovery-gpio' name='gpio' type='number' min='0' max='127' value='");
     sendIntChunk(config.gpio);
-    sendChunk("' required><small>Active low with the internal pull-up.</small></p>");
-    sendChunk("<p class='field short'><label for='wifi-recovery-hold'>Long press</label><input id='wifi-recovery-hold' name='hold_seconds' type='number' min='1' max='60' step='1' value='");
+    sendChunk("' required></div><div class='field'><label for='wifi-recovery-hold'>Long press</label><div class='inputunit'><input id='wifi-recovery-hold' name='hold_seconds' type='number' min='1' max='60' step='1' value='");
     sendIntChunk(static_cast<int>(config.holdMs / 1000UL));
-    sendChunk("' required><small>Seconds; the portal starts as soon as the threshold is reached.</small></p></div>");
-    sendChunk("<p class='notice warn'>Changing the GPIO takes effect immediately. Do not select a pin used by flash, PSRAM, USB, a peripheral, or application hardware. Esp32Base rejects invalid and known flash GPIOs, but the application remains responsible for board-level pin conflicts. The default BOOT button must be pressed after the application is running; holding it through reset or power-on enters the ROM download mode.</p>");
-    sendChunk("<p class='muted'>A successful long press preserves saved WiFi credentials and switches this boot session to the configuration hotspot. The usual AP address is 192.168.4.1. Saving WiFi from the portal immediately tries the new network; otherwise restarting retries the previously saved network.</p>");
-    sendChunk("<div class='actions'><input type='submit' value='Save WiFi Recovery'></div></form></section>");
+    sendChunk("' required><span>seconds</span></div></div></div>");
+    sendChunk("<p class='notice warn recoverywarning'><b>Pin safety:</b> GPIO changes immediately. The library rejects invalid and known flash pins; board-level PSRAM, USB, peripheral and application conflicts remain the application's responsibility.</p>");
+    sendChunk("<p class='muted recoverynote'>A successful hold preserves saved credentials and opens the hotspot at 192.168.4.1. Press the BOOT button only after startup; holding it during reset or power-on enters ROM download mode.</p>");
+    sendChunk("<div class='actions'><input type='submit' value='Save Recovery Button'></div></form></section>");
 }
 #endif
 

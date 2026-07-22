@@ -47,6 +47,8 @@ public:
     static const char* ssid();
     static bool safeBootPaused();
     static uint8_t safeBootGuardedResetCount();
+    static uint8_t retryCount();
+    static uint32_t retryRemainingMs();
     static bool ip(char* out, size_t len);
     static int32_t rssi();
 

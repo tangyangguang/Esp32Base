@@ -47,6 +47,7 @@ public:
     static void formatBytes(uint64_t bytes, char* out, size_t len);
     static void formatMillis(uint32_t ms, char* out, size_t len);
     static void formatUptime(uint32_t ms, char* out, size_t len);
+    static void formatUptime64(uint64_t ms, char* out, size_t len);
 };
 
 #if ESP32BASE_LOG_LEVEL >= ESP32BASE_LOG_ERROR

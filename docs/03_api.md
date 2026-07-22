@@ -126,6 +126,7 @@ public:
     static void formatBytes(uint64_t bytes, char* out, size_t len);
     static void formatMillis(uint32_t ms, char* out, size_t len);
     static void formatUptime(uint32_t ms, char* out, size_t len);
+    static void formatUptime64(uint64_t ms, char* out, size_t len);
 };
 ```
 
@@ -653,6 +654,7 @@ public:
     static uint32_t totalHeap();
     static uint32_t flashSize();
     static uint32_t uptimeMs();
+    static uint64_t uptimeMs64();
     static uint32_t bootCount();
 
     static const char* resetReason();
@@ -666,6 +668,8 @@ public:
     static uint8_t restartLogCount();
 };
 ```
+
+`uptimeMs()` 保留 Arduino `millis()` 的 32 位语义，约 49.7 天回绕；长期运行诊断应使用 `uptimeMs64()`，它基于 ESP 定时器返回 64 位毫秒值。内置 Web Status 和 footer 使用 64 位接口，因此不会在 49.7 天后把在线时长归零。
 
 `bootCount()` 返回无符号重启计数，存储在 `eb_sys.boot_cnt`，使用 `uint32_t` 语义在上电、手动复位、`ESP.restart()`、Watchdog、OTA 重启等会清除普通内存的非 sleep 重启后加 1。deep sleep 唤醒不会增加该计数，也不会为 `boot_cnt` 写 NVS；具体启动原因通过 `resetReason()` / `wakeReason()` 判断。
 
@@ -758,6 +762,8 @@ public:
     static bool isConnected();
     static const char* ssid();
     static bool safeBootPaused();
+    static uint8_t retryCount();
+    static uint32_t retryRemainingMs();
     static uint8_t safeBootGuardedResetCount();
     static bool ip(char* out, size_t len);
     static int32_t rssi();
@@ -769,6 +775,7 @@ public:
 
 WiFi 凭证和重连策略：
 
+- `retryCount()` 返回当前连续重连周期已经执行的次数；连接成功、显式重新连接、清除凭证或进入配置热点时归零。`retryRemainingMs()` 只在 `RETRY_BACKOFF` 状态返回距离下一次尝试的剩余毫秒数，其他状态返回 `0`。两者均为已有状态的只读快照，不触发扫描或连接。
 - 无已保存凭证时，`begin()` 可进入 `CONFIG_PORTAL`。
 - 默认 config portal AP 不设置密码；SSID 为 `ESP32-Config-XXXX`，其中 `XXXX` 取 eFuse MAC 按常见网络 MAC 顺序显示时的最后两个字节。
 - WiFi恢复按键默认启用：ESP32 / ESP32-S3默认GPIO0，ESP32-C3默认GPIO9，使用内部上拉、低电平有效。应用运行后连续稳定按下达到默认10000ms时立即调用`startConfigPortal()`，无需先松手；同一次按下只触发一次。该动作不清除`eb_wifi`凭据、不重启，避免默认BOOT引脚仍为低电平时进入下载模式；如果按键在复位或上电期间已经按下，芯片仍会先按硬件strapping规则进入ROM下载模式，应用无法接管。

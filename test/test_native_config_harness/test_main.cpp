@@ -1,12 +1,21 @@
 #include <unity.h>
 
 #include "core/Esp32BaseConfig.h"
+#include "core/Esp32BaseLog.h"
 #include "core/internal/Esp32BaseConfigInternal.h"
 #include "network/internal/Esp32BaseRecoveryButton.h"
 #include "Preferences.h"
 
 uint32_t g_nativeMillis = 0;
 NativeSerial Serial;
+
+void test_uptime_formatter_supports_more_than_32_bit_millis() {
+    char value[32] = "";
+    Esp32BaseLog::formatUptime64(50ULL * 24ULL * 60ULL * 60ULL * 1000ULL + 3723004ULL,
+                                 value,
+                                 sizeof(value));
+    TEST_ASSERT_EQUAL_STRING("50d 01:02:03", value);
+}
 
 static void resetConfigHarness() {
     native_nvs::reset();
@@ -208,6 +217,7 @@ void test_factory_reset_reports_wifi_recovery_namespace_open_failure() {
 
 int main(int, char**) {
     UNITY_BEGIN();
+    RUN_TEST(test_uptime_formatter_supports_more_than_32_bit_millis);
     RUN_TEST(test_recovery_button_triggers_at_threshold_once_per_press);
     RUN_TEST(test_recovery_button_release_and_bounce_restart_hold_window);
     RUN_TEST(test_deferred_int_skips_when_nvs_already_has_same_value);

@@ -117,17 +117,21 @@ void Esp32BaseLog::formatMillis(uint32_t ms, char* out, size_t len) {
 }
 
 void Esp32BaseLog::formatUptime(uint32_t ms, char* out, size_t len) {
+    formatUptime64(ms, out, len);
+}
+
+void Esp32BaseLog::formatUptime64(uint64_t ms, char* out, size_t len) {
     if (!out || len == 0) {
         return;
     }
 
-    const uint32_t totalSeconds = ms / 1000U;
-    const uint32_t seconds = totalSeconds % 60U;
-    const uint32_t minutes = (totalSeconds / 60U) % 60U;
-    const uint32_t hours = (totalSeconds / 3600U) % 24U;
-    const uint32_t days = totalSeconds / 86400U;
-    snprintf(out, len, "%lud %02lu:%02lu:%02lu",
-             static_cast<unsigned long>(days),
+    const uint64_t totalSeconds = ms / 1000ULL;
+    const uint32_t seconds = static_cast<uint32_t>(totalSeconds % 60ULL);
+    const uint32_t minutes = static_cast<uint32_t>((totalSeconds / 60ULL) % 60ULL);
+    const uint32_t hours = static_cast<uint32_t>((totalSeconds / 3600ULL) % 24ULL);
+    const uint64_t days = totalSeconds / 86400ULL;
+    snprintf(out, len, "%llud %02lu:%02lu:%02lu",
+             static_cast<unsigned long long>(days),
              static_cast<unsigned long>(hours),
              static_cast<unsigned long>(minutes),
              static_cast<unsigned long>(seconds));

@@ -20,6 +20,7 @@ public:
     static uint32_t totalHeap();
     static uint32_t flashSize();
     static uint32_t uptimeMs();
+    static uint64_t uptimeMs64();
     static uint32_t bootCount();
 
     static const char* resetReason();

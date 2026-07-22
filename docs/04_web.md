@@ -451,8 +451,10 @@ Esp32BaseWeb::addPage("/config", "配置", handleConfigPage);
 - `SYSTEM_NAV_SECTION` 会在页面底部以小字系统入口与 `Free heap`、`Up`、`RSSI` 同行展示；窄屏下系统入口和状态摘要可自然换行，避免遮挡和横向滚动。
 - Footer bar 可在 System 页面运行时切换 Off、Status only、Links + status；关闭底部横条时系统页面仍可通过直达 URL 访问。
 - 基础库页面复用同一套导航框架，业务页和系统页保持一致入口结构。
-- `/esp32base/status` Status 页按设备、网络、运行健康、存储日志、固件 OTA 和硬件维度展示调试信息；运行 ELF SHA 与运行时分区表只在 `/esp32base/status?details=1` 显示。
-- `/esp32base/api/status` 保留 `resetReason` / `wakeReason` 原始字段，并提供 `resetReasonText` / `wakeReasonText` 中文说明字段；`wifi.rssi` 返回当前 WiFi RSSI，未连接时为 `0`。
+- `/esp32base/status` 面向技术管理与现场诊断：顶部先给出固件、主机名、Profile、64 位在线时长和需关注事项，再按 Network、Runtime、Persistence、Firmware & OTA、Platform & Security 组织状态。默认页面只读取常数级运行态；网络参数、NVS 条目统计、运行 ELF SHA 与分区表只在 `/esp32base/status?details=1` 读取和显示。
+- Status 页的 `Current image` 来自当前运行分区的镜像元数据。每次启动最多读取一次并缓存结果，不调用会校验完整镜像的 `ESP.getSketchSize()`；读取失败时明确显示 `unavailable`。该值同时用于判断当前镜像能否放入 OTA target slot。
+- `/esp32base/api/status` 保留 `resetReason` / `wakeReason` 原始字段，并提供 `resetReasonText` / `wakeReasonText` 中文说明字段；新增 64 位 `uptimeMs` 与 `firmware.imageSize`（`{bytes,human}`，不可得时为 `null`）。`wifi.rssi` 返回当前 WiFi RSSI，未连接时为 `0`。
+- `/esp32base/api/firmware` 同样返回 `imageSize`，语义与 Status 页一致。
 - `/esp32base/api/hostname` 返回 `currentHostname`、`defaultHostname`、`storedHostname`、`storedValid`、`restartRequired` 和校验规则；POST 参数 `hostname` 必须符合 1-32 位小写字母、数字和短横线规则，不能首尾短横线，不能包含 `.local`。
 
 同一路径 API 分流：

@@ -926,6 +926,18 @@ uint8_t Esp32BaseWiFi::safeBootGuardedResetCount() {
     return g_staGuardedResetCount;
 }
 
+uint8_t Esp32BaseWiFi::retryCount() {
+    return g_wifiRetryCount;
+}
+
+uint32_t Esp32BaseWiFi::retryRemainingMs() {
+    if (g_wifiState != RETRY_BACKOFF) {
+        return 0;
+    }
+    const uint32_t now = millis();
+    return static_cast<int32_t>(now - g_wifiNextRetryMs) >= 0 ? 0 : g_wifiNextRetryMs - now;
+}
+
 bool Esp32BaseWiFi::ip(char* out, size_t len) {
     if (!out || len == 0) {
         return false;

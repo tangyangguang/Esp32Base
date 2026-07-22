@@ -32,6 +32,18 @@
 #if ESP32BASE_ENABLE_NTP
 #include "../../network/Esp32BaseNtp.h"
 #endif
+#if ESP32BASE_ENABLE_MDNS
+#include "../../network/Esp32BaseMdns.h"
+#endif
+#if ESP32BASE_ENABLE_HEALTH
+#include "../../runtime/Esp32BaseHealth.h"
+#endif
+#if ESP32BASE_ENABLE_TIME
+#include "../../runtime/Esp32BaseTime.h"
+#endif
+#if ESP32BASE_ENABLE_RTC
+#include "../../runtime/Esp32BaseRtc.h"
+#endif
 #if ESP32BASE_ENABLE_OTA
 #include "../../update/Esp32BaseOta.h"
 #endif
@@ -44,6 +56,13 @@
 #include <Preferences.h>
 #include <esp_ota_ops.h>
 #include <esp_partition.h>
+#include <esp_image_format.h>
+#include <esp_flash_encrypt.h>
+#include <esp_secure_boot.h>
+#include <nvs.h>
+#include <nvs_flash.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 #include <mbedtls/base64.h>
 #include <errno.h>
 #include <stdlib.h>

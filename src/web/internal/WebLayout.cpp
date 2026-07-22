@@ -289,7 +289,7 @@ void sendFooterStats() {
     char heap[48];
     char uptime[48];
     formatReadableBytes(Esp32BaseSystem::freeHeap(), heap, sizeof(heap));
-    Esp32BaseLog::formatUptime(Esp32BaseSystem::uptimeMs(), uptime, sizeof(uptime));
+    Esp32BaseLog::formatUptime64(Esp32BaseSystem::uptimeMs64(), uptime, sizeof(uptime));
     sendChunk("Free heap: ");
     sendEscapedHtmlChunk(heap);
     sendChunk(" · Up: ");
