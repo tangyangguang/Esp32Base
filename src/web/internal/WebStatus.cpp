@@ -75,14 +75,6 @@ void formatMac(uint64_t mac, char* out, size_t len) {
              static_cast<unsigned>((mac >> 40) & 0xff));
 }
 
-const char* partitionTypeName(esp_partition_type_t type) {
-    switch (type) {
-        case ESP_PARTITION_TYPE_APP: return "app";
-        case ESP_PARTITION_TYPE_DATA: return "data";
-        default: return "unknown";
-    }
-}
-
 const char* partitionSubtypeName(const esp_partition_t* partition) {
     if (!partition) {
         return "unknown";
@@ -255,37 +247,6 @@ void sendAppPartitionsJson() {
     sendChunk("]");
 }
 
-const char* partitionRole(const esp_partition_t* partition, const esp_partition_t* running, const esp_partition_t* boot, const esp_partition_t* nextOta) {
-    if (!partition) {
-        return "-";
-    }
-    if (samePartition(partition, running) && samePartition(partition, boot)) {
-        return "running app / boot";
-    }
-    if (samePartition(partition, running)) {
-        return "running app";
-    }
-    if (samePartition(partition, boot)) {
-        return "boot app";
-    }
-    if (samePartition(partition, nextOta)) {
-        return "next OTA";
-    }
-    if (partition->type == ESP_PARTITION_TYPE_APP) {
-        return "app";
-    }
-    if (partition->type == ESP_PARTITION_TYPE_DATA) {
-        switch (partition->subtype) {
-            case ESP_PARTITION_SUBTYPE_DATA_NVS: return "NVS config";
-            case ESP_PARTITION_SUBTYPE_DATA_OTA: return "OTA state";
-            case ESP_PARTITION_SUBTYPE_DATA_SPIFFS: return "app data";
-            case ESP_PARTITION_SUBTYPE_DATA_COREDUMP: return "coredump";
-            default: return "data";
-        }
-    }
-    return "-";
-}
-
 bool statusDetailsMode() {
     return g_server.hasArg("details") && g_server.arg("details") != "0";
 }
@@ -375,39 +336,6 @@ void formatIpAddress(const IPAddress& address, char* out, size_t len) {
              static_cast<unsigned>(address[1]),
              static_cast<unsigned>(address[2]),
              static_cast<unsigned>(address[3]));
-}
-
-void sendPartitionTable() {
-    const esp_partition_t* running = esp_ota_get_running_partition();
-    const esp_partition_t* boot = esp_ota_get_boot_partition();
-    const esp_partition_t* nextOta = esp_ota_get_next_update_partition(nullptr);
-    esp_partition_iterator_t it = esp_partition_find(ESP_PARTITION_TYPE_ANY, ESP_PARTITION_SUBTYPE_ANY, nullptr);
-    sendChunk("<section class='panel statuspage'><h2>Partition Table</h2><div class='tablewrap'><table class='part'><tr><th>Name</th><th>Type</th><th>SubType</th><th>Offset</th><th>Size</th><th>Role</th></tr>");
-    while (it) {
-        const esp_partition_t* p = esp_partition_get(it);
-        if (p) {
-            char offset[16];
-            char sizeBuf[48];
-            snprintf(offset, sizeof(offset), "0x%06lx", static_cast<unsigned long>(p->address));
-            formatReadableBytes(p->size, sizeBuf, sizeof(sizeBuf));
-            sendChunk("<tr><td>");
-            sendEscapedHtmlChunk(p->label);
-            sendChunk("</td><td>");
-            sendEscapedHtmlChunk(partitionTypeName(p->type));
-            sendChunk("</td><td>");
-            sendEscapedHtmlChunk(partitionSubtypeName(p));
-            sendChunk("</td><td>");
-            sendEscapedHtmlChunk(offset);
-            sendChunk("</td><td>");
-            sendEscapedHtmlChunk(sizeBuf);
-            sendChunk("</td><td>");
-            sendEscapedHtmlChunk(partitionRole(p, running, boot, nextOta));
-            sendChunk("</td></tr>");
-        }
-        it = esp_partition_next(it);
-    }
-    esp_partition_iterator_release(it);
-    sendChunk("</table></div></section>");
 }
 
 void sendFirmwareOtaDetails() {
@@ -1051,9 +979,7 @@ void handleStatusPage() {
     sendChunk(details ? "/esp32base/status" : "/esp32base/status?details=1");
     sendChunk("'>");
     sendChunk(details ? "Hide low-frequency details" : "Show low-frequency details");
-    sendChunk("</a><span>Detailed mode adds one-time partition, NVS and network reads.</span></section>");
-
-    sendChunk("<section class='panel appsection'><h2>System settings</h2><p class='muted'>Open device settings and maintenance even when the footer bar is hidden.</p><div class='actions'><a class='btnlink' href='/esp32base/system'>Open System</a></div></section>");
+    sendChunk("</a><span>Detailed mode adds one-time firmware, NVS and network reads.</span></section>");
 
     if (g_homeMode == Esp32BaseWeb::HOME_ESP32BASE && appNavCount() > 0) {
         sendChunk("<section class='panel appsection'><h2>Application</h2>");
@@ -1061,9 +987,6 @@ void handleStatusPage() {
         sendChunk("</section>");
     }
 
-    if (details) {
-        sendPartitionTable();
-    }
     Esp32BaseWeb::sendFooter();
 }
 
