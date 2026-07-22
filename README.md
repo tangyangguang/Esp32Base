@@ -202,7 +202,7 @@ custom_esp32base_webota_password = <current-web-auth-password>
 pio run -t webota
 ```
 
-`espota` 是 ArduinoOTA 标准协议；`webota` 是 Esp32Base 提供的 HTTP 上传方式，默认使用 `/esp32base/ota/raw` raw binary 路径和 64KB 分块，并在上传前预检认证、RSSI 和 OTA 目标分区容量，超出时不发送固件 body。raw 上传会根据弱 RSSI 自动把发送分块和节奏降到更保守的默认值，也可通过 `esp32base_webota_chunk_size`、`esp32base_webota_raw_pause_ms` 和 `esp32base_webota_socket_send_buffer` 显式覆盖；raw 传输中断时不会自动改走 `/esp32base/ota` multipart 路径。脚本会为 raw HTTP body 增加传输 padding，设备端只写入 `X-Firmware-Size` 声明的真实固件字节，以避免 Arduino `HTTPRaw` 最后一包短读等待超时。浏览器手工选择文件上传仍使用 `/esp32base/ota` multipart 表单路径，页面会在选择文件后立即显示固件大小，并在发送前按当前 OTA 目标 slot 容量拦截过大的固件，不受脚本默认值影响。详细配置见 `docs/05_ota.md`。
+`espota` 是 ArduinoOTA 标准协议；`webota` 是 Esp32Base 提供的 HTTP 上传方式，默认使用 `/esp32base/ota/raw` raw binary 路径和 64KB 分块，并在上传前预检认证、RSSI 和 OTA 目标分区容量，超出时不发送固件 body。raw 上传会根据弱 RSSI 自动把发送分块和节奏降到更保守的默认值，也可通过 `esp32base_webota_chunk_size`、`esp32base_webota_raw_pause_ms` 和 `esp32base_webota_socket_send_buffer` 显式覆盖；raw 传输中断时不会自动改走 `/esp32base/ota` multipart 路径。脚本会为 raw HTTP body 增加传输 padding，设备端只写入 `X-Firmware-Size` 声明的真实固件字节，以避免 Arduino `HTTPRaw` 最后一包短读等待超时。设备端把 raw 接收块直接交给 Arduino `Update` 内部缓冲，不再额外申请连续 64 KB heap。浏览器手工选择文件上传仍使用 `/esp32base/ota` multipart 表单路径，页面会在选择文件后立即显示固件大小，并在发送前按当前 OTA 目标 slot 容量拦截过大的固件，不受脚本默认值影响。详细配置见 `docs/05_ota.md`。
 
 量产项目建议启用 `ESP32BASE_OTA_REQUIRE_MARK_VALID=1`，避免 Arduino core 在应用自检前过早把新 OTA 镜像标记为 valid。业务应在传感器、配置和核心任务初始化通过后调用 `Esp32BaseOta::markCurrentValid()`；setup 阶段崩溃交给 bootloader rollback，运行期未确认交给 `Esp32BaseOta::handle()` timeout rollback。最小配置和示例见 `docs/05_ota.md`。
 

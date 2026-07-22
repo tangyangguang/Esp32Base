@@ -5,70 +5,9 @@
 #include "WebInternal.h"
 #include "WebOtaPreflight.h"
 
-#include <stdlib.h>
 #include <string.h>
 
 namespace esp32base_web {
-
-namespace {
-constexpr size_t kRawOtaWriteBufferSize = 64UL * 1024UL;
-constexpr size_t kRawOtaFlashWriteChunkSize = 4UL * 1024UL;
-uint8_t* g_rawOtaWriteBuffer = nullptr;
-size_t g_rawOtaWriteBuffered = 0;
-
-void resetRawOtaWriteBuffer() {
-    if (g_rawOtaWriteBuffer) {
-        free(g_rawOtaWriteBuffer);
-        g_rawOtaWriteBuffer = nullptr;
-    }
-    g_rawOtaWriteBuffered = 0;
-}
-
-bool ensureRawOtaWriteBuffer() {
-    if (g_rawOtaWriteBuffer) {
-        return true;
-    }
-    g_rawOtaWriteBuffer = static_cast<uint8_t*>(malloc(kRawOtaWriteBufferSize));
-    return g_rawOtaWriteBuffer != nullptr;
-}
-
-bool flushRawOtaWriteBuffer() {
-    if (g_rawOtaWriteBuffered == 0) {
-        return true;
-    }
-    const size_t len = g_rawOtaWriteBuffered;
-    g_rawOtaWriteBuffered = 0;
-    size_t offset = 0;
-    while (offset < len) {
-        const size_t remaining = len - offset;
-        const size_t writeLen = remaining < kRawOtaFlashWriteChunkSize ? remaining : kRawOtaFlashWriteChunkSize;
-        if (!Esp32BaseOta::writeChunk(g_rawOtaWriteBuffer + offset, writeLen)) {
-            return false;
-        }
-        offset += writeLen;
-    }
-    return true;
-}
-
-bool appendRawOtaWriteBuffer(const uint8_t* data, size_t len) {
-    if (!ensureRawOtaWriteBuffer()) {
-        Esp32BaseOta::abortUpload("raw ota buffer allocation failed");
-        return false;
-    }
-    size_t offset = 0;
-    while (offset < len) {
-        if (g_rawOtaWriteBuffered == kRawOtaWriteBufferSize && !flushRawOtaWriteBuffer()) {
-            return false;
-        }
-        const size_t available = kRawOtaWriteBufferSize - g_rawOtaWriteBuffered;
-        const size_t copyLen = (len - offset) < available ? (len - offset) : available;
-        memcpy(g_rawOtaWriteBuffer + g_rawOtaWriteBuffered, data + offset, copyLen);
-        g_rawOtaWriteBuffered += copyLen;
-        offset += copyLen;
-    }
-    return true;
-}
-} // namespace
 
 bool parseSizeHeader(const String& value, size_t& out, char* error, size_t errorLen) {
     return parseOtaDeclaredSize(value.c_str(), out, error, errorLen);
@@ -110,9 +49,8 @@ void formatRawOtaAbortReason(const HTTPRaw& raw, char* out, size_t outLen) {
     }
     snprintf(out,
              outLen,
-             "client aborted raw upload endpoint=/esp32base/ota/raw written=%lu buffered=%lu raw=%lu/%d progress=%u%%",
+             "client aborted raw upload endpoint=/esp32base/ota/raw written=%lu raw=%lu/%d progress=%u%%",
              static_cast<unsigned long>(Esp32BaseOta::bytesProcessed()),
-             static_cast<unsigned long>(g_rawOtaWriteBuffered),
              static_cast<unsigned long>(raw.totalSize),
              g_server.clientContentLength(),
              static_cast<unsigned>(Esp32BaseOta::progress()));
@@ -276,7 +214,6 @@ void handleOtaRawUpload() {
     }
     HTTPRaw& raw = g_server.raw();
     if (raw.status == RAW_START) {
-        resetRawOtaWriteBuffer();
         g_otaUploadForbidden = false;
         g_otaUploadStartFailed = false;
         if (!requestSameOrigin()) {
@@ -310,40 +247,31 @@ void handleOtaRawUpload() {
             return;
         }
         const size_t total = Esp32BaseOta::totalSize();
-        const size_t accepted = Esp32BaseOta::bytesProcessed() + g_rawOtaWriteBuffered;
-        if (accepted >= total) {
+        const size_t processed = Esp32BaseOta::bytesProcessed();
+        if (processed >= total) {
             serviceOtaUploadRequest();
             return;
         }
-        const size_t remaining = total - accepted;
+        const size_t remaining = total - processed;
         const size_t writeLen = raw.currentSize > remaining ? remaining : raw.currentSize;
-        if (writeLen > 0 && !appendRawOtaWriteBuffer(raw.buf, writeLen)) {
+        if (writeLen > 0 && !Esp32BaseOta::writeChunk(raw.buf, writeLen)) {
             g_otaUploadStartFailed = true;
-            resetRawOtaWriteBuffer();
         }
         serviceOtaUploadRequest();
     } else if (raw.status == RAW_END) {
         if (g_otaUploadForbidden || g_otaUploadStartFailed) {
-            resetRawOtaWriteBuffer();
             return;
         }
-        if (!flushRawOtaWriteBuffer()) {
-            resetRawOtaWriteBuffer();
-            return;
-        }
-        resetRawOtaWriteBuffer();
         Esp32BaseOta::finishUpload();
     } else if (raw.status == RAW_ABORTED) {
         char reason[160];
         formatRawOtaAbortReason(raw, reason, sizeof(reason));
         ESP32BASE_LOG_W("web",
-                        "ota_raw_aborted written=%lu buffered=%lu raw_total=%lu raw_current=%lu content_length=%d",
+                        "ota_raw_aborted written=%lu raw_total=%lu raw_current=%lu content_length=%d",
                         static_cast<unsigned long>(Esp32BaseOta::bytesProcessed()),
-                        static_cast<unsigned long>(g_rawOtaWriteBuffered),
                         static_cast<unsigned long>(raw.totalSize),
                         static_cast<unsigned long>(raw.currentSize),
                         g_server.clientContentLength());
-        resetRawOtaWriteBuffer();
         Esp32BaseOta::abortUpload(reason);
     }
 }

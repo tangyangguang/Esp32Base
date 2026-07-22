@@ -81,7 +81,7 @@ pio run -t webota
 - `webota` 是 Esp32Base 提供的 HTTP 上传方式，默认 64 KB 分块并使用 raw endpoint；要求设备 Web 服务和 `/esp32base/ota/raw` 可访问。
 - 浏览器 Web OTA 页面仍使用 `/esp32base/ota` multipart 表单上传路径，脚本默认值不会改变手工选择文件上传的设备端 handler。
 - `webota` 命令行日志会显示容量、耗时、RSSI、速度和阶段进度。上传进度表示客户端已写入 socket 的字节数，不等同于设备已完成 flash 写入。
-- raw Web OTA 使用 `X-Firmware-Size` 声明真实固件大小；脚本可为 raw HTTP 传输补齐 padding，设备端只写入真实固件字节。该 padding 是脚本和设备端 raw endpoint 的兼容细节，不影响浏览器 multipart 上传路径。
+- raw Web OTA 使用 `X-Firmware-Size` 声明真实固件大小；脚本可为 raw HTTP 传输补齐 padding，设备端只写入真实固件字节。设备端把 `HTTPRaw` 接收块直接交给 OTA 层，Arduino `Update` 在内部按 Flash sector 聚合和写入；raw handler 不再额外申请大块聚合缓冲，因此不会因无法取得连续 64 KB heap 而中止 OTA。该 padding 和接收策略是 raw endpoint 的兼容细节，不影响浏览器 multipart 上传路径。
 - raw endpoint 上传失败不会完成 OTA boot 分区切换，设备应保持原固件运行。若 Web 服务仍可访问，可由操作者明确选择表单或显式 multipart 路径远程恢复。
 - 升级 Arduino ESP32 Core 或替换 HTTP server 实现时，应重新验证 raw endpoint、padding、超时和弱网表现；如果 raw 路径不稳定，可先降低 `esp32base_webota_chunk_size`、设置 `esp32base_webota_raw_pause_ms` 或改用 multipart 路径。
 - 浏览器 Web OTA 页面会在选择文件后立即显示固件大小，并在发送前用当前 next OTA slot 容量检查所选文件；固件过大时直接在页面提示，不发送上传 body。命令行 `webota` 预检也会读取 `/esp32base/api/ota` 的 `nextUpdatePartition.size.bytes` 并在本地固件超出时停止。

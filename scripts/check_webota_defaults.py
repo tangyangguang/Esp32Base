@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
 WEBOTA_PATH = ROOT / "scripts" / "esp32base_webota.py"
+WEBOTA_HANDLER_PATH = ROOT / "src" / "web" / "internal" / "WebOta.cpp"
 
 
 def load_webota_module():
@@ -103,6 +104,14 @@ def check_raw_socket_options(webota_module, errors: list[str]) -> None:
         errors.append("scripts/esp32base_webota.py: raw upload socket must set TCP_NODELAY and configurable SO_SNDBUF")
 
 
+def check_raw_device_write_contract(errors: list[str]) -> None:
+    handler = WEBOTA_HANDLER_PATH.read_text(encoding="utf-8")
+    if "Esp32BaseOta::writeChunk(raw.buf, writeLen)" not in handler:
+        errors.append("src/web/internal/WebOta.cpp: raw handler must stream HTTPRaw chunks directly to the OTA layer")
+    if "raw ota buffer allocation failed" in handler or "kRawOtaWriteBufferSize" in handler:
+        errors.append("src/web/internal/WebOta.cpp: raw handler must not require a separate large aggregation buffer")
+
+
 def main() -> int:
     webota_module = load_webota_module()
     errors: list[str] = []
@@ -178,6 +187,7 @@ def main() -> int:
 
     check_raw_upload_send_contract(webota_module, errors)
     check_raw_socket_options(webota_module, errors)
+    check_raw_device_write_contract(errors)
     require(
         webota_module.RAW_RSSI_WEAK_DBM == -70 and webota_module.RAW_RSSI_VERY_WEAK_DBM == -75,
         "scripts/esp32base_webota.py: raw upload must define weak RSSI thresholds",
