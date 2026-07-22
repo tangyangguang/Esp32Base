@@ -323,8 +323,16 @@ bool runningImageSize(uint32_t& out) {
     return g_runningImageSizeState == RunningImageSizeState::Available;
 }
 
-void sendStatusCardStart(const char* title, Esp32BaseWeb::UiTone tone, const char* state) {
-    sendChunk("<section class='panel statuspage statuscard'><div class='statuscardhead'><h2>");
+void sendStatusCardStart(const char* title,
+                         Esp32BaseWeb::UiTone tone,
+                         const char* state,
+                         const char* extraClass = nullptr) {
+    sendChunk("<section class='panel statuspage statuscard");
+    if (extraClass && extraClass[0]) {
+        sendChunk(" ");
+        sendEscapedHtmlChunk(extraClass);
+    }
+    sendChunk("'><div class='statuscardhead'><h2>");
     sendEscapedHtmlChunk(title);
     sendChunk("</h2>");
     sendStatusTag(tone, state);
@@ -656,6 +664,14 @@ void handleStatusPage() {
         formatReadableBytes(nextPartition->size, otaTargetSize, sizeof(otaTargetSize));
         snprintf(otaTargetSlot, sizeof(otaTargetSlot), "%s / %s", nextPartition->label, otaTargetSize);
     }
+#if ESP32BASE_ENABLE_WIFI
+    const bool wifiConnected = Esp32BaseWiFi::isConnected();
+    const bool wifiWarn = Esp32BaseWiFi::safeBootPaused() || Esp32BaseWiFi::state() == Esp32BaseWiFi::FAILED;
+    char wifiIp[24] = "-";
+    if (wifiConnected) {
+        Esp32BaseWiFi::ip(wifiIp, sizeof(wifiIp));
+    }
+#endif
 
     sendChunk("<section class='panel statusidentity'><div class='metrics'>");
     sendChunk("<div><b>Firmware</b><span>");
@@ -675,7 +691,21 @@ void handleStatusPage() {
         sendChunk(" · Build ");
         sendEscapedHtmlChunk(Esp32Base::firmwareBuild());
     }
-    sendChunk("</p></section>");
+    sendChunk("</p>");
+#if ESP32BASE_ENABLE_WIFI
+    sendChunk("<div class='statusnetworkquick'><div class='statusnetworkcopy'><b>Network setup</b><span>");
+    if (wifiConnected && Esp32BaseWiFi::ssid()[0]) {
+        sendEscapedHtmlChunk(Esp32BaseWiFi::ssid());
+        sendChunk(" · ");
+        sendEscapedHtmlChunk(wifiIp);
+    } else if (Esp32BaseWiFi::state() == Esp32BaseWiFi::CONFIG_PORTAL) {
+        sendChunk("Configuration hotspot is active");
+    } else {
+        sendChunk("Choose or update the device WiFi network");
+    }
+    sendChunk("</span></div><a class='btnlink info statuswifibutton' href='/esp32base/wifi'>Configure WiFi</a></div>");
+#endif
+    sendChunk("</section>");
 
     const bool configStalled = Esp32BaseConfig::isDeferredFlushPaused() && Esp32BaseConfig::pendingCount() > 0;
     bool hasAttention = resetReasonNeedsAttention() || configStalled || Esp32Base::lastError()[0];
@@ -720,8 +750,6 @@ void handleStatusPage() {
     sendChunk("<div class='statusgrid'>");
 
 #if ESP32BASE_ENABLE_WIFI
-    const bool wifiConnected = Esp32BaseWiFi::isConnected();
-    const bool wifiWarn = Esp32BaseWiFi::safeBootPaused() || Esp32BaseWiFi::state() == Esp32BaseWiFi::FAILED;
     sendStatusCardStart("Network", wifiWarn ? Esp32BaseWeb::UI_WARN : (wifiConnected ? Esp32BaseWeb::UI_OK : Esp32BaseWeb::UI_NEUTRAL), Esp32BaseWiFi::stateName());
     sendInfoRowStart("WiFi");
     if (Esp32BaseWiFi::ssid()[0]) {
@@ -730,11 +758,7 @@ void handleStatusPage() {
         sendChunk("No saved network");
     }
     sendInfoRowEnd();
-    char ip[24] = "-";
-    if (wifiConnected) {
-        Esp32BaseWiFi::ip(ip, sizeof(ip));
-    }
-    sendInfoRow("IP", ip);
+    sendInfoRow("IP", wifiIp);
     if (wifiConnected) {
         snprintf(value, sizeof(value), "%ld dBm", static_cast<long>(Esp32BaseWiFi::rssi()));
     } else {
@@ -766,7 +790,10 @@ void handleStatusPage() {
     sendStatusSectionEnd();
 #endif
 
-    sendStatusCardStart("Runtime", resetReasonNeedsAttention() ? Esp32BaseWeb::UI_WARN : Esp32BaseWeb::UI_OK, resetReasonNeedsAttention() ? "check reset" : "healthy");
+    sendStatusCardStart("Runtime",
+                        resetReasonNeedsAttention() ? Esp32BaseWeb::UI_WARN : Esp32BaseWeb::UI_OK,
+                        resetReasonNeedsAttention() ? "check reset" : "healthy",
+                        "statusruntime");
     sendInfoRowStart("Heap");
     sendSubmetricsStart();
     sendSubmetric("Free", freeHeap);
