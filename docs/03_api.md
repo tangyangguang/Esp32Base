@@ -1349,6 +1349,8 @@ ESP32BASE_APP_CONFIG_MAX_FIELDS
 
 容量硬上限为 16 组、128 字段；业务 namespace 不能使用 `eb_` 前缀。注册必须在 `Esp32Base::begin()` 前完成。注册结构体中的字符串指针和 enum option 数组只被引用、不被复制，必须在固件生命周期内一直有效，推荐使用 `static const`。
 
+所有 `addGroup()` / `add*()` 返回值都必须检查。注册失败表示请求的业务配置没有进入当前固件契约，基础库会输出 ERROR，并用 `reason` 区分容量耗尽、重复注册、未知 group、非法 namespace/key、默认值或范围错误，同时输出当前计数和编译上限。基础库不知道该字段对具体业务是否关键，不会仅凭注册失败自行 halt、降级或触发 OTA 回滚；业务应聚合注册结果，并把必需注册项成功纳入自己的启动健康检查。
+
 职责：
 
 - 业务注册可持久化修改的应用参数。
@@ -1471,6 +1473,8 @@ public:
 `begin()` 只初始化 OTA boot 诊断和 rollback/mark-valid 状态，应在系统启动早期执行；`beginNetworkServices()` 在 Web/Auth ready 后启动 ArduinoOTA/espota 网络入口。普通业务通常不需要直接调用这两个函数，由 `Esp32Base` 统一调度。
 
 `runningOtaState()` 返回当前 running partition 的 OTA state 字符串：`valid`、`pending_verify`、`aborted`、`invalid`、`undefined`、`new`、`unknown` 或 `n/a`。`waitingForMarkValid()` 仅在启用 `ESP32BASE_OTA_REQUIRE_MARK_VALID=1` 且当前 running partition 为 `pending_verify` 时返回 `true`。业务自检通过后调用 `markCurrentValid()`；如果当前镜像不是 `pending_verify`，该函数会记录诊断并返回 `false`，不会误报确认成功。
+
+启用人工确认时，Esp32Base 覆盖 Arduino rollback hook，并在 Arduino `setup()` 前为 `pending_verify` 镜像启动一次性确认期限。该期限使用 ESP-IDF 系统计时器，不创建 Esp32Base 后台任务，也不依赖 `Esp32Base::begin()`、业务 loop 或 `Esp32Base::handle()`；`markCurrentValid()` 成功后取消计时器。期限届满会直接调用 ESP-IDF 标准 rollback-and-reboot API。`handle()` 中的同期限检查仅作为系统计时器创建失败时的降级路径。回滚后的旧镜像启动时会根据上一镜像的 `invalid` / `aborted` OTA state 输出 ERROR 诊断；业务自检的具体失败项仍应由业务在拒绝镜像前记录。
 
 `Update.end(true)` 必须在 SHA256 校验通过、且实际接收字节数等于声明总大小之后调用。
 

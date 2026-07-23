@@ -4,7 +4,10 @@
 void setup() {
     Esp32Base::setFirmwareInfo("web-logs-ota", "1.0.0");
     Esp32BaseWeb::setDefaultAuth("admin", "admin");
-    Esp32Base::begin();
+    const bool baseReady = Esp32Base::begin();
+    if (baseReady && Esp32BaseOta::waitingForMarkValid()) {
+        Esp32BaseOta::markCurrentValid();
+    }
     ESP32BASE_LOG_I("example", "open /esp32base/logs or /esp32base/ota");
 }
 

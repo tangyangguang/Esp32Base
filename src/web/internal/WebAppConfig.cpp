@@ -15,10 +15,6 @@ bool validConfigName(const char* value) {
     return len >= 1 && len <= 15;
 }
 
-bool appNsAllowed(const char* ns) {
-    return validConfigName(ns) && strncmp(ns, "eb_", 3) != 0;
-}
-
 Esp32BaseAppConfig::FieldType publicFieldType(AppConfigStoredType type) {
     switch (type) {
         case APP_CFG_STRING: return Esp32BaseAppConfig::FIELD_STRING;
@@ -56,14 +52,6 @@ bool fieldExists(const char* ns, const char* key) {
     return false;
 }
 
-bool validFieldCommon(const char* groupId, const char* ns, const char* key, const char* label) {
-    if (!groupExists(groupId) || !appNsAllowed(ns) || !validConfigName(key) || !label || !label[0] ||
-        strlen(label) > Esp32BaseAppConfig::LABEL_MAX_LENGTH) {
-        return false;
-    }
-    return !fieldExists(ns, key);
-}
-
 bool validOptionalHelp(const char* help) {
     return !help || strlen(help) <= Esp32BaseAppConfig::HELP_MAX_LENGTH;
 }
@@ -72,18 +60,67 @@ bool validOptionalUnit(const char* unit) {
     return !unit || strlen(unit) <= Esp32BaseAppConfig::UNIT_MAX_LENGTH;
 }
 
-void appConfigLogRegisterFailed(const char* type, const char* ns, const char* key) {
-    ESP32BASE_LOG_W("appcfg", "register_failed type=%s ns=%s key=%s", type ? type : "-", ns ? ns : "-", key ? key : "-");
+void appConfigLogRegisterFailed(const char* reason, const char* type, const char* groupId,
+                                const char* ns, const char* key) {
+    ESP32BASE_LOG_E("appcfg",
+                    "register_failed reason=%s type=%s group=%s ns=%s key=%s groups=%u/%u fields=%u/%u",
+                    reason ? reason : "unknown",
+                    type ? type : "-",
+                    groupId ? groupId : "-",
+                    ns ? ns : "-",
+                    key ? key : "-",
+                    static_cast<unsigned>(g_appConfigGroupCount),
+                    static_cast<unsigned>(ESP32BASE_APP_CONFIG_MAX_GROUPS),
+                    static_cast<unsigned>(g_appConfigFieldCount),
+                    static_cast<unsigned>(ESP32BASE_APP_CONFIG_MAX_FIELDS));
 }
 
 void appConfigLogHelpTooLong(const char* type, const char* ns, const char* key, size_t length) {
-    ESP32BASE_LOG_W("appcfg",
+    ESP32BASE_LOG_E("appcfg",
                     "register_failed reason=help_too_long type=%s ns=%s key=%s length=%u max=%u",
                     type ? type : "-",
                     ns ? ns : "-",
                     key ? key : "-",
                     static_cast<unsigned>(length),
                     static_cast<unsigned>(Esp32BaseAppConfig::HELP_MAX_LENGTH));
+}
+
+const char* fieldCommonRegistrationError(const char* groupId, const char* ns,
+                                         const char* key, const char* label) {
+    if (g_appConfigFieldCount >= ESP32BASE_APP_CONFIG_MAX_FIELDS) {
+        return "field_capacity";
+    }
+    if (!groupId || !groupId[0]) {
+        return "missing_group";
+    }
+    if (!groupExists(groupId)) {
+        return "unknown_group";
+    }
+    if (!ns || !ns[0]) {
+        return "missing_namespace";
+    }
+    if (!validConfigName(ns)) {
+        return "invalid_namespace";
+    }
+    if (strncmp(ns, "eb_", 3) == 0) {
+        return "reserved_namespace";
+    }
+    if (!key || !key[0]) {
+        return "missing_key";
+    }
+    if (!validConfigName(key)) {
+        return "invalid_key";
+    }
+    if (!label || !label[0]) {
+        return "missing_label";
+    }
+    if (strlen(label) > Esp32BaseAppConfig::LABEL_MAX_LENGTH) {
+        return "label_too_long";
+    }
+    if (fieldExists(ns, key)) {
+        return "duplicate_field";
+    }
+    return nullptr;
 }
 
 bool enumValueAllowed(const Esp32BaseAppConfig::EnumField& field, const char* value) {
@@ -1013,10 +1050,19 @@ bool Esp32BaseAppConfig::setSaveCallback(SaveCallback callback) {
 }
 
 bool Esp32BaseAppConfig::addGroup(const Group& group) {
-    if (!group.id || !group.id[0] || strlen(group.id) > 15 || !group.title || !group.title[0] ||
-        strlen(group.title) > LABEL_MAX_LENGTH ||
-        g_appConfigGroupCount >= ESP32BASE_APP_CONFIG_MAX_GROUPS || groupExists(group.id)) {
-        ESP32BASE_LOG_W("appcfg", "group_register_failed id=%s", group.id ? group.id : "-");
+    const char* reason = nullptr;
+    if (!group.id || !group.id[0]) reason = "missing_id";
+    else if (strlen(group.id) > 15) reason = "id_too_long";
+    else if (!group.title || !group.title[0]) reason = "missing_title";
+    else if (strlen(group.title) > LABEL_MAX_LENGTH) reason = "title_too_long";
+    else if (g_appConfigGroupCount >= ESP32BASE_APP_CONFIG_MAX_GROUPS) reason = "group_capacity";
+    else if (groupExists(group.id)) reason = "duplicate_group";
+    if (reason) {
+        ESP32BASE_LOG_E("appcfg", "group_register_failed reason=%s id=%s groups=%u/%u",
+                        reason,
+                        group.id ? group.id : "-",
+                        static_cast<unsigned>(g_appConfigGroupCount),
+                        static_cast<unsigned>(ESP32BASE_APP_CONFIG_MAX_GROUPS));
         return false;
     }
     AppConfigGroupSlot& slot = g_appConfigGroups[g_appConfigGroupCount++];
@@ -1031,11 +1077,15 @@ bool Esp32BaseAppConfig::addString(const StringField& field) {
         appConfigLogHelpTooLong("string", field.ns, field.key, strlen(field.help));
         return false;
     }
-    if (g_appConfigFieldCount >= ESP32BASE_APP_CONFIG_MAX_FIELDS ||
-        !validFieldCommon(field.groupId, field.ns, field.key, field.label) ||
-        field.minLength > field.maxLength || field.maxLength > STRING_MAX_LENGTH ||
-        !field.defaultValue || strlen(field.defaultValue) < field.minLength || strlen(field.defaultValue) > field.maxLength) {
-        appConfigLogRegisterFailed("string", field.ns, field.key);
+    const char* reason = fieldCommonRegistrationError(field.groupId, field.ns, field.key, field.label);
+    if (!reason && field.minLength > field.maxLength) reason = "invalid_length_range";
+    if (!reason && field.maxLength > STRING_MAX_LENGTH) reason = "max_length_exceeded";
+    if (!reason && !field.defaultValue) reason = "missing_default";
+    if (!reason && (strlen(field.defaultValue) < field.minLength || strlen(field.defaultValue) > field.maxLength)) {
+        reason = "default_length_out_of_range";
+    }
+    if (reason) {
+        appConfigLogRegisterFailed(reason, "string", field.groupId, field.ns, field.key);
         return false;
     }
     AppConfigFieldSlot& slot = g_appConfigFields[g_appConfigFieldCount++];
@@ -1058,12 +1108,14 @@ bool Esp32BaseAppConfig::addInt(const IntField& field) {
         appConfigLogHelpTooLong("int", field.ns, field.key, strlen(field.help));
         return false;
     }
-    if (g_appConfigFieldCount >= ESP32BASE_APP_CONFIG_MAX_FIELDS ||
-        !validFieldCommon(field.groupId, field.ns, field.key, field.label) ||
-        !validOptionalUnit(field.unit) ||
-        field.minValue > field.maxValue || field.defaultValue < field.minValue || field.defaultValue > field.maxValue ||
-        field.step <= 0 || !stepMatches(field.defaultValue, field.minValue, field.step)) {
-        appConfigLogRegisterFailed("int", field.ns, field.key);
+    const char* reason = fieldCommonRegistrationError(field.groupId, field.ns, field.key, field.label);
+    if (!reason && !validOptionalUnit(field.unit)) reason = "unit_too_long";
+    if (!reason && field.minValue > field.maxValue) reason = "invalid_range";
+    if (!reason && (field.defaultValue < field.minValue || field.defaultValue > field.maxValue)) reason = "default_out_of_range";
+    if (!reason && field.step <= 0) reason = "invalid_step";
+    if (!reason && !stepMatches(field.defaultValue, field.minValue, field.step)) reason = "default_step_mismatch";
+    if (reason) {
+        appConfigLogRegisterFailed(reason, "int", field.groupId, field.ns, field.key);
         return false;
     }
     AppConfigFieldSlot& slot = g_appConfigFields[g_appConfigFieldCount++];
@@ -1087,13 +1139,15 @@ bool Esp32BaseAppConfig::addDecimal(const DecimalField& field) {
         appConfigLogHelpTooLong("decimal", field.ns, field.key, strlen(field.help));
         return false;
     }
-    if (g_appConfigFieldCount >= ESP32BASE_APP_CONFIG_MAX_FIELDS ||
-        !validFieldCommon(field.groupId, field.ns, field.key, field.label) ||
-        !validOptionalUnit(field.unit) ||
-        field.scale > DECIMAL_SCALE_MAX || field.minRawValue > field.maxRawValue ||
-        field.defaultRawValue < field.minRawValue || field.defaultRawValue > field.maxRawValue ||
-        field.stepRaw <= 0 || !stepMatches(field.defaultRawValue, field.minRawValue, field.stepRaw)) {
-        appConfigLogRegisterFailed("decimal", field.ns, field.key);
+    const char* reason = fieldCommonRegistrationError(field.groupId, field.ns, field.key, field.label);
+    if (!reason && !validOptionalUnit(field.unit)) reason = "unit_too_long";
+    if (!reason && field.scale > DECIMAL_SCALE_MAX) reason = "invalid_scale";
+    if (!reason && field.minRawValue > field.maxRawValue) reason = "invalid_range";
+    if (!reason && (field.defaultRawValue < field.minRawValue || field.defaultRawValue > field.maxRawValue)) reason = "default_out_of_range";
+    if (!reason && field.stepRaw <= 0) reason = "invalid_step";
+    if (!reason && !stepMatches(field.defaultRawValue, field.minRawValue, field.stepRaw)) reason = "default_step_mismatch";
+    if (reason) {
+        appConfigLogRegisterFailed(reason, "decimal", field.groupId, field.ns, field.key);
         return false;
     }
     AppConfigFieldSlot& slot = g_appConfigFields[g_appConfigFieldCount++];
@@ -1117,9 +1171,9 @@ bool Esp32BaseAppConfig::addBool(const BoolField& field) {
         appConfigLogHelpTooLong("bool", field.ns, field.key, strlen(field.help));
         return false;
     }
-    if (g_appConfigFieldCount >= ESP32BASE_APP_CONFIG_MAX_FIELDS ||
-        !validFieldCommon(field.groupId, field.ns, field.key, field.label)) {
-        appConfigLogRegisterFailed("bool", field.ns, field.key);
+    const char* reason = fieldCommonRegistrationError(field.groupId, field.ns, field.key, field.label);
+    if (reason) {
+        appConfigLogRegisterFailed(reason, "bool", field.groupId, field.ns, field.key);
         return false;
     }
     AppConfigFieldSlot& slot = g_appConfigFields[g_appConfigFieldCount++];
@@ -1142,10 +1196,10 @@ bool Esp32BaseAppConfig::addEnum(const EnumField& field) {
         appConfigLogHelpTooLong("enum", field.ns, field.key, strlen(field.help));
         return false;
     }
-    if (g_appConfigFieldCount >= ESP32BASE_APP_CONFIG_MAX_FIELDS ||
-        !validFieldCommon(field.groupId, field.ns, field.key, field.label) ||
-        !validEnumOptions(field)) {
-        appConfigLogRegisterFailed("enum", field.ns, field.key);
+    const char* reason = fieldCommonRegistrationError(field.groupId, field.ns, field.key, field.label);
+    if (!reason && !validEnumOptions(field)) reason = "invalid_enum_options";
+    if (reason) {
+        appConfigLogRegisterFailed(reason, "enum", field.groupId, field.ns, field.key);
         return false;
     }
     AppConfigFieldSlot& slot = g_appConfigFields[g_appConfigFieldCount++];

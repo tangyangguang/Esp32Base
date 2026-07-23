@@ -157,9 +157,9 @@ Arduino ESP32 core 在 `CONFIG_APP_ROLLBACK_ENABLE` 启用时会声明 weak `ver
 Esp32Base 的策略：
 
 - `ESP32BASE_OTA_REQUIRE_MARK_VALID=0` 时不覆盖该 weak hook，保持既有 Arduino 行为。
-- `ESP32BASE_OTA_REQUIRE_MARK_VALID=1` 时定义 `extern "C" bool verifyRollbackLater()` 并返回 `true`，阻止 Arduino core 在业务初始化前自动 mark valid。
+- `ESP32BASE_OTA_REQUIRE_MARK_VALID=1` 时定义 `extern "C" bool verifyRollbackLater()`，阻止 Arduino core 在业务初始化前自动 mark valid，并在该 hook 内为 `pending_verify` 镜像启动一次性 ESP-IDF 系统计时器。
 - 业务必须在应用自检通过后调用 `Esp32BaseOta::markCurrentValid()`。
-- setup 阶段崩溃由 bootloader rollback 处理；运行期未确认由 `Esp32BaseOta::handle()` 的 timeout 处理。
+- setup 阶段崩溃/复位由 bootloader rollback；未进入 `Esp32Base::begin()`、setup 阻塞或未调用 `handle()` 时由独立确认计时器触发 rollback；`handle()` timeout 只作为计时器建立失败时的降级路径。
 
 ## 13. PlatformIO / pioarduino 验证注意事项
 

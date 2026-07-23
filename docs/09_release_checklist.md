@@ -108,6 +108,9 @@
 - WiFi power save off/restore。
 - 中途断电不变砖。
 - rollback 可用。
+- 启用 `ESP32BASE_OTA_REQUIRE_MARK_VALID=1` 时，确认期限在 Arduino `setup()` 前建立；不调用 `Esp32Base::begin()`、setup 阻塞和业务不调用 `handle()` 三种场景都能回滚。
+- `markCurrentValid()` 成功后取消独立确认计时器，不发生延迟误回滚；计时器创建失败时有 ERROR 且 `handle()` 降级检查有效。
+- 回滚后的旧镜像输出上一无效/中止镜像的分区、state 和原因分类。
 - 上传页进度显示正确。
 - 上传页进度容量只显示 KB/MB/B 人性化值；状态/API JSON 保留 raw `bytes` 字段。
 
@@ -144,6 +147,7 @@
 - deferred pending/NVS 同值去重，不重复推迟 flush 或产生 NVS 写入。
 - restart 前全部落盘。
 - NVS 写满返回 false。
+- App Config group/field 注册失败输出 ERROR，日志包含明确 `reason`、对象标识、当前计数和编译容量；调用方仍通过 bool 决定业务启动策略。
 - `factoryReset()` 清理 `eb_wifi`、`eb_wifi_rcv`、`eb_web`、`eb_log`、`eb_ui`、`eb_sys.hostname`，并在条件跟踪启用时清理 `eb_app_events`。
 - `factoryReset()` 保留 `eb_sys` 中的 boot/restart/watchdog 统计诊断 key。
 - 单项清理 API 只影响对应配置范围；`clearSystemConfig()` 只清 hostname，不清统计诊断 key。

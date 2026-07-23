@@ -292,10 +292,11 @@ void rollbackAndRestart(const char* reason);
 - 量产项目应启用 `ESP32BASE_OTA_REQUIRE_MARK_VALID=1`，由 Esp32Base 覆盖 `verifyRollbackLater()` 并阻止 Arduino core 自动 mark valid。
 - 新固件启动后，应用自检通过再调用 `markCurrentValid()`。
 - `markCurrentValid()` 只在当前 running partition 为 `pending_verify` 时报告成功；如果已经是 `valid`、`aborted`、`invalid`、`undefined` 或状态不可读，会写日志并返回 `false`。
-- 若启用自动 mark valid timeout，`Esp32BaseOta::handle()` 负责检查超时并 rollback。
-- timeout 从 OTA boot 状态初始化完成后开始计算，不依赖 WiFi 连接或 Web 服务启动。
+- 启用确认 timeout 后，rollback hook 在 Arduino `setup()` 前为 `pending_verify` 镜像启动一次性系统计时器；主路径不依赖业务进入 `Esp32Base::begin()`、loop 或调用 `Esp32BaseOta::handle()`。
+- timeout 从 rollback hook 识别到 `pending_verify` 开始，不依赖 WiFi 连接、Web 服务或业务初始化。`Esp32BaseOta::begin()` 会确认保护已建立；系统计时器创建失败时记录 ERROR，并由 `handle()` 保留合作式降级检查。
 - timeout 状态绑定当前 running partition，避免 rollback 后再次误判形成循环。
-- setup/应用初始化阶段崩溃应由 bootloader rollback 处理；固件能运行但一直未确认时，由 `Esp32BaseOta::handle()` 的 timeout 触发 rollback。
+- setup/应用初始化阶段崩溃或意外复位由 bootloader rollback；setup 阻塞、提前退出或业务 loop 未调用基础库时，由独立确认期限触发 rollback。关中断、调度器失效等连系统计时器也无法运行的硬卡死仍需硬件 Watchdog 产生复位，再由 bootloader 回滚。
+- 业务必须把所有必需的配置/API 注册返回值、存储、传感器、执行器安全状态和核心任务纳入健康检查；基础库不能根据某个业务 API 的失败替应用判断镜像是否可用。
 - 启动日志会输出 running partition、configured boot partition、next update partition、当前 OTA image state，以及是否正在等待业务 mark valid。
 - `/esp32base/api/ota` 返回 `runningOtaState`、`waitingForMarkValid`、`markValidElapsedMs`、`markValidTimeoutMs`，同时在 `runningPartition.state` 中保留当前 running partition 的 OTA state。
 
@@ -348,7 +349,9 @@ build_flags =
 - `pio run -t webota` 可通过 IP 地址上传，错误 Web Auth 失败且设备保持可访问。
 - Web OTA 与 espota 不得同时写 flash。
 - Web OTA 成功后 `/esp32base/api/ota` 中 `bootPartition` 与 `lastTargetPartition` 一致。
-- 启用 `ESP32BASE_OTA_REQUIRE_MARK_VALID=1` 时，即使 WiFi/Web 未 ready，OTA boot/rollback 状态也已初始化，`handle()` 能执行 mark-valid timeout 检查。
+- 启用 `ESP32BASE_OTA_REQUIRE_MARK_VALID=1` 时，即使未进入 `Esp32Base::begin()`、WiFi/Web 未 ready、setup 阻塞或业务未调用 `handle()`，确认期限仍能把未确认镜像标记无效并重启回滚。
+- 模拟系统计时器创建失败时，启动日志输出 ERROR，`handle()` 降级检查仍能在期限后回滚。
+- 回滚到上一镜像后，启动日志能根据上一槽的 `invalid` / `aborted` state 输出拒绝原因分类和分区信息。
 - 双 OTA 串口恢复脚本 dry-run 输出两个 OTA app 槽写入，并显示 OTA data 清理计划。
 - 双 OTA 串口恢复脚本 dry-run 覆盖 hex、K/M 和空 offset 分区表，确认能解析 `otadata`、`ota_0`、`ota_1`。
 - 双 OTA 串口恢复前关闭串口 monitor；测试覆盖端口占用诊断，实机恢复失败时优先排查 monitor 占用、下载模式进入和高波特率链路稳定性。
