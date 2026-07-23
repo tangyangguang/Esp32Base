@@ -62,7 +62,18 @@ def check_raw_upload_send_contract(webota_module, errors: list[str]) -> None:
         with mock.patch.object(webota_module, "_open_socket", return_value=fake_socket), mock.patch.object(
             webota_module.time, "sleep"
         ) as sleep_mock, mock.patch.object(webota_module, "_print_progress"):
-            response = webota_module._send_raw(parsed, firmware, firmware_size, headers, 4, 5.0, stats, 1.0, False)
+            response = webota_module._send_raw(
+                parsed,
+                firmware,
+                firmware_size,
+                headers,
+                4,
+                5.0,
+                stats,
+                1.0,
+                False,
+                ["192.168.2.112"],
+            )
             response.read()
 
     if len(fake_socket.writes) != 3:
@@ -134,6 +145,16 @@ def check_host_configuration_contract(webota_module, errors: list[str]) -> None:
     if addresses != ["192.168.2.112"]:
         errors.append("scripts/esp32base_webota.py: target resolution must return unique resolved addresses")
     resolver.assert_called_once_with("esp32base-full.local", 80, type=webota_module.socket.SOCK_STREAM)
+
+    fake_socket = FakeRawSocket()
+    connection = webota_module._open_connection(parsed, 1.0, False, addresses)
+    with mock.patch.object(webota_module.socket, "create_connection", return_value=fake_socket) as connector:
+        connected_socket = connection._create_connection((parsed.hostname, 80), 1.0, None)
+    if connected_socket is not fake_socket or connection.host != "esp32base-full.local":
+        errors.append(
+            "scripts/esp32base_webota.py: HTTP connections must reuse the resolved IP while preserving the hostname"
+        )
+    connector.assert_called_once_with(("192.168.2.112", 80), 1.0, None)
 
 
 def check_raw_device_write_contract(errors: list[str]) -> None:

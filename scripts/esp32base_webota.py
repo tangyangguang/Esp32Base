@@ -205,6 +205,29 @@ def _print_resolution_failure(parsed, error):
         print("Hint: check the configured IP address or DNS hostname.", file=sys.stderr)
 
 
+def _create_resolved_socket(addresses, port, timeout, source_address=None):
+    last_error = None
+    for address in addresses:
+        try:
+            return socket.create_connection((address, port), timeout, source_address)
+        except OSError as exc:
+            last_error = exc
+    if last_error is not None:
+        raise last_error
+    raise socket.gaierror("no resolved address available")
+
+
+def _use_resolved_addresses(connection, addresses):
+    if not addresses:
+        return connection
+
+    def create_connection(address, timeout=socket._GLOBAL_DEFAULT_TIMEOUT, source_address=None):
+        return _create_resolved_socket(addresses, address[1], timeout, source_address)
+
+    connection._create_connection = create_connection
+    return connection
+
+
 def _status_path(upload_path):
     configured = _option("esp32base_webota_status_path")
     if configured:
@@ -221,28 +244,35 @@ def _request_target(parsed, path=None):
     return target
 
 
-def _open_connection(parsed, timeout, verify_tls):
+def _open_connection(parsed, timeout, verify_tls, resolved_addresses=None):
     if parsed.scheme == "https":
         context = None if verify_tls else ssl._create_unverified_context()
-        return http.client.HTTPSConnection(
-            parsed.hostname,
-            parsed.port or 443,
-            timeout=timeout,
-            context=context,
+        return _use_resolved_addresses(
+            http.client.HTTPSConnection(
+                parsed.hostname,
+                parsed.port or 443,
+                timeout=timeout,
+                context=context,
+            ),
+            resolved_addresses,
         )
     if parsed.scheme == "http":
-        return http.client.HTTPConnection(parsed.hostname, parsed.port or 80, timeout=timeout)
+        return _use_resolved_addresses(
+            http.client.HTTPConnection(parsed.hostname, parsed.port or 80, timeout=timeout),
+            resolved_addresses,
+        )
     raise ValueError("unsupported URL scheme: %s" % parsed.scheme)
 
 
-def _open_socket(parsed, timeout, verify_tls):
+def _open_socket(parsed, timeout, verify_tls, resolved_addresses=None):
+    addresses = resolved_addresses or [parsed.hostname]
     if parsed.scheme == "http":
-        sock = socket.create_connection((parsed.hostname, parsed.port or 80), timeout=timeout)
+        sock = _create_resolved_socket(addresses, parsed.port or 80, timeout)
         _configure_raw_upload_socket(sock)
         return sock
     if parsed.scheme == "https":
         context = ssl.create_default_context() if verify_tls else ssl._create_unverified_context()
-        raw_sock = socket.create_connection((parsed.hostname, parsed.port or 443), timeout=timeout)
+        raw_sock = _create_resolved_socket(addresses, parsed.port or 443, timeout)
         _configure_raw_upload_socket(raw_sock)
         try:
             return context.wrap_socket(raw_sock, server_hostname=parsed.hostname)
@@ -368,8 +398,8 @@ def _validate_remote_ota_capacity(payload, firmware_size):
     )
 
 
-def _request_json(parsed, path, headers, timeout, verify_tls):
-    conn = _open_connection(parsed, timeout, verify_tls)
+def _request_json(parsed, path, headers, timeout, verify_tls, resolved_addresses):
+    conn = _open_connection(parsed, timeout, verify_tls, resolved_addresses)
     try:
         conn.request("GET", path, headers={"Authorization": headers["Authorization"]})
         response = conn.getresponse()
@@ -384,9 +414,16 @@ def _request_json(parsed, path, headers, timeout, verify_tls):
         return None
 
 
-def _sample_device(parsed, headers, timeout, verify_tls):
-    status = _request_json(parsed, "/esp32base/api/status", headers, timeout, verify_tls) or {}
-    ota = _request_json(parsed, _status_path(parsed.path or "/"), headers, timeout, verify_tls) or {}
+def _sample_device(parsed, headers, timeout, verify_tls, resolved_addresses):
+    status = _request_json(parsed, "/esp32base/api/status", headers, timeout, verify_tls, resolved_addresses) or {}
+    ota = _request_json(
+        parsed,
+        _status_path(parsed.path or "/"),
+        headers,
+        timeout,
+        verify_tls,
+        resolved_addresses,
+    ) or {}
     wifi = status.get("wifi") if isinstance(status, dict) else {}
     rssi = wifi.get("rssi") if isinstance(wifi, dict) else None
     if not isinstance(rssi, int):
@@ -530,10 +567,10 @@ def _print_progress(percent, sent, total, elapsed):
     )
 
 
-def _preflight(parsed, headers, timeout, verify_tls, firmware_size):
+def _preflight(parsed, headers, timeout, verify_tls, firmware_size, resolved_addresses):
     if not _as_bool(_option("esp32base_webota_preflight", "true"), True):
         return
-    conn = _open_connection(parsed, timeout, verify_tls)
+    conn = _open_connection(parsed, timeout, verify_tls, resolved_addresses)
     try:
         status_path = _status_path(parsed.path or "/")
         conn.request("GET", status_path, headers={"Authorization": headers["Authorization"]})
@@ -602,14 +639,25 @@ def _send_multipart(connection, parsed, firmware_path, firmware_size, headers, c
     stats["client_send_finished_at"] = time.time()
 
 
-def _send_raw(parsed, firmware_path, firmware_size, headers, chunk_size, raw_pause_ms, stats, timeout, verify_tls):
+def _send_raw(
+    parsed,
+    firmware_path,
+    firmware_size,
+    headers,
+    chunk_size,
+    raw_pause_ms,
+    stats,
+    timeout,
+    verify_tls,
+    resolved_addresses,
+):
     padded_size = _raw_padded_size(firmware_size)
     padding_size = padded_size - firmware_size
     request_headers = dict(headers)
     request_headers["Content-Type"] = "application/octet-stream"
     request_headers["Content-Length"] = str(padded_size)
     request_head = _raw_request_bytes(parsed, request_headers)
-    sock = _open_socket(parsed, timeout, verify_tls)
+    sock = _open_socket(parsed, timeout, verify_tls, resolved_addresses)
 
     stats["sent_bytes"] = 0
     stats["upload_started_at"] = time.time()
@@ -656,9 +704,21 @@ def _send_raw(parsed, firmware_path, firmware_size, headers, chunk_size, raw_pau
         raise
 
 
-def _upload_once(upload_mode, parsed, firmware, firmware_size, headers, chunk_size, raw_pause_ms, stats, upload_timeout, verify_tls):
+def _upload_once(
+    upload_mode,
+    parsed,
+    firmware,
+    firmware_size,
+    headers,
+    chunk_size,
+    raw_pause_ms,
+    stats,
+    upload_timeout,
+    verify_tls,
+    resolved_addresses,
+):
     if upload_mode == "multipart":
-        conn = _open_connection(parsed, upload_timeout, verify_tls)
+        conn = _open_connection(parsed, upload_timeout, verify_tls, resolved_addresses)
         try:
             _send_multipart(conn, parsed, firmware, firmware_size, headers, chunk_size, stats)
             stats["response_wait_started_at"] = time.time()
@@ -677,6 +737,7 @@ def _upload_once(upload_mode, parsed, firmware, firmware_size, headers, chunk_si
         stats,
         upload_timeout,
         verify_tls,
+        resolved_addresses,
     )
 
 
@@ -735,15 +796,20 @@ def _run_webota(target, source, env):
     print("Web OTA mode: %s" % upload_mode)
 
     try:
+        resolution_started_at = time.time()
         resolved_addresses = _resolve_target(parsed)
         print(
-            "Web OTA resolved target: %s -> %s"
-            % (parsed.hostname, ", ".join(resolved_addresses))
+            "Web OTA resolved target: %s -> %s (%s)"
+            % (
+                parsed.hostname,
+                ", ".join(resolved_addresses),
+                _format_duration(time.time() - resolution_started_at),
+            )
         )
-        _preflight(parsed, headers, timeout, verify_tls, firmware_size)
+        _preflight(parsed, headers, timeout, verify_tls, firmware_size, resolved_addresses)
         samples_before = []
         for sample_index in range(3):
-            sample_before = _sample_device(parsed, headers, timeout, verify_tls)
+            sample_before = _sample_device(parsed, headers, timeout, verify_tls, resolved_addresses)
             samples_before.append(sample_before)
             print(_format_device_sample("before-send %d/3" % (sample_index + 1), sample_before))
             if sample_index < 2:
@@ -768,6 +834,7 @@ def _run_webota(target, source, env):
             stats,
             upload_timeout,
             verify_tls,
+            resolved_addresses,
         )
         stats["response_received_at"] = time.time()
     except PermissionError as exc:
