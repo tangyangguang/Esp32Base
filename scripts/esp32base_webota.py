@@ -306,6 +306,27 @@ def _host_header(parsed):
     return host
 
 
+def _format_network_endpoint(address, port):
+    address = str(address or "")
+    if ":" in address and not address.startswith("["):
+        address = "[%s]" % address
+    return "%s:%d" % (address, port)
+
+
+def _print_upload_connection(parsed, sock):
+    try:
+        peer = sock.getpeername()
+    except (AttributeError, OSError):
+        return
+    if not peer:
+        return
+    endpoint = _format_network_endpoint(peer[0], peer[1])
+    print(
+        "Web OTA upload connection: %s (requestHost=%s path=%s)"
+        % (endpoint, _host_header(parsed), _request_target(parsed))
+    )
+
+
 def _raw_request_bytes(parsed, headers):
     lines = [
         "POST %s HTTP/1.1" % _request_target(parsed),
@@ -398,6 +419,28 @@ def _validate_remote_ota_capacity(payload, firmware_size):
     )
 
 
+def _format_preflight_summary(payload, firmware_size):
+    if not isinstance(payload, dict):
+        return "Web OTA preflight: access accepted, OTA slot capacity unavailable"
+    partition = payload.get("nextUpdatePartition")
+    if not isinstance(partition, dict):
+        return "Web OTA preflight: access accepted, OTA slot capacity unavailable"
+    partition_size = _json_bytes_value(partition.get("size"))
+    if not isinstance(partition_size, int) or partition_size <= 0:
+        return "Web OTA preflight: access accepted, OTA slot capacity unavailable"
+    label = partition.get("label") if isinstance(partition.get("label"), str) else "next OTA"
+    headroom = max(0, partition_size - firmware_size)
+    return (
+        "Web OTA preflight: access accepted, target=%s slot=%s firmware=%s headroom=%s"
+        % (
+            label,
+            _format_bytes(partition_size),
+            _format_bytes(firmware_size),
+            _format_bytes(headroom),
+        )
+    )
+
+
 def _request_json(parsed, path, headers, timeout, verify_tls, resolved_addresses):
     conn = _open_connection(parsed, timeout, verify_tls, resolved_addresses)
     try:
@@ -472,6 +515,27 @@ def _format_device_sample(label, sample):
 def _sample_min_rssi(samples):
     values = [sample.get("rssi") for sample in samples if isinstance(sample.get("rssi"), int)]
     return min(values) if values else None
+
+
+def _format_link_samples(samples):
+    values = [sample.get("rssi") for sample in samples if isinstance(sample.get("rssi"), int)]
+    sample_count = len(samples)
+    if not values:
+        return (
+            "Web OTA link check: RSSI unavailable in %d samples; RSSI-based adjustment unavailable"
+            % sample_count
+        )
+    weakest = min(values)
+    strongest = max(values)
+    if weakest == strongest:
+        range_text = "%d dBm" % weakest
+    else:
+        range_text = "%d..%d dBm" % (weakest, strongest)
+    return "Web OTA link check: rssi=%s samples=%d adaptiveBasis=%d dBm" % (
+        range_text,
+        len(values),
+        weakest,
+    )
 
 
 def _resolve_raw_transfer_settings(upload_mode, chunk_size, raw_pause_ms, chunk_size_configured, raw_pause_configured, samples):
@@ -569,7 +633,7 @@ def _print_progress(percent, sent, total, elapsed):
 
 def _preflight(parsed, headers, timeout, verify_tls, firmware_size, resolved_addresses):
     if not _as_bool(_option("esp32base_webota_preflight", "true"), True):
-        return
+        return False, None
     conn = _open_connection(parsed, timeout, verify_tls, resolved_addresses)
     try:
         status_path = _status_path(parsed.path or "/")
@@ -594,6 +658,7 @@ def _preflight(parsed, headers, timeout, verify_tls, firmware_size, resolved_add
     if response.status < 200 or response.status >= 300:
         raise RuntimeError("HTTP %d: %s" % (response.status, body_error))
     _validate_remote_ota_capacity(payload, firmware_size)
+    return True, payload
 
 
 def _send_multipart(connection, parsed, firmware_path, firmware_size, headers, chunk_size, stats):
@@ -616,6 +681,7 @@ def _send_multipart(connection, parsed, firmware_path, firmware_size, headers, c
     for key, value in request_headers.items():
         connection.putheader(key, value)
     connection.endheaders()
+    _print_upload_connection(parsed, connection.sock)
     connection.send(file_header_bytes)
 
     stats["sent_bytes"] = 0
@@ -658,6 +724,7 @@ def _send_raw(
     request_headers["Content-Length"] = str(padded_size)
     request_head = _raw_request_bytes(parsed, request_headers)
     sock = _open_socket(parsed, timeout, verify_tls, resolved_addresses)
+    _print_upload_connection(parsed, sock)
 
     stats["sent_bytes"] = 0
     stats["upload_started_at"] = time.time()
@@ -788,7 +855,7 @@ def _run_webota(target, source, env):
         print("Error: esp32base_webota_chunk_size must be at least 4096", file=sys.stderr)
         env.Exit(1)
     print("Web OTA started: %s" % _format_timestamp(started_at))
-    print("Web OTA target: %s" % url)
+    print("Web OTA configured URL: %s" % url)
     print("Web OTA firmware: %s (%s, %d bytes)" % (firmware, _format_bytes(firmware_size), firmware_size))
     print("Web OTA timeouts: request %.1fs, upload %.1fs" % (timeout, upload_timeout))
     upload_path = (parsed.path or "/").rstrip("/")
@@ -798,22 +865,35 @@ def _run_webota(target, source, env):
     try:
         resolution_started_at = time.time()
         resolved_addresses = _resolve_target(parsed)
+        resolution_finished_at = time.time()
+        stats["resolution_duration"] = resolution_finished_at - resolution_started_at
         print(
-            "Web OTA resolved target: %s -> %s (%s)"
+            "Web OTA resolved address: %s -> %s (%s; reused for all connections)"
             % (
                 parsed.hostname,
                 ", ".join(resolved_addresses),
-                _format_duration(time.time() - resolution_started_at),
+                _format_duration(stats["resolution_duration"]),
             )
         )
-        _preflight(parsed, headers, timeout, verify_tls, firmware_size, resolved_addresses)
+        preflight_enabled, preflight_payload = _preflight(
+            parsed,
+            headers,
+            timeout,
+            verify_tls,
+            firmware_size,
+            resolved_addresses,
+        )
+        if preflight_enabled:
+            print(_format_preflight_summary(preflight_payload, firmware_size))
+        else:
+            print("Web OTA preflight: disabled")
         samples_before = []
         for sample_index in range(3):
             sample_before = _sample_device(parsed, headers, timeout, verify_tls, resolved_addresses)
             samples_before.append(sample_before)
-            print(_format_device_sample("before-send %d/3" % (sample_index + 1), sample_before))
             if sample_index < 2:
                 time.sleep(0.25)
+        print(_format_link_samples(samples_before))
         chunk_size, raw_pause_ms, raw_note = _resolve_raw_transfer_settings(
             upload_mode,
             chunk_size,
@@ -886,6 +966,8 @@ def _run_webota(target, source, env):
     response_received = stats.get("response_received_at") or finished_at
     client_send_duration = max(0.0, send_finished - send_started)
     response_wait_duration = max(0.0, response_received - response_started)
+    resolution_duration = max(0.0, float(stats.get("resolution_duration", 0.0)))
+    preparation_duration = max(0.0, send_started - started_at - resolution_duration)
     sample_after_response = _sample_from_response(body_error)
     print("Web OTA success: device accepted firmware and is restarting")
     print("Web OTA finished: %s" % _format_timestamp(finished_at))
@@ -895,6 +977,15 @@ def _run_webota(target, source, env):
         % (_format_duration(client_send_duration), _format_speed(stats["sent_bytes"], client_send_duration))
     )
     print("Web OTA wait response: %s" % _format_duration(response_wait_duration))
+    print(
+        "Web OTA phases: resolve=%s prepare=%s send=%s response=%s"
+        % (
+            _format_duration(resolution_duration),
+            _format_duration(preparation_duration),
+            _format_duration(client_send_duration),
+            _format_duration(response_wait_duration),
+        )
+    )
     print(
         "Web OTA duration: %s, uploaded %s, end-to-end average %s"
         % (_format_duration(duration), _format_bytes(stats["sent_bytes"]), _format_speed(stats["sent_bytes"], duration))

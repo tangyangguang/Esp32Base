@@ -81,7 +81,7 @@ pio run -t webota
 - `webota` 是 Esp32Base 提供的 HTTP 上传方式，默认 64 KB 分块并使用 raw endpoint；要求设备 Web 服务和 `/esp32base/ota/raw` 可访问。
 - `webota` 每次执行时通过运行脚本的操作系统解析一次 hostname，并在上传前显示解析到的地址；本次任务的预检、状态采样和上传连接复用该地址，HTTP `Host` 和 HTTPS SNI 仍保留原 hostname。解析结果不会跨任务缓存，因此设备在两次任务之间取得新的 DHCP 地址后，下次执行会重新解析。`.local` 依赖电脑与设备位于允许组播的同一网络，并依赖当前 Windows、macOS 或 Linux 解析环境支持 mDNS；解析失败时脚本会在发送固件前停止并给出对应提示。WSL、跨 VLAN、访客 WiFi 或禁用组播的网络不能假定 `.local` 可用，此时应使用网络 DNS 中的稳定 hostname 或设备 IP。
 - 浏览器 Web OTA 页面仍使用 `/esp32base/ota` multipart 表单上传路径，脚本默认值不会改变手工选择文件上传的设备端 handler。
-- `webota` 命令行日志会显示容量、耗时、RSSI、速度和阶段进度。上传进度表示客户端已写入 socket 的字节数，不等同于设备已完成 flash 写入。
+- `webota` 命令行日志会区分配置 URL、hostname 解析结果和实际上传连接的 IP:port，并显示保留的 HTTP `Host`、OTA 目标槽容量与余量、RSSI 采样结论、传输设置、阶段进度，以及解析/准备/发送/等待响应的分段耗时。上传进度表示客户端已写入 socket 的字节数，不等同于设备已完成 flash 写入。
 - raw Web OTA 使用 `X-Firmware-Size` 声明真实固件大小；脚本可为 raw HTTP 传输补齐 padding，设备端只写入真实固件字节。设备端把 `HTTPRaw` 接收块直接交给 OTA 层，Arduino `Update` 在内部按 Flash sector 聚合和写入；raw handler 不再额外申请大块聚合缓冲，因此不会因无法取得连续 64 KB heap 而中止 OTA。该 padding 和接收策略是 raw endpoint 的兼容细节，不影响浏览器 multipart 上传路径。
 - raw endpoint 上传失败不会完成 OTA boot 分区切换，设备应保持原固件运行。若 Web 服务仍可访问，可由操作者明确选择表单或显式 multipart 路径远程恢复。
 - 升级 Arduino ESP32 Core 或替换 HTTP server 实现时，应重新验证 raw endpoint、padding、超时和弱网表现；如果 raw 路径不稳定，可先降低 `esp32base_webota_chunk_size`、设置 `esp32base_webota_raw_pause_ms` 或改用 multipart 路径。

@@ -2,6 +2,7 @@
 import io
 import importlib.util
 import tempfile
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 from urllib.parse import urlparse
@@ -157,6 +158,37 @@ def check_host_configuration_contract(webota_module, errors: list[str]) -> None:
     connector.assert_called_once_with(("192.168.2.112", 80), 1.0, None)
 
 
+def check_operator_output_contract(webota_module, errors: list[str]) -> None:
+    preflight = webota_module._format_preflight_summary(
+        {"nextUpdatePartition": {"label": "ota_1", "size": {"bytes": 1572864}}},
+        1289008,
+    )
+    if not all(value in preflight for value in ("access accepted", "target=ota_1", "headroom=")):
+        errors.append("scripts/esp32base_webota.py: preflight output must show access, target slot, and headroom")
+
+    unavailable = webota_module._format_link_samples([{"rssi": None}, {"rssi": None}, {"rssi": None}])
+    available = webota_module._format_link_samples([{"rssi": -40}, {"rssi": -42}, {"rssi": -41}])
+    if "RSSI unavailable in 3 samples" not in unavailable or "adaptiveBasis=-42 dBm" not in available:
+        errors.append("scripts/esp32base_webota.py: link output must summarize samples and adaptive pacing basis")
+
+    class ConnectedSocket:
+        def getpeername(self):
+            return ("192.168.2.127", 80)
+
+    parsed = urlparse("http://irrigation-controller.local/esp32base/ota/raw")
+    output = io.StringIO()
+    with redirect_stdout(output):
+        webota_module._print_upload_connection(parsed, ConnectedSocket())
+    connection_line = output.getvalue()
+    if not all(
+        value in connection_line
+        for value in ("192.168.2.127:80", "requestHost=irrigation-controller.local", "path=/esp32base/ota/raw")
+    ):
+        errors.append(
+            "scripts/esp32base_webota.py: upload output must distinguish the connected IP from request hostname"
+        )
+
+
 def check_raw_device_write_contract(errors: list[str]) -> None:
     handler = WEBOTA_HANDLER_PATH.read_text(encoding="utf-8")
     if "Esp32BaseOta::writeChunk(raw.buf, writeLen)" not in handler:
@@ -241,6 +273,7 @@ def main() -> int:
     check_raw_upload_send_contract(webota_module, errors)
     check_raw_socket_options(webota_module, errors)
     check_host_configuration_contract(webota_module, errors)
+    check_operator_output_contract(webota_module, errors)
     check_raw_device_write_contract(errors)
     require(
         webota_module.RAW_RSSI_WEAK_DBM == -70 and webota_module.RAW_RSSI_VERY_WEAK_DBM == -75,
