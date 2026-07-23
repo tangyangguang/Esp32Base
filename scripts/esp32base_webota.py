@@ -173,6 +173,38 @@ def _build_url():
     return "http://%s:%s%s" % (host, port, path)
 
 
+def _resolve_target(parsed):
+    host = parsed.hostname
+    if not host:
+        raise ValueError("Web OTA URL is missing a host")
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    results = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    addresses = []
+    for result in results:
+        sockaddr = result[4]
+        if not sockaddr:
+            continue
+        address = str(sockaddr[0])
+        if address not in addresses:
+            addresses.append(address)
+    if not addresses:
+        raise socket.gaierror("no address returned for %s" % host)
+    return addresses
+
+
+def _print_resolution_failure(parsed, error):
+    host = parsed.hostname or "<missing>"
+    print("Error: Web OTA target resolution failed for %s: %s" % (host, error), file=sys.stderr)
+    if host.lower().endswith(".local"):
+        print(
+            "Hint: .local uses mDNS. Check that the computer and device are on the same multicast-capable "
+            "network, the device mDNS service is running, and the OS resolver supports mDNS.",
+            file=sys.stderr,
+        )
+    else:
+        print("Hint: check the configured IP address or DNS hostname.", file=sys.stderr)
+
+
 def _status_path(upload_path):
     configured = _option("esp32base_webota_status_path")
     if configured:
@@ -703,6 +735,11 @@ def _run_webota(target, source, env):
     print("Web OTA mode: %s" % upload_mode)
 
     try:
+        resolved_addresses = _resolve_target(parsed)
+        print(
+            "Web OTA resolved target: %s -> %s"
+            % (parsed.hostname, ", ".join(resolved_addresses))
+        )
         _preflight(parsed, headers, timeout, verify_tls, firmware_size)
         samples_before = []
         for sample_index in range(3):
@@ -750,7 +787,11 @@ def _run_webota(target, source, env):
         _print_raw_failure_hint(upload_mode)
         _print_failure_summary(stats, firmware_size, started_at)
         env.Exit(1)
-    except (ConnectionRefusedError, socket.gaierror, TimeoutError, socket.timeout, OSError) as exc:
+    except socket.gaierror as exc:
+        _print_resolution_failure(parsed, exc)
+        _print_failure_summary(stats, firmware_size, started_at)
+        env.Exit(1)
+    except (ConnectionRefusedError, TimeoutError, socket.timeout, OSError) as exc:
         print("Error: connection failed: %s" % exc, file=sys.stderr)
         _print_raw_failure_hint(upload_mode)
         _print_failure_summary(stats, firmware_size, started_at)

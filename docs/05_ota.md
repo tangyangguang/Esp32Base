@@ -39,13 +39,13 @@ upload_flags =
 
 espota 认证密码为当前生效的 Web Auth 密码；espota 没有用户名，因此 Web 用户名不参与。即使 Web Auth 被关闭，ArduinoOTA 仍要求密码，避免静默开放无密码 OTA。
 
-Esp32Base 同时提供更快的命令行 Web OTA target。它复用现有 HTTP Web OTA 接口和 Web Basic Auth，不依赖 mDNS，推荐直接使用设备 IP：
+Esp32Base 同时提供更快的命令行 Web OTA target。它复用现有 HTTP Web OTA 接口和 Web Basic Auth。`esp32base_webota_host` 同时接受设备 IP、普通 DNS hostname 和 mDNS `<hostname>.local`；DHCP 地址可能变化的本地开发设备推荐使用当前 Esp32Base hostname 对应的 `.local` 地址：
 
 ```ini
 extra_scripts =
   post:path/to/Esp32Base/scripts/esp32base_webota.py
 
-custom_esp32base_webota_host = 192.168.2.112
+custom_esp32base_webota_host = esp32base-full.local
 custom_esp32base_webota_user = <current-web-auth-user>
 custom_esp32base_webota_password = <current-web-auth-password>
 ```
@@ -59,7 +59,7 @@ pio run -t webota
 `webota` target 由 Esp32Base 提供的可复用 PlatformIO extra_script 注册；业务项目不需要复制脚本或编写自定义 target。可用配置项：
 
 - `esp32base_webota_url`：完整 URL，例如 `http://192.168.2.112/esp32base/ota/raw`。
-- `esp32base_webota_host`：设备 IP 或 hostname；未设置 URL 时使用。
+- `esp32base_webota_host`：设备 IP、普通 DNS hostname 或 mDNS `<hostname>.local`；未设置 URL 时使用。不要给普通 DNS hostname 自动追加 `.local`。
 - `esp32base_webota_port`：默认 `80`。
 - `esp32base_webota_path`：默认 `/esp32base/ota/raw`，走 raw binary endpoint；显式设为 `/esp32base/ota` 时走 multipart 上传路径，和浏览器手工选择文件上传使用同一个设备端 OTA handler。
 - `esp32base_webota_user` / `esp32base_webota_password`：当前 Web Auth 用户名和密码；未配置时脚本仍可从环境变量读取，但不再假设设备内置 `admin/admin`。
@@ -79,6 +79,7 @@ pio run -t webota
 
 - `espota` 是 ArduinoOTA 标准协议，兼容 PlatformIO/ArduinoOTA 常规工具链。
 - `webota` 是 Esp32Base 提供的 HTTP 上传方式，默认 64 KB 分块并使用 raw endpoint；要求设备 Web 服务和 `/esp32base/ota/raw` 可访问。
+- `webota` 每次执行时通过运行脚本的操作系统重新解析 hostname，并在上传前显示解析到的地址，不缓存 DHCP 地址。`.local` 依赖电脑与设备位于允许组播的同一网络，并依赖当前 Windows、macOS 或 Linux 解析环境支持 mDNS；解析失败时脚本会在发送固件前停止并给出对应提示。WSL、跨 VLAN、访客 WiFi 或禁用组播的网络不能假定 `.local` 可用，此时应使用网络 DNS 中的稳定 hostname 或设备 IP。
 - 浏览器 Web OTA 页面仍使用 `/esp32base/ota` multipart 表单上传路径，脚本默认值不会改变手工选择文件上传的设备端 handler。
 - `webota` 命令行日志会显示容量、耗时、RSSI、速度和阶段进度。上传进度表示客户端已写入 socket 的字节数，不等同于设备已完成 flash 写入。
 - raw Web OTA 使用 `X-Firmware-Size` 声明真实固件大小；脚本可为 raw HTTP 传输补齐 padding，设备端只写入真实固件字节。设备端把 `HTTPRaw` 接收块直接交给 OTA 层，Arduino `Update` 在内部按 Flash sector 聚合和写入；raw handler 不再额外申请大块聚合缓冲，因此不会因无法取得连续 64 KB heap 而中止 OTA。该 padding 和接收策略是 raw endpoint 的兼容细节，不影响浏览器 multipart 上传路径。

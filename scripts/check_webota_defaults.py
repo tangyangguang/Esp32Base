@@ -104,6 +104,38 @@ def check_raw_socket_options(webota_module, errors: list[str]) -> None:
         errors.append("scripts/esp32base_webota.py: raw upload socket must set TCP_NODELAY and configurable SO_SNDBUF")
 
 
+def check_host_configuration_contract(webota_module, errors: list[str]) -> None:
+    cases = {
+        "192.168.2.112": "http://192.168.2.112:80/esp32base/ota/raw",
+        "esp32base-full.local": "http://esp32base-full.local:80/esp32base/ota/raw",
+        "device.example.lan": "http://device.example.lan:80/esp32base/ota/raw",
+    }
+    for configured_host, expected_url in cases.items():
+        def option(name: str, default=None):
+            if name == "esp32base_webota_host":
+                return configured_host
+            return default
+
+        with mock.patch.object(webota_module, "_option", side_effect=option):
+            actual_url = webota_module._build_url()
+        if actual_url != expected_url:
+            errors.append(
+                "scripts/esp32base_webota.py: esp32base_webota_host must accept IP, DNS hostname, and mDNS .local"
+            )
+            break
+
+    addrinfo = [
+        (2, 1, 6, "", ("192.168.2.112", 80)),
+        (2, 1, 6, "", ("192.168.2.112", 80)),
+    ]
+    parsed = urlparse("http://esp32base-full.local/esp32base/ota/raw")
+    with mock.patch.object(webota_module.socket, "getaddrinfo", return_value=addrinfo) as resolver:
+        addresses = webota_module._resolve_target(parsed)
+    if addresses != ["192.168.2.112"]:
+        errors.append("scripts/esp32base_webota.py: target resolution must return unique resolved addresses")
+    resolver.assert_called_once_with("esp32base-full.local", 80, type=webota_module.socket.SOCK_STREAM)
+
+
 def check_raw_device_write_contract(errors: list[str]) -> None:
     handler = WEBOTA_HANDLER_PATH.read_text(encoding="utf-8")
     if "Esp32BaseOta::writeChunk(raw.buf, writeLen)" not in handler:
@@ -187,6 +219,7 @@ def main() -> int:
 
     check_raw_upload_send_contract(webota_module, errors)
     check_raw_socket_options(webota_module, errors)
+    check_host_configuration_contract(webota_module, errors)
     check_raw_device_write_contract(errors)
     require(
         webota_module.RAW_RSSI_WEAK_DBM == -70 and webota_module.RAW_RSSI_VERY_WEAK_DBM == -75,
