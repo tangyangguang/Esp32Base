@@ -61,3 +61,4 @@ CLAUDE.md
 design-history/
 ESP32BASE_DOCUMENTATION_REVIEW*.md
 bug-ticklish-kitten.md
+examples/mqtt_tls/local_secrets.h

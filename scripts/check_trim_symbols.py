@@ -12,11 +12,13 @@ from pathlib import Path
 
 DEFAULT_ENVS = ("esp32_core", "esp32_runtime", "esp32_net", "esp32_web")
 
+MQTT_FORBIDDEN = ("Esp32BaseMqtt", "esp_mqtt_client_", "mqtt_task")
+
 FORBIDDEN = {
-    "esp32_core": ("WiFi", "DNSServer", "MDNS", "WebServer", "UpdateClass", "LittleFS"),
-    "esp32_runtime": ("WiFi", "DNSServer", "MDNS", "WebServer", "UpdateClass"),
-    "esp32_net": ("WebServer", "UpdateClass", "LittleFS"),
-    "esp32_web": ("UpdateClass", "ArduinoOTA"),
+    "esp32_core": ("WiFi", "DNSServer", "MDNS", "WebServer", "UpdateClass", "LittleFS") + MQTT_FORBIDDEN,
+    "esp32_runtime": ("WiFi", "DNSServer", "MDNS", "WebServer", "UpdateClass") + MQTT_FORBIDDEN,
+    "esp32_net": ("WebServer", "UpdateClass", "LittleFS") + MQTT_FORBIDDEN,
+    "esp32_web": ("UpdateClass", "ArduinoOTA") + MQTT_FORBIDDEN,
 }
 
 

@@ -13,6 +13,7 @@ errors = []
 system = read("src/core/Esp32BaseSystem.cpp")
 system_header = read("src/core/Esp32BaseSystem.h")
 sleep = read("src/runtime/Esp32BaseSleep.inc")
+mqtt = read("src/network/Esp32BaseMqtt.inc")
 
 for forbidden in ("../runtime/", "Esp32BaseFileLog"):
     if forbidden in system:
@@ -24,6 +25,10 @@ for forbidden in ("setPreRestartHook", "setPreSleepHook"):
 
 if "Esp32BaseFileLog" in sleep:
     errors.append("src/runtime/Esp32BaseSleep.inc: sleep must use the system pre-sleep hook instead of depending on FileLog")
+
+for forbidden in ("../web/", "Esp32BaseWeb", "../update/", "Esp32BaseOta", "Esp32BaseSleep"):
+    if forbidden in mqtt:
+        errors.append(f"src/network/Esp32BaseMqtt.inc: Network MQTT must not depend on higher layer {forbidden}")
 
 if errors:
     for error in errors:

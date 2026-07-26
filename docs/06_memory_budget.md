@@ -128,6 +128,24 @@ ESP32BASE_RESTART_LOG_CAPACITY=4
 - NVS string value：可见内容 <= 3999 字节。
 - NVS blob value：1..256 字节。
 
+MQTT（仅 `ESP32BASE_ENABLE_MQTT=1`）：
+
+- Topic：默认 128 字节，构建期允许 32..256。
+- payload：默认 512 字节，构建期允许 64..2048。
+- 订阅：默认 8，最大 16。
+- 完整入站消息槽：默认 2，最大 4。
+- 控制事件槽：默认 16，允许 4..16；默认值保证一次连接加 8 个订阅 ACK 不会必然溢出。
+- QoS 1 in-flight：默认 4，最大 8。
+- ESP-MQTT outbox 预算：默认 4096 字节，允许 1024..16384；Core 2.x 由 wrapper 在 enqueue 前约束，Core 3.x 同时设置底层 outbox limit。
+- MQTT task stack：默认 6144 字节，允许 4096..8192；不能把 PlatformIO 静态 RAM 报告当作 task stack 或 TLS heap。
+- CA PEM（含末尾 NUL）：默认上限 6144 字节，允许 1024..16384。
+- 单个客户端证书/私钥 PEM（含末尾 NUL）：默认上限各 4096 字节，允许 1024..8192；这些数据可能被底层 TLS/MQTT 配置复制，必须纳入初始化 heap 预算。
+- 接收消息从 ESP-MQTT 分片复制到固定消息槽一次，业务 callback 直接读取该槽；callback 返回后指针失效。
+
+MQTT 默认关闭且不随 FULL 自动开启。开启后 Arduino Core 预编译 ESP-MQTT 基本同时带入 TLS transport，因此“只配置明文”不能作为显著裁剪 TLS Flash 的手段。发布测量必须分别记录 MQTT 关闭、MQTT 开启但未配置、真实 MQTTS 配置的 `firmware.elf/bin`，并在实机记录初始化、TCP、TLS 握手峰值和稳定连接后的 free/min heap。
+
+2026-07-26 的 classic ESP32、Arduino Core 2.0.16、`-flto -fno-exceptions`、1.5MiB app slot 构建参考：`examples/basic` FULL/MQTT关闭为 Flash 985765 bytes、静态 RAM 63412 bytes；`examples/mqtt_tls` FULL/MQTT启用且实际调用配置/订阅/发布/LWT API 为 Flash 1128373 bytes、静态 RAM 66268 bytes，增量分别为 142608 和 2856 bytes。该示例使用不可工作的短 CA 占位文本，只证明链接和 wrapper 固定容量，不代表真实 CA 体积、TLS 握手或运行时 heap；产品验收不得把这组构建数值外推为实机资源结论。
+
 人性化容量显示：
 
 - 日志和内置页面中的大字节数只显示 KB/MB/B 人性化值，不重复 raw bytes。
@@ -211,5 +229,6 @@ ESP32-C3 4MB 要控制 Web/OTA/Fs 组合的体积。
 - 代表目标的 `firmware.bin` 是否落在推荐分区表的 app slot 内。
 - `text / data / bss` 是否出现异常增长。
 - 实机 `free heap` / `min free heap` 是否覆盖启动、联网、Web 请求、OTA 和 LittleFS 主要路径。
+- 启用 MQTT 时，是否记录 MQTT task stack、TLS 握手峰值、稳定连接 heap、outbox/inbox 高水位和连续重连后的 min heap。
 
 如果某次发布无法完成实机容量验证，应在发布记录中说明缺口，不应把空表或过期数值留在项目文档里。

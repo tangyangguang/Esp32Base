@@ -21,3 +21,4 @@ idf_component.yml
 idf_component.yml.orig
 **/idf_component.yml
 **/idf_component.yml.orig
+**/local_secrets.h

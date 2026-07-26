@@ -805,6 +805,117 @@ WiFi 凭证和重连策略：
 - 仅当应用显式设置有限 maxRetries 且全部用尽，才进入 `FAILED`。
 - 从 `FAILED` 恢复必须通过 `connect()` 重新提交凭证，或 `clearCredentials()` 后再显式 `startConfigPortal()`。
 
+## 7.1 Esp32BaseMqtt
+
+仅在 `ESP32BASE_ENABLE_MQTT=1` 时公开，依赖 WiFi 和统一 Time。MQTT 不随任何 Profile 自动开启：
+
+```ini
+build_flags =
+  -D ESP32BASE_PROFILE=ESP32BASE_PROFILE_NET_RUNTIME
+  -D ESP32BASE_ENABLE_MQTT=1
+```
+
+第一版固定为单 Broker、单 Client、MQTT 3.1.1、Clean Session、QoS 0/1。底层使用 Arduino ESP32 Core 内置 ESP-MQTT；不公开 ESP-IDF 类型。
+
+主要 API：
+
+```cpp
+static bool configure(const ConnectionConfig& config);
+static bool addSubscription(const Subscription& subscription);
+static void setMessageCallback(MessageCallback callback, void* context = nullptr);
+static void setEventCallback(EventCallback callback, void* context = nullptr);
+static PublishResult publish(const PublishRequest& request);
+static bool requestReconnect();
+static State state();
+static Status status();
+static Diagnostics diagnostics();
+static const char* stateName(State state);
+static const char* errorName(Error error);
+```
+
+应用必须在 `Esp32Base::begin()` 前完成 `configure()`、订阅和 callback 注册。模块自己的 begin/handle 由 `Esp32Base` facade 调度，不向业务公开。`Esp32Base::begin()` 只校验本地配置，不等待 WiFi、DNS、NTP、TCP、TLS 或 Broker；MQTT 未配置视为可用但 `NOT_CONFIGURED`，非法配置按 optional module begin 契约报告，只有 `ESP32BASE_STRICT_OPTIONAL_BEGIN=1` 才阻止整体 begin。
+
+`ConnectionConfig`：
+
+- `host`：1..253 字节、NUL 结尾。
+- `port`：非 0；MQTTS 通常显式使用 8883。
+- `clientId`：1..64 字节、NUL 结尾，应用保证跨该设备唯一。
+- `keepAliveSeconds`：15..1200，默认 60。
+- `security`：默认 `TLS`；`EXPLICIT_PLAINTEXT` 还要求构建期 `ESP32BASE_MQTT_ALLOW_PLAINTEXT=1`。
+- `username/password`：可选；不允许只有 password 没有 username。
+- `tls.caCertificatePem`：TLS 必填，PEM 必须以 NUL 结束，length 精确包含该 NUL，并受 `ESP32BASE_MQTT_MAX_CA_CERT_BYTES` 限制。
+- `tls.clientCertificatePem/privateKeyPem`：可选双向 TLS，必须成对提供，length 精确包含 NUL，并分别受 `ESP32BASE_MQTT_MAX_IDENTITY_PEM_BYTES` 限制。
+- `lastWill`：可选，Topic 不允许 wildcard，payload 不超过构建上限，QoS 仅 0/1。
+
+TLS 不提供 insecure、跳过 hostname、系统 CA bundle 或失败后明文 fallback。TLS 配置在 `Esp32BaseTime::isRealTime()==false` 时停在 `WAITING_FOR_TIME`。普通明文模式只用于显式启用的受控局域网或测试固件。
+
+所有配置字符串、PEM、私钥、LWT 和订阅 Topic 都按借用内存处理，必须从注册到设备重启或进入 deep sleep 始终有效；推荐使用静态存储期数据，不能在 `begin()` 后释放。密码和私钥不写 NVS、LittleFS、App Config、Web、Status、JSON 或日志；状态只暴露 `usernameSet/clientCertificateSet`。
+
+订阅：
+
+```cpp
+Esp32BaseMqtt::Subscription subscription;
+subscription.topicFilter = "device/+/command";
+subscription.qos = Esp32BaseMqtt::QOS_1;
+Esp32BaseMqtt::addSubscription(subscription);
+```
+
+订阅表默认 8 项，构建期最大 16。Topic filter 最大字节数由 `ESP32BASE_MQTT_MAX_TOPIC_BYTES` 控制；`+` 和 `#` 必须位于合法 level。每次连接后全部重新提交。`EVENT_SUBSCRIPTION_ACKNOWLEDGED` 带 `subscriptionIndex` 和 MQTT packet id；底层立即拒绝时发布 `EVENT_SUBSCRIPTION_REJECTED`。
+
+发送：
+
+```cpp
+Esp32BaseMqtt::PublishRequest request;
+request.topic = "device/state";
+request.payload = bytes;
+request.payloadLength = length;
+request.qos = Esp32BaseMqtt::QOS_1;
+request.retain = true;
+const auto result = Esp32BaseMqtt::publish(request);
+```
+
+`publish()` 只能从 `Esp32Base::handle()` 所在 loop/system task 调用，只在 `CONNECTED` 时接受。它使用非阻塞 `esp_mqtt_client_enqueue()`，返回前底层已复制成功或明确拒绝，因此返回 `PUBLISH_ACCEPTED` 后调用方可释放 topic/payload；它不调用可能阻塞数秒的 `esp_mqtt_client_publish()`。
+
+`PUBLISH_ACCEPTED` 只表示进入有限发送流程：
+
+- QoS 0 的 `packetId` 为 0，没有 Broker ACK，不能解释为送达。
+- QoS 1 通过 `EVENT_PUBLISH_ACKNOWLEDGED` 报告 Broker PUBACK。
+- Broker ACK 不等于业务处理完成。
+- 断线时未 ACK 的 QoS 1 发布报告
+  `EVENT_PUBLISH_DELIVERY_UNCERTAIN`：报文可能已到 Broker，也可能仍在
+  ESP-MQTT 的有界 in-flight outbox 中等待协议重传，不能将该事件解释为“确定未送达”。
+  基础库不接受断线期间的新 publish，也不建立第二套业务离线队列。
+- 应用在 `EVENT_CONNECTED` 后重新发布当前状态，而不是积压旧遥测。
+
+接收 callback：
+
+```cpp
+typedef void (*MessageCallback)(const MessageView& message, void* context);
+```
+
+`MessageView` 给出 topic/payload 指针和精确长度、QoS、retain、duplicate。ESP-MQTT task 将分片按 offset 复制到固定槽，完整且未超限后才由 `Esp32Base::handle()` 调用业务 callback；不截断。指针只在 callback 期间有效，需要异步保留时由业务自行复制。底层 MQTT/WiFi/LWIP/FreeRTOS callback 不直接进入业务代码。
+
+状态：
+
+- `NOT_CONFIGURED`
+- `CONFIGURATION_ERROR`
+- `WAITING_FOR_WIFI`
+- `WAITING_FOR_TIME`
+- `BACKOFF`
+- `CONNECTING`
+- `CONNECTED`
+- `CONNECTION_REJECTED`
+- `SUSPENDED_FOR_OTA`
+- `STOPPING`
+
+普通 transport/TLS/Broker unavailable 错误使用 1、2、4、8、16、32、60 秒上限的指数退避，并在当前上限 50%..100% 使用系统随机抖动。协议、Client ID、用户名和授权拒绝进入 `CONNECTION_REJECTED`，避免持续错误认证；Broker/ACL 修复后应用可调用 `requestReconnect()`。所有 deadline 使用 32 位无符号差值，允许 `millis()` 回绕。
+
+`Status` 提供当前状态、稳定错误、TLS/credential-set、Broker host/port/clientId 和最近连接的 uptime/epoch。`Diagnostics` 提供连接尝试、成功、重连、断开、接收、publish accepted、PUBACK、订阅 ACK、送达状态不确定、超限/邮箱丢弃、enqueue 失败、outbox/inbox/control high-water、当前 QoS 1 in-flight 及 native ESP/TLS/socket/certificate flags。QoS 0 没有可观察的 Broker ACK，因此不伪造“已发送”计数；native code 只用于诊断，不作为跨 Core 稳定业务枚举。
+
+OTA 上传开始时 facade 异步请求 MQTT DISCONNECT 并拒绝新 publish；上传失败且设备继续运行时重新进入前置条件和连接流程。运行期不调用可能无限等待的 `esp_mqtt_client_stop()`；MQTT task 保留到重启，避免阻塞 loop/watchdog。restart/deep sleep 前只尽力异步请求 DISCONNECT，不等待 task 停止，也不承诺 DISCONNECT、在途 publish 或 PUBACK 已抵达。异常掉电的 LWT 行为由 Broker 和 MQTT 契约决定。WiFi safe boot/AP 配网时不连接 Broker；modem sleep 下 Keepalive 和重连需要产品实机验证。
+
+容量宏及默认值见 [内存与容量预算](06_memory_budget.md)。最小安全接入见 `examples/mqtt_tls`。Topic 版本、命令去重/过期/授权、JSON、设备影子、业务状态同步和离线业务数据属于应用层。
+
 ## 8. Esp32BaseTime / Rtc / Dns / Ntp / Mdns
 
 ```cpp

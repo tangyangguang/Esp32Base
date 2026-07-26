@@ -21,6 +21,8 @@ base = read("src/Esp32Base.cpp")
 webota = read("scripts/esp32base_webota.py")
 web_docs = read("docs/04_web.md")
 ota_docs = read("docs/05_ota.md")
+mqtt = read("src/network/Esp32BaseMqtt.inc")
+mqtt_header = read("src/network/Esp32BaseMqtt.h")
 
 if 'value=\'");\n    sendEscapedHtmlChunk(password)' in web_wifi or "sendEscapedHtmlChunk(password);" in web_wifi:
     errors.append("src/web/internal/WebWifi.cpp: WiFi password input must not echo the saved password")
@@ -58,6 +60,21 @@ if "- 回显当前密码" in web_docs:
     errors.append("docs/04_web.md: WiFi page docs must not claim the saved password is echoed")
 if "custom_esp32base_webota_user = admin" in ota_docs or "custom_esp32base_webota_password = admin" in ota_docs:
     errors.append("docs/05_ota.md: Web OTA examples must not use admin/admin placeholders")
+
+for forbidden in (
+    "password=%s",
+    "private_key=%s",
+    "payload=%s",
+    "skip_cert_common_name_check = true",
+):
+    if forbidden in mqtt:
+        errors.append(f"src/network/Esp32BaseMqtt.inc: MQTT security boundary contains forbidden pattern {forbidden}")
+if "EXPLICIT_PLAINTEXT" not in mqtt_header or "ESP32BASE_MQTT_ALLOW_PLAINTEXT" not in mqtt:
+    errors.append("MQTT plaintext transport must require explicit API and build opt-in")
+if "validCertificatePem(config.tls.caCertificatePem" not in mqtt:
+    errors.append("MQTTS must fail closed when no application CA is configured")
+if 'strcmp(pem, "NULL") != 0' not in mqtt:
+    errors.append("MQTTS must reject ESP-MQTT's special CA verification disable value")
 
 if errors:
     for error in errors:

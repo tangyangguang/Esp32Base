@@ -52,6 +52,7 @@
 - classic ESP32 4MB 推荐分区表必须保持 `app0=0x10000`，不要求业务项目设置 `board_upload.offset_address`。
 - 发布包包含 `examples/basic` 的 profile 依赖裁剪验证源码。
 - 发布包包含独立 PIO 示例 `examples/full_demo`、`examples/web_ui_gallery`、`examples/web_logs_ota`、`examples/net_runtime`。
+- 发布包包含 `examples/mqtt_tls`，只提交虚构 Broker 和空凭据模板，不包含 `local_secrets.h`、真实 CA、密码或私钥。
 - 发布包不包含历史设计、评审、评估等本地非发布材料。
 - 发布包不包含 `.pio/`、`.cache/`、`idf_component.yml` 等构建生成物。
 
@@ -68,6 +69,22 @@
 - 关闭 Bus/Fs/Health 不产生静态对象。
 - Web 可选页面资源必须按能力宏裁剪，避免未启用 App Events、FS、OTA 或 FileLog 时仍带入对应专属资源。
 - 外部最小应用仅 `#include <Esp32Base.h>` 并启用 FULL profile 时，不额外声明 framework 内置库也必须编译通过，包括 ArduinoOTA。
+
+## 4.1 MQTT 检查
+
+- MQTT 不随任何 Profile 自动开启；关闭构建中没有 `Esp32BaseMqtt`、`esp_mqtt_client_*` 和 `mqtt_task` 符号。
+- `pio test -e native_mqtt_harness` 通过。
+- `examples/mqtt_tls` 完成 ESP32 / ESP32-S3 / ESP32-C3 Core 2.x 和代表性 Core 3.x 构建。
+- MQTTS 缺少 CA、缺少可信时间或证书校验失败时不得降级明文。
+- 明文必须同时具备构建期和运行期显式 opt-in。
+- WiFi 未连接、Broker/DNS 不可用时没有高速重连或持续 heap 下降。
+- Broker 重启后重新订阅；连接/消息/ACK callback 只在 `Esp32Base::handle()` 上下文执行。
+- QoS 0 只承诺 enqueue accepted；QoS 1 只有 Broker ACK 后发布确认事件。
+- 超限分片整条丢弃且计数，不截断交给业务。
+- 控制邮箱、入站邮箱、QoS 1 in-flight 和 outbox 达到上限时明确失败并保留诊断。
+- OTA、restart、deep sleep 异步请求 MQTT 断开时不等待可能阻塞的 stop，也不声称在途 publish 已完成；异常掉电 LWT 由 Broker 契约处理。
+- 日志、安全脚本和发布包中没有密码、私钥、真实证书或敏感 payload。
+- 实机记录 TLS 握手峰值、稳定 heap、MQTT task stack、modem sleep Keepalive、路由器/Broker 恢复及至少一次长稳结果；未完成项写入发布记录。
 - RTC 关闭时不链接 DS3231/PCF8563 驱动符号。
 - DS3231 构建必须排除 PCF8563 驱动符号；PCF8563 构建必须排除 DS3231 驱动符号，证明两个 RTC 芯片是构建期二选一，不是运行时共存。
 
@@ -297,6 +314,7 @@
 - `examples/web_ui_gallery` 覆盖 Web UI baseline 的状态、统计、分页记录、配置、命令、分步操作、维护、访问控制、确认、空状态和表单页面。
 - `examples/web_logs_ota` 可在自身目录 `pio run`。
 - `examples/net_runtime` 可在自身目录 `pio run`。
+- `examples/mqtt_tls` 可在自身目录完成三芯片和代表性 Core 3.x 构建，并展示重连后重发当前状态。
 - `examples/app_events_demo` 可在自身目录 `pio run`，并演示 App Events 写入、分页查看、JSON/CSV 和 POST 写入。
 - `examples/record_store_demo` 至少完成 ESP32 / ESP32-S3 / ESP32-C3 和 Arduino Core 3.x 构建，并演示固定payload编码、动作开始快照、完成记录和最新优先读取。
 - `examples/rtc_time_source` 可在自身目录分别构建 DS3231 和 PCF8563 env，并清楚演示构建期二选一、I2C 初始化所有权和业务使用 `Esp32BaseTime` 的接入方式。

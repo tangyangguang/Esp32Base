@@ -54,6 +54,9 @@
 #if ESP32BASE_ENABLE_MDNS
 #include "network/Esp32BaseMdns.h"
 #endif
+#if ESP32BASE_ENABLE_MQTT
+#include "network/Esp32BaseMqtt.h"
+#endif
 #if ESP32BASE_ENABLE_WEB
 #include "web/Esp32BaseWeb.h"
 #endif
@@ -84,4 +87,7 @@ public:
 
     static void logStartupConfig();
     static void logResources();
+
+private:
+    static void prepareForLifecycleStop();
 };

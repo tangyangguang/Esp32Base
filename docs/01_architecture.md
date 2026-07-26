@@ -94,6 +94,7 @@ Runtime 只依赖 Core。
 - `Esp32BaseDns`
 - `Esp32BaseNtp`
 - `Esp32BaseMdns`
+- `Esp32BaseMqtt`（独立能力宏，默认关闭）
 
 职责：
 
@@ -101,8 +102,13 @@ Runtime 只依赖 Core。
 - Captive Portal DNS。
 - NTP。
 - mDNS。
+- 单 Broker MQTT 3.1.1 TCP/TLS Client、固定邮箱、退避重连和协议诊断。
 
 Network 可使用 Bus，但不强依赖 Bus。
+
+MQTT 只向下依赖 WiFi、统一 Time 和 Core 日志/诊断。ESP-MQTT 的 FreeRTOS task 不直接调用应用 callback；底层事件先复制到固定容量消息槽或控制事件环，再由 `Esp32Base::handle()` 所在的 loop/system task 分发。OTA、restart 和 deep sleep 由顶层 `Esp32Base` facade 通知 MQTT 暂停或异步断开，Network 不反向依赖 Update、Sleep 或 Web。
+
+底层选择 ESP-MQTT，不额外引入 Arduino MQTT 依赖。选择依据是 Core 2.x/3.x 均随包提供、三类目标芯片共用 ESP-IDF transport、具备 QoS 1/LWT/retain/分片事件和异步 task；wrapper 负责收窄为 MQTT 3.1.1、固定容量、loop callback 和安全默认值。基于 `WiFiClientSecure` 的 Arduino Client 路径虽然 API 更小，但需要新增并维护第三方依赖，且常见实现的 loop/connect 阻塞、QoS 1 ACK、分片和缓冲上限契约不一致。完全由各业务项目自行接入的路径不增加基础库体积，却会让 TLS gate、退避抖动、生命周期和诊断在多个项目重复实现。ESP-MQTT 功能较多造成的 Flash/task/heap 代价由独立能力宏和实测预算显式承担，不把 MQTT 自动加入 FULL。
 
 ## 5. Layer 3: Web
 
@@ -243,13 +249,14 @@ ESP32BASE_STRICT_OPTIONAL_BEGIN=0
 6. Captive DNS handle。
 7. 条件启动 Web。
 8. 条件启动 NTP。
-9. 条件启动 mDNS。
-10. 条件启动 OTA 网络服务（ArduinoOTA/espota）。
-11. Web handle。
-12. OTA handle，包含 mark-valid timeout 检查。
-13. Health handle。
-14. Watchdog feed。
-15. 启动阶段诊断日志。
+9. MQTT 状态机、固定邮箱和业务 callback；OTA 上传期间暂停。
+10. 条件启动 mDNS。
+11. 条件启动 OTA 网络服务（ArduinoOTA/espota）。
+12. Web handle。
+13. OTA handle，包含 mark-valid timeout 检查。
+14. Health handle。
+15. Watchdog feed。
+16. 启动阶段诊断日志。
 
 LittleFS 当前没有 maintenance 任务，不在 handle 中做额外维护。
 
@@ -274,9 +281,10 @@ Esp32BaseSleep::deepSleep(...);
 1. 发布生命周期事件，如 Bus 启用。
 2. 写重启日志环。
 3. `Esp32BaseConfig::flushAll()`。
-4. 输出最后诊断。
-5. 处理 Watchdog。
-6. 执行底层 restart / sleep。
+4. MQTT 尽力发送 DISCONNECT 并停止后台 task；不承诺在途 publish 已送达。
+5. 输出最后诊断。
+6. 处理 Watchdog。
+7. 执行底层 restart / sleep。
 
 禁止模块内部直接调用：
 

@@ -78,6 +78,7 @@ Health 负责周期性运行状态：
 - WiFi state：`Esp32BaseWiFi`。
 - FS state：`Esp32BaseFs`。
 - FileLog state：`Esp32BaseFileLog`。
+- MQTT：`Esp32BaseMqtt::status()` 和 `diagnostics()`，包括等待条件、连接/重连、最近连接时间、接收/publish accepted/PUBACK、送达状态不确定、丢弃、outbox/inbox/control mailbox 高水位、in-flight 和底层错误码。密码、私钥和 payload 不进入这些结构。
 
 默认周期：
 
@@ -92,6 +93,8 @@ ESP32BASE_HEALTH_DEBUG_LOG_INTERVAL_MS=1800000
 
 故障诊断应让用户能区分“不可用、用户关闭、写入故障、认证失败、输入非法和维护动作失败”等状态，避免只给出泛化错误。
 
+MQTT 至少区分：未配置、配置非法、等待 WiFi、等待可信时间、退避、连接中、已连接、Broker 拒绝、TLS/证书、普通 transport/DNS 和应用显式暂停。ESP-IDF/Core 版本不能稳定细分的 DNS/socket 原因统一归入 `dns_or_transport`，同时保留 native ESP/TLS/socket code，不把推断伪装成精确错误。
+
 需要覆盖的故障类别：
 
 - optional module begin failed。
@@ -103,6 +106,7 @@ ESP32BASE_HEALTH_DEBUG_LOG_INTERVAL_MS=1800000
 - App Events append/read/header/record/clear 失败。
 - OTA start/write/verify/end 失败和低频进度。
 - Watchdog reset、rollback reason、sleep/restart 生命周期。
+- MQTT 配置、WiFi/Time gate、Broker 拒绝、TLS、分片超限、邮箱/outbox/in-flight 满、断线后送达状态不确定和重新订阅。
 
 故障日志应表达结果、原因和可维护动作，不应要求调用方依赖固定英文日志 marker。
 
@@ -115,3 +119,5 @@ Bug fix 应补对应回归覆盖，优先顺序：
 - 依赖真实 WiFi、Flash、OTA、Watchdog、RTC 或 Captive Portal 的，写入发布检查清单或实机记录。
 
 测试应验证结果和边界，不强制代码必须长成某个内部实现形状。
+
+`native_mqtt_harness` 使用 fake ESP-MQTT transport 验证配置/危险 CA 值拒绝、WiFi/Time gate、回调只在 handle 分发、重新订阅及 SUBACK 拒绝、QoS 1 ACK/送达状态不确定、outbox 上限、分片组装、超限丢弃、认证/DNS/证书错误和 millis 回绕。真实 CA、Broker 重启、WiFi/modem sleep、TLS heap 和长稳仍必须使用 Mosquitto 与实机验证。

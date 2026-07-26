@@ -79,6 +79,7 @@ Profile 默认值不能覆盖用户显式 `-D`。
 - `DNS` 需要 `WIFI`。
 - `NTP` 需要 `WIFI`。
 - `NTP`、`RTC` 和 `RECORD_STORE` 需要 `TIME`；`TIME` 在启用 NTP、RTC、RecordStore、App Events 或 Web 时默认启用。
+- `MQTT` 需要 `WIFI` 和 `TIME`，默认关闭，不随任何 profile 自动开启；MQTTS 运行时还要求可信 RTC/NTP 时间。
 - `RTC` 默认关闭，通过 `ESP32BASE_ENABLE_RTC=1` 显式启用。
 - `MDNS` 需要 `WIFI`。
 - `FILELOG` 需要 `FS`。
@@ -109,6 +110,8 @@ WiFi恢复按键能力默认跟随WiFi编译，不新增Profile，可用`ESP32BA
 App Events通过 `ESP32BASE_ENABLE_APP_EVENTS=1` 显式启用，并复用RecordStore。`ESP32BASE_APP_EVENT_STORE_MAX_BYTES` 默认 `100 * 1024` 字节；App Events在 `Esp32Base::begin()` 内优先创建，不提供单独最低剩余空间配置。`ESP32BASE_ENABLE_APP_EVENT_CONDITIONS` 默认跟随App Events启用，不新增Profile，也不提供容量宏；固定1～32号条件使用一个32位NVS位图，ID含义属于保留该NVS状态的固件版本共同遵守的持久化schema。
 
 RS485 半双工基础串口通过 `ESP32BASE_ENABLE_RS485_PORT=1` 显式启用。它只负责 `HardwareSerial` 初始化、DE 方向脚切换、发送后 `flush()` 等待和轮询读取，不创建后台任务，不分配协议缓冲，不解析帧，也不内置 Modbus/RTU、CRC、重试或业务命令。
+
+MQTT Client 通过 `ESP32BASE_ENABLE_MQTT=1` 显式启用，不新增 Profile。默认只允许 MQTTS；受控局域网/测试固件必须同时设置 `ESP32BASE_MQTT_ALLOW_PLAINTEXT=1` 并在连接配置中显式选择明文。MQTT 开启后固定引入 ESP-MQTT task、收发缓冲和有限邮箱；MQTT 关闭时不得链接 `Esp32BaseMqtt`、`esp_mqtt_client_*` 或 `mqtt_task` 符号。
 
 外部 RTC 是可选时间源，不随任何 profile 自动启用。应用固件必须在构建期二选一配置驱动，不做运行时自动识别：
 
@@ -189,7 +192,7 @@ Profile 数量固定为 7 个，不再扩张。
 适合：
 
 - 纯联网设备。
-- 业务层自己使用 MQTT / HTTP Client / 私有协议。
+- 显式启用基础库 MQTT Client，或由业务自行使用 HTTP Client / 私有协议。
 
 ## 8. ESP32BASE_PROFILE_NET_RUNTIME
 

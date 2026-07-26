@@ -2,7 +2,7 @@
   "name": "Esp32Base",
   "version": "1.0.0",
   "description": "Lightweight ESP32 Arduino Core base library with profile-based trimming.",
-  "keywords": ["esp32", "arduino", "base", "wifi", "ota", "littlefs"],
+  "keywords": ["esp32", "arduino", "base", "wifi", "mqtt", "ota", "littlefs"],
   "homepage": "https://github.com/tangyangguang/Esp32Base",
   "repository": {
     "type": "git",
@@ -50,7 +50,8 @@
       "**/*.py[cod]",
       "**/.DS_Store",
       "**/idf_component.yml",
-      "**/idf_component.yml.orig"
+      "**/idf_component.yml.orig",
+      "**/local_secrets.h"
     ]
   }
 }

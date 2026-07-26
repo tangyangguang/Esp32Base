@@ -42,6 +42,8 @@ for path, text in (
         errors.append(f"{path}: release/export filters must exclude Python cache files")
     if "idf_component.yml" not in text:
         errors.append(f"{path}: release/export filters must exclude generated idf_component.yml files")
+    if path != ".gitignore" and "local_secrets.h" not in text:
+        errors.append(f"{path}: release/export filters must exclude MQTT local secrets")
 
 for path in ("src/Esp32BaseProfile.h", "src/runtime/Esp32BaseFs.inc"):
     text = read(path)

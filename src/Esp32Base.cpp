@@ -103,11 +103,15 @@ void logBootSessionStart() {
     ESP32BASE_LOG_I("boot", "============================================================");
 }
 
-void flushRuntimeBeforeLifecycleStop() {
+}
+
+void Esp32Base::prepareForLifecycleStop() {
+#if ESP32BASE_ENABLE_MQTT
+    Esp32BaseMqtt::prepareForLifecycleStop();
+#endif
 #if ESP32BASE_ENABLE_FILELOG
     Esp32BaseFileLog::flush();
 #endif
-}
 }
 
 bool Esp32Base::begin() {
@@ -135,8 +139,8 @@ bool Esp32Base::begin() {
         esp32base_internal::copySafe(g_lastError, sizeof(g_lastError), "system");
         return false;
     }
-    esp32base_internal::registerPreRestartHook(flushRuntimeBeforeLifecycleStop);
-    esp32base_internal::registerPreSleepHook(flushRuntimeBeforeLifecycleStop);
+    esp32base_internal::registerPreRestartHook(prepareForLifecycleStop);
+    esp32base_internal::registerPreSleepHook(prepareForLifecycleStop);
     ESP32BASE_LOG_D("base", "module_ready name=system");
 #if ESP32BASE_ENABLE_OTA
     // Keep ESP32BASE_OTA_REQUIRE_MARK_VALID rollback timing independent from WiFi/Web readiness.
@@ -225,6 +229,14 @@ bool Esp32Base::begin() {
         if (ok) ESP32BASE_LOG_D("base", "module_ready name=wifi");
     }
 #endif
+#if ESP32BASE_ENABLE_MQTT
+    ESP32BASE_LOG_D("base", "module_begin name=mqtt");
+    {
+        const bool ok = Esp32BaseMqtt::begin();
+        if (!optionalOk(ok, "mqtt")) return false;
+        if (ok) ESP32BASE_LOG_D("base", "module_ready name=mqtt");
+    }
+#endif
 
     g_ready = true;
     logBootSessionStart();
@@ -281,6 +293,15 @@ void Esp32Base::handle() {
     if (Esp32BaseNtp::isStarted()) {
         Esp32BaseNtp::isTimeSynced();
     }
+#endif
+#if ESP32BASE_ENABLE_MQTT
+    Esp32BaseMqtt::handle(
+#if ESP32BASE_ENABLE_OTA
+        Esp32BaseOta::isUploading()
+#else
+        false
+#endif
+    );
 #endif
 #if ESP32BASE_ENABLE_MDNS
     if (Esp32BaseWiFi::isConnected() && !Esp32BaseMdns::isRunning()) {
@@ -439,6 +460,9 @@ void Esp32Base::logResources() {
 #endif
 #if ESP32BASE_ENABLE_MDNS
 #include "network/Esp32BaseMdns.inc"
+#endif
+#if ESP32BASE_ENABLE_MQTT
+#include "network/Esp32BaseMqtt.inc"
 #endif
 #if ESP32BASE_ENABLE_OTA
 #include "update/Esp32BaseOta.inc"
