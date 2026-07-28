@@ -281,7 +281,7 @@ Esp32BaseSleep::deepSleep(...);
 1. 发布生命周期事件，如 Bus 启用。
 2. 写重启日志环。
 3. `Esp32BaseConfig::flushAll()`。
-4. MQTT 尽力发送 DISCONNECT 并停止后台 task；不承诺在途 publish 已送达。
+4. MQTT 尽力异步请求 DISCONNECT，不等待或停止后台 task；task 随本次 restart / deep sleep 终止，不承诺 DISCONNECT、在途 publish 或 PUBACK 已抵达。
 5. 输出最后诊断。
 6. 处理 Watchdog。
 7. 执行底层 restart / sleep。

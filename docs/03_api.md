@@ -849,7 +849,7 @@ static const char* errorName(Error error);
 
 TLS 不提供 insecure、跳过 hostname、系统 CA bundle 或失败后明文 fallback。TLS 配置在 `Esp32BaseTime::isRealTime()==false` 时停在 `WAITING_FOR_TIME`。普通明文模式只用于显式启用的受控局域网或测试固件。
 
-所有配置字符串、PEM、私钥、LWT 和订阅 Topic 都按借用内存处理，必须从注册到设备重启或进入 deep sleep 始终有效；推荐使用静态存储期数据，不能在 `begin()` 后释放。密码和私钥不写 NVS、LittleFS、App Config、Web、Status、JSON 或日志；状态只暴露 `usernameSet/clientCertificateSet`。
+所有配置字符串、PEM、私钥、`LastWill` 结构及其 Topic/payload、订阅 Topic 都按借用内存处理，必须从注册到设备重启或进入 deep sleep 始终有效；推荐使用静态存储期数据，不能在 `begin()` 后释放。密码和私钥不写 NVS、LittleFS、App Config、Web、Status、JSON 或日志；状态只暴露 `usernameSet/clientCertificateSet`。
 
 订阅：
 

@@ -277,15 +277,19 @@ void abandonAssembly() {
 }
 
 void finishDroppingIfComplete(const esp_mqtt_event_t* event) {
-    if (event->current_data_offset + event->data_len >= event->total_data_len) {
+    const int64_t fragmentEnd =
+        static_cast<int64_t>(event->current_data_offset) + event->data_len;
+    if (fragmentEnd >= event->total_data_len) {
         g_mqttDroppingPacketId = -1;
     }
 }
 
 void handleIncomingData(const esp_mqtt_event_t* event) {
+    const int64_t fragmentEnd =
+        event ? static_cast<int64_t>(event->current_data_offset) + event->data_len : 0;
     if (!event || event->data_len < 0 || event->total_data_len < 0 ||
         event->current_data_offset < 0 ||
-        event->current_data_offset + event->data_len > event->total_data_len) {
+        fragmentEnd > event->total_data_len) {
         portENTER_CRITICAL(&g_mqttMux);
         ++g_mqttDiagnostics.incomingOversizeDropped;
         portEXIT_CRITICAL(&g_mqttMux);
@@ -341,7 +345,7 @@ void handleIncomingData(const esp_mqtt_event_t* event) {
 
     IncomingSlot& slot = g_mqttIncoming[g_mqttAssemblySlot];
     if (slot.packetId != event->msg_id ||
-        event->current_data_offset + event->data_len > slot.payloadLength) {
+        fragmentEnd > slot.payloadLength) {
         portENTER_CRITICAL(&g_mqttMux);
         ++g_mqttDiagnostics.incomingOversizeDropped;
         portEXIT_CRITICAL(&g_mqttMux);
@@ -356,7 +360,7 @@ void handleIncomingData(const esp_mqtt_event_t* event) {
                event->data,
                static_cast<size_t>(event->data_len));
     }
-    if (event->current_data_offset + event->data_len == event->total_data_len) {
+    if (fragmentEnd == event->total_data_len) {
         portENTER_CRITICAL(&g_mqttMux);
         slot.state = INCOMING_READY;
         ++g_mqttDiagnostics.receivedMessages;

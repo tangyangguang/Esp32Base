@@ -79,7 +79,7 @@ Core 不包含：
 
 - ESP8266 支持
 - 跨芯片 HAL
-- MQTT 封装
+- MQTT 业务协议、云平台绑定和设备影子；标准 MQTT Client 连接机制由显式可选能力提供
 - HTTP Client 封装
 - WebSocket
 - HTTPS

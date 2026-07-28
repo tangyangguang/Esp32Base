@@ -1,5 +1,6 @@
 #include <unity.h>
 
+#include <limits.h>
 #include <string.h>
 
 #include "../../src/Esp32BaseProfile.h"
@@ -388,6 +389,15 @@ void test_fragment_assembly_and_oversize_drop() {
     Esp32BaseMqtt::handle(false);
     TEST_ASSERT_EQUAL(1, g_messageCount);
     TEST_ASSERT_EQUAL(1, Esp32BaseMqtt::diagnostics().incomingOversizeDropped);
+
+    event.msg_id = 57;
+    event.total_data_len = INT_MAX;
+    event.current_data_offset = INT_MAX;
+    event.data_len = INT_MAX;
+    g_fakeEventHandler(nullptr, nullptr, MQTT_EVENT_DATA, &event);
+    Esp32BaseMqtt::handle(false);
+    TEST_ASSERT_EQUAL(1, g_messageCount);
+    TEST_ASSERT_EQUAL(2, Esp32BaseMqtt::diagnostics().incomingOversizeDropped);
 }
 
 void test_terminal_auth_rejection_requires_explicit_retry() {
