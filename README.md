@@ -122,6 +122,8 @@ RS485 半双工基础串口通过 `ESP32BASE_ENABLE_RS485_PORT=1` 显式启用�
 
 MQTT 只负责连接机制。Topic 版本、命令授权、去重、过期、JSON、业务状态同步、离线业务数据和重连后的当前状态重发仍由应用负责。基础库没有第二套离线发送队列；`publish()` 成功只表示报文已被非阻塞发送队列接受，QoS 1 必须等待 `EVENT_PUBLISH_ACKNOWLEDGED` 才表示 Broker ACK，断线前未 ACK 的报文会报告“送达状态不确定”且可能由底层有界 outbox 重传；QoS 0 不提供无法证明的送达承诺。
 
+RTC 提供的可信时间可以启动 MQTTS；若一次连接始于 RTC，且失败标志仅表示证书尚未生效或已经过期，模块会等待统一 Time 来源升级为 NTP 后自动补偿重试一次。CA 不可信、域名不匹配、混合证书错误和已经使用 NTP 的失败保持终止状态，不进行周期重试。
+
 WiFi 默认关闭 modem sleep，让 Web 首屏和 OTA 不被 Arduino ESP32 默认 `WIFI_PS_MIN_MODEM` 的 DTIM 唤醒抖动拖慢；电池设备可调用 `Esp32BaseWiFi::setPowerSave(true)` 恢复 modem sleep。
 
 ## 支持目标

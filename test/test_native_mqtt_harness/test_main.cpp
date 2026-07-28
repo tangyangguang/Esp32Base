@@ -25,13 +25,28 @@ public:
 
 class Esp32BaseTime {
 public:
+    enum Source : uint8_t {
+        SOURCE_UPTIME = 0,
+        SOURCE_RTC = 1,
+        SOURCE_NTP = 2
+    };
     struct Snapshot {
         bool synced;
+        Source source;
         uint32_t epochSec;
     };
+    static Source g_source;
     static bool isRealTime() { return g_fakeRealTime; }
-    static Snapshot snapshot() { return {g_fakeRealTime, g_fakeRealTime ? 1800000000u : 0u}; }
+    static Snapshot snapshot() {
+        return {
+            g_fakeRealTime,
+            g_fakeRealTime ? g_source : SOURCE_UPTIME,
+            g_fakeRealTime ? 1800000000u : 0u
+        };
+    }
 };
+
+Esp32BaseTime::Source Esp32BaseTime::g_source = Esp32BaseTime::SOURCE_NTP;
 
 #include "mqtt_client.h"
 
@@ -159,6 +174,9 @@ void resetModule() {
     g_mqttReconnectRequested = false;
     g_mqttForceReconnectAfterDisconnect = false;
     g_mqttConnectionWanted = true;
+    g_mqttTimeCorrectionRetryArmed = false;
+    g_mqttTimeCorrectionRetryConsumed = false;
+    g_mqttAttemptTimeSource = Esp32BaseTime::SOURCE_UPTIME;
     g_mqttClient = nullptr;
     g_mqttState = Esp32BaseMqtt::NOT_CONFIGURED;
     g_mqttLastError = Esp32BaseMqtt::ERROR_NONE;
@@ -176,6 +194,7 @@ void resetModule() {
     g_mqttEventContext = nullptr;
     g_fakeWifiConnected = false;
     g_fakeRealTime = false;
+    Esp32BaseTime::g_source = Esp32BaseTime::SOURCE_NTP;
     g_fakeMillis = 0;
     g_fakeRandom = 1;
     g_fakeEventHandler = nullptr;
@@ -514,6 +533,100 @@ void test_dns_and_certificate_errors_are_distinguished() {
     TEST_ASSERT_TRUE(terminal);
 }
 
+void test_rtc_certificate_time_error_retries_once_after_ntp() {
+    TEST_ASSERT_TRUE(Esp32BaseMqtt::configure(validConfig()));
+    TEST_ASSERT_TRUE(Esp32BaseMqtt::begin());
+    g_fakeWifiConnected = true;
+    g_fakeRealTime = true;
+    Esp32BaseTime::g_source = Esp32BaseTime::SOURCE_RTC;
+    Esp32BaseMqtt::handle(false);
+    TEST_ASSERT_EQUAL(Esp32BaseMqtt::CONNECTING, Esp32BaseMqtt::state());
+
+    esp_mqtt_error_codes_t timeError = {};
+    timeError.error_type = MQTT_ERROR_TYPE_TCP_TRANSPORT;
+    timeError.esp_tls_cert_verify_flags = MBEDTLS_X509_BADCERT_FUTURE;
+    emitEvent(MQTT_EVENT_ERROR, 0, &timeError);
+    emitEvent(MQTT_EVENT_DISCONNECTED);
+    Esp32BaseMqtt::handle(false);
+    TEST_ASSERT_EQUAL(Esp32BaseMqtt::CONNECTION_REJECTED,
+                      Esp32BaseMqtt::state());
+    TEST_ASSERT_EQUAL_UINT32(
+        0, Esp32BaseMqtt::diagnostics().timeCorrectionRetries);
+
+    Esp32BaseMqtt::handle(false);
+    TEST_ASSERT_EQUAL(Esp32BaseMqtt::CONNECTION_REJECTED,
+                      Esp32BaseMqtt::state());
+
+    Esp32BaseTime::g_source = Esp32BaseTime::SOURCE_NTP;
+    Esp32BaseMqtt::handle(false);
+    TEST_ASSERT_EQUAL(Esp32BaseMqtt::CONNECTING, Esp32BaseMqtt::state());
+    TEST_ASSERT_EQUAL_UINT32(
+        1, Esp32BaseMqtt::diagnostics().timeCorrectionRetries);
+    TEST_ASSERT_EQUAL_UINT32(2, Esp32BaseMqtt::diagnostics().connectAttempts);
+
+    emitEvent(MQTT_EVENT_ERROR, 0, &timeError);
+    emitEvent(MQTT_EVENT_DISCONNECTED);
+    Esp32BaseMqtt::handle(false);
+    TEST_ASSERT_EQUAL(Esp32BaseMqtt::CONNECTION_REJECTED,
+                      Esp32BaseMqtt::state());
+    Esp32BaseMqtt::handle(false);
+    TEST_ASSERT_EQUAL(Esp32BaseMqtt::CONNECTION_REJECTED,
+                      Esp32BaseMqtt::state());
+    TEST_ASSERT_EQUAL_UINT32(
+        1, Esp32BaseMqtt::diagnostics().timeCorrectionRetries);
+}
+
+void test_non_time_certificate_error_does_not_retry_after_ntp() {
+    TEST_ASSERT_TRUE(Esp32BaseMqtt::configure(validConfig()));
+    TEST_ASSERT_TRUE(Esp32BaseMqtt::begin());
+    g_fakeWifiConnected = true;
+    g_fakeRealTime = true;
+    Esp32BaseTime::g_source = Esp32BaseTime::SOURCE_RTC;
+    Esp32BaseMqtt::handle(false);
+
+    esp_mqtt_error_codes_t certificateError = {};
+    certificateError.error_type = MQTT_ERROR_TYPE_TCP_TRANSPORT;
+    certificateError.esp_tls_cert_verify_flags =
+        MBEDTLS_X509_BADCERT_FUTURE |
+        MBEDTLS_X509_BADCERT_CN_MISMATCH;
+    emitEvent(MQTT_EVENT_ERROR, 0, &certificateError);
+    emitEvent(MQTT_EVENT_DISCONNECTED);
+    Esp32BaseTime::g_source = Esp32BaseTime::SOURCE_NTP;
+    Esp32BaseMqtt::handle(false);
+    TEST_ASSERT_EQUAL(Esp32BaseMqtt::CONNECTION_REJECTED,
+                      Esp32BaseMqtt::state());
+    TEST_ASSERT_EQUAL_UINT32(
+        0, Esp32BaseMqtt::diagnostics().timeCorrectionRetries);
+    TEST_ASSERT_EQUAL_UINT32(1, Esp32BaseMqtt::diagnostics().connectAttempts);
+}
+
+void test_terminal_rejection_survives_wifi_loss_and_recovery() {
+    TEST_ASSERT_TRUE(Esp32BaseMqtt::configure(validConfig()));
+    TEST_ASSERT_TRUE(Esp32BaseMqtt::begin());
+    g_fakeWifiConnected = true;
+    g_fakeRealTime = true;
+    Esp32BaseMqtt::handle(false);
+
+    esp_mqtt_error_codes_t authError = {};
+    authError.error_type = MQTT_ERROR_TYPE_CONNECTION_REFUSED;
+    authError.connect_return_code = MQTT_CONNECTION_REFUSE_BAD_USERNAME;
+    emitEvent(MQTT_EVENT_ERROR, 0, &authError);
+    emitEvent(MQTT_EVENT_DISCONNECTED);
+    Esp32BaseMqtt::handle(false);
+    TEST_ASSERT_EQUAL(Esp32BaseMqtt::CONNECTION_REJECTED,
+                      Esp32BaseMqtt::state());
+
+    g_fakeWifiConnected = false;
+    Esp32BaseMqtt::handle(false);
+    TEST_ASSERT_EQUAL(Esp32BaseMqtt::CONNECTION_REJECTED,
+                      Esp32BaseMqtt::state());
+    g_fakeWifiConnected = true;
+    Esp32BaseMqtt::handle(false);
+    TEST_ASSERT_EQUAL(Esp32BaseMqtt::CONNECTION_REJECTED,
+                      Esp32BaseMqtt::state());
+    TEST_ASSERT_EQUAL_UINT32(1, Esp32BaseMqtt::diagnostics().connectAttempts);
+}
+
 void test_backoff_deadline_is_millis_wrap_safe() {
     TEST_ASSERT_TRUE(deadlineReached(3u, UINT32_MAX - 2u));
     TEST_ASSERT_FALSE(deadlineReached(UINT32_MAX - 3u, 2u));
@@ -539,6 +652,9 @@ int main(int, char**) {
     RUN_TEST(test_incoming_mailbox_full_drops_whole_message);
     RUN_TEST(test_connection_event_survives_full_control_mailbox);
     RUN_TEST(test_dns_and_certificate_errors_are_distinguished);
+    RUN_TEST(test_rtc_certificate_time_error_retries_once_after_ntp);
+    RUN_TEST(test_non_time_certificate_error_does_not_retry_after_ntp);
+    RUN_TEST(test_terminal_rejection_survives_wifi_loss_and_recovery);
     RUN_TEST(test_backoff_deadline_is_millis_wrap_safe);
     return UNITY_END();
 }

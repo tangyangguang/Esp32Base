@@ -54,6 +54,7 @@ __pycache__/
 # =====================================
 # 5. 本地非发布材料
 # =====================================
+local_private/
 evaluations/
 CLAUDE.md
 .codex-worklog.md

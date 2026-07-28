@@ -144,7 +144,7 @@ MQTT（仅 `ESP32BASE_ENABLE_MQTT=1`）：
 
 MQTT 默认关闭且不随 FULL 自动开启。开启后 Arduino Core 预编译 ESP-MQTT 基本同时带入 TLS transport，因此“只配置明文”不能作为显著裁剪 TLS Flash 的手段。发布测量必须分别记录 MQTT 关闭、MQTT 开启但未配置、真实 MQTTS 配置的 `firmware.elf/bin`，并在实机记录初始化、TCP、TLS 握手峰值和稳定连接后的 free/min heap。
 
-2026-07-26 的 classic ESP32、Arduino Core 2.0.16、`-flto -fno-exceptions`、1.5MiB app slot 构建参考：`examples/basic` FULL/MQTT关闭为 Flash 985765 bytes、静态 RAM 63412 bytes；`examples/mqtt_tls` FULL/MQTT启用且实际调用配置/订阅/发布/LWT API 为 Flash 1128373 bytes、静态 RAM 66268 bytes，增量分别为 142608 和 2856 bytes。该示例使用不可工作的短 CA 占位文本，只证明链接和 wrapper 固定容量，不代表真实 CA 体积、TLS 握手或运行时 heap；产品验收不得把这组构建数值外推为实机资源结论。
+2026-07-28 的 classic ESP32、Arduino Core 2.0.16、`-flto -fno-exceptions`、1.5MiB app slot 构建参考：`examples/basic` FULL/MQTT关闭为 Flash 985765 bytes、静态 RAM 63412 bytes；`examples/mqtt_tls` FULL/MQTT启用且实际调用配置/订阅/发布/LWT API 为 Flash 1128801 bytes、静态 RAM 66276 bytes，增量分别为 143036 和 2864 bytes。该示例使用不可工作的短 CA 占位文本，只证明链接和 wrapper 固定容量，不代表真实 CA 体积、TLS 握手或运行时 heap；产品验收不得把这组构建数值外推为实机资源结论。
 
 人性化容量显示：
 

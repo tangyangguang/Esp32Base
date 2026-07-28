@@ -170,6 +170,7 @@ public:
         uint32_t publishAcknowledged = 0;
         uint32_t publishDeliveryUncertain = 0;
         uint32_t subscriptionAcknowledged = 0;
+        uint32_t timeCorrectionRetries = 0;
         uint32_t incomingOversizeDropped = 0;
         uint32_t incomingMailboxDropped = 0;
         uint32_t controlEventDropped = 0;

@@ -37,6 +37,7 @@
 - ESP-MQTT 创建独立 FreeRTOS task；业务 callback 仍只在 `Esp32Base::handle()` 所在任务执行。`configure()`、订阅、publish 和 callback 注册不是任意跨任务 API。
 - Arduino Core 预编译 ESP-MQTT 基本同时带入 TLS transport，MQTT 开启后的明文构建不保证明显节省 Flash。真实 TLS heap 峰值、modem sleep Keepalive 和长稳必须按产品实机验证。
 - MQTT 连接拒绝能稳定区分协议、Client ID、用户名和授权；DNS、socket 和部分 TLS 错误在 Core 版本间只保证稳定大类，详细原因通过 native code 诊断。
+- RTC 只要通过基础库可信 epoch 下限即可用于首次 TLS；它可能仍早于或晚于服务器证书有效期。仅纯证书时间有效期错误会在 Time 来源升级为 NTP 后自动补偿一次，其他证书错误保持终止状态。
 
 - 有已保存 WiFi 凭证但普通连接失败时，库不会自动进入 AP/config portal，而是持续 STA 重连。
 - WiFi 初始化安全启动保护是更早的保护层：如果设备连续在 Arduino WiFi 初始化最早期发生 guarded brownout、panic、watchdog 或 software reset，达到阈值后会暂停 WiFi 初始化并进入无 WiFi 诊断状态，而不是继续尝试 AP/config portal。日志会用中文提示疑似 WiFi/RF 启动瞬时电流导致供电跌落，建议检查供电链路并考虑在板端 VIN/5V 与 GND 间增加低 ESR 储能电容。该提示不是对“电容不足”的唯一归因，仍需排查电源限流、USB 线压降、稳压器余量和接线接触电阻。

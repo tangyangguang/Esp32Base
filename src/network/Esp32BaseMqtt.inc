@@ -1,6 +1,7 @@
 #include <esp_idf_version.h>
 #include <esp_system.h>
 #include <esp_tls_errors.h>
+#include <mbedtls/x509.h>
 #include <mqtt_client.h>
 
 #include <errno.h>
@@ -89,6 +90,9 @@ bool g_mqttOtaSuspended = false;
 bool g_mqttReconnectRequested = false;
 bool g_mqttForceReconnectAfterDisconnect = false;
 bool g_mqttConnectionWanted = true;
+bool g_mqttTimeCorrectionRetryArmed = false;
+bool g_mqttTimeCorrectionRetryConsumed = false;
+Esp32BaseTime::Source g_mqttAttemptTimeSource = Esp32BaseTime::SOURCE_UPTIME;
 esp_mqtt_client_handle_t g_mqttClient = nullptr;
 Esp32BaseMqtt::State g_mqttState = Esp32BaseMqtt::NOT_CONFIGURED;
 Esp32BaseMqtt::Error g_mqttLastError = Esp32BaseMqtt::ERROR_NONE;
@@ -646,6 +650,52 @@ Esp32BaseMqtt::Error classifyError(const RawEvent& raw, bool& terminal) {
     return Esp32BaseMqtt::ERROR_DNS_OR_TRANSPORT;
 }
 
+bool isOnlyCertificateTimeValidityError(uint32_t certificateFlags) {
+    constexpr uint32_t TIME_VALIDITY_FLAGS =
+        MBEDTLS_X509_BADCERT_EXPIRED | MBEDTLS_X509_BADCERT_FUTURE;
+    return (certificateFlags & TIME_VALIDITY_FLAGS) != 0 &&
+           (certificateFlags & ~TIME_VALIDITY_FLAGS) == 0;
+}
+
+void updateTimeCorrectionRetryEligibility(const RawEvent& raw,
+                                          Esp32BaseMqtt::Error error) {
+    const bool eligible =
+        error == Esp32BaseMqtt::ERROR_TLS_CERTIFICATE &&
+        g_mqttConfig.security == Esp32BaseMqtt::TLS &&
+        !g_mqttTimeCorrectionRetryConsumed &&
+        g_mqttAttemptTimeSource == Esp32BaseTime::SOURCE_RTC &&
+        isOnlyCertificateTimeValidityError(raw.certificateFlags);
+    g_mqttTimeCorrectionRetryArmed = eligible;
+}
+
+bool consumeTimeCorrectionRetryIfReady() {
+    if (!g_mqttTimeCorrectionRetryArmed ||
+        g_mqttTimeCorrectionRetryConsumed ||
+        g_mqttState != Esp32BaseMqtt::CONNECTION_REJECTED) {
+        return false;
+    }
+    const Esp32BaseTime::Snapshot time = Esp32BaseTime::snapshot();
+    if (!time.synced || time.source != Esp32BaseTime::SOURCE_NTP) {
+        return false;
+    }
+    g_mqttTimeCorrectionRetryArmed = false;
+    g_mqttTimeCorrectionRetryConsumed = true;
+    g_mqttTerminalRejection = false;
+    g_mqttBackoffStep = 0;
+    g_mqttNextAttemptMs = millis();
+    portENTER_CRITICAL(&g_mqttMux);
+    g_mqttConnectionWanted = true;
+    g_mqttLastError = Esp32BaseMqtt::ERROR_NONE;
+    ++g_mqttDiagnostics.timeCorrectionRetries;
+    portEXIT_CRITICAL(&g_mqttMux);
+    setState(Esp32BaseMqtt::BACKOFF);
+    ESP32BASE_LOG_I("mqtt",
+                    "retry reason=rtc_to_ntp_time_correction host=%s port=%u attempt=1",
+                    g_mqttConfig.host,
+                    static_cast<unsigned>(g_mqttConfig.port));
+    return true;
+}
+
 void dispatchMailboxOverflowIfNeeded() {
     uint32_t current = 0;
     portENTER_CRITICAL(&g_mqttMux);
@@ -684,6 +734,7 @@ void handleRawEvents() {
                 const bool reconnect = g_mqttEverConnected;
                 g_mqttEverConnected = true;
                 g_mqttTerminalRejection = false;
+                g_mqttTimeCorrectionRetryArmed = false;
                 g_mqttBackoffStep = 0;
                 g_mqttPendingDisconnectError =
                     Esp32BaseMqtt::ERROR_DISCONNECTED;
@@ -719,6 +770,9 @@ void handleRawEvents() {
                 g_mqttDiagnostics.nativeCertificateFlags = raw.certificateFlags;
                 portEXIT_CRITICAL(&g_mqttMux);
                 g_mqttTerminalRejection = terminal;
+                if (terminal) {
+                    updateTimeCorrectionRetryEligibility(raw, error);
+                }
                 ESP32BASE_LOG_W("mqtt",
                                 "connection_error host=%s port=%u error=%s esp=%ld tls=%ld socket=%ld cert_flags=%lu credential_set=%s",
                                 g_mqttConfig.host,
@@ -863,6 +917,10 @@ void dispatchIncomingMessages() {
 }
 
 bool startMqttClient() {
+    const Esp32BaseTime::Snapshot time = Esp32BaseTime::snapshot();
+    g_mqttAttemptTimeSource = time.synced
+                                  ? time.source
+                                  : Esp32BaseTime::SOURCE_UPTIME;
     portENTER_CRITICAL(&g_mqttMux);
     ++g_mqttDiagnostics.connectAttempts;
     g_mqttConnectionWanted = true;
@@ -1246,6 +1304,15 @@ void Esp32BaseMqtt::handle(bool otaUploading) {
         }
         return;
     }
+    if (g_mqttTerminalRejection &&
+        g_mqttState != CONNECTION_REJECTED) {
+        setState(CONNECTION_REJECTED);
+    }
+    consumeTimeCorrectionRetryIfReady();
+    if (g_mqttTerminalRejection ||
+        g_mqttState == CONNECTION_REJECTED) {
+        return;
+    }
     if (!Esp32BaseWiFi::isConnected()) {
         if (isConnectionWanted()) {
             requestNativeDisconnect();
@@ -1268,8 +1335,7 @@ void Esp32BaseMqtt::handle(bool otaUploading) {
         g_mqttNextAttemptMs = millis();
         setState(BACKOFF);
     }
-    if (g_mqttState == CONNECTION_REJECTED || g_mqttState == CONNECTED ||
-        g_mqttState == CONNECTING) {
+    if (g_mqttState == CONNECTED || g_mqttState == CONNECTING) {
         return;
     }
     const uint32_t now = millis();

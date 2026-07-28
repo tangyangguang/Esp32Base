@@ -108,6 +108,8 @@ Network 可使用 Bus，但不强依赖 Bus。
 
 MQTT 只向下依赖 WiFi、统一 Time 和 Core 日志/诊断。ESP-MQTT 的 FreeRTOS task 不直接调用应用 callback；底层事件先复制到固定容量消息槽或控制事件环，再由 `Esp32Base::handle()` 所在的 loop/system task 分发。OTA、restart 和 deep sleep 由顶层 `Esp32Base` facade 通知 MQTT 暂停或异步断开，Network 不反向依赖 Update、Sleep 或 Web。
 
+MQTT 不直接依赖 NTP 模块。连接尝试只记录统一 Time 的来源；若尝试始于 RTC 且证书失败仅包含时间有效期标志，后续观察到 Time 来源升级为 NTP 时允许一次补偿重试。这样既能从偏旧/偏新的 RTC 自动恢复，也不会把 CA、域名或真实证书错误变成无限重试。
+
 底层选择 ESP-MQTT，不额外引入 Arduino MQTT 依赖。选择依据是 Core 2.x/3.x 均随包提供、三类目标芯片共用 ESP-IDF transport、具备 QoS 1/LWT/retain/分片事件和异步 task；wrapper 负责收窄为 MQTT 3.1.1、固定容量、loop callback 和安全默认值。基于 `WiFiClientSecure` 的 Arduino Client 路径虽然 API 更小，但需要新增并维护第三方依赖，且常见实现的 loop/connect 阻塞、QoS 1 ACK、分片和缓冲上限契约不一致。完全由各业务项目自行接入的路径不增加基础库体积，却会让 TLS gate、退避抖动、生命周期和诊断在多个项目重复实现。ESP-MQTT 功能较多造成的 Flash/task/heap 代价由独立能力宏和实测预算显式承担，不把 MQTT 自动加入 FULL。
 
 ## 5. Layer 3: Web
