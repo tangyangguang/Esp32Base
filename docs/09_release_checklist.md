@@ -73,12 +73,12 @@
 ## 4.1 MQTT 检查
 
 - MQTT 不随任何 Profile 自动开启；关闭构建中没有 `Esp32BaseMqtt`、`esp_mqtt_client_*` 和 `mqtt_task` 符号。
-- `pio test -e native_mqtt_harness` 通过。
+- `pio test -e native_mqtt_harness` 和 `pio test -e native_mqtt_secure_default_harness` 通过。
 - `examples/mqtt_tls` 完成 ESP32 / ESP32-S3 / ESP32-C3 Core 2.x 和代表性 Core 3.x 构建。
 - 有可用测试 Broker 时，`python3 scripts/check_mqtt_cloud_integration.py` 通过；本机 INI、CA 和凭据保持 Git 忽略且不进入发布包。
-- MQTTS 缺少 CA、缺少可信时间或证书校验失败时不得降级明文。
-- RTC 来源下仅证书时间有效期错误可在 Time 升级为 NTP 后自动补偿一次；CA、域名、混合标志、NTP 下失败和二次失败不得自动重试。
-- 协议、Client ID、用户名、授权和非补偿证书拒绝不得因 WiFi 断开/恢复而绕过终止状态。
+- MQTTS 缺少 CA、缺少 NTP 时间或证书校验失败时不得降级明文；RTC 不能单独放行 MQTTS。
+- Core 未启用 `CONFIG_MBEDTLS_HAVE_TIME_DATE` 时，默认以 `ERROR_TLS_CERTIFICATE_DATE_CHECK_UNAVAILABLE` 拒绝 TLS；只有显式 opt-in 才允许继续，且 Status 必须报告真实能力。
+- 协议、Client ID、用户名、授权和证书拒绝不得因 WiFi 断开/恢复而绕过终止状态。
 - 明文必须同时具备构建期和运行期显式 opt-in。
 - WiFi 未连接、Broker/DNS 不可用时没有高速重连或持续 heap 下降。
 - Broker 重启后重新订阅；连接/消息/ACK callback 只在 `Esp32Base::handle()` 上下文执行。

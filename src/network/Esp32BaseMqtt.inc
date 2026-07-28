@@ -1,7 +1,6 @@
 #include <esp_idf_version.h>
 #include <esp_system.h>
 #include <esp_tls_errors.h>
-#include <mbedtls/x509.h>
 #include <mqtt_client.h>
 
 #include <errno.h>
@@ -18,6 +17,11 @@ constexpr size_t MQTT_MAX_PASSWORD_BYTES = 256;
 constexpr uint32_t MQTT_BACKOFF_INITIAL_MS = 1000;
 constexpr uint32_t MQTT_BACKOFF_MAX_MS = 60000;
 constexpr uint8_t MQTT_NO_SLOT = 0xFF;
+#if defined(CONFIG_MBEDTLS_HAVE_TIME_DATE) && CONFIG_MBEDTLS_HAVE_TIME_DATE
+constexpr bool MQTT_CERTIFICATE_DATE_CHECK_ENABLED = true;
+#else
+constexpr bool MQTT_CERTIFICATE_DATE_CHECK_ENABLED = false;
+#endif
 
 enum RawEventType : uint8_t {
     RAW_CONNECTED,
@@ -90,9 +94,6 @@ bool g_mqttOtaSuspended = false;
 bool g_mqttReconnectRequested = false;
 bool g_mqttForceReconnectAfterDisconnect = false;
 bool g_mqttConnectionWanted = true;
-bool g_mqttTimeCorrectionRetryArmed = false;
-bool g_mqttTimeCorrectionRetryConsumed = false;
-Esp32BaseTime::Source g_mqttAttemptTimeSource = Esp32BaseTime::SOURCE_UPTIME;
 esp_mqtt_client_handle_t g_mqttClient = nullptr;
 Esp32BaseMqtt::State g_mqttState = Esp32BaseMqtt::NOT_CONFIGURED;
 Esp32BaseMqtt::Error g_mqttLastError = Esp32BaseMqtt::ERROR_NONE;
@@ -650,52 +651,6 @@ Esp32BaseMqtt::Error classifyError(const RawEvent& raw, bool& terminal) {
     return Esp32BaseMqtt::ERROR_DNS_OR_TRANSPORT;
 }
 
-bool isOnlyCertificateTimeValidityError(uint32_t certificateFlags) {
-    constexpr uint32_t TIME_VALIDITY_FLAGS =
-        MBEDTLS_X509_BADCERT_EXPIRED | MBEDTLS_X509_BADCERT_FUTURE;
-    return (certificateFlags & TIME_VALIDITY_FLAGS) != 0 &&
-           (certificateFlags & ~TIME_VALIDITY_FLAGS) == 0;
-}
-
-void updateTimeCorrectionRetryEligibility(const RawEvent& raw,
-                                          Esp32BaseMqtt::Error error) {
-    const bool eligible =
-        error == Esp32BaseMqtt::ERROR_TLS_CERTIFICATE &&
-        g_mqttConfig.security == Esp32BaseMqtt::TLS &&
-        !g_mqttTimeCorrectionRetryConsumed &&
-        g_mqttAttemptTimeSource == Esp32BaseTime::SOURCE_RTC &&
-        isOnlyCertificateTimeValidityError(raw.certificateFlags);
-    g_mqttTimeCorrectionRetryArmed = eligible;
-}
-
-bool consumeTimeCorrectionRetryIfReady() {
-    if (!g_mqttTimeCorrectionRetryArmed ||
-        g_mqttTimeCorrectionRetryConsumed ||
-        g_mqttState != Esp32BaseMqtt::CONNECTION_REJECTED) {
-        return false;
-    }
-    const Esp32BaseTime::Snapshot time = Esp32BaseTime::snapshot();
-    if (!time.synced || time.source != Esp32BaseTime::SOURCE_NTP) {
-        return false;
-    }
-    g_mqttTimeCorrectionRetryArmed = false;
-    g_mqttTimeCorrectionRetryConsumed = true;
-    g_mqttTerminalRejection = false;
-    g_mqttBackoffStep = 0;
-    g_mqttNextAttemptMs = millis();
-    portENTER_CRITICAL(&g_mqttMux);
-    g_mqttConnectionWanted = true;
-    g_mqttLastError = Esp32BaseMqtt::ERROR_NONE;
-    ++g_mqttDiagnostics.timeCorrectionRetries;
-    portEXIT_CRITICAL(&g_mqttMux);
-    setState(Esp32BaseMqtt::BACKOFF);
-    ESP32BASE_LOG_I("mqtt",
-                    "retry reason=rtc_to_ntp_time_correction host=%s port=%u attempt=1",
-                    g_mqttConfig.host,
-                    static_cast<unsigned>(g_mqttConfig.port));
-    return true;
-}
-
 void dispatchMailboxOverflowIfNeeded() {
     uint32_t current = 0;
     portENTER_CRITICAL(&g_mqttMux);
@@ -734,7 +689,6 @@ void handleRawEvents() {
                 const bool reconnect = g_mqttEverConnected;
                 g_mqttEverConnected = true;
                 g_mqttTerminalRejection = false;
-                g_mqttTimeCorrectionRetryArmed = false;
                 g_mqttBackoffStep = 0;
                 g_mqttPendingDisconnectError =
                     Esp32BaseMqtt::ERROR_DISCONNECTED;
@@ -770,9 +724,6 @@ void handleRawEvents() {
                 g_mqttDiagnostics.nativeCertificateFlags = raw.certificateFlags;
                 portEXIT_CRITICAL(&g_mqttMux);
                 g_mqttTerminalRejection = terminal;
-                if (terminal) {
-                    updateTimeCorrectionRetryEligibility(raw, error);
-                }
                 ESP32BASE_LOG_W("mqtt",
                                 "connection_error host=%s port=%u error=%s esp=%ld tls=%ld socket=%ld cert_flags=%lu credential_set=%s",
                                 g_mqttConfig.host,
@@ -917,10 +868,6 @@ void dispatchIncomingMessages() {
 }
 
 bool startMqttClient() {
-    const Esp32BaseTime::Snapshot time = Esp32BaseTime::snapshot();
-    g_mqttAttemptTimeSource = time.synced
-                                  ? time.source
-                                  : Esp32BaseTime::SOURCE_UPTIME;
     portENTER_CRITICAL(&g_mqttMux);
     ++g_mqttDiagnostics.connectAttempts;
     g_mqttConnectionWanted = true;
@@ -1052,6 +999,20 @@ bool Esp32BaseMqtt::configure(const ConnectionConfig& config) {
             setLastError(ERROR_INVALID_CONFIGURATION);
             return false;
         }
+#if !ESP32BASE_MQTT_ALLOW_UNCHECKED_CERTIFICATE_DATES
+        if (!MQTT_CERTIFICATE_DATE_CHECK_ENABLED) {
+            g_mqttConfigured = false;
+            setState(CONFIGURATION_ERROR);
+            setLastError(ERROR_TLS_CERTIFICATE_DATE_CHECK_UNAVAILABLE);
+            return false;
+        }
+#endif
+#if !ESP32BASE_ENABLE_NTP
+        g_mqttConfigured = false;
+        setState(CONFIGURATION_ERROR);
+        setLastError(ERROR_INVALID_CONFIGURATION);
+        return false;
+#endif
     } else {
 #if !ESP32BASE_MQTT_ALLOW_PLAINTEXT
         g_mqttConfigured = false;
@@ -1245,11 +1206,12 @@ bool Esp32BaseMqtt::begin() {
     portEXIT_CRITICAL(&g_mqttMux);
     setState(WAITING_FOR_WIFI);
     ESP32BASE_LOG_I("mqtt",
-                    "configured host=%s port=%u client_id=%s tls=%s credential_set=%s client_certificate_set=%s clean_session=true",
+                    "configured host=%s port=%u client_id=%s tls=%s certificate_date_check=%s credential_set=%s client_certificate_set=%s clean_session=true",
                     g_mqttConfig.host,
                     static_cast<unsigned>(g_mqttConfig.port),
                     g_mqttConfig.clientId,
                     g_mqttConfig.security == TLS ? "true" : "false",
+                    MQTT_CERTIFICATE_DATE_CHECK_ENABLED ? "true" : "false",
                     g_mqttConfig.username ? "true" : "false",
                     g_mqttConfig.tls.clientCertificatePem ? "true" : "false");
     return true;
@@ -1308,7 +1270,6 @@ void Esp32BaseMqtt::handle(bool otaUploading) {
         g_mqttState != CONNECTION_REJECTED) {
         setState(CONNECTION_REJECTED);
     }
-    consumeTimeCorrectionRetryIfReady();
     if (g_mqttTerminalRejection ||
         g_mqttState == CONNECTION_REJECTED) {
         return;
@@ -1320,7 +1281,9 @@ void Esp32BaseMqtt::handle(bool otaUploading) {
         setState(WAITING_FOR_WIFI);
         return;
     }
-    if (g_mqttConfig.security == TLS && !Esp32BaseTime::isRealTime()) {
+    const Esp32BaseTime::Snapshot time = Esp32BaseTime::snapshot();
+    if (g_mqttConfig.security == TLS &&
+        (!time.synced || time.source != Esp32BaseTime::SOURCE_NTP)) {
         if (isConnectionWanted()) {
             requestNativeDisconnect();
         }
@@ -1372,6 +1335,8 @@ Esp32BaseMqtt::Status Esp32BaseMqtt::status() {
     snapshot.connectedAtEpochSec = g_mqttConnectedAtEpochSec;
     portEXIT_CRITICAL(&g_mqttMux);
     snapshot.tls = g_mqttConfig.security == TLS;
+    snapshot.certificateDateCheckEnabled =
+        MQTT_CERTIFICATE_DATE_CHECK_ENABLED;
     snapshot.usernameSet = g_mqttConfig.username != nullptr;
     snapshot.clientCertificateSet =
         g_mqttConfig.tls.clientCertificatePem != nullptr;
@@ -1420,6 +1385,8 @@ const char* Esp32BaseMqtt::errorName(Error errorValue) {
         case ERROR_DNS_OR_TRANSPORT: return "dns_or_transport";
         case ERROR_TLS: return "tls";
         case ERROR_TLS_CERTIFICATE: return "tls_certificate";
+        case ERROR_TLS_CERTIFICATE_DATE_CHECK_UNAVAILABLE:
+            return "tls_certificate_date_check_unavailable";
         case ERROR_BROKER_UNAVAILABLE: return "broker_unavailable";
         case ERROR_PROTOCOL_REJECTED: return "protocol_rejected";
         case ERROR_CLIENT_ID_REJECTED: return "client_id_rejected";

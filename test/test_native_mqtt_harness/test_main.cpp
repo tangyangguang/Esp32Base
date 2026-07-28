@@ -174,9 +174,6 @@ void resetModule() {
     g_mqttReconnectRequested = false;
     g_mqttForceReconnectAfterDisconnect = false;
     g_mqttConnectionWanted = true;
-    g_mqttTimeCorrectionRetryArmed = false;
-    g_mqttTimeCorrectionRetryConsumed = false;
-    g_mqttAttemptTimeSource = Esp32BaseTime::SOURCE_UPTIME;
     g_mqttClient = nullptr;
     g_mqttState = Esp32BaseMqtt::NOT_CONFIGURED;
     g_mqttLastError = Esp32BaseMqtt::ERROR_NONE;
@@ -290,6 +287,12 @@ void test_begin_never_starts_network_and_waits_for_prerequisites() {
                       Esp32BaseMqtt::state());
 
     g_fakeRealTime = true;
+    Esp32BaseTime::g_source = Esp32BaseTime::SOURCE_RTC;
+    Esp32BaseMqtt::handle(false);
+    TEST_ASSERT_EQUAL(Esp32BaseMqtt::WAITING_FOR_TIME,
+                      Esp32BaseMqtt::state());
+
+    Esp32BaseTime::g_source = Esp32BaseTime::SOURCE_NTP;
     Esp32BaseMqtt::handle(false);
     TEST_ASSERT_EQUAL(Esp32BaseMqtt::CONNECTING,
                       Esp32BaseMqtt::state());
@@ -533,71 +536,25 @@ void test_dns_and_certificate_errors_are_distinguished() {
     TEST_ASSERT_TRUE(terminal);
 }
 
-void test_rtc_certificate_time_error_retries_once_after_ntp() {
+void test_reports_platform_certificate_date_check_capability() {
     TEST_ASSERT_TRUE(Esp32BaseMqtt::configure(validConfig()));
-    TEST_ASSERT_TRUE(Esp32BaseMqtt::begin());
-    g_fakeWifiConnected = true;
-    g_fakeRealTime = true;
-    Esp32BaseTime::g_source = Esp32BaseTime::SOURCE_RTC;
-    Esp32BaseMqtt::handle(false);
-    TEST_ASSERT_EQUAL(Esp32BaseMqtt::CONNECTING, Esp32BaseMqtt::state());
-
-    esp_mqtt_error_codes_t timeError = {};
-    timeError.error_type = MQTT_ERROR_TYPE_TCP_TRANSPORT;
-    timeError.esp_tls_cert_verify_flags = MBEDTLS_X509_BADCERT_FUTURE;
-    emitEvent(MQTT_EVENT_ERROR, 0, &timeError);
-    emitEvent(MQTT_EVENT_DISCONNECTED);
-    Esp32BaseMqtt::handle(false);
-    TEST_ASSERT_EQUAL(Esp32BaseMqtt::CONNECTION_REJECTED,
-                      Esp32BaseMqtt::state());
-    TEST_ASSERT_EQUAL_UINT32(
-        0, Esp32BaseMqtt::diagnostics().timeCorrectionRetries);
-
-    Esp32BaseMqtt::handle(false);
-    TEST_ASSERT_EQUAL(Esp32BaseMqtt::CONNECTION_REJECTED,
-                      Esp32BaseMqtt::state());
-
-    Esp32BaseTime::g_source = Esp32BaseTime::SOURCE_NTP;
-    Esp32BaseMqtt::handle(false);
-    TEST_ASSERT_EQUAL(Esp32BaseMqtt::CONNECTING, Esp32BaseMqtt::state());
-    TEST_ASSERT_EQUAL_UINT32(
-        1, Esp32BaseMqtt::diagnostics().timeCorrectionRetries);
-    TEST_ASSERT_EQUAL_UINT32(2, Esp32BaseMqtt::diagnostics().connectAttempts);
-
-    emitEvent(MQTT_EVENT_ERROR, 0, &timeError);
-    emitEvent(MQTT_EVENT_DISCONNECTED);
-    Esp32BaseMqtt::handle(false);
-    TEST_ASSERT_EQUAL(Esp32BaseMqtt::CONNECTION_REJECTED,
-                      Esp32BaseMqtt::state());
-    Esp32BaseMqtt::handle(false);
-    TEST_ASSERT_EQUAL(Esp32BaseMqtt::CONNECTION_REJECTED,
-                      Esp32BaseMqtt::state());
-    TEST_ASSERT_EQUAL_UINT32(
-        1, Esp32BaseMqtt::diagnostics().timeCorrectionRetries);
+    const Esp32BaseMqtt::Status status = Esp32BaseMqtt::status();
+    TEST_ASSERT_TRUE(status.tls);
+    TEST_ASSERT_FALSE(status.certificateDateCheckEnabled);
+    TEST_ASSERT_EQUAL_STRING(
+        "tls_certificate_date_check_unavailable",
+        Esp32BaseMqtt::errorName(
+            Esp32BaseMqtt::ERROR_TLS_CERTIFICATE_DATE_CHECK_UNAVAILABLE));
 }
 
-void test_non_time_certificate_error_does_not_retry_after_ntp() {
-    TEST_ASSERT_TRUE(Esp32BaseMqtt::configure(validConfig()));
-    TEST_ASSERT_TRUE(Esp32BaseMqtt::begin());
-    g_fakeWifiConnected = true;
-    g_fakeRealTime = true;
-    Esp32BaseTime::g_source = Esp32BaseTime::SOURCE_RTC;
-    Esp32BaseMqtt::handle(false);
-
-    esp_mqtt_error_codes_t certificateError = {};
-    certificateError.error_type = MQTT_ERROR_TYPE_TCP_TRANSPORT;
-    certificateError.esp_tls_cert_verify_flags =
-        MBEDTLS_X509_BADCERT_FUTURE |
-        MBEDTLS_X509_BADCERT_CN_MISMATCH;
-    emitEvent(MQTT_EVENT_ERROR, 0, &certificateError);
-    emitEvent(MQTT_EVENT_DISCONNECTED);
-    Esp32BaseTime::g_source = Esp32BaseTime::SOURCE_NTP;
-    Esp32BaseMqtt::handle(false);
-    TEST_ASSERT_EQUAL(Esp32BaseMqtt::CONNECTION_REJECTED,
-                      Esp32BaseMqtt::state());
-    TEST_ASSERT_EQUAL_UINT32(
-        0, Esp32BaseMqtt::diagnostics().timeCorrectionRetries);
-    TEST_ASSERT_EQUAL_UINT32(1, Esp32BaseMqtt::diagnostics().connectAttempts);
+void test_secure_default_rejects_missing_certificate_date_check() {
+    TEST_ASSERT_FALSE(Esp32BaseMqtt::configure(validConfig()));
+    const Esp32BaseMqtt::Status status = Esp32BaseMqtt::status();
+    TEST_ASSERT_FALSE(status.configured);
+    TEST_ASSERT_FALSE(status.certificateDateCheckEnabled);
+    TEST_ASSERT_EQUAL(
+        Esp32BaseMqtt::ERROR_TLS_CERTIFICATE_DATE_CHECK_UNAVAILABLE,
+        status.lastError);
 }
 
 void test_terminal_rejection_survives_wifi_loss_and_recovery() {
@@ -642,6 +599,9 @@ void tearDown() {}
 
 int main(int, char**) {
     UNITY_BEGIN();
+#if ESP32BASE_MQTT_EXPECT_DATE_CHECK_REJECTION
+    RUN_TEST(test_secure_default_rejects_missing_certificate_date_check);
+#else
     RUN_TEST(test_configuration_requires_ca_and_rejects_plaintext_by_default);
     RUN_TEST(test_begin_never_starts_network_and_waits_for_prerequisites);
     RUN_TEST(test_callbacks_are_deferred_until_handle_and_subscriptions_repeat);
@@ -652,9 +612,9 @@ int main(int, char**) {
     RUN_TEST(test_incoming_mailbox_full_drops_whole_message);
     RUN_TEST(test_connection_event_survives_full_control_mailbox);
     RUN_TEST(test_dns_and_certificate_errors_are_distinguished);
-    RUN_TEST(test_rtc_certificate_time_error_retries_once_after_ntp);
-    RUN_TEST(test_non_time_certificate_error_does_not_retry_after_ntp);
+    RUN_TEST(test_reports_platform_certificate_date_check_capability);
     RUN_TEST(test_terminal_rejection_survives_wifi_loss_and_recovery);
     RUN_TEST(test_backoff_deadline_is_millis_wrap_safe);
+#endif
     return UNITY_END();
 }

@@ -6,6 +6,13 @@ Before flashing, copy `local_secrets.example.h` to `local_secrets.h` and replace
 the broker host, credentials and CA certificate. The local file is ignored by
 Git. The committed values are non-working placeholders.
 
+The official precompiled Arduino Core 2.0.16 and 3.3.8 packages validate the CA
+chain and hostname, but are built without X.509 `notBefore`/`notAfter` checks.
+This example therefore contains the explicit
+`ESP32BASE_MQTT_ALLOW_UNCHECKED_CERTIFICATE_DATES=1` product opt-in. Remove that
+flag when using a Core built with `CONFIG_MBEDTLS_HAVE_TIME_DATE=y`. MQTTS waits
+for NTP; an RTC alone does not release the TLS gate.
+
 Build:
 
 ```sh

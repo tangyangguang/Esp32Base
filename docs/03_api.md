@@ -847,7 +847,9 @@ static const char* errorName(Error error);
 - `tls.clientCertificatePem/privateKeyPem`：可选双向 TLS，必须成对提供，length 精确包含 NUL，并分别受 `ESP32BASE_MQTT_MAX_IDENTITY_PEM_BYTES` 限制。
 - `lastWill`：可选，Topic 不允许 wildcard，payload 不超过构建上限，QoS 仅 0/1。
 
-TLS 不提供 insecure、跳过 hostname、系统 CA bundle 或失败后明文 fallback。TLS 配置在 `Esp32BaseTime::isRealTime()==false` 时停在 `WAITING_FOR_TIME`。普通明文模式只用于显式启用的受控局域网或测试固件。
+TLS 不提供 insecure、跳过 hostname、系统 CA bundle 或失败后明文 fallback。TLS 配置只在统一 Time 来源为 `SOURCE_NTP` 后离开 `WAITING_FOR_TIME`；RTC 时间不单独放行 MQTTS。未启用 NTP 的构建会拒绝 TLS 配置。
+
+证书日期校验是编译期平台能力：只有 Core 的 mbedTLS 启用 `CONFIG_MBEDTLS_HAVE_TIME_DATE` 才检查 `notBefore/notAfter`。官方预编译 Arduino Core 2.0.16/3.3.8 当前均未启用；Esp32Base 默认以 `ERROR_TLS_CERTIFICATE_DATE_CHECK_UNAVAILABLE` 拒绝 TLS 配置。明确接受“CA 链和 hostname 仍校验、日期不校验”的产品可设置 `ESP32BASE_MQTT_ALLOW_UNCHECKED_CERTIFICATE_DATES=1`，`Status::certificateDateCheckEnabled` 始终反映底层真实能力。该 opt-in 不等于 `setInsecure()`，也不会关闭 CA 或 hostname 校验。普通明文模式只用于显式启用的受控局域网或测试固件。
 
 所有配置字符串、PEM、私钥、`LastWill` 结构及其 Topic/payload、订阅 Topic 都按借用内存处理，必须从注册到设备重启或进入 deep sleep 始终有效；推荐使用静态存储期数据，不能在 `begin()` 后释放。密码和私钥不写 NVS、LittleFS、App Config、Web、Status、JSON 或日志；状态只暴露 `usernameSet/clientCertificateSet`。
 
@@ -910,9 +912,9 @@ typedef void (*MessageCallback)(const MessageView& message, void* context);
 
 普通 transport/TLS/Broker unavailable 错误使用 1、2、4、8、16、32、60 秒上限的指数退避，并在当前上限 50%..100% 使用系统随机抖动。协议、Client ID、用户名和授权拒绝进入 `CONNECTION_REJECTED`，避免持续错误认证；WiFi 断开再恢复不会绕过该终止状态，Broker/ACL 修复后应用可调用 `requestReconnect()`。所有 deadline 使用 32 位无符号差值，允许 `millis()` 回绕。
 
-证书校验失败通常同样进入 `CONNECTION_REJECTED`。唯一自动补偿是：该次 TLS 尝试开始时统一 Time 来源为 RTC、mbedTLS 标志只包含 `certificate future/expired`、且本次启动尚未补偿过；模块随后观察到 `Esp32BaseTime::Snapshot::source` 升级为 `SOURCE_NTP` 时立即重试一次。补偿在启动期最多一次；CA 不可信、域名不匹配、混合标志、NTP 来源下的失败和补偿后的再次失败均保持终止状态。模块不直接依赖 `Esp32BaseNtp`。
+证书校验失败进入 `CONNECTION_REJECTED`，不会因 WiFi 或时间源变化自动重试；修正 CA、hostname、Broker 证书或 Core 配置后，由应用调用 `requestReconnect()`。
 
-`Status` 提供当前状态、稳定错误、TLS/credential-set、Broker host/port/clientId 和最近连接的 uptime/epoch。`Diagnostics` 提供连接尝试、成功、重连、断开、接收、publish accepted、PUBACK、订阅 ACK、RTC→NTP 时间补偿重试、送达状态不确定、超限/邮箱丢弃、enqueue 失败、outbox/inbox/control high-water、当前 QoS 1 in-flight 及 native ESP/TLS/socket/certificate flags。QoS 0 没有可观察的 Broker ACK，因此不伪造“已发送”计数；native code 只用于诊断，不作为跨 Core 稳定业务枚举。
+`Status` 提供当前状态、稳定错误、TLS/credential-set、证书日期校验能力、Broker host/port/clientId 和最近连接的 uptime/epoch。`Diagnostics` 提供连接尝试、成功、重连、断开、接收、publish accepted、PUBACK、订阅 ACK、送达状态不确定、超限/邮箱丢弃、enqueue 失败、outbox/inbox/control high-water、当前 QoS 1 in-flight 及 native ESP/TLS/socket/certificate flags。QoS 0 没有可观察的 Broker ACK，因此不伪造“已发送”计数；native code 只用于诊断，不作为跨 Core 稳定业务枚举。
 
 OTA 上传开始时 facade 异步请求 MQTT DISCONNECT 并拒绝新 publish；上传失败且设备继续运行时重新进入前置条件和连接流程。运行期不调用可能无限等待的 `esp_mqtt_client_stop()`；MQTT task 保留到重启，避免阻塞 loop/watchdog。restart/deep sleep 前只尽力异步请求 DISCONNECT，不等待 task 停止，也不承诺 DISCONNECT、在途 publish 或 PUBACK 已抵达。异常掉电的 LWT 行为由 Broker 和 MQTT 契约决定。WiFi safe boot/AP 配网时不连接 Broker；modem sleep 下 Keepalive 和重连需要产品实机验证。
 

@@ -45,6 +45,7 @@ public:
         ERROR_DNS_OR_TRANSPORT,
         ERROR_TLS,
         ERROR_TLS_CERTIFICATE,
+        ERROR_TLS_CERTIFICATE_DATE_CHECK_UNAVAILABLE,
         ERROR_BROKER_UNAVAILABLE,
         ERROR_PROTOCOL_REJECTED,
         ERROR_CLIENT_ID_REJECTED,
@@ -150,6 +151,7 @@ public:
         Error lastError = ERROR_NONE;
         bool configured = false;
         bool tls = true;
+        bool certificateDateCheckEnabled = false;
         bool usernameSet = false;
         bool clientCertificateSet = false;
         const char* host = nullptr;
@@ -170,7 +172,6 @@ public:
         uint32_t publishAcknowledged = 0;
         uint32_t publishDeliveryUncertain = 0;
         uint32_t subscriptionAcknowledged = 0;
-        uint32_t timeCorrectionRetries = 0;
         uint32_t incomingOversizeDropped = 0;
         uint32_t incomingMailboxDropped = 0;
         uint32_t controlEventDropped = 0;
