@@ -214,6 +214,7 @@
 
 必须通过：
 
+- `pio test -e native_fs_harness`。
 - 任何启动路径都不得自动格式化 LittleFS。
 - 首次挂载失败不 halt。
 - 格式化 LittleFS 只能来自明确维护动作，例如 Web System 页 POST 或显式调用 `Esp32BaseFs::format()`。
@@ -222,6 +223,7 @@
 - 二进制读写正常。
 - append 正常。
 - `readBytes()` / `readBytesAt()` 支持分页读取，文件不存在和 offset 越界返回失败，EOF 短读返回实际长度；未到 EOF 却读出 0 字节必须返回失败。
+- 文件不存在时，`writeFile()` / `writeBytes()`、首次 `appendFile()` / `appendBytes()` 和 `createFixedFile()` 能创建文件。
 - `writeFile()` / `writeBytes()` / `appendFile()` / `appendBytes()` 写后大小校验正常，非空写入后末端可读。
 - `writeBytes()` / `appendBytes()` / `writeBytesAt()` 大块读写通过 `Esp32BaseFs` 分块 I/O 和 watchdog-friendly service 覆盖；业务不需要在存储类里重复拆分 Flash 写入。
 - `createFixedFile()` 支持常见定长文件创建，首字节、中间字节和末尾字节填充值正确；非法路径、FS 未 ready、空间不足等情况返回 false 且不崩溃。

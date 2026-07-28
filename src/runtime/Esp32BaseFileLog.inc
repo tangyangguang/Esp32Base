@@ -93,7 +93,7 @@ bool ensureSegmentFiles() {
             ok = false;
             break;
         }
-        File file = LittleFS.open(seg, "a");
+        File file = LittleFS.open(seg, "a", true);
         if (!file) {
             ok = false;
             break;

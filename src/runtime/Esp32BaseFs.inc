@@ -176,7 +176,7 @@ bool writeMode(const char* path, const uint8_t* data, size_t len, const char* mo
         return false;
     }
     const uint64_t expectedSize = (append && before > 0 ? static_cast<uint64_t>(before) : 0ULL) + len;
-    File file = LittleFS.open(path, mode);
+    File file = LittleFS.open(path, mode, true);
     if (!file) {
         return false;
     }
@@ -290,7 +290,7 @@ bool Esp32BaseFs::createFixedFile(const char* path, uint32_t size, uint8_t fillB
     }
 
     Esp32BaseLongOperation::LongOperationScope scope;
-    File file = LittleFS.open(path, "w");
+    File file = LittleFS.open(path, "w", true);
     if (!file) {
         return false;
     }
@@ -438,14 +438,16 @@ bool writeSegmentSequence(const char* path,
         total += segments[i].length;
         if (total > UINT32_MAX) return false;
     }
-    const int64_t before = mode[0] == 'a' ? Esp32BaseFs::fileSize(path) : 0;
+    const bool append = mode[0] == 'a';
+    const bool existed = LittleFS.exists(path);
+    const int64_t before = append && existed ? Esp32BaseFs::fileSize(path) : 0;
     if (before < 0 || static_cast<uint64_t>(before) + total > UINT32_MAX) return false;
     if (mode[0] == 'a' && before > 0 &&
         !verifyReadableByte(path, static_cast<uint64_t>(before - 1))) {
         return false;
     }
     Esp32BaseLongOperation::LongOperationScope scope;
-    File file = LittleFS.open(path, mode);
+    File file = LittleFS.open(path, mode, true);
     if (!file) return false;
     bool ok = true;
     for (size_t i = 0; i < segmentCount && ok; ++i) {
