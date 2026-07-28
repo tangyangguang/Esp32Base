@@ -9,6 +9,9 @@ bool g_ready = false;
 bool g_startupLogged = false;
 bool g_webStartDebugLogged = false;
 bool g_ntpStartDebugLogged = false;
+#if ESP32BASE_ENABLE_NTP
+bool g_ntpSyncObserved = false;
+#endif
 bool g_mdnsStartDebugLogged = false;
 bool g_otaStartDebugLogged = false;
 char g_firmwareName[33] = "app";
@@ -118,6 +121,9 @@ bool Esp32Base::begin() {
     g_lastError[0] = '\0';
     g_webStartDebugLogged = false;
     g_ntpStartDebugLogged = false;
+#if ESP32BASE_ENABLE_NTP
+    g_ntpSyncObserved = false;
+#endif
     g_mdnsStartDebugLogged = false;
     g_otaStartDebugLogged = false;
 
@@ -290,8 +296,8 @@ void Esp32Base::handle() {
         }
         Esp32BaseNtp::begin();
     }
-    if (Esp32BaseNtp::isStarted()) {
-        Esp32BaseNtp::isTimeSynced();
+    if (Esp32BaseNtp::isStarted() && !g_ntpSyncObserved) {
+        g_ntpSyncObserved = Esp32BaseNtp::isTimeSynced();
     }
 #endif
 #if ESP32BASE_ENABLE_MQTT

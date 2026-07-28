@@ -38,7 +38,6 @@ bool g_paused = false;
 bool g_auditEnabled = false;
 bool g_readAuditEnabled = false;
 PendingItem g_pending[ESP32BASE_CONFIG_PENDING_MAX];
-char g_stringScratch[CONFIG_STRING_MAX_VISIBLE_LEN + 1];
 uint8_t g_blobScratch[Esp32BaseConfig::CONFIG_BLOB_MAX_LEN];
 
 bool validName(const char* value) {
@@ -98,21 +97,95 @@ bool readStoredString(const char* ns, const char* key, char* out, size_t len, bo
         nvs_close(handle);
         return true;
     }
-    if (err != ESP_OK || required == 0 || required > len) {
+    if (err != ESP_OK || required == 0 || required > CONFIG_STRING_MAX_VISIBLE_LEN + 1U) {
         nvs_close(handle);
         return false;
     }
 
-    err = nvs_get_str(handle, key, out, &required);
+    char* readBuffer = out;
+    if (required > len) {
+        readBuffer = static_cast<char*>(malloc(required));
+        if (!readBuffer) {
+            nvs_close(handle);
+            return false;
+        }
+    }
+    size_t readLength = required;
+    err = nvs_get_str(handle, key, readBuffer, &readLength);
     nvs_close(handle);
     if (err != ESP_OK) {
+        if (readBuffer != out) {
+            free(readBuffer);
+        }
         out[0] = '\0';
         return false;
+    }
+    if (readBuffer != out) {
+        esp32base_internal::copySafe(out, len, readBuffer);
+        free(readBuffer);
     }
     if (found) {
         *found = true;
     }
     return true;
+}
+
+bool storedStringEquals(const char* ns, const char* key, const char* value,
+                        bool* found, bool* equal) {
+    if (found) {
+        *found = false;
+    }
+    if (equal) {
+        *equal = false;
+    }
+    if (!value) {
+        return false;
+    }
+
+    nvs_handle_t handle = 0;
+    const esp_err_t openErr = nvs_open(ns, NVS_READONLY, &handle);
+    if (openErr == ESP_ERR_NVS_NOT_FOUND) {
+        return true;
+    }
+    if (openErr != ESP_OK) {
+        return false;
+    }
+
+    size_t required = 0;
+    esp_err_t err = nvs_get_str(handle, key, nullptr, &required);
+    if (err == ESP_ERR_NVS_NOT_FOUND) {
+        nvs_close(handle);
+        return true;
+    }
+    if (err != ESP_OK || required == 0 || required > CONFIG_STRING_MAX_VISIBLE_LEN + 1U) {
+        nvs_close(handle);
+        return false;
+    }
+    if (found) {
+        *found = true;
+    }
+    if (required != strlen(value) + 1U) {
+        nvs_close(handle);
+        return true;
+    }
+
+    char* readBuffer = required <= sizeof(g_blobScratch)
+        ? reinterpret_cast<char*>(g_blobScratch)
+        : static_cast<char*>(malloc(required));
+    if (!readBuffer) {
+        nvs_close(handle);
+        return false;
+    }
+    size_t readLength = required;
+    err = nvs_get_str(handle, key, readBuffer, &readLength);
+    nvs_close(handle);
+    if (err == ESP_OK && equal) {
+        *equal = strcmp(readBuffer, value) == 0;
+    }
+    if (readBuffer != reinterpret_cast<char*>(g_blobScratch)) {
+        free(readBuffer);
+    }
+    return err == ESP_OK;
 }
 
 bool readStoredBlob(const char* ns, const char* key, void* out, size_t len, size_t* actualLen, bool* found) {
@@ -429,8 +502,9 @@ bool Esp32BaseConfig::setStr(const char* ns, const char* key, const char* value)
         return false;
     }
     bool hadOld = false;
-    const bool readOk = readStoredString(ns, key, g_stringScratch, sizeof(g_stringScratch), &hadOld);
-    if (readOk && hadOld && strcmp(g_stringScratch, value) == 0) {
+    bool unchanged = false;
+    const bool readOk = storedStringEquals(ns, key, value, &hadOld, &unchanged);
+    if (readOk && hadOld && unchanged) {
         if (g_auditEnabled) {
             ESP32BASE_LOG_D("config", "audit op=setStr ns=%s key=%s changed=no result=skipped", ns, key);
         }
@@ -468,13 +542,11 @@ bool Esp32BaseConfig::getStr(const char* ns, const char* key, char* out, size_t 
     }
 
     bool found = false;
-    if (!readStoredString(ns, key, g_stringScratch, sizeof(g_stringScratch), &found)) {
+    if (!readStoredString(ns, key, out, len, &found)) {
         esp32base_internal::copySafe(out, len, def ? def : "");
         return false;
     }
-    if (found) {
-        esp32base_internal::copySafe(out, len, g_stringScratch);
-    } else {
+    if (!found) {
         esp32base_internal::copySafe(out, len, def ? def : "");
     }
     if (g_readAuditEnabled) {
@@ -695,8 +767,9 @@ bool Esp32BaseConfig::setStrDeferred(const char* ns, const char* key, const char
     }
 
     bool hadOld = false;
-    const bool readOk = readStoredString(ns, key, g_stringScratch, sizeof(g_stringScratch), &hadOld);
-    if (readOk && hadOld && strcmp(g_stringScratch, value) == 0) {
+    bool unchanged = false;
+    const bool readOk = storedStringEquals(ns, key, value, &hadOld, &unchanged);
+    if (readOk && hadOld && unchanged) {
         if (g_auditEnabled) {
             char lenBuf[24];
             Esp32BaseLog::formatBytes(valueLen, lenBuf, sizeof(lenBuf));

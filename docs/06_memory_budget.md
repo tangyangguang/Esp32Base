@@ -64,7 +64,7 @@ Status 页不创建后台任务、定时器、历史采样缓存或自动刷新�
 #define ESP32BASE_CONFIG_PENDING_MAX ESP32BASE_EB_CONFIG_PENDING_MAX
 ```
 
-每个 pending blob 按实际长度动态分配，单个 blob 最大 256 字节；Config 另有一个 256 字节静态 scratch buffer 用于 blob 写前比较和读取。
+每个 pending blob 按实际长度动态分配，单个 blob 最大 256 字节。Config 只保留一个 256 字节静态 scratch buffer，用于 blob 和短字符串的写前比较；字符串读取优先直接写入调用方缓冲，调用方缓冲不足或长字符串需要写前比较时，才在当前调用期间按 NVS 实际长度临时分配，完成后立即释放。CORE 不再为最大 3999 字节字符串常驻预留 4000 字节 RAM。
 
 ### 3.4 FileLog
 
@@ -145,7 +145,7 @@ MQTT（仅 `ESP32BASE_ENABLE_MQTT=1`）：
 
 MQTT 默认关闭且不随 FULL 自动开启。开启后 Arduino Core 预编译 ESP-MQTT 基本同时带入 TLS transport，因此“只配置明文”不能作为显著裁剪 TLS Flash 的手段。发布测量必须分别记录 MQTT 关闭、MQTT 开启但未配置、真实 MQTTS 配置的 `firmware.elf/bin`，并在实机记录初始化、TCP、TLS 握手峰值和稳定连接后的 free/min heap。
 
-2026-07-28 的 classic ESP32、Arduino Core 2.0.16、`-flto -fno-exceptions`、1.5MiB app slot 构建参考：`examples/basic` FULL/MQTT关闭为 Flash 985765 bytes、静态 RAM 63412 bytes；`examples/mqtt_tls` FULL/MQTT启用且实际调用配置/订阅/发布/LWT API 为 Flash 1129865 bytes、静态 RAM 66268 bytes，增量分别为 144100 和 2856 bytes。该示例使用不可工作的短 CA 占位文本，只证明链接和 wrapper 固定容量，不代表真实 CA 体积、TLS 握手或运行时 heap；产品验收不得把这组构建数值外推为实机资源结论。
+2026-07-28 的 classic ESP32、Arduino Core 2.0.16、`-flto -fno-exceptions`、1.5MiB app slot 构建参考：`examples/basic` FULL/MQTT关闭为 Flash 986689 bytes、静态 RAM 59412 bytes；`examples/mqtt_tls` FULL/MQTT启用且实际调用配置/订阅/发布/LWT API 为 Flash 1130685 bytes、静态 RAM 62260 bytes，增量分别为 143996 和 2848 bytes。该示例使用不可工作的短 CA 占位文本，只证明链接和 wrapper 固定容量，不代表真实 CA 体积、TLS 握手或运行时 heap；产品验收不得把这组构建数值外推为实机资源结论。
 
 人性化容量显示：
 

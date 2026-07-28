@@ -77,12 +77,44 @@
 #define ESP32BASE_WEB_RAW_NO_PROGRESS_TIMEOUT_MS 30000UL
 #endif
 
+#ifndef ESP32BASE_WEB_MAX_REQUEST_LINE_BYTES
+#define ESP32BASE_WEB_MAX_REQUEST_LINE_BYTES 1024U
+#endif
+
+#ifndef ESP32BASE_WEB_MAX_HEADER_LINE_BYTES
+#define ESP32BASE_WEB_MAX_HEADER_LINE_BYTES 1024U
+#endif
+
+#ifndef ESP32BASE_WEB_MAX_HEADER_BYTES
+#define ESP32BASE_WEB_MAX_HEADER_BYTES 8192U
+#endif
+
+#ifndef ESP32BASE_WEB_MAX_BODY_BYTES
+#define ESP32BASE_WEB_MAX_BODY_BYTES 8192U
+#endif
+
 #if ESP32BASE_WEB_REQUEST_READ_TIMEOUT_SEC < 1
 #error "ESP32BASE_WEB_REQUEST_READ_TIMEOUT_SEC must be at least 1"
 #endif
 
 #if ESP32BASE_WEB_RAW_NO_PROGRESS_TIMEOUT_MS < 1000UL
 #error "ESP32BASE_WEB_RAW_NO_PROGRESS_TIMEOUT_MS must be at least 1000"
+#endif
+
+#if ESP32BASE_WEB_MAX_REQUEST_LINE_BYTES < 128U
+#error "ESP32BASE_WEB_MAX_REQUEST_LINE_BYTES must be at least 128"
+#endif
+
+#if ESP32BASE_WEB_MAX_HEADER_LINE_BYTES < 128U
+#error "ESP32BASE_WEB_MAX_HEADER_LINE_BYTES must be at least 128"
+#endif
+
+#if ESP32BASE_WEB_MAX_HEADER_BYTES < ESP32BASE_WEB_MAX_HEADER_LINE_BYTES
+#error "ESP32BASE_WEB_MAX_HEADER_BYTES must cover at least one header line"
+#endif
+
+#if ESP32BASE_WEB_MAX_BODY_BYTES < 256U
+#error "ESP32BASE_WEB_MAX_BODY_BYTES must be at least 256"
 #endif
 
 namespace esp32base_web {
@@ -95,6 +127,9 @@ public:
 
 private:
     bool parseRequest(WiFiClient& client);
+    bool parseHeaders(WiFiClient& client, String& line, uint32_t requestStartedMs,
+                      bool parseBodyMetadata, String& boundary,
+                      bool& isForm, bool& isEncoded);
     bool parseRawBody(WiFiClient& client);
 };
 

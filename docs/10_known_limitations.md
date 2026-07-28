@@ -21,6 +21,7 @@
 
 - Web 基于 Arduino `WebServer` 同步模型。
 - 长时间 handler 会阻塞其他请求，建议单次 handler < 200ms。
+- HTTP 请求首行、单个 Header 行、Header 总量和普通非流式 body 默认分别限制为 1024、1024、8192、8192 字节；App Config 按实际注册字段数扩大表单上限，OTA/FS 上传继续流式处理。自定义普通 POST 需要更大 body 时必须显式调整构建上限并重新评估峰值 heap。
 - 不支持 WebSocket、SPA、大型前端资源管理器、多用户权限和会话系统。
 - System Logs 的 GET 页面只读取已落盘的系统诊断日志快照，不为了“立即看到缓存中日志”主动 flush；低优先级缓存日志按常规 flush interval 落盘，清空、格式化、重启等维护动作仍必须走 POST。
 - System Logs 的 `unavailable` 表示模式开启但当前 FS/init 前置条件无法启用系统诊断日志；`disabled` 才表示用户把模式设为 OFF。
@@ -83,7 +84,7 @@
 ## 7. 存储边界
 
 - Config 后端为 ESP32 NVS，只适合小配置，不适合大量数据或高频日志。
-- Config 字符串 API 支持最大 3999 字节可见内容，并使用固定 scratch buffer 读取和比较，避免 Arduino `String` 造成 heap 碎片；它仍然不适合大量数据或高频日志。
+- Config 字符串 API 支持最大 3999 字节可见内容，不使用 Arduino `String`；短字符串写前比较复用 256 字节静态 scratch，长字符串比较或读取到较小调用方缓冲时按 NVS 实际长度临时分配，完成后立即释放。它仍然不适合大量数据或高频日志，低 heap 时长字符串操作可能失败并返回 false。
 - Config blob / POD API 支持最大 256 字节，只适合 head/count/next_id 这类小型固定布局元数据；业务记录正文、事件环形文件和高频日志仍应放在文件系统或业务自己的存储结构中。
 - NVS 写满时 set API 返回 false，库不自动删除业务数据。
 - `clearLibraryNamespaces()` 只清理 `eb_` 前缀的库 namespace。

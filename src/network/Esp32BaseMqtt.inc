@@ -1218,7 +1218,11 @@ bool Esp32BaseMqtt::begin() {
 }
 
 void Esp32BaseMqtt::handle(bool otaUploading) {
-    if (g_mqttConfigured && otaUploading && !g_mqttOtaSuspended) {
+    if (!g_mqttConfigured && !g_mqttConfigurationAttempted) {
+        return;
+    }
+
+    if (otaUploading && !g_mqttOtaSuspended) {
         g_mqttOtaSuspended = true;
         g_mqttForceReconnectAfterDisconnect = false;
         requestNativeDisconnect();

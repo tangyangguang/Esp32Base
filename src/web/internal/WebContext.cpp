@@ -4,12 +4,106 @@
 
 #include "WebContext.h"
 
+#include <limits.h>
+
 namespace esp32base_web {
 
-static char* readClientBytesWithTimeout(WiFiClient& client, size_t maxLength, size_t& dataLength, int timeoutMs) {
-    char* buf = nullptr;
+enum HttpLineReadResult : uint8_t {
+    HTTP_LINE_OK,
+    HTTP_LINE_TOO_LONG,
+    HTTP_LINE_TIMEOUT,
+    HTTP_LINE_NO_MEMORY
+};
+
+static HttpLineReadResult readHttpLine(WiFiClient& client, String& line, size_t maxLength,
+                                       uint32_t requestStartedMs) {
+    line.remove(0);
+    line.reserve(maxLength < 128U ? maxLength : 128U);
+    const uint32_t timeoutMs =
+        static_cast<uint32_t>(ESP32BASE_WEB_REQUEST_READ_TIMEOUT_SEC) * 1000UL;
+    while (true) {
+        if (!client.available()) {
+            if (!client.connected() || millis() - requestStartedMs >= timeoutMs) {
+                return HTTP_LINE_TIMEOUT;
+            }
+            delay(1);
+            continue;
+        }
+        const int value = client.read();
+        if (value < 0) {
+            continue;
+        }
+        const char c = static_cast<char>(value);
+        if (c == '\n') {
+            return HTTP_LINE_OK;
+        }
+        if (c == '\r') {
+            continue;
+        }
+        if (line.length() >= maxLength) {
+            return HTTP_LINE_TOO_LONG;
+        }
+        if (!line.concat(c)) {
+            return HTTP_LINE_NO_MEMORY;
+        }
+    }
+}
+
+static void rejectHttpRequest(WiFiClient& client, int status, const char* reason) {
+    char response[128];
+    snprintf(response, sizeof(response),
+             "HTTP/1.1 %d %s\r\nConnection: close\r\nContent-Length: 0\r\n\r\n",
+             status, reason ? reason : "Bad Request");
+    client.print(response);
+}
+
+static bool parseContentLength(const String& value, int& contentLength) {
+    if (value.length() == 0) {
+        return false;
+    }
+    uint64_t parsed = 0;
+    for (size_t i = 0; i < value.length(); ++i) {
+        const char c = value[i];
+        if (c < '0' || c > '9') {
+            return false;
+        }
+        parsed = parsed * 10ULL + static_cast<uint8_t>(c - '0');
+        if (parsed > static_cast<uint64_t>(INT_MAX)) {
+            return false;
+        }
+    }
+    contentLength = static_cast<int>(parsed);
+    return true;
+}
+
+static size_t ordinaryBodyLimit(const String& uri) {
+    size_t limit = ESP32BASE_WEB_MAX_BODY_BYTES;
+#if ESP32BASE_ENABLE_APP_CONFIG
+    if (uri == F("/esp32base/app-config")) {
+        const size_t appConfigLimit =
+            64U + static_cast<size_t>(ctx().appConfigFieldCount) *
+                       (Esp32BaseAppConfig::STRING_MAX_LENGTH * 3U + 16U);
+        if (appConfigLimit > limit) {
+            limit = appConfigLimit;
+        }
+    }
+#else
+    (void)uri;
+#endif
+    return limit;
+}
+
+static char* readClientBytesWithTimeout(WiFiClient& client, size_t expectedLength,
+                                        size_t& dataLength, int timeoutMs) {
     dataLength = 0;
-    while (dataLength < maxLength) {
+    if (expectedLength == 0 || expectedLength == SIZE_MAX) {
+        return nullptr;
+    }
+    char* buf = static_cast<char*>(malloc(expectedLength + 1U));
+    if (!buf) {
+        return nullptr;
+    }
+    while (dataLength < expectedLength) {
         int tries = timeoutMs;
         size_t newLength = 0;
         while (!(newLength = client.available()) && tries--) {
@@ -18,20 +112,17 @@ static char* readClientBytesWithTimeout(WiFiClient& client, size_t maxLength, si
         if (!newLength) {
             break;
         }
-        const size_t remaining = maxLength - dataLength;
+        const size_t remaining = expectedLength - dataLength;
         if (newLength > remaining) {
             newLength = remaining;
         }
-        char* newBuf = static_cast<char*>(buf ? realloc(buf, dataLength + newLength + 1) : malloc(newLength + 1));
-        if (!newBuf) {
-            free(buf);
-            return nullptr;
+        const size_t readLength = client.readBytes(buf + dataLength, newLength);
+        if (readLength == 0) {
+            break;
         }
-        buf = newBuf;
-        client.readBytes(buf + dataLength, newLength);
-        dataLength += newLength;
-        buf[dataLength] = '\0';
+        dataLength += readLength;
     }
+    buf[dataLength] = '\0';
     return buf;
 }
 
@@ -106,9 +197,98 @@ void Esp32BaseWebServer::handleClient() {
     }
 }
 
+bool Esp32BaseWebServer::parseHeaders(WiFiClient& client, String& line,
+                                      uint32_t requestStartedMs,
+                                      bool parseBodyMetadata, String& boundary,
+                                      bool& isForm, bool& isEncoded) {
+    size_t headerBytes = 0;
+    String headerName;
+    String headerValue;
+    while (true) {
+        const HttpLineReadResult result =
+            readHttpLine(client, line, ESP32BASE_WEB_MAX_HEADER_LINE_BYTES, requestStartedMs);
+        if (result != HTTP_LINE_OK) {
+            ESP32BASE_LOG_W("web", "http_header_rejected reason=%s",
+                            result == HTTP_LINE_TOO_LONG
+                                ? "line_too_long"
+                                : (result == HTTP_LINE_NO_MEMORY ? "no_memory" : "timeout"));
+            const int status = result == HTTP_LINE_TOO_LONG
+                                   ? 431
+                                   : (result == HTTP_LINE_NO_MEMORY ? 503 : 408);
+            rejectHttpRequest(client, status,
+                              result == HTTP_LINE_TOO_LONG
+                                  ? "Request Header Fields Too Large"
+                                  : (result == HTTP_LINE_NO_MEMORY
+                                         ? "Service Unavailable"
+                                         : "Request Timeout"));
+            return false;
+        }
+        if (line == "") {
+            return true;
+        }
+        headerBytes += line.length() + 2U;
+        if (headerBytes > ESP32BASE_WEB_MAX_HEADER_BYTES) {
+            ESP32BASE_LOG_W("web", "http_header_rejected reason=total_too_large");
+            rejectHttpRequest(client, 431, "Request Header Fields Too Large");
+            return false;
+        }
+
+        const int headerDiv = line.indexOf(':');
+        if (headerDiv == -1) {
+            rejectHttpRequest(client, 400, "Bad Request");
+            return false;
+        }
+        headerName = line.substring(0, headerDiv);
+        headerValue = line.substring(headerDiv + 1);
+        headerValue.trim();
+        _collectHeader(headerName.c_str(), headerValue.c_str());
+
+        if (headerName.equalsIgnoreCase(F("Host"))) {
+            _hostHeader = headerValue;
+        } else if (parseBodyMetadata &&
+                   headerName.equalsIgnoreCase(F("Content-Length"))) {
+            if (!parseContentLength(headerValue, _clientContentLength)) {
+                ESP32BASE_LOG_W("web", "http_body_rejected reason=invalid_content_length");
+                rejectHttpRequest(client, 400, "Bad Request");
+                return false;
+            }
+        } else if (parseBodyMetadata &&
+                   headerName.equalsIgnoreCase(F("Content-Type"))) {
+            if (headerValue.startsWith(F("text/plain"))) {
+                isForm = false;
+            } else if (headerValue.startsWith(F("application/x-www-form-urlencoded"))) {
+                isForm = false;
+                isEncoded = true;
+            } else if (headerValue.startsWith(F("multipart/"))) {
+                boundary = headerValue.substring(headerValue.indexOf('=') + 1);
+                boundary.replace("\"", "");
+                isForm = true;
+            }
+        }
+    }
+}
+
 bool Esp32BaseWebServer::parseRequest(WiFiClient& client) {
-    String req = client.readStringUntil('\r');
-    client.readStringUntil('\n');
+    String req;
+    const uint32_t requestStartedMs = millis();
+    const HttpLineReadResult requestLineResult =
+        readHttpLine(client, req, ESP32BASE_WEB_MAX_REQUEST_LINE_BYTES, requestStartedMs);
+    if (requestLineResult != HTTP_LINE_OK) {
+        ESP32BASE_LOG_W("web", "http_request_line_rejected reason=%s",
+                        requestLineResult == HTTP_LINE_TOO_LONG
+                            ? "too_long"
+                            : (requestLineResult == HTTP_LINE_NO_MEMORY ? "no_memory" : "timeout"));
+        const int status = requestLineResult == HTTP_LINE_TOO_LONG
+                               ? 414
+                               : (requestLineResult == HTTP_LINE_NO_MEMORY ? 503 : 408);
+        rejectHttpRequest(client, status,
+                          requestLineResult == HTTP_LINE_TOO_LONG
+                              ? "URI Too Long"
+                              : (requestLineResult == HTTP_LINE_NO_MEMORY
+                                     ? "Service Unavailable"
+                                     : "Request Timeout"));
+        return false;
+    }
     for (int i = 0; i < _headerKeysCount; ++i) {
         _currentHeaders[i].value = String();
     }
@@ -149,52 +329,39 @@ bool Esp32BaseWebServer::parseRequest(WiFiClient& client) {
     }
     _currentHandler = handler;
 
-    if (requestMayHaveBody(method)) {
-        String boundaryStr;
-        String headerName;
-        String headerValue;
-        bool isForm = false;
-        bool isEncoded = false;
-        while (true) {
-            req = client.readStringUntil('\r');
-            client.readStringUntil('\n');
-            if (req == "") {
-                break;
-            }
-            int headerDiv = req.indexOf(':');
-            if (headerDiv == -1) {
-                break;
-            }
-            headerName = req.substring(0, headerDiv);
-            headerValue = req.substring(headerDiv + 1);
-            headerValue.trim();
-            _collectHeader(headerName.c_str(), headerValue.c_str());
+    String boundaryStr;
+    bool isForm = false;
+    bool isEncoded = false;
+    const bool mayHaveBody = requestMayHaveBody(method);
+    if (!parseHeaders(client, req, requestStartedMs, mayHaveBody,
+                      boundaryStr, isForm, isEncoded)) {
+        return false;
+    }
 
-            if (headerName.equalsIgnoreCase(F("Content-Type"))) {
-                if (headerValue.startsWith(F("text/plain"))) {
-                    isForm = false;
-                } else if (headerValue.startsWith(F("application/x-www-form-urlencoded"))) {
-                    isForm = false;
-                    isEncoded = true;
-                } else if (headerValue.startsWith(F("multipart/"))) {
-                    boundaryStr = headerValue.substring(headerValue.indexOf('=') + 1);
-                    boundaryStr.replace("\"", "");
-                    isForm = true;
-                }
-            } else if (headerName.equalsIgnoreCase(F("Content-Length"))) {
-                _clientContentLength = headerValue.toInt();
-            } else if (headerName.equalsIgnoreCase(F("Host"))) {
-                _hostHeader = headerValue;
-            }
+    if (mayHaveBody) {
+        const bool streamBody = _currentHandler && _currentHandler->canRaw(_currentUri);
+        const size_t bodyLimit = ordinaryBodyLimit(_currentUri);
+        if (!streamBody && static_cast<size_t>(_clientContentLength) > bodyLimit) {
+            ESP32BASE_LOG_W("web", "http_body_rejected reason=too_large bytes=%d limit=%lu",
+                            _clientContentLength,
+                            static_cast<unsigned long>(bodyLimit));
+            rejectHttpRequest(client, 413, "Payload Too Large");
+            return false;
         }
 
-        if (!isForm && _currentHandler && _currentHandler->canRaw(_currentUri)) {
+        if (!isForm && streamBody) {
             if (!parseRawBody(client)) {
                 return false;
             }
         } else if (!isForm) {
             size_t plainLength = 0;
             char* plainBuf = readClientBytesWithTimeout(client, _clientContentLength, plainLength, HTTP_MAX_POST_WAIT);
+            if (_clientContentLength > 0 && !plainBuf) {
+                ESP32BASE_LOG_W("web", "http_body_rejected reason=no_memory bytes=%d",
+                                _clientContentLength);
+                rejectHttpRequest(client, 503, "Service Unavailable");
+                return false;
+            }
             if (plainLength < static_cast<size_t>(_clientContentLength)) {
                 free(plainBuf);
                 return false;
@@ -205,6 +372,8 @@ bool Esp32BaseWebServer::parseRequest(WiFiClient& client) {
                         searchStr += '&';
                     }
                     searchStr += plainBuf;
+                    free(plainBuf);
+                    plainBuf = nullptr;
                 }
                 _parseArguments(searchStr);
                 if (!isEncoded) {
@@ -223,26 +392,6 @@ bool Esp32BaseWebServer::parseRequest(WiFiClient& client) {
             }
         }
     } else {
-        String headerName;
-        String headerValue;
-        while (true) {
-            req = client.readStringUntil('\r');
-            client.readStringUntil('\n');
-            if (req == "") {
-                break;
-            }
-            int headerDiv = req.indexOf(':');
-            if (headerDiv == -1) {
-                break;
-            }
-            headerName = req.substring(0, headerDiv);
-            headerValue = req.substring(headerDiv + 2);
-            _collectHeader(headerName.c_str(), headerValue.c_str());
-
-            if (headerName.equalsIgnoreCase(F("Host"))) {
-                _hostHeader = headerValue;
-            }
-        }
         _parseArguments(searchStr);
     }
 
