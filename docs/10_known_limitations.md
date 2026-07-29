@@ -21,7 +21,7 @@
 
 - Web 基于 Arduino `WebServer` 同步模型。
 - 长时间 handler 会阻塞其他请求，建议单次 handler < 200ms。
-- HTTP 请求首行、单个 Header 行、Header 总量和普通非流式 body 默认分别限制为 1024、1024、8192、8192 字节；App Config 按实际注册字段数扩大表单上限，OTA/FS 上传继续流式处理。自定义普通 POST 需要更大 body 时必须显式调整构建上限并重新评估峰值 heap。
+- HTTP 请求首行、单个 Header 行、Header 总量和普通非流式 body 默认分别限制为 1024、1024、8192、8192 字节；App Config 按实际注册字段数扩大表单上限。流式上传默认硬上限为 8 MiB；内置 OTA/FS 在读取正文前检查认证、同源、目标分区或 FS 可用空间，并只允许 4096 字节 multipart 开销。自定义请求需要更大上限时必须显式调整构建参数并重新评估阻塞时间和资源边界。
 - 不支持 WebSocket、SPA、大型前端资源管理器、多用户权限和会话系统。
 - System Logs 的 GET 页面只读取已落盘的系统诊断日志快照，不为了“立即看到缓存中日志”主动 flush；低优先级缓存日志按常规 flush interval 落盘，清空、格式化、重启等维护动作仍必须走 POST。
 - System Logs 的 `unavailable` 表示模式开启但当前 FS/init 前置条件无法启用系统诊断日志；`disabled` 才表示用户把模式设为 OFF。

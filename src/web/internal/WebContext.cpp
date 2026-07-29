@@ -2,7 +2,8 @@
 
 #if ESP32BASE_ENABLE_WEB
 
-#include "WebContext.h"
+#include "WebInternal.h"
+#include "WebRequestPreflight.h"
 
 #include <limits.h>
 
@@ -49,11 +50,14 @@ static HttpLineReadResult readHttpLine(WiFiClient& client, String& line, size_t 
     }
 }
 
-static void rejectHttpRequest(WiFiClient& client, int status, const char* reason) {
-    char response[128];
+static void rejectHttpRequest(WiFiClient& client, int status, const char* reason,
+                              const char* extraHeaders = nullptr) {
+    char response[192];
     snprintf(response, sizeof(response),
-             "HTTP/1.1 %d %s\r\nConnection: close\r\nContent-Length: 0\r\n\r\n",
-             status, reason ? reason : "Bad Request");
+             "HTTP/1.1 %d %s\r\nConnection: close\r\n%sContent-Length: 0\r\n\r\n",
+             status,
+             reason ? reason : "Bad Request",
+             extraHeaders ? extraHeaders : "");
     client.print(response);
 }
 
@@ -268,6 +272,125 @@ bool Esp32BaseWebServer::parseHeaders(WiFiClient& client, String& line,
     }
 }
 
+bool Esp32BaseWebServer::preflightStreamBody(WiFiClient& client, bool isForm) {
+    StreamBodyKind kind = StreamBodyKind::Generic;
+    bool builtInUpload = false;
+
+#if ESP32BASE_ENABLE_OTA
+    if (_currentUri == F("/esp32base/ota/raw")) {
+        kind = StreamBodyKind::OtaRaw;
+        builtInUpload = true;
+    } else if (_currentUri == F("/esp32base/ota")) {
+        kind = StreamBodyKind::OtaMultipart;
+        builtInUpload = true;
+    }
+#endif
+#if ESP32BASE_ENABLE_FS
+    if (_currentUri == F("/esp32base/fs/upload")) {
+        kind = StreamBodyKind::FsMultipart;
+        builtInUpload = true;
+    }
+#endif
+
+    if (builtInUpload) {
+        if (!isAuthenticated()) {
+            rejectHttpRequest(
+                client, 401, "Unauthorized",
+                "WWW-Authenticate: Basic realm=\"Esp32Base\"\r\n");
+            return false;
+        }
+        if (!requestSameOrigin()) {
+            ESP32BASE_LOG_W("web", "stream_upload_rejected reason=cross_origin uri=%s",
+                            _currentUri.c_str());
+            rejectHttpRequest(client, 403, "Forbidden");
+            return false;
+        }
+        const bool expectsMultipart =
+            kind == StreamBodyKind::OtaMultipart ||
+            kind == StreamBodyKind::FsMultipart;
+        if (isForm != expectsMultipart) {
+            ESP32BASE_LOG_W("web", "stream_upload_rejected reason=content_type uri=%s",
+                            _currentUri.c_str());
+            rejectHttpRequest(client, 415, "Unsupported Media Type");
+            return false;
+        }
+    }
+
+    size_t declaredPayloadBytes = 0;
+    size_t availablePayloadBytes = 0;
+#if ESP32BASE_ENABLE_OTA
+    if (kind == StreamBodyKind::OtaRaw ||
+        kind == StreamBodyKind::OtaMultipart) {
+        char error[96];
+        if (!parseSizeHeader(
+                hasHeader("X-Firmware-Size")
+                    ? header("X-Firmware-Size")
+                    : String(""),
+                declaredPayloadBytes, error, sizeof(error))) {
+            ESP32BASE_LOG_W("web", "stream_upload_rejected reason=declared_size uri=%s",
+                            _currentUri.c_str());
+            rejectHttpRequest(client, 400, "Bad Request");
+            return false;
+        }
+        const esp_partition_t* target =
+            esp_ota_get_next_update_partition(nullptr);
+        if (!target) {
+            ESP32BASE_LOG_W("web", "stream_upload_rejected reason=no_ota_partition");
+            rejectHttpRequest(client, 503, "Service Unavailable");
+            return false;
+        }
+        availablePayloadBytes = target->size;
+    }
+#endif
+#if ESP32BASE_ENABLE_FS
+    if (kind == StreamBodyKind::FsMultipart) {
+        size_t total = 0;
+        size_t used = 0;
+        if (!Esp32BaseFs::storageInfo(total, used)) {
+            ESP32BASE_LOG_W("web", "stream_upload_rejected reason=fs_unavailable");
+            rejectHttpRequest(client, 503, "Service Unavailable");
+            return false;
+        }
+        availablePayloadBytes = total > used ? total - used : 0;
+    }
+#endif
+
+    const StreamBodyPreflightResult result = evaluateStreamBodyLength(
+        kind,
+        _clientContentLength > 0
+            ? static_cast<size_t>(_clientContentLength)
+            : 0,
+        declaredPayloadBytes,
+        availablePayloadBytes,
+        ESP32BASE_WEB_MAX_STREAM_BODY_BYTES,
+        ESP32BASE_WEB_MAX_UPLOAD_OVERHEAD_BYTES);
+    if (result == StreamBodyPreflightResult::Allowed) {
+        return true;
+    }
+
+    const int status =
+        result == StreamBodyPreflightResult::LengthRequired
+            ? 411
+            : (result == StreamBodyPreflightResult::TooLarge ? 413 : 400);
+    const char* reason =
+        result == StreamBodyPreflightResult::LengthRequired
+            ? "Length Required"
+            : (result == StreamBodyPreflightResult::TooLarge
+                   ? "Payload Too Large"
+                   : "Bad Request");
+    ESP32BASE_LOG_W("web",
+                    "stream_upload_rejected reason=%s uri=%s bytes=%d",
+                    result == StreamBodyPreflightResult::LengthRequired
+                        ? "length_required"
+                        : (result == StreamBodyPreflightResult::TooLarge
+                               ? "too_large"
+                               : "size_mismatch"),
+                    _currentUri.c_str(),
+                    _clientContentLength);
+    rejectHttpRequest(client, status, reason);
+    return false;
+}
+
 bool Esp32BaseWebServer::parseRequest(WiFiClient& client) {
     String req;
     const uint32_t requestStartedMs = millis();
@@ -341,6 +464,9 @@ bool Esp32BaseWebServer::parseRequest(WiFiClient& client) {
     if (mayHaveBody) {
         const bool streamBody = _currentHandler && _currentHandler->canRaw(_currentUri);
         const size_t bodyLimit = ordinaryBodyLimit(_currentUri);
+        if (streamBody && !preflightStreamBody(client, isForm)) {
+            return false;
+        }
         if (!streamBody && static_cast<size_t>(_clientContentLength) > bodyLimit) {
             ESP32BASE_LOG_W("web", "http_body_rejected reason=too_large bytes=%d limit=%lu",
                             _clientContentLength,

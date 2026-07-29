@@ -130,43 +130,45 @@ bool readStoredString(const char* ns, const char* key, char* out, size_t len, bo
     return true;
 }
 
-bool storedStringEquals(const char* ns, const char* key, const char* value,
-                        bool* found, bool* equal) {
-    if (found) {
-        *found = false;
-    }
-    if (equal) {
-        *equal = false;
-    }
+enum class StoredStringCompareResult : uint8_t {
+    NotFound,
+    Equal,
+    Different,
+    Error
+};
+
+StoredStringCompareResult compareStoredString(const char* ns, const char* key,
+                                              const char* value) {
     if (!value) {
-        return false;
+        return StoredStringCompareResult::Error;
     }
 
     nvs_handle_t handle = 0;
     const esp_err_t openErr = nvs_open(ns, NVS_READONLY, &handle);
     if (openErr == ESP_ERR_NVS_NOT_FOUND) {
-        return true;
+        return StoredStringCompareResult::NotFound;
     }
     if (openErr != ESP_OK) {
-        return false;
+        return StoredStringCompareResult::Error;
     }
 
     size_t required = 0;
     esp_err_t err = nvs_get_str(handle, key, nullptr, &required);
     if (err == ESP_ERR_NVS_NOT_FOUND) {
         nvs_close(handle);
-        return true;
+        return StoredStringCompareResult::NotFound;
+    }
+    if (err == ESP_ERR_NVS_TYPE_MISMATCH) {
+        nvs_close(handle);
+        return StoredStringCompareResult::Different;
     }
     if (err != ESP_OK || required == 0 || required > CONFIG_STRING_MAX_VISIBLE_LEN + 1U) {
         nvs_close(handle);
-        return false;
-    }
-    if (found) {
-        *found = true;
+        return StoredStringCompareResult::Error;
     }
     if (required != strlen(value) + 1U) {
         nvs_close(handle);
-        return true;
+        return StoredStringCompareResult::Different;
     }
 
     char* readBuffer = required <= sizeof(g_blobScratch)
@@ -174,18 +176,21 @@ bool storedStringEquals(const char* ns, const char* key, const char* value,
         : static_cast<char*>(malloc(required));
     if (!readBuffer) {
         nvs_close(handle);
-        return false;
+        return StoredStringCompareResult::Error;
     }
     size_t readLength = required;
     err = nvs_get_str(handle, key, readBuffer, &readLength);
     nvs_close(handle);
-    if (err == ESP_OK && equal) {
-        *equal = strcmp(readBuffer, value) == 0;
-    }
+    const StoredStringCompareResult result =
+        err == ESP_OK
+            ? (strcmp(readBuffer, value) == 0
+                   ? StoredStringCompareResult::Equal
+                   : StoredStringCompareResult::Different)
+            : StoredStringCompareResult::Error;
     if (readBuffer != reinterpret_cast<char*>(g_blobScratch)) {
         free(readBuffer);
     }
-    return err == ESP_OK;
+    return result;
 }
 
 bool readStoredBlob(const char* ns, const char* key, void* out, size_t len, size_t* actualLen, bool* found) {
@@ -501,15 +506,18 @@ bool Esp32BaseConfig::setStr(const char* ns, const char* key, const char* value)
     if (!validName(ns) || !validName(key) || !value || strlen(value) > CONFIG_STRING_MAX_VISIBLE_LEN) {
         return false;
     }
-    bool hadOld = false;
-    bool unchanged = false;
-    const bool readOk = storedStringEquals(ns, key, value, &hadOld, &unchanged);
-    if (readOk && hadOld && unchanged) {
+    const StoredStringCompareResult compareResult =
+        compareStoredString(ns, key, value);
+    if (compareResult == StoredStringCompareResult::Equal) {
         if (g_auditEnabled) {
             ESP32BASE_LOG_D("config", "audit op=setStr ns=%s key=%s changed=no result=skipped", ns, key);
         }
         clearPendingKey(ns, key);
         return true;
+    }
+    if (compareResult == StoredStringCompareResult::Error) {
+        ESP32BASE_LOG_W("config", "audit op=setStr ns=%s key=%s result=compare_failed", ns, key);
+        return false;
     }
 
     Preferences prefs;
@@ -766,10 +774,9 @@ bool Esp32BaseConfig::setStrDeferred(const char* ns, const char* key, const char
         return true;
     }
 
-    bool hadOld = false;
-    bool unchanged = false;
-    const bool readOk = storedStringEquals(ns, key, value, &hadOld, &unchanged);
-    if (readOk && hadOld && unchanged) {
+    const StoredStringCompareResult compareResult =
+        compareStoredString(ns, key, value);
+    if (compareResult == StoredStringCompareResult::Equal) {
         if (g_auditEnabled) {
             char lenBuf[24];
             Esp32BaseLog::formatBytes(valueLen, lenBuf, sizeof(lenBuf));
@@ -778,6 +785,12 @@ bool Esp32BaseConfig::setStrDeferred(const char* ns, const char* key, const char
         }
         clearPendingKey(ns, key);
         return true;
+    }
+    if (compareResult == StoredStringCompareResult::Error) {
+        ESP32BASE_LOG_W("config",
+                        "audit op=setStrDeferred ns=%s key=%s result=compare_failed",
+                        ns, key);
+        return false;
     }
 
     const int slot = allocPending(ns, key);

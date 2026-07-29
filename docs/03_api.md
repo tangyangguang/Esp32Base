@@ -554,7 +554,7 @@ deferred 语义：
 - `getXxx()` 必须先查 pending 队列，未命中再读 NVS，因此 set 后立即 get 总是返回最新值。
 - `getStr()` 找不到 key 时返回 false，并把默认值写入输出缓冲；`getInt()` / `getBool()` 找不到 key 时返回默认值。
 - NVS 读取必须先判断 key 是否存在，避免 Arduino `Preferences` 在缺 key 时输出底层 `NOT_FOUND` 噪音。
-- 字符串读取和写前比较使用固定 scratch buffer，不使用 Arduino `String` 拼接或读取，减少配置高频读取造成的 heap 碎片风险。
+- 字符串读取不使用 Arduino `String`；短字符串写前比较复用 256 字节静态 scratch，调用方缓冲不足或长字符串需要比较时按 NVS 实际长度临时分配，完成后立即释放。临时分配或 NVS 比较读取失败时 set/deferred set 返回 false，不把“无法比较”误判为值变化，也不继续写 NVS。
 - 同一 namespace/key 的 pending 写入会合并为最新值，不重复占用多条 pending。
 - `setXxxDeferred()` 如果 pending 中已有相同值，会返回 true 并保留原 pending/due 时间；如果 NVS 旧值已经相同，会返回 true、清除同 key pending 并跳过新的 NVS 写入。
 - deferred 到期判断使用 `millis()` 差值比较，覆盖正常延迟窗口内的 49 天回绕；不要把 deferred delay 设置为接近或超过 `INT32_MAX` ms 的长期定时任务。

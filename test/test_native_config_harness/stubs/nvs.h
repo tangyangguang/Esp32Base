@@ -56,9 +56,16 @@ inline esp_err_t nvs_get_str(nvs_handle_t handle, const char* key, char* out, si
     if (handleIt == native_nvs::handles().end()) {
         return ESP_FAIL;
     }
+    if (native_nvs::stringReadFailureNamespace() == handleIt->second &&
+        native_nvs::stringReadFailureKey() == key) {
+        return ESP_FAIL;
+    }
     native_nvs::Value* value = native_nvs::findValue(handleIt->second.c_str(), key);
-    if (!value || value->type != native_nvs::ValueType::String) {
+    if (!value) {
         return ESP_ERR_NVS_NOT_FOUND;
+    }
+    if (value->type != native_nvs::ValueType::String) {
+        return ESP_ERR_NVS_TYPE_MISMATCH;
     }
     const size_t required = value->stringValue.size() + 1;
     if (!out) {

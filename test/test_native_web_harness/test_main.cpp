@@ -2,6 +2,7 @@
 
 #include "web/Esp32BaseWeb.h"
 #include "web/internal/WebOtaPreflight.h"
+#include "web/internal/WebRequestPreflight.h"
 
 static void jsonHandler() {
     char value[16];
@@ -376,6 +377,81 @@ void test_native_ota_preflight_rejects_missing_or_invalid_declared_size() {
     TEST_ASSERT_EQUAL_STRING("invalid firmware size", error);
 }
 
+void test_stream_body_preflight_bounds_generic_and_raw_uploads() {
+    using esp32base_web::StreamBodyKind;
+    using esp32base_web::StreamBodyPreflightResult;
+    constexpr size_t genericLimit = 8U * 1024U * 1024U;
+    constexpr size_t overhead = 4096U;
+
+    TEST_ASSERT_EQUAL(
+        static_cast<int>(StreamBodyPreflightResult::LengthRequired),
+        static_cast<int>(esp32base_web::evaluateStreamBodyLength(
+            StreamBodyKind::Generic, 0, 0, 0, genericLimit, overhead)));
+    TEST_ASSERT_EQUAL(
+        static_cast<int>(StreamBodyPreflightResult::TooLarge),
+        static_cast<int>(esp32base_web::evaluateStreamBodyLength(
+            StreamBodyKind::Generic, genericLimit + 1U, 0, 0,
+            genericLimit, overhead)));
+    TEST_ASSERT_EQUAL(
+        static_cast<int>(StreamBodyPreflightResult::Allowed),
+        static_cast<int>(esp32base_web::evaluateStreamBodyLength(
+            StreamBodyKind::OtaRaw, 1024U, 1024U, 2048U,
+            genericLimit, overhead)));
+    TEST_ASSERT_EQUAL(
+        static_cast<int>(StreamBodyPreflightResult::Allowed),
+        static_cast<int>(esp32base_web::evaluateStreamBodyLength(
+            StreamBodyKind::OtaRaw, 1025U, 1024U, 2048U,
+            genericLimit, overhead)));
+    TEST_ASSERT_EQUAL(
+        static_cast<int>(StreamBodyPreflightResult::SizeMismatch),
+        static_cast<int>(esp32base_web::evaluateStreamBodyLength(
+            StreamBodyKind::OtaRaw, 1023U, 1024U, 2048U,
+            genericLimit, overhead)));
+    TEST_ASSERT_EQUAL(
+        static_cast<int>(StreamBodyPreflightResult::TooLarge),
+        static_cast<int>(esp32base_web::evaluateStreamBodyLength(
+            StreamBodyKind::OtaRaw, 1024U + overhead + 1U,
+            1024U, 2048U, genericLimit, overhead)));
+    TEST_ASSERT_EQUAL(
+        static_cast<int>(StreamBodyPreflightResult::TooLarge),
+        static_cast<int>(esp32base_web::evaluateStreamBodyLength(
+            StreamBodyKind::OtaRaw, 4096U, 4096U, 2048U,
+            genericLimit, overhead)));
+}
+
+void test_stream_body_preflight_bounds_multipart_overhead_and_fs_space() {
+    using esp32base_web::StreamBodyKind;
+    using esp32base_web::StreamBodyPreflightResult;
+    constexpr size_t genericLimit = 8U * 1024U * 1024U;
+    constexpr size_t overhead = 4096U;
+
+    TEST_ASSERT_EQUAL(
+        static_cast<int>(StreamBodyPreflightResult::Allowed),
+        static_cast<int>(esp32base_web::evaluateStreamBodyLength(
+            StreamBodyKind::OtaMultipart, 1024U + overhead,
+            1024U, 2048U, genericLimit, overhead)));
+    TEST_ASSERT_EQUAL(
+        static_cast<int>(StreamBodyPreflightResult::TooLarge),
+        static_cast<int>(esp32base_web::evaluateStreamBodyLength(
+            StreamBodyKind::OtaMultipart, 1024U + overhead + 1U,
+            1024U, 2048U, genericLimit, overhead)));
+    TEST_ASSERT_EQUAL(
+        static_cast<int>(StreamBodyPreflightResult::SizeMismatch),
+        static_cast<int>(esp32base_web::evaluateStreamBodyLength(
+            StreamBodyKind::OtaMultipart, 1023U,
+            1024U, 2048U, genericLimit, overhead)));
+    TEST_ASSERT_EQUAL(
+        static_cast<int>(StreamBodyPreflightResult::Allowed),
+        static_cast<int>(esp32base_web::evaluateStreamBodyLength(
+            StreamBodyKind::FsMultipart, 100U + overhead,
+            0, 100U, genericLimit, overhead)));
+    TEST_ASSERT_EQUAL(
+        static_cast<int>(StreamBodyPreflightResult::TooLarge),
+        static_cast<int>(esp32base_web::evaluateStreamBodyLength(
+            StreamBodyKind::FsMultipart, 101U + overhead,
+            0, 100U, genericLimit, overhead)));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_native_request_inputs_and_json_response);
@@ -397,5 +473,7 @@ int main(int, char**) {
     RUN_TEST(test_native_ota_preflight_accepts_size_within_target_partition);
     RUN_TEST(test_native_ota_preflight_rejects_oversize_before_upload_body);
     RUN_TEST(test_native_ota_preflight_rejects_missing_or_invalid_declared_size);
+    RUN_TEST(test_stream_body_preflight_bounds_generic_and_raw_uploads);
+    RUN_TEST(test_stream_body_preflight_bounds_multipart_overhead_and_fs_space);
     return UNITY_END();
 }

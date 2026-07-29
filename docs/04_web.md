@@ -647,11 +647,15 @@ Arduino `WebServer` 是同步模型。
 #define ESP32BASE_WEB_MAX_HEADER_LINE_BYTES 1024
 #define ESP32BASE_WEB_MAX_HEADER_BYTES 8192
 #define ESP32BASE_WEB_MAX_BODY_BYTES 8192
+#define ESP32BASE_WEB_MAX_STREAM_BODY_BYTES (8 * 1024 * 1024)
+#define ESP32BASE_WEB_MAX_UPLOAD_OVERHEAD_BYTES 4096
 ```
 
 - 超限请求分别返回 414、431 或 413；普通正文按 `Content-Length` 一次精确分配，不按网络分片反复 `realloc`。
 - `/esp32base/app-config` 的表单上限会按启动前实际注册字段数和字符串字段最坏 URL 编码长度自动扩大，避免默认 8 KiB 改变已注册 App Config 的整页保存能力。
-- 带上传回调的 OTA / FS multipart 或 raw 路由继续走固定分块流式接收，不受普通 body 上限限制；它们仍由 OTA 分区大小、声明固件大小、FS 空间和各自失败契约约束。
+- 所有带上传回调的流式请求都必须提供 `Content-Length`，并受默认 8 MiB 流式 body 硬上限约束；确有更大自定义上传需求时可显式调整 `ESP32BASE_WEB_MAX_STREAM_BODY_BYTES`。
+- 内置 OTA / FS 上传在读取任何正文前完成 Web Auth 和同源校验，认证失败不会继续消费上传 body。OTA raw 的 `Content-Length` 不得小于 `X-Firmware-Size`，二者差值只允许最多 4096 字节的有界传输 padding；当前 `webota` 脚本按 1436 字节边界补齐。OTA multipart 同样只允许最多 4096 字节边界和 part header 开销，且声明固件不得超过目标分区。
+- FS multipart 的正文上限为当前 LittleFS 可用空间加 4096 字节 multipart 开销；FS 不可用或空间预算不足时在创建临时文件前拒绝。
 - 应用自定义普通 POST 确实需要超过 8 KiB 时，可在构建参数中显式提高 `ESP32BASE_WEB_MAX_BODY_BYTES`；大型文件或固件不能通过提高该值改成整包驻留内存，应使用上传回调的流式路径。
 
 自定义 handler 建议：

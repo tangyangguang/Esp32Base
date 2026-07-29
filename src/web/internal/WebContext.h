@@ -93,6 +93,14 @@
 #define ESP32BASE_WEB_MAX_BODY_BYTES 8192U
 #endif
 
+#ifndef ESP32BASE_WEB_MAX_STREAM_BODY_BYTES
+#define ESP32BASE_WEB_MAX_STREAM_BODY_BYTES (8UL * 1024UL * 1024UL)
+#endif
+
+#ifndef ESP32BASE_WEB_MAX_UPLOAD_OVERHEAD_BYTES
+#define ESP32BASE_WEB_MAX_UPLOAD_OVERHEAD_BYTES 4096U
+#endif
+
 #if ESP32BASE_WEB_REQUEST_READ_TIMEOUT_SEC < 1
 #error "ESP32BASE_WEB_REQUEST_READ_TIMEOUT_SEC must be at least 1"
 #endif
@@ -117,6 +125,14 @@
 #error "ESP32BASE_WEB_MAX_BODY_BYTES must be at least 256"
 #endif
 
+#if ESP32BASE_WEB_MAX_STREAM_BODY_BYTES < ESP32BASE_WEB_MAX_BODY_BYTES
+#error "ESP32BASE_WEB_MAX_STREAM_BODY_BYTES must be at least ESP32BASE_WEB_MAX_BODY_BYTES"
+#endif
+
+#if ESP32BASE_WEB_MAX_UPLOAD_OVERHEAD_BYTES < 512U
+#error "ESP32BASE_WEB_MAX_UPLOAD_OVERHEAD_BYTES must be at least 512"
+#endif
+
 namespace esp32base_web {
 
 class Esp32BaseWebServer : public WebServer {
@@ -130,6 +146,7 @@ private:
     bool parseHeaders(WiFiClient& client, String& line, uint32_t requestStartedMs,
                       bool parseBodyMetadata, String& boundary,
                       bool& isForm, bool& isEncoded);
+    bool preflightStreamBody(WiFiClient& client, bool isForm);
     bool parseRawBody(WiFiClient& client);
 };
 

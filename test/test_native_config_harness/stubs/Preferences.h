@@ -40,10 +40,22 @@ inline std::string& openFailureNamespace() {
     return value;
 }
 
+inline std::string& stringReadFailureNamespace() {
+    static std::string value;
+    return value;
+}
+
+inline std::string& stringReadFailureKey() {
+    static std::string value;
+    return value;
+}
+
 inline void reset() {
     store().clear();
     writeCount() = 0;
     openFailureNamespace().clear();
+    stringReadFailureNamespace().clear();
+    stringReadFailureKey().clear();
 }
 
 inline bool namespaceExists(const char* ns) {

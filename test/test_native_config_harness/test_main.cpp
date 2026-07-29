@@ -118,6 +118,33 @@ void test_get_string_preserves_truncation_behavior_without_global_scratch() {
     TEST_ASSERT_EQUAL_STRING("stored-", value);
 }
 
+void test_string_compare_failure_does_not_write_or_enqueue() {
+    resetConfigHarness();
+    TEST_ASSERT_TRUE(Esp32BaseConfig::setStr("app_cfg", "label", "stored"));
+    const unsigned writesBefore = native_nvs::writeCount();
+    native_nvs::stringReadFailureNamespace() = "app_cfg";
+    native_nvs::stringReadFailureKey() = "label";
+
+    TEST_ASSERT_FALSE(Esp32BaseConfig::setStr("app_cfg", "label", "changed"));
+    TEST_ASSERT_FALSE(Esp32BaseConfig::setStrDeferred(
+        "app_cfg", "label", "changed", 1000));
+    TEST_ASSERT_EQUAL_UINT(writesBefore, native_nvs::writeCount());
+    TEST_ASSERT_EQUAL_UINT8(0, Esp32BaseConfig::pendingCount());
+}
+
+void test_string_write_repairs_wrong_nvs_type() {
+    resetConfigHarness();
+    TEST_ASSERT_TRUE(Esp32BaseConfig::setInt("app_cfg", "label", 7));
+    const unsigned writesBefore = native_nvs::writeCount();
+
+    TEST_ASSERT_TRUE(Esp32BaseConfig::setStr("app_cfg", "label", "repaired"));
+    TEST_ASSERT_EQUAL_UINT(writesBefore + 1U, native_nvs::writeCount());
+    char value[16] = "";
+    TEST_ASSERT_TRUE(Esp32BaseConfig::getStr(
+        "app_cfg", "label", value, sizeof(value), ""));
+    TEST_ASSERT_EQUAL_STRING("repaired", value);
+}
+
 void test_deferred_int_same_pending_value_does_not_extend_due_time() {
     resetConfigHarness();
 
@@ -294,6 +321,8 @@ int main(int, char**) {
     RUN_TEST(test_deferred_string_skips_when_nvs_already_has_same_value);
     RUN_TEST(test_long_string_comparison_skips_redundant_write);
     RUN_TEST(test_get_string_preserves_truncation_behavior_without_global_scratch);
+    RUN_TEST(test_string_compare_failure_does_not_write_or_enqueue);
+    RUN_TEST(test_string_write_repairs_wrong_nvs_type);
     RUN_TEST(test_deferred_int_same_pending_value_does_not_extend_due_time);
     RUN_TEST(test_deferred_bool_same_pending_value_does_not_extend_due_time);
     RUN_TEST(test_deferred_string_same_pending_value_does_not_extend_due_time);
