@@ -125,4 +125,4 @@ Bug fix 应补对应回归覆盖，优先顺序：
 
 测试应验证结果和边界，不强制代码必须长成某个内部实现形状。
 
-`native_mqtt_harness` 使用 fake ESP-MQTT transport 验证配置/危险 CA 值拒绝、WiFi/NTP gate、回调只在 handle 分发、重新订阅及 SUBACK 拒绝、QoS 1 ACK/送达状态不确定、outbox 上限、分片组装、超限丢弃、认证/DNS/证书错误、终止拒绝不被 WiFi 恢复绕过、证书日期校验能力诊断和 millis 回绕。`native_mqtt_secure_default_harness` 单独证明底层未启用证书日期校验且应用未显式 opt-in 时，TLS 配置以专用错误失败。`check_mqtt_cloud_integration.py` 使用 Git 忽略的 `local_private/emqx_mqtt.ini` 与 CA 文件，从开发机验证真实 Broker 的 TLS 主机名/CA、正确和错误密码、QoS 0/1、retain 清理和 LWT；脚本不打印凭据。Broker 重启、ESP32 WiFi/modem sleep、TLS heap、task stack 和长稳仍必须使用实机验证。
+`native_mqtt_harness` 使用 fake ESP-MQTT transport 验证配置/危险 CA 值拒绝、WiFi/NTP gate、业务回调只在 handle 分发、每次 CONNECT 前刷新并重新校验 LWT、原生配置更新失败门禁、重新订阅及 SUBACK 拒绝、QoS 1 ACK/送达状态不确定、outbox 上限、分片组装、超限丢弃、认证/DNS/证书错误、终止拒绝不被 WiFi 恢复绕过、证书日期校验能力诊断和 millis 回绕。`native_mqtt_secure_default_harness` 单独证明底层未启用证书日期校验且应用未显式 opt-in 时，TLS 配置以专用错误失败。`check_mqtt_cloud_integration.py` 使用 Git 忽略的 `local_private/emqx_mqtt.ini` 与 CA 文件，从开发机验证真实 Broker 的 TLS 主机名/CA、正确和错误密码、QoS 0/1、retain 清理和 LWT；脚本不打印凭据。Broker 重启、ESP32 WiFi/modem sleep、TLS heap、task stack 和长稳仍必须使用实机验证。

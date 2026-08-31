@@ -118,7 +118,7 @@ Web 页面可优先使用 Esp32Base 的 UI baseline、helper 和页面能力；�
 
 RS485 半双工基础串口通过 `ESP32BASE_ENABLE_RS485_PORT=1` 显式启用。`Esp32BaseRs485Port` 只封装 ESP32 `HardwareSerial`、RX/TX/DE 引脚、baud、串口配置、发送前后 DE 方向切换、`flush()` 等待和轮询读取；它不包含 Modbus/RTU、CRC、地址、重试、超时帧解析或任何应用协议。业务协议应在应用层基于 `writeBytes()`、`readable()` 和 `readByte()` 自行实现。示例见 `examples/rs485_port`。
 
-标准 MQTT 3.1.1 Client 在 `IOT` Profile 中默认启用，其他 Profile 也可通过 `ESP32BASE_ENABLE_MQTT=1` 显式开启。它基于 Arduino ESP32 Core 内置 ESP-MQTT，提供单 Broker、MQTTS、QoS 0/1、retain、LWT、固定容量订阅、重连重新订阅、退避抖动、分片消息安全组装和结构化诊断。默认必须提供 Broker CA，TLS 在 NTP 成功前保持 `WAITING_FOR_TIME`；RTC 可供离线业务记时，但不能单独放行公网 TLS。明文 MQTT 需要额外设置 `ESP32BASE_MQTT_ALLOW_PLAINTEXT=1` 并在运行配置中选择 `EXPLICIT_PLAINTEXT`。用户名、密码、证书、私钥、LWT 和订阅字符串由应用持有到设备重启，不写入 App Config、NVS、Web 或日志。示例见 `examples/mqtt_tls`。
+标准 MQTT 3.1.1 Client 在 `IOT` Profile 中默认启用，其他 Profile 也可通过 `ESP32BASE_ENABLE_MQTT=1` 显式开启。它基于 Arduino ESP32 Core 内置 ESP-MQTT，提供单 Broker、MQTTS、QoS 0/1、retain、LWT、每次 CONNECT 前更新应用借用的连接周期数据、固定容量订阅、重连重新订阅、退避抖动、分片消息安全组装和结构化诊断。默认必须提供 Broker CA，TLS 在 NTP 成功前保持 `WAITING_FOR_TIME`；RTC 可供离线业务记时，但不能单独放行公网 TLS。明文 MQTT 需要额外设置 `ESP32BASE_MQTT_ALLOW_PLAINTEXT=1` 并在运行配置中选择 `EXPLICIT_PLAINTEXT`。用户名、密码、证书、私钥、LWT 和订阅字符串由应用持有到设备重启，不写入 App Config、NVS、Web 或日志。示例见 `examples/mqtt_tls`。
 
 MQTT 只负责连接机制。Topic 版本、命令授权、去重、过期、JSON、业务状态同步、离线业务数据和重连后的当前状态重发仍由应用负责。基础库没有第二套离线发送队列；`publish()` 成功只表示报文已被非阻塞发送队列接受，QoS 1 必须等待 `EVENT_PUBLISH_ACKNOWLEDGED` 才表示 Broker ACK，断线前未 ACK 的报文会报告“送达状态不确定”且可能由底层有界 outbox 重传；QoS 0 不提供无法证明的送达承诺。
 

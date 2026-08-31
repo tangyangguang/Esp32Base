@@ -27,6 +27,7 @@ enum RawEventType : uint8_t {
     RAW_CONNECTED,
     RAW_DISCONNECTED,
     RAW_ERROR,
+    RAW_CONFIGURATION_FAILED,
     RAW_SUBSCRIBED,
     RAW_PUBLISHED
 };
@@ -89,6 +90,7 @@ bool g_mqttConfigured = false;
 bool g_mqttConfigurationAttempted = false;
 bool g_mqttBegun = false;
 bool g_mqttTerminalRejection = false;
+bool g_mqttConnectionConfigurationFailed = false;
 bool g_mqttEverConnected = false;
 bool g_mqttOtaSuspended = false;
 bool g_mqttReconnectRequested = false;
@@ -110,6 +112,8 @@ Esp32BaseMqtt::MessageCallback g_mqttMessageCallback = nullptr;
 void* g_mqttMessageContext = nullptr;
 Esp32BaseMqtt::EventCallback g_mqttEventCallback = nullptr;
 void* g_mqttEventContext = nullptr;
+Esp32BaseMqtt::BeforeConnectCallback g_mqttBeforeConnectCallback = nullptr;
+void* g_mqttBeforeConnectContext = nullptr;
 
 size_t boundedLength(const char* value, size_t maximum) {
     if (!value) {
@@ -174,6 +178,77 @@ bool validCertificatePem(const char* pem, size_t length, size_t maximum) {
            strstr(pem, "-----END CERTIFICATE-----") != nullptr;
 }
 
+bool validateConnectionConfig(const Esp32BaseMqtt::ConnectionConfig& config,
+                              Esp32BaseMqtt::Error& error) {
+    error = Esp32BaseMqtt::ERROR_INVALID_CONFIGURATION;
+    if (!validRequiredString(config.host, MQTT_MAX_HOST_BYTES) ||
+        !validRequiredString(config.clientId, MQTT_MAX_CLIENT_ID_BYTES) ||
+        config.port == 0 ||
+        config.keepAliveSeconds < MQTT_MIN_KEEPALIVE_SECONDS ||
+        config.keepAliveSeconds > MQTT_MAX_KEEPALIVE_SECONDS ||
+        !validOptionalString(config.username, MQTT_MAX_USERNAME_BYTES) ||
+        !validOptionalString(config.password, MQTT_MAX_PASSWORD_BYTES) ||
+        (config.password && !config.username) ||
+        (config.security != Esp32BaseMqtt::TLS &&
+         config.security != Esp32BaseMqtt::EXPLICIT_PLAINTEXT)) {
+        return false;
+    }
+
+    if (config.security == Esp32BaseMqtt::TLS) {
+        if (!validCertificatePem(config.tls.caCertificatePem,
+                                 config.tls.caCertificateLength,
+                                 ESP32BASE_MQTT_MAX_CA_CERT_BYTES)) {
+            return false;
+        }
+        const bool clientCertificateSet =
+            config.tls.clientCertificatePem ||
+            config.tls.clientCertificateLength != 0;
+        const bool privateKeySet =
+            config.tls.privateKeyPem || config.tls.privateKeyLength != 0;
+        if (clientCertificateSet != privateKeySet ||
+            (clientCertificateSet &&
+             (!validCertificatePem(config.tls.clientCertificatePem,
+                                   config.tls.clientCertificateLength,
+                                   ESP32BASE_MQTT_MAX_IDENTITY_PEM_BYTES) ||
+              !validPem(config.tls.privateKeyPem,
+                        config.tls.privateKeyLength,
+                        ESP32BASE_MQTT_MAX_IDENTITY_PEM_BYTES)))) {
+            return false;
+        }
+#if !ESP32BASE_MQTT_ALLOW_UNCHECKED_CERTIFICATE_DATES
+        if (!MQTT_CERTIFICATE_DATE_CHECK_ENABLED) {
+            error =
+                Esp32BaseMqtt::ERROR_TLS_CERTIFICATE_DATE_CHECK_UNAVAILABLE;
+            return false;
+        }
+#endif
+#if !ESP32BASE_ENABLE_NTP
+        return false;
+#endif
+    } else {
+#if !ESP32BASE_MQTT_ALLOW_PLAINTEXT
+        return false;
+#endif
+        if (config.tls.caCertificatePem ||
+            config.tls.clientCertificatePem ||
+            config.tls.privateKeyPem) {
+            return false;
+        }
+    }
+
+    if (config.lastWill &&
+        (!validPublishTopic(config.lastWill->topic) ||
+         config.lastWill->payloadLength > ESP32BASE_MQTT_MAX_PAYLOAD_BYTES ||
+         (config.lastWill->payloadLength > 0 && !config.lastWill->payload) ||
+         (config.lastWill->qos != Esp32BaseMqtt::QOS_0 &&
+          config.lastWill->qos != Esp32BaseMqtt::QOS_1))) {
+        return false;
+    }
+
+    error = Esp32BaseMqtt::ERROR_NONE;
+    return true;
+}
+
 bool deadlineReached(uint32_t now, uint32_t deadline) {
     return static_cast<int32_t>(now - deadline) >= 0;
 }
@@ -208,7 +283,8 @@ bool pushRawEvent(const RawEvent& event) {
         accepted = true;
     } else if (event.type == RAW_CONNECTED ||
                event.type == RAW_DISCONNECTED ||
-               event.type == RAW_ERROR) {
+               event.type == RAW_ERROR ||
+               event.type == RAW_CONFIGURATION_FAILED) {
         // Preserve connection truth even under an ACK burst. Drop the oldest
         // lower-priority event and retain the newest state/error event.
         g_mqttEvents[g_mqttEventWrite] = event;
@@ -393,6 +469,8 @@ void submitSubscriptionsFromMqttTask(esp_mqtt_client_handle_t client) {
     }
 }
 
+void fillNativeConfig(esp_mqtt_client_config_t& nativeConfig);
+
 void mqttEventHandler(void*, esp_event_base_t, int32_t eventId, void* eventData) {
     esp_mqtt_event_t* event = static_cast<esp_mqtt_event_t*>(eventData);
     if (!event) {
@@ -406,6 +484,22 @@ void mqttEventHandler(void*, esp_event_base_t, int32_t eventId, void* eventData)
 
     RawEvent raw;
     switch (eventId) {
+        case MQTT_EVENT_BEFORE_CONNECT: {
+            esp_mqtt_client_config_t nativeConfig;
+            fillNativeConfig(nativeConfig);
+            const esp_err_t result =
+                esp_mqtt_set_config(event->client, &nativeConfig);
+            if (result != ESP_OK) {
+                portENTER_CRITICAL(&g_mqttMux);
+                g_mqttConnectionWanted = false;
+                portEXIT_CRITICAL(&g_mqttMux);
+                raw.type = RAW_CONFIGURATION_FAILED;
+                raw.espError = result;
+                pushRawEvent(raw);
+                esp_mqtt_client_disconnect(event->client);
+            }
+            break;
+        }
         case MQTT_EVENT_CONNECTED: {
             portENTER_CRITICAL(&g_mqttMux);
             const bool connectionWanted = g_mqttConnectionWanted;
@@ -739,6 +833,22 @@ void handleRawEvents() {
                 }
                 break;
             }
+            case RAW_CONFIGURATION_FAILED: {
+                portENTER_CRITICAL(&g_mqttMux);
+                g_mqttLastError = raw.espError == ESP_ERR_NO_MEM
+                                      ? Esp32BaseMqtt::ERROR_NO_MEMORY
+                                      : Esp32BaseMqtt::ERROR_INVALID_CONFIGURATION;
+                g_mqttDiagnostics.nativeEspError = raw.espError;
+                ++g_mqttDiagnostics.connectionConfigurationFailures;
+                g_mqttConnectionWanted = false;
+                portEXIT_CRITICAL(&g_mqttMux);
+                g_mqttConnectionConfigurationFailed = true;
+                setState(Esp32BaseMqtt::CONFIGURATION_ERROR);
+                ESP32BASE_LOG_E("mqtt",
+                                "connection_configuration_update_failed esp=%ld",
+                                static_cast<long>(raw.espError));
+                break;
+            }
             case RAW_DISCONNECTED: {
                 portENTER_CRITICAL(&g_mqttMux);
                 g_mqttLastError = g_mqttPendingDisconnectError;
@@ -762,6 +872,8 @@ void handleRawEvents() {
                     g_mqttBackoffStep = 0;
                     g_mqttNextAttemptMs = millis();
                     setState(Esp32BaseMqtt::BACKOFF);
+                } else if (g_mqttConnectionConfigurationFailed) {
+                    setState(Esp32BaseMqtt::CONFIGURATION_ERROR);
                 } else if (g_mqttTerminalRejection) {
                     setState(Esp32BaseMqtt::CONNECTION_REJECTED);
                 } else if (g_mqttOtaSuspended) {
@@ -868,6 +980,23 @@ void dispatchIncomingMessages() {
 }
 
 bool startMqttClient() {
+    if (g_mqttBeforeConnectCallback) {
+        g_mqttBeforeConnectCallback(g_mqttBeforeConnectContext);
+    }
+    Esp32BaseMqtt::Error validationError = Esp32BaseMqtt::ERROR_NONE;
+    if (!validateConnectionConfig(g_mqttConfig, validationError)) {
+        portENTER_CRITICAL(&g_mqttMux);
+        ++g_mqttDiagnostics.connectionConfigurationFailures;
+        g_mqttConnectionWanted = false;
+        portEXIT_CRITICAL(&g_mqttMux);
+        g_mqttConnectionConfigurationFailed = true;
+        setLastError(validationError);
+        setState(Esp32BaseMqtt::CONFIGURATION_ERROR);
+        ESP32BASE_LOG_E("mqtt",
+                        "connection_configuration_invalid error=%s",
+                        Esp32BaseMqtt::errorName(validationError));
+        return false;
+    }
     portENTER_CRITICAL(&g_mqttMux);
     ++g_mqttDiagnostics.connectAttempts;
     g_mqttConnectionWanted = true;
@@ -957,91 +1086,17 @@ void releaseInflightSlot(uint8_t index) {
 
 bool Esp32BaseMqtt::configure(const ConnectionConfig& config) {
     g_mqttConfigurationAttempted = true;
-    if (g_mqttBegun ||
-        !validRequiredString(config.host, MQTT_MAX_HOST_BYTES) ||
-        !validRequiredString(config.clientId, MQTT_MAX_CLIENT_ID_BYTES) ||
-        config.port == 0 ||
-        config.keepAliveSeconds < MQTT_MIN_KEEPALIVE_SECONDS ||
-        config.keepAliveSeconds > MQTT_MAX_KEEPALIVE_SECONDS ||
-        !validOptionalString(config.username, MQTT_MAX_USERNAME_BYTES) ||
-        !validOptionalString(config.password, MQTT_MAX_PASSWORD_BYTES) ||
-        (config.password && !config.username) ||
-        (config.security != TLS && config.security != EXPLICIT_PLAINTEXT)) {
+    Error validationError = ERROR_NONE;
+    if (g_mqttBegun || !validateConnectionConfig(config, validationError)) {
         g_mqttConfigured = false;
         setState(CONFIGURATION_ERROR);
-        setLastError(ERROR_INVALID_CONFIGURATION);
+        setLastError(g_mqttBegun ? ERROR_INVALID_CONFIGURATION
+                                 : validationError);
         return false;
-    }
-
-    if (config.security == TLS) {
-        if (!validCertificatePem(config.tls.caCertificatePem,
-                                 config.tls.caCertificateLength,
-                                 ESP32BASE_MQTT_MAX_CA_CERT_BYTES)) {
-            g_mqttConfigured = false;
-            setState(CONFIGURATION_ERROR);
-            setLastError(ERROR_INVALID_CONFIGURATION);
-            return false;
-        }
-        const bool clientCertificateSet =
-            config.tls.clientCertificatePem || config.tls.clientCertificateLength != 0;
-        const bool privateKeySet =
-            config.tls.privateKeyPem || config.tls.privateKeyLength != 0;
-        if (clientCertificateSet != privateKeySet ||
-            (clientCertificateSet &&
-             (!validCertificatePem(config.tls.clientCertificatePem,
-                                   config.tls.clientCertificateLength,
-                                   ESP32BASE_MQTT_MAX_IDENTITY_PEM_BYTES) ||
-              !validPem(config.tls.privateKeyPem,
-                        config.tls.privateKeyLength,
-                        ESP32BASE_MQTT_MAX_IDENTITY_PEM_BYTES)))) {
-            g_mqttConfigured = false;
-            setState(CONFIGURATION_ERROR);
-            setLastError(ERROR_INVALID_CONFIGURATION);
-            return false;
-        }
-#if !ESP32BASE_MQTT_ALLOW_UNCHECKED_CERTIFICATE_DATES
-        if (!MQTT_CERTIFICATE_DATE_CHECK_ENABLED) {
-            g_mqttConfigured = false;
-            setState(CONFIGURATION_ERROR);
-            setLastError(ERROR_TLS_CERTIFICATE_DATE_CHECK_UNAVAILABLE);
-            return false;
-        }
-#endif
-#if !ESP32BASE_ENABLE_NTP
-        g_mqttConfigured = false;
-        setState(CONFIGURATION_ERROR);
-        setLastError(ERROR_INVALID_CONFIGURATION);
-        return false;
-#endif
-    } else {
-#if !ESP32BASE_MQTT_ALLOW_PLAINTEXT
-        g_mqttConfigured = false;
-        setState(CONFIGURATION_ERROR);
-        setLastError(ERROR_INVALID_CONFIGURATION);
-        return false;
-#endif
-        if (config.tls.caCertificatePem || config.tls.clientCertificatePem ||
-            config.tls.privateKeyPem) {
-            g_mqttConfigured = false;
-            setState(CONFIGURATION_ERROR);
-            setLastError(ERROR_INVALID_CONFIGURATION);
-            return false;
-        }
-    }
-
-    if (config.lastWill) {
-        if (!validPublishTopic(config.lastWill->topic) ||
-            config.lastWill->payloadLength > ESP32BASE_MQTT_MAX_PAYLOAD_BYTES ||
-            (config.lastWill->payloadLength > 0 && !config.lastWill->payload) ||
-            (config.lastWill->qos != QOS_0 && config.lastWill->qos != QOS_1)) {
-            g_mqttConfigured = false;
-            setState(CONFIGURATION_ERROR);
-            setLastError(ERROR_INVALID_CONFIGURATION);
-            return false;
-        }
     }
 
     g_mqttConfig = config;
+    g_mqttConnectionConfigurationFailed = false;
     g_mqttConfigured = true;
     setState(WAITING_FOR_WIFI);
     setLastError(ERROR_NONE);
@@ -1069,6 +1124,17 @@ bool Esp32BaseMqtt::addSubscription(const Subscription& subscription) {
     entry.topicFilter = subscription.topicFilter;
     entry.qos = subscription.qos;
     entry.pendingPacketId = -1;
+    return true;
+}
+
+bool Esp32BaseMqtt::setBeforeConnectCallback(BeforeConnectCallback callback,
+                                               void* context) {
+    if (g_mqttBegun) {
+        setLastError(ERROR_INVALID_CONFIGURATION);
+        return false;
+    }
+    g_mqttBeforeConnectCallback = callback;
+    g_mqttBeforeConnectContext = context;
     return true;
 }
 
@@ -1256,6 +1322,7 @@ void Esp32BaseMqtt::handle(bool otaUploading) {
     }
     if (reconnectRequested) {
         g_mqttTerminalRejection = false;
+        g_mqttConnectionConfigurationFailed = false;
         setLastError(ERROR_NONE);
         g_mqttBackoffStep = 0;
         g_mqttNextAttemptMs = millis();
@@ -1268,6 +1335,10 @@ void Esp32BaseMqtt::handle(bool otaUploading) {
             portEXIT_CRITICAL(&g_mqttMux);
             setState(BACKOFF);
         }
+        return;
+    }
+    if (g_mqttConnectionConfigurationFailed ||
+        g_mqttState == CONFIGURATION_ERROR) {
         return;
     }
     if (g_mqttTerminalRejection &&

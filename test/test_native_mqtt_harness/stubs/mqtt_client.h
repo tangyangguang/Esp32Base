@@ -134,6 +134,8 @@ esp_err_t esp_mqtt_client_stop(esp_mqtt_client_handle_t);
 esp_err_t esp_mqtt_client_disconnect(esp_mqtt_client_handle_t);
 esp_err_t esp_mqtt_client_reconnect(esp_mqtt_client_handle_t);
 esp_err_t esp_mqtt_client_destroy(esp_mqtt_client_handle_t);
+esp_err_t esp_mqtt_set_config(
+    esp_mqtt_client_handle_t, const esp_mqtt_client_config_t*);
 esp_err_t esp_mqtt_client_register_event(
     esp_mqtt_client_handle_t, esp_mqtt_event_id_t, esp_event_handler_t, void*);
 int esp_mqtt_client_subscribe(esp_mqtt_client_handle_t, const char*, int);

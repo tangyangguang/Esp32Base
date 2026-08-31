@@ -1,6 +1,7 @@
 #include <unity.h>
 
 #include <limits.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "../../src/Esp32BaseProfile.h"
@@ -63,9 +64,25 @@ static int g_fakeSubscribeCount = 0;
 static int g_fakeEnqueueResult = 0;
 static int g_fakeStopCount = 0;
 static int g_fakeDisconnectCount = 0;
+static int g_fakeSetConfigCount = 0;
+static esp_err_t g_fakeSetConfigResult = ESP_OK;
+static char g_lastWillPayload[96] = {};
+
+void captureNativeConfig(const esp_mqtt_client_config_t* config) {
+    g_lastNativeConfig = *config;
+    g_lastWillPayload[0] = '\0';
+    if (config->lwt_msg && config->lwt_msg_len > 0) {
+        const size_t length = static_cast<size_t>(config->lwt_msg_len) <
+                                      sizeof(g_lastWillPayload) - 1
+                                  ? static_cast<size_t>(config->lwt_msg_len)
+                                  : sizeof(g_lastWillPayload) - 1;
+        memcpy(g_lastWillPayload, config->lwt_msg, length);
+        g_lastWillPayload[length] = '\0';
+    }
+}
 
 esp_mqtt_client_handle_t esp_mqtt_client_init(const esp_mqtt_client_config_t* config) {
-    g_lastNativeConfig = *config;
+    captureNativeConfig(config);
     return &g_fakeClient;
 }
 
@@ -80,6 +97,15 @@ esp_err_t esp_mqtt_client_disconnect(esp_mqtt_client_handle_t) {
 }
 esp_err_t esp_mqtt_client_reconnect(esp_mqtt_client_handle_t) { return ESP_OK; }
 esp_err_t esp_mqtt_client_destroy(esp_mqtt_client_handle_t) { return ESP_OK; }
+esp_err_t esp_mqtt_set_config(
+    esp_mqtt_client_handle_t,
+    const esp_mqtt_client_config_t* config) {
+    ++g_fakeSetConfigCount;
+    if (g_fakeSetConfigResult == ESP_OK) {
+        captureNativeConfig(config);
+    }
+    return g_fakeSetConfigResult;
+}
 
 esp_err_t esp_mqtt_client_register_event(
     esp_mqtt_client_handle_t,
@@ -128,6 +154,26 @@ Esp32BaseMqtt::PublishCode g_reentrantPublishCode =
 int g_messageCount = 0;
 size_t g_lastPayloadLength = 0;
 char g_lastTopic[ESP32BASE_MQTT_MAX_TOPIC_BYTES + 1] = {};
+int g_beforeConnectCount = 0;
+char g_dynamicWillPayload[96] = {};
+Esp32BaseMqtt::LastWill* g_dynamicWill = nullptr;
+bool g_makeDynamicWillInvalid = false;
+
+void beforeConnect(void*) {
+    ++g_beforeConnectCount;
+    if (!g_dynamicWill) {
+        return;
+    }
+    snprintf(g_dynamicWillPayload,
+             sizeof(g_dynamicWillPayload),
+             "offline-%d",
+             g_beforeConnectCount);
+    g_dynamicWill->payload =
+        reinterpret_cast<const uint8_t*>(g_dynamicWillPayload);
+    g_dynamicWill->payloadLength = g_makeDynamicWillInvalid
+                                       ? ESP32BASE_MQTT_MAX_PAYLOAD_BYTES + 1
+                                       : strlen(g_dynamicWillPayload);
+}
 
 void onEvent(const Esp32BaseMqtt::Event& event, void*) {
     ++g_applicationEventCount;
@@ -169,6 +215,7 @@ void resetModule() {
     g_mqttConfigurationAttempted = false;
     g_mqttBegun = false;
     g_mqttTerminalRejection = false;
+    g_mqttConnectionConfigurationFailed = false;
     g_mqttEverConnected = false;
     g_mqttOtaSuspended = false;
     g_mqttReconnectRequested = false;
@@ -189,6 +236,8 @@ void resetModule() {
     g_mqttMessageContext = nullptr;
     g_mqttEventCallback = nullptr;
     g_mqttEventContext = nullptr;
+    g_mqttBeforeConnectCallback = nullptr;
+    g_mqttBeforeConnectContext = nullptr;
     g_fakeWifiConnected = false;
     g_fakeRealTime = false;
     Esp32BaseTime::g_source = Esp32BaseTime::SOURCE_NTP;
@@ -202,12 +251,19 @@ void resetModule() {
     g_fakeEnqueueResult = 0;
     g_fakeStopCount = 0;
     g_fakeDisconnectCount = 0;
+    g_fakeSetConfigCount = 0;
+    g_fakeSetConfigResult = ESP_OK;
+    g_lastWillPayload[0] = '\0';
     g_applicationEventCount = 0;
     g_tryPublishOnUncertain = false;
     g_reentrantPublishCode = Esp32BaseMqtt::PUBLISH_ACCEPTED;
     g_messageCount = 0;
     g_lastPayloadLength = 0;
     g_lastTopic[0] = '\0';
+    g_beforeConnectCount = 0;
+    g_dynamicWillPayload[0] = '\0';
+    g_dynamicWill = nullptr;
+    g_makeDynamicWillInvalid = false;
 }
 
 Esp32BaseMqtt::ConnectionConfig validConfig() {
@@ -239,6 +295,7 @@ void startAndConnect() {
     g_fakeRealTime = true;
     Esp32BaseMqtt::handle(false);
     TEST_ASSERT_EQUAL(Esp32BaseMqtt::CONNECTING, Esp32BaseMqtt::state());
+    emitEvent(MQTT_EVENT_BEFORE_CONNECT);
     emitEvent(MQTT_EVENT_CONNECTED);
     Esp32BaseMqtt::handle(false);
     TEST_ASSERT_EQUAL(Esp32BaseMqtt::CONNECTED, Esp32BaseMqtt::state());
@@ -328,6 +385,7 @@ void test_callbacks_are_deferred_until_handle_and_subscriptions_repeat() {
 
     g_fakeMillis = g_mqttNextAttemptMs;
     Esp32BaseMqtt::handle(false);
+    emitEvent(MQTT_EVENT_BEFORE_CONNECT);
     emitEvent(MQTT_EVENT_CONNECTED);
     TEST_ASSERT_EQUAL(3, g_applicationEventCount);
     Esp32BaseMqtt::handle(false);
@@ -477,6 +535,111 @@ void test_lwt_is_mapped_and_ota_suspends_without_direct_callback() {
                       Esp32BaseMqtt::state());
 }
 
+void test_before_connect_refreshes_lwt_for_every_attempt() {
+    Esp32BaseMqtt::LastWill will;
+    will.topic = "device/availability";
+    will.payload = reinterpret_cast<const uint8_t*>(g_dynamicWillPayload);
+    will.payloadLength = 0;
+    will.qos = Esp32BaseMqtt::QOS_1;
+    will.retain = true;
+    g_dynamicWill = &will;
+
+    Esp32BaseMqtt::ConnectionConfig config = validConfig();
+    config.lastWill = &will;
+    TEST_ASSERT_TRUE(Esp32BaseMqtt::configure(config));
+    TEST_ASSERT_TRUE(
+        Esp32BaseMqtt::setBeforeConnectCallback(beforeConnect));
+    TEST_ASSERT_TRUE(Esp32BaseMqtt::begin());
+    g_fakeWifiConnected = true;
+    g_fakeRealTime = true;
+
+    Esp32BaseMqtt::handle(false);
+    TEST_ASSERT_EQUAL(1, g_beforeConnectCount);
+    TEST_ASSERT_EQUAL_STRING("offline-1", g_lastWillPayload);
+    emitEvent(MQTT_EVENT_BEFORE_CONNECT);
+    TEST_ASSERT_EQUAL(1, g_fakeSetConfigCount);
+    TEST_ASSERT_EQUAL_STRING("offline-1", g_lastWillPayload);
+    emitEvent(MQTT_EVENT_CONNECTED);
+    Esp32BaseMqtt::handle(false);
+
+    emitEvent(MQTT_EVENT_DISCONNECTED);
+    Esp32BaseMqtt::handle(false);
+    g_fakeMillis = g_mqttNextAttemptMs;
+    Esp32BaseMqtt::handle(false);
+    TEST_ASSERT_EQUAL(2, g_beforeConnectCount);
+    emitEvent(MQTT_EVENT_BEFORE_CONNECT);
+    TEST_ASSERT_EQUAL(2, g_fakeSetConfigCount);
+    TEST_ASSERT_EQUAL_STRING("offline-2", g_lastWillPayload);
+}
+
+void test_before_connect_output_is_revalidated() {
+    Esp32BaseMqtt::LastWill will;
+    will.topic = "device/availability";
+    will.payload = reinterpret_cast<const uint8_t*>(g_dynamicWillPayload);
+    will.payloadLength = 0;
+    will.qos = Esp32BaseMqtt::QOS_1;
+    will.retain = true;
+    g_dynamicWill = &will;
+    g_makeDynamicWillInvalid = true;
+
+    Esp32BaseMqtt::ConnectionConfig config = validConfig();
+    config.lastWill = &will;
+    TEST_ASSERT_TRUE(Esp32BaseMqtt::configure(config));
+    TEST_ASSERT_TRUE(
+        Esp32BaseMqtt::setBeforeConnectCallback(beforeConnect));
+    TEST_ASSERT_TRUE(Esp32BaseMqtt::begin());
+    g_fakeWifiConnected = true;
+    g_fakeRealTime = true;
+
+    Esp32BaseMqtt::handle(false);
+    TEST_ASSERT_EQUAL(Esp32BaseMqtt::CONFIGURATION_ERROR,
+                      Esp32BaseMqtt::state());
+    TEST_ASSERT_EQUAL(Esp32BaseMqtt::ERROR_INVALID_CONFIGURATION,
+                      Esp32BaseMqtt::status().lastError);
+    TEST_ASSERT_EQUAL_UINT32(
+        1,
+        Esp32BaseMqtt::diagnostics().connectionConfigurationFailures);
+    TEST_ASSERT_EQUAL_UINT32(0,
+                             Esp32BaseMqtt::diagnostics().connectAttempts);
+    TEST_ASSERT_NULL(g_fakeEventHandler);
+}
+
+void test_native_before_connect_update_failure_is_terminal_until_retry() {
+    startAndConnect();
+    emitEvent(MQTT_EVENT_DISCONNECTED);
+    Esp32BaseMqtt::handle(false);
+    g_fakeMillis = g_mqttNextAttemptMs;
+    Esp32BaseMqtt::handle(false);
+    for (uint8_t i = 0; i < ESP32BASE_MQTT_EVENT_SLOTS; ++i) {
+        RawEvent queued;
+        queued.type = RAW_PUBLISHED;
+        queued.packetId = static_cast<int32_t>(100 + i);
+        TEST_ASSERT_TRUE(pushRawEvent(queued));
+    }
+    const int subscriptionsBeforeFailure = g_fakeSubscribeCount;
+    g_fakeSetConfigResult = ESP_ERR_NO_MEM;
+    emitEvent(MQTT_EVENT_BEFORE_CONNECT);
+    TEST_ASSERT_FALSE(isConnectionWanted());
+    emitEvent(MQTT_EVENT_CONNECTED);
+    TEST_ASSERT_EQUAL(subscriptionsBeforeFailure, g_fakeSubscribeCount);
+    Esp32BaseMqtt::handle(false);
+
+    TEST_ASSERT_EQUAL(Esp32BaseMqtt::CONFIGURATION_ERROR,
+                      Esp32BaseMqtt::state());
+    TEST_ASSERT_EQUAL(Esp32BaseMqtt::ERROR_NO_MEMORY,
+                      Esp32BaseMqtt::status().lastError);
+    TEST_ASSERT_EQUAL_UINT32(
+        1,
+        Esp32BaseMqtt::diagnostics().connectionConfigurationFailures);
+    TEST_ASSERT_EQUAL_UINT32(
+        1,
+        Esp32BaseMqtt::diagnostics().controlEventDropped);
+    TEST_ASSERT_TRUE(Esp32BaseMqtt::requestReconnect());
+    g_fakeSetConfigResult = ESP_OK;
+    Esp32BaseMqtt::handle(false);
+    TEST_ASSERT_EQUAL(Esp32BaseMqtt::BACKOFF, Esp32BaseMqtt::state());
+}
+
 void test_incoming_mailbox_full_drops_whole_message() {
     Esp32BaseMqtt::setMessageCallback(onMessage);
     Esp32BaseMqtt::setEventCallback(onEvent);
@@ -609,6 +772,9 @@ int main(int, char**) {
     RUN_TEST(test_fragment_assembly_and_oversize_drop);
     RUN_TEST(test_terminal_auth_rejection_requires_explicit_retry);
     RUN_TEST(test_lwt_is_mapped_and_ota_suspends_without_direct_callback);
+    RUN_TEST(test_before_connect_refreshes_lwt_for_every_attempt);
+    RUN_TEST(test_before_connect_output_is_revalidated);
+    RUN_TEST(test_native_before_connect_update_failure_is_terminal_until_retry);
     RUN_TEST(test_incoming_mailbox_full_drops_whole_message);
     RUN_TEST(test_connection_event_survives_full_control_mailbox);
     RUN_TEST(test_dns_and_certificate_errors_are_distinguished);

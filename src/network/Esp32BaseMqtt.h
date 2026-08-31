@@ -163,6 +163,7 @@ public:
 
     struct Diagnostics {
         uint32_t connectAttempts = 0;
+        uint32_t connectionConfigurationFailures = 0;
         uint32_t successfulConnections = 0;
         uint32_t reconnects = 0;
         uint32_t disconnects = 0;
@@ -188,9 +189,12 @@ public:
 
     typedef void (*MessageCallback)(const MessageView& message, void* context);
     typedef void (*EventCallback)(const Event& event, void* context);
+    typedef void (*BeforeConnectCallback)(void* context);
 
     static bool configure(const ConnectionConfig& config);
     static bool addSubscription(const Subscription& subscription);
+    static bool setBeforeConnectCallback(BeforeConnectCallback callback,
+                                         void* context = nullptr);
     static void setMessageCallback(MessageCallback callback, void* context = nullptr);
     static void setEventCallback(EventCallback callback, void* context = nullptr);
     static PublishResult publish(const PublishRequest& request);
