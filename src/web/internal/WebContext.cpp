@@ -5,6 +5,7 @@
 #include "WebInternal.h"
 #include "WebRequestPreflight.h"
 
+#include <esp_idf_version.h>
 #include <limits.h>
 
 namespace esp32base_web {
@@ -146,7 +147,11 @@ static bool requestMayHaveBody(HTTPMethod method) {
 
 void Esp32BaseWebServer::handleClient() {
     if (_currentStatus == HC_NONE) {
+#if ESP_IDF_VERSION_MAJOR >= 5
+        _currentClient = _server.accept();
+#else
         _currentClient = _server.available();
+#endif
         if (!_currentClient) {
             if (_nullDelay) {
                 delay(1);
@@ -521,7 +526,11 @@ bool Esp32BaseWebServer::parseRequest(WiFiClient& client) {
         _parseArguments(searchStr);
     }
 
+#if ESP_IDF_VERSION_MAJOR >= 5
+    client.clear();
+#else
     client.flush();
+#endif
     return true;
 }
 

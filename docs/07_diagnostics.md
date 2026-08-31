@@ -14,7 +14,7 @@
 
 Profile 裁剪以最终构建产物为准，不只看 `library.json` 或源码条件编译：
 
-- CORE 不链接 WiFi / WebServer / Update / LittleFS。
+- MINIMAL不链接WiFi / WebServer / Update / LittleFS / MQTT。
 - NET 不链接 WebServer / Update / LittleFS，除非显式启用 FS。
 - WEB 不链接 Update。
 - FS 关闭时 FileLog 不拉入 LittleFS。
@@ -27,8 +27,8 @@ pio test -e native_config_harness
 pio test -e native_web_harness
 pio test -e native_time_harness
 pio test -e native_time_pcf8563_harness
-pio run -d examples/basic -e esp32_core
-python3 scripts/check_trim_symbols.py --elf examples/basic/.pio/build/esp32_core/firmware.elf --forbid WiFi WebServer Update LittleFS
+pio run -d examples/basic -e esp32_minimal -e esp32_offline -e esp32_local -e esp32_iot
+python3 scripts/check_trim_symbols.py
 
 # 可选：读取 Git 忽略的本机配置，对真实 MQTTS Broker 验证
 # TLS/认证、错误密码、QoS 0/1、retain 和 LWT

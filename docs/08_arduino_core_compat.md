@@ -100,7 +100,7 @@ mDNS 在 Core 3.x / IDF v5 下频繁 destroy/recreate 风险较高。
 `Update.begin/write/end` 基本一致，但：
 
 - Core 3.x 分区校验更严格。
-- FULL profile 必须在 Core 2.x / 3.x 都验证 OTA。
+- LOCAL和IOT Profile必须在Core 2.x / 3.x都验证OTA。
 - SHA256 使用 mbedTLS streaming API 边接收边更新，不把完整固件载入 RAM。
 - 只有 SHA256 校验通过后才能调用 `Update.end(true)`。
 - Core 2.x / 3.x 都必须验证错误 SHA256 不切换分区。
@@ -176,15 +176,15 @@ python3 scripts/ensure_arduino3_platformio.py
 推荐验证顺序：
 
 ```sh
-platformio run -d examples/basic -e esp32_core -e esp32_full -j 1
+platformio run -d examples/basic -e esp32_minimal -e esp32_local -e esp32_iot -j 1
 python3 scripts/ensure_arduino3_platformio.py
-platformio run -d examples/basic -e esp32_full_arduino3 -j 1
-platformio run -d examples/basic -e esp32_core_arduino3 -j 1
+platformio run -d examples/basic -e esp32_local_arduino3 -e esp32_iot_arduino3 -j 1
+platformio run -d examples/basic -e esp32_minimal_arduino3 -j 1
 ```
 
-外部应用通过 `lib_deps = file:///.../Esp32Base` 引用本库时，FULL / FS / Web / OTA profile 必须能由本库自行触发 PlatformIO LDF 发现 Arduino ESP32 内置库，不要求业务代码额外 include `LittleFS.h`、`WiFi.h`、`WebServer.h`、`Update.h` 或 `ArduinoOTA.h`。
+外部应用通过 `lib_deps = file:///.../Esp32Base` 引用本库时，LOCAL/IOT及显式FS/Web/OTA能力必须能由本库自行触发PlatformIO LDF发现Arduino ESP32内置库，不要求业务代码额外include `LittleFS.h`、`WiFi.h`、`WebServer.h`或`Update.h`。
 
-本库的可选实现文件使用直接 framework include 给 LDF 提供依赖线索。PlatformIO 可能会为 CORE 外部应用构建一些未链接的 framework archive；裁剪验收以最终 ELF/map 是否链接 WiFi/WebServer/Update/LittleFS 符号为准。
+本库的可选实现文件使用直接framework include给LDF提供依赖线索。PlatformIO可能会为MINIMAL外部应用构建一些未链接的framework archive；裁剪验收以最终ELF/map是否链接WiFi/WebServer/Update/LittleFS符号为准。
 
 如需同时验证 Core 2.x 与 Core 3.x，记录首次失败时应区分：
 

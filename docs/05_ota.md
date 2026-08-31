@@ -2,12 +2,12 @@
 
 ## 1. 定位
 
-OTA 是 FULL profile 的核心能力，必须按量产可靠性设计。
+OTA是 `LOCAL` 和 `IOT` Profile的核心维护能力，必须按量产可靠性设计。
 
 OTA 不只是 Web 上传文件，还包括：
 
 - 复用 Web Auth。
-- ArduinoOTA/espota 命令行上传。
+- 高速HTTP raw命令行上传。
 - SHA256。
 - Watchdog 联动。
 - Config deferred flush pause。
@@ -26,20 +26,9 @@ OTA route 按 profile/OTA 编译条件注册；Web OTA 认证来自当前 Web Au
 - Web Auth 开启时，OTA 页面和上传接口复用 Web Basic Auth。
 - Web Auth 关闭时，OTA 页面和上传接口不要求认证，风险由应用和用户自行承担。
 
-`ESP32BASE_ENABLE_ARDUINO_OTA` 默认跟随 `ESP32BASE_ENABLE_OTA`。启用 OTA 的 profile 默认同时支持 PlatformIO/espota：
+Esp32Base只维护一套HTTP Web OTA能力。浏览器使用multipart表单；PlatformIO命令行使用高速raw binary target。两者复用相同的OTA写入引擎、Web Basic Auth、容量检查和分区诊断。当前库不提供ArduinoOTA/espota、UDP发现或3232监听端口。
 
-```ini
-upload_protocol = espota
-upload_port = <hostname>.local
-upload_flags =
-  --auth=<password>
-```
-
-命令行 OTA 使用 `Esp32Base::hostname()`、标准端口 3232 和现有 mDNS host 记录；ArduinoOTA 自身不重复启动 mDNS。hostname 默认值来自 `ESP32BASE_DEFAULT_HOSTNAME`，Web/API 保存的 hostname 需要重启后才会被 DHCP hostname、mDNS 和 ArduinoOTA 使用。业务不需要命令行 OTA 时，可显式 `-D ESP32BASE_ENABLE_ARDUINO_OTA=0`。
-
-espota 认证密码为当前生效的 Web Auth 密码；espota 没有用户名，因此 Web 用户名不参与。即使 Web Auth 被关闭，ArduinoOTA 仍要求密码，避免静默开放无密码 OTA。
-
-Esp32Base 同时提供更快的命令行 Web OTA target。它复用现有 HTTP Web OTA 接口和 Web Basic Auth。`esp32base_webota_host` 同时接受设备 IP、普通 DNS hostname 和 mDNS `<hostname>.local`；DHCP 地址可能变化的本地开发设备推荐使用当前 Esp32Base hostname 对应的 `.local` 地址：
+Esp32Base提供可复用的命令行Web OTA target。它复用现有 HTTP Web OTA 接口和 Web Basic Auth。`esp32base_webota_host` 同时接受设备 IP、普通 DNS hostname 和 mDNS `<hostname>.local`；DHCP 地址可能变化的本地开发设备推荐使用当前 Esp32Base hostname 对应的 `.local` 地址：
 
 ```ini
 extra_scripts =
@@ -77,7 +66,6 @@ pio run -t webota
 
 使用边界：
 
-- `espota` 是 ArduinoOTA 标准协议，兼容 PlatformIO/ArduinoOTA 常规工具链。
 - `webota` 是 Esp32Base 提供的 HTTP 上传方式，默认 64 KB 分块并使用 raw endpoint；要求设备 Web 服务和 `/esp32base/ota/raw` 可访问。
 - `webota` 每次执行时通过运行脚本的操作系统解析一次 hostname，并在上传前显示解析到的地址；本次任务的预检、状态采样和上传连接复用该地址，HTTP `Host` 和 HTTPS SNI 仍保留原 hostname。解析结果不会跨任务缓存，因此设备在两次任务之间取得新的 DHCP 地址后，下次执行会重新解析。`.local` 依赖电脑与设备位于允许组播的同一网络，并依赖当前 Windows、macOS 或 Linux 解析环境支持 mDNS；解析失败时脚本会在发送固件前停止并给出对应提示。WSL、跨 VLAN、访客 WiFi 或禁用组播的网络不能假定 `.local` 可用，此时应使用网络 DNS 中的稳定 hostname 或设备 IP。
 - 浏览器 Web OTA 页面仍使用 `/esp32base/ota` multipart 表单上传路径，脚本默认值不会改变手工选择文件上传的设备端 handler。
@@ -90,7 +78,7 @@ pio run -t webota
 - `Update.begin()` 失败时会把底层 Update 错误字符串写入 `lastError()`，便于区分空间、flash 或 Update 状态问题。
 - Web OTA 写入成功后会读取 `esp_ota_get_boot_partition()` 二次确认下一启动分区已经切到本次写入目标；确认失败时返回 OTA 失败，不进入自动重启。
 - `/esp32base/api/ota` 返回当前 running partition、configured boot partition、next update partition、app partition 列表、镜像 SHA256、版本、OTA state、本次上传目标、实际计算 SHA256 和最后错误，便于判断设备当前运行的是哪个槽位和哪个固件。
-- OTA boot 诊断和 rollback/mark-valid 状态在 `Esp32Base::begin()` 早期初始化，不等待 WiFi/Web ready；ArduinoOTA/espota 网络服务仍在 Web/Auth ready 后启动，确保密码来源正确。
+- OTA boot诊断和rollback/mark-valid状态在 `Esp32Base::begin()` 早期初始化，不等待WiFi/Web ready；HTTP上传路由由Web层按编译能力注册。
 
 ## 3. 状态机
 
@@ -109,7 +97,7 @@ pio run -t webota
 - 上传开始日志应包含固件大小和是否提供 SHA256。
 - 上传过程中按阶段输出少量进度日志，包含百分比和已写入/总大小，不按 chunk 刷屏。
 - 上传完成日志应包含实际固件大小和校验结果；失败日志应能区分写入、校验和启动槽切换阶段。
-- 成功、失败或 abort 后输出上传摘要，包含耗时、上传字节数和平均速度；ArduinoOTA/espota 也应输出对应摘要。
+- 成功、失败或abort后输出上传摘要，包含耗时、上传字节数和平均速度。
 - bytesProcessed。
 - totalSize。
 - totalSize human。
@@ -168,7 +156,6 @@ Web OTA 可从以下来源读取：
 - 提供摘要时必须校验。
 - 校验失败不得调用 `Update.end(true)`。
 - 校验失败不得重启到新固件。
-- ArduinoOTA/espota 使用 ArduinoOTA 内建 MD5 校验；Web OTA 的 SHA256 规则不强加给 espota。
 - 命令行 `webota` 默认自动计算并发送 SHA256，设备端按 Web OTA SHA256 规则校验。
 
 关键顺序：
@@ -337,7 +324,7 @@ void loop() {
 
 ```ini
 build_flags =
-  -D ESP32BASE_PROFILE=ESP32BASE_PROFILE_FULL
+  -D ESP32BASE_PROFILE=ESP32BASE_PROFILE_LOCAL
   -D ESP32BASE_OTA_REQUIRE_MARK_VALID=1
   -D ESP32BASE_OTA_MARK_VALID_TIMEOUT_MS=30000
 ```
@@ -346,9 +333,8 @@ build_flags =
 
 - Web Auth 开启时，未授权上传不调用 `Update.begin()`。
 - Web Auth 关闭时，OTA route 仍可访问。
-- espota 正确 `--auth` 可上传，错误 `--auth` 失败且设备保持可访问。
 - `pio run -t webota` 可通过 IP 地址上传，错误 Web Auth 失败且设备保持可访问。
-- Web OTA 与 espota 不得同时写 flash。
+- 浏览器multipart上传和raw命令行上传不得同时写flash。
 - Web OTA 成功后 `/esp32base/api/ota` 中 `bootPartition` 与 `lastTargetPartition` 一致。
 - 启用 `ESP32BASE_OTA_REQUIRE_MARK_VALID=1` 时，即使未进入 `Esp32Base::begin()`、WiFi/Web 未 ready、setup 阻塞或业务未调用 `handle()`，确认期限仍能把未确认镜像标记无效并重启回滚。
 - 模拟系统计时器创建失败时，启动日志输出 ERROR，`handle()` 降级检查仍能在期限后回滚。

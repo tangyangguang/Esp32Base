@@ -83,7 +83,7 @@ OTA 规则：
 - Web Auth 开启时，OTA 页面和上传接口复用 Web Basic Auth。
 - Web Auth 关闭时，OTA 页面和上传接口不要求认证，风险由应用和用户自行承担。
 - 调用 `Esp32BaseWeb::setAuthEnabled(false)` 后，内置 HTTP 路由会完全开放，包括 WiFi 保存/清除、Auth 保存、重启、System、System Logs clear 和 Web OTA；这只适合受控调试网络，不适合暴露到外部网络。
-- 启用 OTA 时默认同时启用 ArduinoOTA/espota；espota 只使用当前 Web Auth 密码作为 `--auth` 密码，即使 Web Auth 关闭也仍要求密码。
+- 命令行 `pio run -t webota` 与浏览器OTA复用同一Web Basic Auth、HTTP服务和OTA写入引擎。
 
 不使用“密码是否等于默认字符串”作为唯一判断。
 
@@ -94,7 +94,6 @@ OTA 规则：
 - 不抵御 LAN 内主动攻击。
 - 关闭 Web Auth 时，内置页面和 OTA 均无密码保护。
 - 关闭 Web Auth 不只是关闭登录框，而是让所有内置 HTTP 页面和 POST 操作无需认证。
-- 关闭 Web Auth 只影响 HTTP/Web OTA；不关闭 ArduinoOTA/espota 密码。
 - Web Auth 密码不在 HTML、JSON、API 响应或日志中输出；日志只输出用户名、来源、结果和 `password_set` 状态。当前持久化仍保存到普通 NVS，未启用平台级 flash encryption 时不应视为密文凭据库。
 - 内置危险 POST 必须是 POST method，并会做轻量 `Origin` / `Referer` host 校验；存在这些头时必须与请求 `Host` 同源，缺失时放行，保证 curl、PlatformIO `webota` 和简单脚本可用。非 POST 返回 405，校验失败返回 403，不执行副作用。
 
@@ -337,7 +336,7 @@ App Events 页面：
 - 启用 Watchdog 时显示 `enabled, lifetime resets N, trip resets M` 或 invalid baseline 和 trip reset time；Reset Trip 保存时间使用和页面 Time 行一致的可信 epoch 判断，无可用时间则显示 `unknown (time unavailable)`。
 - 启用 Time 时，Status 页显示统一 `Time` 行，包含当前来源 `uptime/rtc/ntp`、可信状态、当前时间和 uptime；启用 RTC 时额外显示 `RTC` 行，包含驱动、状态、最近读取 epoch 和读取时的 uptime；启用 NTP 时显示 `NTP` 行，只表示联网对时客户端自身状态。
 - 历史 `?details=1` 查询参数不再改变页面内容；Status 只有一套直接平铺的信息结构。
-- 未启用的模块不显示对应行，避免非 FULL profile 引入额外依赖。
+- 未启用的模块不显示对应行，避免MINIMAL/OFFLINE或显式裁剪组合引入额外依赖。
 
 页面风格：
 

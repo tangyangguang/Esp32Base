@@ -17,6 +17,7 @@ web_auth = read("src/web/internal/WebAuth.cpp")
 web_wifi = read("src/web/internal/WebWifi.cpp")
 wifi = read("src/network/Esp32BaseWiFi.inc")
 profile = read("src/Esp32BaseProfile.h")
+capability_config = read("src/Esp32BaseCapabilityConfig.h")
 base = read("src/Esp32Base.cpp")
 webota = read("scripts/esp32base_webota.py")
 web_docs = read("docs/04_web.md")
@@ -37,8 +38,8 @@ for path, text in (
 if "name='clear_password'" not in web_wifi:
     errors.append("src/web/internal/WebWifi.cpp: WiFi form must provide an explicit way to clear the stored password for open networks")
 
-if "ESP32BASE_WEB_ALLOW_INSECURE_DEFAULT_AUTH" not in profile:
-    errors.append("src/Esp32BaseProfile.h: missing explicit insecure default auth opt-in macro")
+if "ESP32BASE_WEB_ALLOW_INSECURE_DEFAULT_AUTH" not in capability_config:
+    errors.append("src/Esp32BaseCapabilityConfig.h: missing explicit insecure default auth opt-in macro")
 if 'applyPlainAuth(g_defaultAuthSet ? g_defaultAuthUser : "admin"' in web_routing:
     errors.append("src/web/internal/WebRouting.cpp: Web auth must not silently fall back to admin/admin")
 if "bool Esp32BaseWeb::startLocked()" not in web_core or "static bool startLocked();" not in web_header:

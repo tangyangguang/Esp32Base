@@ -208,6 +208,20 @@ bool credentialsValid(const char* ssidValue, const char* passwordValue) {
 
 const char* wlStatusName(wl_status_t status);
 
+bool formatIpv4(const IPAddress& address, char* out, size_t len) {
+    if (!out || len == 0) {
+        return false;
+    }
+    const int written = snprintf(out,
+                                 len,
+                                 "%u.%u.%u.%u",
+                                 static_cast<unsigned>(address[0]),
+                                 static_cast<unsigned>(address[1]),
+                                 static_cast<unsigned>(address[2]),
+                                 static_cast<unsigned>(address[3]));
+    return written >= 0 && static_cast<size_t>(written) < len;
+}
+
 uint16_t readableMacSuffix(uint64_t mac) {
     const uint8_t penultimate = static_cast<uint8_t>((mac >> 32) & 0xff);
     const uint8_t last = static_cast<uint8_t>((mac >> 40) & 0xff);
@@ -653,7 +667,9 @@ void Esp32BaseWiFi::handle() {
         g_wifiState = CONNECTED;
         g_wifiRetryCount = 0;
         clearStaSafeBootState("connected");
-        ESP32BASE_LOG_I("wifi", "connected ip=%s", WiFi.localIP().toString().c_str());
+        char ipAddress[16];
+        formatIpv4(WiFi.localIP(), ipAddress, sizeof(ipAddress));
+        ESP32BASE_LOG_I("wifi", "connected ip=%s", ipAddress);
         publish(EVENT_CONNECTED);
         return;
     }
@@ -826,7 +842,9 @@ bool Esp32BaseWiFi::startConfigPortal() {
     g_wifiState = ok ? CONFIG_PORTAL : FAILED;
     if (ok) {
         publish(EVENT_CONFIG_PORTAL);
-        ESP32BASE_LOG_I("wifi", "config_portal_started ssid=%s ip=%s", g_configPortalSsid, WiFi.softAPIP().toString().c_str());
+        char ipAddress[16];
+        formatIpv4(WiFi.softAPIP(), ipAddress, sizeof(ipAddress));
+        ESP32BASE_LOG_I("wifi", "config_portal_started ssid=%s ip=%s", g_configPortalSsid, ipAddress);
     }
     return ok;
 }
@@ -942,9 +960,8 @@ bool Esp32BaseWiFi::ip(char* out, size_t len) {
     if (!out || len == 0) {
         return false;
     }
-    const IPAddress addr = g_wifiState == CONFIG_PORTAL ? WiFi.softAPIP() : WiFi.localIP();
-    strlcpy(out, addr.toString().c_str(), len);
-    return true;
+    const IPAddress address = g_wifiState == CONFIG_PORTAL ? WiFi.softAPIP() : WiFi.localIP();
+    return formatIpv4(address, out, len);
 }
 
 int32_t Esp32BaseWiFi::rssi() {

@@ -39,7 +39,7 @@
 
 - 依赖方向遵守 `docs/01_architecture.md`：Application -> Esp32Base -> Update -> Web -> Network -> Runtime -> Core；禁止低层依赖高层、同层强耦合和循环依赖。跨层协作通过既有 facade、轻量 hook 或上层编排完成，不能让 Core 反向感知可选模块。
 - Core 始终保持最小，只承担 Log、NVS 小配置、System 诊断和生命周期基础；不得引入 Bus、WiFi、Web、OTA、LittleFS、FileLog、Watchdog、Sleep 或业务语义。
-- Profile 规则以 `docs/02_profiles.md` 为准，固定保留 7 个已验证 Profile。新增可选能力通常使用明确能力宏，不因一个组合新增 Profile；确需改变 Profile 时必须说明用户价值、依赖展开和完整矩阵验证代价。
+- Profile 规则以 `docs/02_profiles.md` 为准，固定保留 `MINIMAL`、`OFFLINE`、`LOCAL`、`IOT` 四个已验证 Profile。新增可选能力通常使用明确能力宏，不因一个组合新增 Profile；确需改变 Profile 时必须说明用户价值、依赖展开和完整矩阵验证代价。
 - Web、OTA、FS、FileLog、App Events、App Config、RTC、RS485 等可选重能力必须保持可裁剪。能力关闭时，不得编译或链接专属重依赖，不得初始化、注册静态对象或保留专属页面资源；不要只以“运行时未调用”代替裁剪证明。
 - 新模块必须放入最低且正确的层，只依赖完成职责所必需的模块；禁止为接入方便把业务协议、通用任务框架、全局注册表或大型策略系统放入基础库。
 - 不新增后台任务、跨任务共享状态、mutex、大块常驻缓冲或明显的动态分配，除非需求无法用当前单 system/loop task 模型可靠完成，并已记录调度、所有权、内存上限和失败策略。
@@ -64,7 +64,7 @@
   - Config：`pio test -e native_config_harness`
   - Time/RTC：`pio test -e native_time_harness`；涉及 PCF8563 时再运行 `pio test -e native_time_pcf8563_harness`
 - Profile、依赖宏、LDF 或裁剪改动优先构建 `examples/basic` 的相关 env，并结合 map 文件和 `scripts/check_trim_symbols.py` 证明目标符号缺失；架构或安全边界改动同时运行相应的 `scripts/check_architecture_boundaries.py`、`scripts/check_security_boundaries.py`。
-- Web UI 改动验证 `examples/web_ui_gallery`；App Config 或完整集成验证 `examples/full_demo`；App Events 验证 `examples/app_events_demo`；OTA 验证 `examples/web_logs_ota` 或 FULL 示例；RTC/RS485 分别验证对应示例。
+- Web UI改动验证 `examples/web_ui_gallery`；App Config或完整集成验证 `examples/full_demo`；App Events验证 `examples/app_events_demo`；OTA验证 `examples/web_logs_ota` 或LOCAL示例；RTC/RS485分别验证对应示例。
 - 涉及公共头文件、Profile 或平台适配时，评估 ESP32 / ESP32-S3 / ESP32-C3 和 Arduino Core 2.x / 3.x 构建矩阵，至少选择能覆盖本次最高风险的组合；不能把单芯片单 Core 构建成功外推为全部兼容。
 - 涉及 Web、OTA、WiFi、FileLog、Sleep、Watchdog、RTC、RS485、掉电恢复或资源边界时优先做实机验证。无法实机验证时，明确未覆盖场景、剩余风险和建议验证步骤，不能声称已完全验证。
 - 影响发布包、导出规则、依赖或示例内容时，运行 `platformio pkg pack .`，并按 `scripts/check_release_hygiene.py` 和 `docs/09_release_checklist.md` 核对包内容；完成后删除生成 tarball 和临时产物。

@@ -141,8 +141,6 @@ public:
     static bool startLocked();
 
     static void setDefaultAuth(const char* user, const char* pass);
-    static const char* authUser();
-    static const char* authPassword();
     static bool isAuthEnabled();
     static void setAuthEnabled(bool enabled);
     static bool checkAuth();

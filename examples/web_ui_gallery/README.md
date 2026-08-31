@@ -23,19 +23,19 @@
 ## 构建
 
 ```bash
-pio run -d examples/web_ui_gallery -e esp32_web_ui_gallery
+pio run -d examples/web_ui_gallery -e esp32_local_ui_gallery
 ```
 
 ESP32-S3：
 
 ```bash
-pio run -d examples/web_ui_gallery -e esp32s3_web_ui_gallery
+pio run -d examples/web_ui_gallery -e esp32s3_local_ui_gallery
 ```
 
 ## 烧录查看
 
 ```bash
-pio run -d examples/web_ui_gallery -e esp32_web_ui_gallery -t upload
+pio run -d examples/web_ui_gallery -e esp32_local_ui_gallery -t upload
 pio device monitor -d examples/web_ui_gallery -b 115200
 ```
 

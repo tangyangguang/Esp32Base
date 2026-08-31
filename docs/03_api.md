@@ -51,13 +51,13 @@ public:
 约定：
 
 - 默认 hostname 由编译期宏 `ESP32BASE_DEFAULT_HOSTNAME` 指定；未设置时为 `"esp32base"`。
-- 应用代码不提供 hostname setter，避免运行期半生效切换造成 mDNS、ArduinoOTA 和 Web 识别不一致。
+- 应用代码不提供 hostname setter，避免运行期半生效切换造成DHCP hostname、mDNS和Web识别不一致。
 - `begin()` 在 Config 初始化后读取 `eb_sys.hostname`；合法持久化值覆盖构建默认值，非法值记录 WARN 并忽略。
 - hostname 校验规则：1-32 位小写字母、数字、短横线；不能以短横线开头或结尾；不允许 `.` 或 `.local`。
 - Web/API 保存 hostname 只写入 `eb_sys.hostname`，不修改当前运行时 hostname；重启后完整生效。
 - `factoryReset()` 清理 `eb_sys.hostname` 后，重启恢复 `ESP32BASE_DEFAULT_HOSTNAME`。
 - 应用应显式调用 `setFirmwareInfo()`；未设置时状态页和日志会显示库默认固件名/版本，仅用于开发占位。
-- WiFi STA 连接前会把当前 hostname 应用为 DHCP client hostname；mDNS 和 ArduinoOTA 启动时也读取当前 hostname。运行期不做 hostname 热切换。
+- WiFi STA连接前会把当前hostname应用为DHCP client hostname；mDNS启动时也读取当前hostname。运行期不做hostname热切换。
 - `lastError()` 返回最近一次 begin 或关键模块启动失败原因；无错误时返回空字符串，不返回 `nullptr`。
 
 ## 3. Esp32BaseLog
@@ -201,7 +201,7 @@ LittleFS mount failed 时不会自动格式化；`Esp32BaseFs::begin()` 只返�
 最小可运行示例：
 
 ```cpp
-#define ESP32BASE_PROFILE ESP32BASE_PROFILE_RUNTIME
+#define ESP32BASE_PROFILE ESP32BASE_PROFILE_OFFLINE
 #include <Esp32Base.h>
 
 void setup() {
@@ -807,12 +807,11 @@ WiFi 凭证和重连策略：
 
 ## 7.1 Esp32BaseMqtt
 
-仅在 `ESP32BASE_ENABLE_MQTT=1` 时公开，依赖 WiFi 和统一 Time。MQTT 不随任何 Profile 自动开启：
+仅在 `ESP32BASE_ENABLE_MQTT=1` 时公开，依赖WiFi和统一Time。IOT Profile默认开启MQTT；其余Profile默认关闭，也可由满足依赖的显式能力组合开启：
 
 ```ini
 build_flags =
-  -D ESP32BASE_PROFILE=ESP32BASE_PROFILE_NET_RUNTIME
-  -D ESP32BASE_ENABLE_MQTT=1
+  -D ESP32BASE_PROFILE=ESP32BASE_PROFILE_IOT
 ```
 
 第一版固定为单 Broker、单 Client、MQTT 3.1.1、Clean Session、QoS 0/1。底层使用 Arduino ESP32 Core 内置 ESP-MQTT；不公开 ESP-IDF 类型。
@@ -1276,8 +1275,6 @@ public:
     static bool isReady();
 
     static void setDefaultAuth(const char* user, const char* pass);
-    static const char* authUser();
-    static const char* authPassword();
     static bool isAuthEnabled();
     static void setAuthEnabled(bool enabled);
     static bool checkAuth();
@@ -1413,7 +1410,6 @@ Route 缓冲机制：
 - 内置 Web 不提供首次登录强制改密；量产或可被他人访问的设备必须在业务启动时调用 `setDefaultAuth()`，或通过业务流程先保存认证。
 - 仅显式启用 `ESP32BASE_WEB_ALLOW_INSECURE_DEFAULT_AUTH=1` 的受控开发固件会使用库内置 `admin/admin` 兜底，并输出 WARN 审计日志。
 - `setDefaultAuth(user, pass)` 设置应用默认认证；如果用户已保存认证，不会覆盖已保存认证。
-- `authUser()` 返回当前用户名；`authPassword()` 返回当前生效密码，仅供本地 C++ 认证集成使用，例如 ArduinoOTA/espota，禁止输出到 HTML、JSON 或 API 响应。
 - Basic Auth `Authorization` header 有内部长度上限；超长 header 会被拒绝并输出 WARN，不会静默截断后继续认证。
 - `setAuthEnabled(false)` 会完全开放内置 HTTP 路由，包括 WiFi 保存/清除、Auth 保存、重启、System、System Logs clear 和 Web OTA；只适合受控调试网络。
 - `checkAuth()` 用于业务页面复用基础库 Basic Auth；返回 `false` 时已发送认证挑战，业务 handler 应直接 return。
@@ -1421,7 +1417,7 @@ Route 缓冲机制：
 - `verifyAuth(user, pass)` 校验显式传入的账号密码；无参 `verifyAuth()` 仍表示当前请求是否已认证。
 - `saveAuth(user, pass)` 保存 Web Auth 到 `eb_web.auth_user`、`eb_web.auth_pass`，保存后读回校验，并在保存成功后立即切换为新认证；保存失败不会主动清空旧认证。
 - `resetAuth()` 清除 `eb_web` 持久化 Auth，并恢复应用默认认证；没有应用默认认证时返回 false，Web 进入无默认认证的锁定状态，除非开发固件显式启用 `ESP32BASE_WEB_ALLOW_INSECURE_DEFAULT_AUTH=1`。
-- Web Auth 密码当前持久化到普通 NVS 的 `eb_web.auth_pass`；未启用平台级 flash encryption 时，不应把设备物理存储视为密文凭据库。日志、HTML、JSON 和 API 响应不输出 Web Auth 密码值；日志只输出用户名、来源、结果和 `password_set` 状态。`authPassword()` 仅供本地 C++ 集成使用。
+- Web Auth密码当前持久化到普通NVS的 `eb_web.auth_pass`；未启用平台级flash encryption时，不应把设备物理存储视为密文凭据库。日志、HTML、JSON和API响应不输出Web Auth密码值；日志只输出用户名、来源、结果和 `password_set` 状态。基础库不公开当前认证用户名或明文密码读取API。
 - `METHOD_ANY` 用于同一路径 GET/POST 复用；应用 handler 内可用 `currentMethod()`、`isMethod()` 或 `currentMethodName()` 判断当前请求方法。
 - `currentMethod()` 仅在 handler 上下文中返回实际方法：GET 为 `METHOD_GET`，POST 为 `METHOD_POST`；handler 外或未知方法返回 `METHOD_UNKNOWN`。
 - `isMethod(METHOD_ANY)` 在有效 handler 请求中返回 true；`METHOD_ANY` 不作为实际请求方法返回。
@@ -1559,7 +1555,6 @@ public:
     };
 
     static bool begin();
-    static bool beginNetworkServices();
     static void handle();
     static bool isReady();
     static bool isUploading();
@@ -1585,7 +1580,7 @@ public:
 };
 ```
 
-`begin()` 只初始化 OTA boot 诊断和 rollback/mark-valid 状态，应在系统启动早期执行；`beginNetworkServices()` 在 Web/Auth ready 后启动 ArduinoOTA/espota 网络入口。普通业务通常不需要直接调用这两个函数，由 `Esp32Base` 统一调度。
+`begin()`初始化OTA boot诊断和rollback/mark-valid状态，应在系统启动早期执行；Web层按 `ESP32BASE_ENABLE_OTA` 注册浏览器和raw HTTP上传入口。普通业务通常不需要直接调用 `begin()`，由 `Esp32Base` 统一调度。
 
 `runningOtaState()` 返回当前 running partition 的 OTA state 字符串：`valid`、`pending_verify`、`aborted`、`invalid`、`undefined`、`new`、`unknown` 或 `n/a`。`waitingForMarkValid()` 仅在启用 `ESP32BASE_OTA_REQUIRE_MARK_VALID=1` 且当前 running partition 为 `pending_verify` 时返回 `true`。业务自检通过后调用 `markCurrentValid()`；如果当前镜像不是 `pending_verify`，该函数会记录诊断并返回 `false`，不会误报确认成功。
 
@@ -1597,9 +1592,7 @@ public:
 
 Web OTA 上传页面不要求额外认证；它只复用 Web 层 Basic Auth。上传过程必须提供进度展示。
 
-启用 `ESP32BASE_ENABLE_OTA` 时，`ESP32BASE_ENABLE_ARDUINO_OTA` 默认同为 1，提供 ArduinoOTA/espota 兼容入口。命令行 OTA 使用 `Esp32Base::hostname()` 和标准端口 3232，复用 mDNS 的 `<hostname>.local` 解析；认证密码为当前生效的 Web Auth 密码，用户名不参与。Web/API 修改 hostname 后必须重启，ArduinoOTA 和 mDNS 才会使用新名称。即使 Web Auth 被关闭，ArduinoOTA 仍要求密码。
-
-Web OTA 与 ArduinoOTA 不得同时写 flash；已有 OTA 传输进行时，另一入口必须拒绝或暂停处理。
+启用 `ESP32BASE_ENABLE_OTA` 即启用OTA核心、浏览器multipart上传、高速raw HTTP上传、分区诊断、SHA256、mark-valid和回滚。命令行通过 `pio run -t webota` 复用同一个Web Basic Auth和HTTP服务；当前库不提供ArduinoOTA/espota或独立3232监听端口。
 
 ## 13. Esp32BaseWatchdog / Sleep / Fs / Health
 

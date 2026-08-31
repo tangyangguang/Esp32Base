@@ -3,6 +3,7 @@
 #if ESP32BASE_ENABLE_WEB
 
 #include "WebInternal.h"
+#include "../../update/internal/Esp32BaseOtaCompat.h"
 
 namespace esp32base_web {
 
@@ -336,7 +337,7 @@ void formatIpAddress(const IPAddress& address, char* out, size_t len) {
 
 void sendFirmwareOtaDetails() {
     char runningElfSha[65] = "";
-    esp_ota_get_app_elf_sha256(runningElfSha, sizeof(runningElfSha));
+    esp32base_internal::appElfSha256(runningElfSha, sizeof(runningElfSha));
     sendInfoRow("Running ELF SHA256", runningElfSha[0] ? runningElfSha : "unavailable");
 }
 

@@ -21,11 +21,7 @@
 #include "../runtime/Esp32BaseWatchdog.h"
 #endif
 #include "../runtime/internal/Esp32BaseLongOperation.h"
-#if ESP32BASE_ENABLE_ARDUINO_OTA
-#include "../web/Esp32BaseWeb.h"
-#include <ArduinoOTA.h>
-#endif
-
+#include "internal/Esp32BaseOtaCompat.h"
 #include <Update.h>
 #include <esp_err.h>
 #include <esp_log.h>
@@ -36,7 +32,6 @@
 #include <mbedtls/version.h>
 #endif
 #include <ctype.h>
-#include <new>
 #include <string.h>
 
 #ifndef ESP32BASE_OTA_REQUIRE_MARK_VALID
@@ -49,7 +44,6 @@
 
 namespace {
 bool g_otaReady = false;
-bool g_otaNetworkServicesReady = false;
 Esp32BaseOta::Status g_otaStatus = Esp32BaseOta::IDLE;
 size_t g_otaTotal = 0;
 size_t g_otaProcessed = 0;
@@ -82,12 +76,6 @@ char g_otaLastBootPartitionLabel[17] = "";
 uint32_t g_otaLastBootPartitionAddress = 0;
 size_t g_otaLastBootPartitionSize = 0;
 char g_otaStage[17] = "idle";
-#if ESP32BASE_ENABLE_ARDUINO_OTA
-bool g_arduinoOtaReady = false;
-bool g_arduinoOtaTransferActive = false;
-bool g_arduinoOtaRestartPending = false;
-char g_arduinoOtaAuthPass[64] = "";
-#endif
 
 void bytesToHex(const uint8_t* bytes, size_t len, char* out, size_t outLen) {
     static const char* hex = "0123456789abcdef";
@@ -433,157 +421,6 @@ void checkMarkValidTimeout() {
 #endif
 }
 
-#if ESP32BASE_ENABLE_ARDUINO_OTA
-const char* arduinoOtaErrorName(ota_error_t error) {
-    switch (error) {
-        case OTA_AUTH_ERROR: return "auth";
-        case OTA_BEGIN_ERROR: return "begin";
-        case OTA_CONNECT_ERROR: return "connect";
-        case OTA_RECEIVE_ERROR: return "receive";
-        case OTA_END_ERROR: return "end";
-        default: return "unknown";
-    }
-}
-
-void resetArduinoOtaObject(bool stopActiveListener) {
-    if (stopActiveListener) {
-        ArduinoOTA.end();
-    }
-    ArduinoOTA.~ArduinoOTAClass();
-    new (&ArduinoOTA) ArduinoOTAClass();
-}
-
-void configureArduinoOtaCallbacks() {
-    ArduinoOTA.onStart([]() {
-        g_arduinoOtaTransferActive = true;
-        g_arduinoOtaRestartPending = false;
-        g_otaProcessed = 0;
-        g_otaNextProgressLog = 10;
-        g_otaLastError[0] = '\0';
-        g_otaCalculated[0] = '\0';
-        setOtaStage("begin");
-        g_otaTargetPartition = esp_ota_get_next_update_partition(nullptr);
-        storePartition(g_otaTargetPartition,
-                       g_otaTargetPartitionLabel,
-                       sizeof(g_otaTargetPartitionLabel),
-                       g_otaTargetPartitionAddress,
-                       g_otaTargetPartitionSize);
-        storePartition(nullptr,
-                       g_otaLastBootPartitionLabel,
-                       sizeof(g_otaLastBootPartitionLabel),
-                       g_otaLastBootPartitionAddress,
-                       g_otaLastBootPartitionSize);
-        resetOtaTransferStats();
-        g_otaStatus = Esp32BaseOta::UPLOADING;
-        prepareLongOps();
-        char totalBuf[32];
-        formatOtaBytes(g_otaTotal, totalBuf, sizeof(totalBuf));
-        ESP32BASE_LOG_I("ota", "arduino_upload_start stage=begin size=%s auth=enabled md5=arduinoota upload_target=%s address=0x%lx",
-                        g_otaTotal ? totalBuf : "unknown",
-                        g_otaTargetPartitionLabel[0] ? g_otaTargetPartitionLabel : "unknown",
-                        static_cast<unsigned long>(g_otaTargetPartitionAddress));
-#if ESP32BASE_ENABLE_BUS
-        Esp32BaseBus::publish(Esp32BaseOta::EVENT_START, "");
-#endif
-    });
-    ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-        g_otaTotal = static_cast<size_t>(total);
-        g_otaProcessed = static_cast<size_t>(progress);
-        logProgressIfDue();
-#if ESP32BASE_ENABLE_BUS
-        Esp32BaseBus::publish(Esp32BaseOta::EVENT_PROGRESS, "");
-#endif
-    });
-    ArduinoOTA.onEnd([]() {
-        const esp_partition_t* bootPartition = esp_ota_get_boot_partition();
-        storePartition(bootPartition,
-                       g_otaLastBootPartitionLabel,
-                       sizeof(g_otaLastBootPartitionLabel),
-                       g_otaLastBootPartitionAddress,
-                       g_otaLastBootPartitionSize);
-        setOtaStage("boot_confirmed");
-        ESP32BASE_LOG_I("ota", "upload_stage stage=boot_confirmed target=%s address=0x%lx boot_partition=%s boot_address=0x%lx",
-                        g_otaTargetPartitionLabel[0] ? g_otaTargetPartitionLabel : "unknown",
-                        static_cast<unsigned long>(g_otaTargetPartitionAddress),
-                        g_otaLastBootPartitionLabel[0] ? g_otaLastBootPartitionLabel : "unknown",
-                        static_cast<unsigned long>(g_otaLastBootPartitionAddress));
-        if (g_otaTargetPartition && !sameOtaPartition(bootPartition, g_otaTargetPartition)) {
-            g_arduinoOtaTransferActive = false;
-            cleanupLongOps();
-            char message[96];
-            snprintf(message, sizeof(message), "boot partition mismatch target=%s boot=%s",
-                     g_otaTargetPartitionLabel[0] ? g_otaTargetPartitionLabel : "unknown",
-                     g_otaLastBootPartitionLabel[0] ? g_otaLastBootPartitionLabel : "unknown");
-            setError(message);
-            logOtaTransferSummary("arduino_upload_failed");
-            g_otaStatus = Esp32BaseOta::FAILED;
-            return;
-        }
-        g_otaStatus = Esp32BaseOta::SUCCESS;
-        setOtaStage("done");
-        g_arduinoOtaTransferActive = false;
-        cleanupLongOps();
-        char processedBuf[32];
-        formatOtaBytes(g_otaProcessed, processedBuf, sizeof(processedBuf));
-        ESP32BASE_LOG_I("ota", "arduino_upload_success stage=done size=%s boot_partition=%s address=0x%lx",
-                        processedBuf,
-                        g_otaLastBootPartitionLabel[0] ? g_otaLastBootPartitionLabel : "unknown",
-                        static_cast<unsigned long>(g_otaLastBootPartitionAddress));
-        logOtaTransferSummary("arduino_upload_summary");
-#if ESP32BASE_ENABLE_FILELOG
-        Esp32BaseFileLog::flush();
-#endif
-#if ESP32BASE_ENABLE_BUS
-        Esp32BaseBus::publish(Esp32BaseOta::EVENT_SUCCESS, "");
-#endif
-        g_arduinoOtaRestartPending = true;
-    });
-    ArduinoOTA.onError([](ota_error_t error) {
-        const bool wasActive = g_arduinoOtaTransferActive;
-        g_arduinoOtaTransferActive = false;
-        if (wasActive) {
-            cleanupLongOps();
-        }
-        char message[96];
-        snprintf(message, sizeof(message), "arduino ota %s error", arduinoOtaErrorName(error));
-        setError(message);
-        logOtaTransferSummary("arduino_upload_failed");
-        g_otaStatus = Esp32BaseOta::FAILED;
-    });
-}
-
-void beginArduinoOta() {
-    if (g_arduinoOtaReady) {
-        return;
-    }
-    strlcpy(g_arduinoOtaAuthPass, Esp32BaseWeb::authPassword(), sizeof(g_arduinoOtaAuthPass));
-    resetArduinoOtaObject(false);
-    ArduinoOTA.setHostname(Esp32Base::hostname());
-    ArduinoOTA.setPassword(g_arduinoOtaAuthPass);
-    ArduinoOTA.setMdnsEnabled(false);
-    ArduinoOTA.setRebootOnSuccess(false);
-    configureArduinoOtaCallbacks();
-    ArduinoOTA.begin();
-    g_arduinoOtaReady = true;
-    ESP32BASE_LOG_I("ota", "arduino_ota_ready host=%s.local port=3232 auth=enabled",
-                    Esp32Base::hostname());
-}
-
-void syncArduinoOtaAuth() {
-    if (!g_arduinoOtaReady || g_arduinoOtaTransferActive || g_otaStatus == Esp32BaseOta::UPLOADING ||
-        g_otaStatus == Esp32BaseOta::VERIFYING) {
-        return;
-    }
-    const char* currentPass = Esp32BaseWeb::authPassword();
-    if (strcmp(g_arduinoOtaAuthPass, currentPass) == 0) {
-        return;
-    }
-    ESP32BASE_LOG_I("ota", "arduino_ota_auth_changed restarting_listener");
-    resetArduinoOtaObject(true);
-    g_arduinoOtaReady = false;
-    beginArduinoOta();
-}
-#endif
 }
 
 #if ESP32BASE_OTA_REQUIRE_MARK_VALID
@@ -612,7 +449,7 @@ bool Esp32BaseOta::begin() {
     const char* runningOtaState = partitionOtaStateName(g_otaBootPartition);
     const bool waitingForMarkValid = strcmp(runningOtaState, "pending_verify") == 0;
     char runningElfSha256[65] = "";
-    esp_ota_get_app_elf_sha256(runningElfSha256, sizeof(runningElfSha256));
+    esp32base_internal::appElfSha256(runningElfSha256, sizeof(runningElfSha256));
     ESP32BASE_LOG_I("ota",
                     "boot_summary running_partition=%s address=0x%lx running_ota_state=%s configured_boot_partition=%s address=0x%lx configured_boot_state=%s next_update_partition=%s address=0x%lx next_update_state=%s mark_valid_policy=%s waiting_for_mark_valid=%s timeout_ms=%lu elf_sha256=%s",
                     partitionLabelOrUnknown(g_otaBootPartition),
@@ -682,42 +519,7 @@ bool Esp32BaseOta::begin() {
     return true;
 }
 
-bool Esp32BaseOta::beginNetworkServices() {
-    if (!g_otaReady) {
-        begin();
-    }
-    if (g_otaNetworkServicesReady) {
-        return true;
-    }
-    g_otaNetworkServicesReady = true;
-#if ESP32BASE_ENABLE_ARDUINO_OTA
-    beginArduinoOta();
-#endif
-    return true;
-}
-
 void Esp32BaseOta::handle() {
-#if ESP32BASE_ENABLE_ARDUINO_OTA
-    if (g_arduinoOtaRestartPending) {
-        g_arduinoOtaRestartPending = false;
-        delay(500);
-        Esp32BaseSystem::restart("arduino ota success");
-        return;
-    }
-    if (g_otaReady && g_otaNetworkServicesReady) {
-        if (!g_arduinoOtaReady) {
-            beginArduinoOta();
-        } else {
-            syncArduinoOtaAuth();
-        }
-#if ESP32BASE_ENABLE_WIFI
-        if (Esp32BaseWiFi::isConnected() && g_arduinoOtaReady &&
-            (!isUploading() || g_arduinoOtaTransferActive)) {
-            ArduinoOTA.handle();
-        }
-#endif
-    }
-#endif
     checkMarkValidTimeout();
 }
 

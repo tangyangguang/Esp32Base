@@ -92,7 +92,7 @@ Core 不包含：
 - 复杂策略框架
 - 静态模块注册表
 
-系统诊断日志作为 Runtime/FS 可选模块提供，实现/API 名称为 `Esp32BaseFileLog`，不属于 Core。启用 FS 的 profile 默认开启系统诊断日志；CORE 不为 LittleFS 或系统诊断日志付成本。
+系统诊断日志作为Runtime/FS可选模块提供，实现/API名称为 `Esp32BaseFileLog`，不属于Core。启用FS的Profile默认开启系统诊断日志；MINIMAL不为LittleFS或系统诊断日志付成本。
 
 ## 4. 质量目标
 
@@ -100,7 +100,7 @@ Core 不包含：
 
 必须证明：
 
-- CORE 不链接 WiFi / WebServer / Update / LittleFS。
+- MINIMAL不链接WiFi / WebServer / Update / LittleFS / MQTT。
 - NET 不链接 WebServer / Update。
 - WEB 不链接 Update。
 - 关闭 Bus / Fs / Health 不产生静态对象。

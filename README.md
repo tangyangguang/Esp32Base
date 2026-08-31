@@ -44,7 +44,7 @@ void loop() {
 启用能力通过 profile 或精细宏完成：
 
 ```cpp
-#define ESP32BASE_PROFILE ESP32BASE_PROFILE_WEB_RUNTIME
+#define ESP32BASE_PROFILE ESP32BASE_PROFILE_LOCAL
 #include <Esp32Base.h>
 ```
 
@@ -75,11 +75,11 @@ Web/Auth 不再内置启用 admin/admin。启用 Web 的业务必须在 `Esp32Ba
 
 需要长期保存浇水、开关门、喂食等固定结构业务历史时，可启用 `ESP32BASE_ENABLE_RECORD_STORE=1`，为每种固定负载创建独立的 `Esp32BaseRecordStore`。应用负责用定宽整数、代码、位标志和固定位置把业务对象编码为固定字节负载；基础库统一添加32位自增ID、完成时间、启动标识、运行时间、持续时间和CRC32，并负责按段追加、容量轮换、断电恢复、最新优先分页、按ID读取、状态和逻辑清空。启用Web的项目在Store完成 `begin()` 后登记当前版本对象，System页便统一提供状态、`Clear Business Records` 和格式化后的Store恢复，业务不再自建清空入口。登记只要求对象随后持续有效，不限定必须采用全局变量；同一Store的操作需要串行，推荐集中在loop/system task。每个版本使用 `/esp32base/records/<record-type>.v<version>/` 独立目录，未登记历史版本不属于该操作，最大逻辑存储预算由业务按LittleFS分区和保留需求确定。示例见 `examples/record_store_demo`。
 
-需要记录业务可解释事件时，可显式启用 App Events。它默认关闭，不随 FULL profile 自动开启；启用后复用 Record Store，并在业务 Store 前优先创建 `/esp32base/records/app-events.v2/`。默认最大逻辑预算为100 KiB，24字节事件负载加24字节通用元数据后每条48字节，估算容量2113条；按约4 KiB完整段轮换时实际保留约2029～2113条。App Events用于解释近期业务决策和影响；完整浇水、开关门、喂食历史仍应使用业务自己的RecordStore。事件保存 `eventCode/reasonCode/objectId/value1/value2/flags/level/eventKind/conditionId` 定宽数值字段，显示文字由业务代码映射。
+需要记录业务可解释事件时，可显式启用 App Events。它默认关闭，不随任何 Profile 自动开启；启用后复用 Record Store，并在业务 Store 前优先创建 `/esp32base/records/app-events.v2/`。默认最大逻辑预算为100 KiB，24字节事件负载加24字节通用元数据后每条48字节，估算容量2113条；按约4 KiB完整段轮换时实际保留约2029～2113条。App Events用于解释近期业务决策和影响；完整浇水、开关门、喂食历史仍应使用业务自己的RecordStore。事件保存 `eventCode/reasonCode/objectId/value1/value2/flags/level/eventKind/conditionId` 定宽数值字段，显示文字由业务代码映射。
 
 ```ini
 build_flags =
-  -D ESP32BASE_PROFILE=ESP32BASE_PROFILE_FULL
+  -D ESP32BASE_PROFILE=ESP32BASE_PROFILE_LOCAL
   -D ESP32BASE_ENABLE_APP_EVENTS=1
 ```
 
@@ -118,7 +118,7 @@ Web 页面可优先使用 Esp32Base 的 UI baseline、helper 和页面能力；�
 
 RS485 半双工基础串口通过 `ESP32BASE_ENABLE_RS485_PORT=1` 显式启用。`Esp32BaseRs485Port` 只封装 ESP32 `HardwareSerial`、RX/TX/DE 引脚、baud、串口配置、发送前后 DE 方向切换、`flush()` 等待和轮询读取；它不包含 Modbus/RTU、CRC、地址、重试、超时帧解析或任何应用协议。业务协议应在应用层基于 `writeBytes()`、`readable()` 和 `readByte()` 自行实现。示例见 `examples/rs485_port`。
 
-标准 MQTT 3.1.1 Client 通过 `ESP32BASE_ENABLE_MQTT=1` 显式启用，不随任何 Profile 自动开启。它基于 Arduino ESP32 Core 内置 ESP-MQTT，提供单 Broker、MQTTS、QoS 0/1、retain、LWT、固定容量订阅、重连重新订阅、退避抖动、分片消息安全组装和结构化诊断。默认必须提供 Broker CA，TLS 在 NTP 成功前保持 `WAITING_FOR_TIME`；RTC 可供离线业务记时，但不能单独放行公网 TLS。明文 MQTT 需要额外设置 `ESP32BASE_MQTT_ALLOW_PLAINTEXT=1` 并在运行配置中选择 `EXPLICIT_PLAINTEXT`。用户名、密码、证书、私钥、LWT 和订阅字符串由应用持有到设备重启，不写入 App Config、NVS、Web 或日志。示例见 `examples/mqtt_tls`。
+标准 MQTT 3.1.1 Client 在 `IOT` Profile 中默认启用，其他 Profile 也可通过 `ESP32BASE_ENABLE_MQTT=1` 显式开启。它基于 Arduino ESP32 Core 内置 ESP-MQTT，提供单 Broker、MQTTS、QoS 0/1、retain、LWT、固定容量订阅、重连重新订阅、退避抖动、分片消息安全组装和结构化诊断。默认必须提供 Broker CA，TLS 在 NTP 成功前保持 `WAITING_FOR_TIME`；RTC 可供离线业务记时，但不能单独放行公网 TLS。明文 MQTT 需要额外设置 `ESP32BASE_MQTT_ALLOW_PLAINTEXT=1` 并在运行配置中选择 `EXPLICIT_PLAINTEXT`。用户名、密码、证书、私钥、LWT 和订阅字符串由应用持有到设备重启，不写入 App Config、NVS、Web 或日志。示例见 `examples/mqtt_tls`。
 
 MQTT 只负责连接机制。Topic 版本、命令授权、去重、过期、JSON、业务状态同步、离线业务数据和重连后的当前状态重发仍由应用负责。基础库没有第二套离线发送队列；`publish()` 成功只表示报文已被非阻塞发送队列接受，QoS 1 必须等待 `EVENT_PUBLISH_ACKNOWLEDGED` 才表示 Broker ACK，断线前未 ACK 的报文会报告“送达状态不确定”且可能由底层有界 outbox 重传；QoS 0 不提供无法证明的送达承诺。
 
@@ -152,21 +152,16 @@ WiFi 默认关闭 modem sleep，让 Web 首屏和 OTA 不被 Arduino ESP32 默�
 
 ## Profiles
 
-默认 profile 是 `ESP32BASE_PROFILE_CORE`。
+默认 Profile 是 `ESP32BASE_PROFILE_MINIMAL`。
 
-| Profile | Core | Runtime | Bus | Network | Web | OTA | 用途 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `ESP32BASE_PROFILE_CORE` | yes | no | no | no | no | no | 极简配置和诊断 |
-| `ESP32BASE_PROFILE_RUNTIME` | yes | yes | yes | no | no | no | 离线本地设备 |
-| `ESP32BASE_PROFILE_NET` | yes | no | no | yes | no | no | 纯联网设备 |
-| `ESP32BASE_PROFILE_NET_RUNTIME` | yes | yes | yes | yes | no | no | 量产联网节点 |
-| `ESP32BASE_PROFILE_WEB` | yes | no | yes | yes | yes | no | Web 配置和状态 |
-| `ESP32BASE_PROFILE_WEB_RUNTIME` | yes | yes | yes | yes | yes | no | Web + 本地可靠运行 |
-| `ESP32BASE_PROFILE_FULL` | yes | yes | yes | yes | yes | yes | 完整管理和 OTA |
+| Profile | 默认能力 | 用途 |
+| --- | --- | --- |
+| `ESP32BASE_PROFILE_MINIMAL` | Log、Config、System | 极简程序和专项能力组合 |
+| `ESP32BASE_PROFILE_OFFLINE` | MINIMAL、Watchdog、Health、FS、FileLog | 无网络的可靠本地控制器 |
+| `ESP32BASE_PROFILE_LOCAL` | OFFLINE、WiFi、配网、NTP、mDNS、认证Web、Web OTA | 可本地维护和升级的普通设备 |
+| `ESP32BASE_PROFILE_IOT` | LOCAL、MQTT/MQTTS | 本地维护面加公网MQTT的智能终端 |
 
-Profile 是默认组合，用户仍可用 `ESP32BASE_ENABLE_*` 精细覆盖。所有覆盖都必须经过编译期依赖检查。
-
-系统诊断日志（实现/API 名称 `Esp32BaseFileLog`）是 Runtime/FS 能力，不属于 Core。`CORE` 和默认 `NET` 不链接 LittleFS；`RUNTIME`、`NET_RUNTIME`、`WEB_RUNTIME`、`FULL` 默认可用系统诊断日志。
+业务项目通常只需在 `LOCAL` 和 `IOT` 中选择。Bus、Sleep、RTC、RS485、Record Store、App Events和App Config保持正交并按实际需求显式开启；特殊组合继续使用 `ESP32BASE_ENABLE_*` 精细覆盖，不新增排列组合Profile。完整契约见 [Profile 与裁剪](docs/02_profiles.md)。
 
 仓库示例默认面向 ESP32 4MB Flash，并使用 `partitions/esp32-4mb-ota-balanced.csv`。应用项目强烈推荐直接选择 `partitions/` 中已有分区表，不要在业务项目里重新设计分区布局；除非硬件容量、OTA 策略或持久化容量确实不匹配，才自定义分区表，并必须同步验证串口烧录、OTA、NVS、LittleFS 和数据保留边界。ESP32 / ESP32-C3 4MB 推荐分区表保留两个 1.5MB OTA app slot，剩余空间作为 LittleFS 数据分区。
 
@@ -182,18 +177,7 @@ Profile 是默认组合，用户仍可用 `ESP32BASE_ENABLE_*` 精细覆盖。�
 
 LittleFS 中的 `/esp32base/**` 是基础库管理命名空间。系统诊断日志默认在 `/esp32base/logs/system.log`，App Events store 默认在 `/esp32base/records/app-events.v2/`；业务项目自己的 RecordStore 也由基础库放到 `/esp32base/records/**`，其他业务文件应放到 `/app/**`、`/data/**` 或项目自定义目录，避免和基础库维护动作混用。
 
-`ESP32BASE_PROFILE_FULL` 默认同时支持 Web OTA 和 PlatformIO/espota 命令行 OTA。命令行 OTA 使用 `Esp32Base::hostname()` 对应的 `<hostname>.local`、标准端口 3232，以及当前 Web Auth 密码：
-
-```ini
-upload_protocol = espota
-upload_port = esp32-demo.local
-upload_flags =
-  --auth=<current-web-auth-password>
-```
-
-不需要命令行 OTA 的业务可显式设置 `ESP32BASE_ENABLE_ARDUINO_OTA=0`，现有 Web OTA 不受影响。
-
-需要更快的命令行上传时，可使用 Esp32Base 内置 `webota` target。它复用现有 HTTP Web OTA 接口和 Web Auth。`custom_esp32base_webota_host` 同时接受设备 IP、普通 DNS hostname 和 mDNS `<hostname>.local`；DHCP 地址可能变化的本地开发设备推荐使用当前 Esp32Base hostname 对应的 `.local` 地址：
+`LOCAL` 和 `IOT` 统一使用HTTP Web OTA，不提供ArduinoOTA/espota或独立3232监听端口。浏览器使用multipart上传；命令行使用Esp32Base内置的高速 `webota` target。它复用现有 HTTP Web OTA 接口和 Web Auth。`custom_esp32base_webota_host` 同时接受设备 IP、普通 DNS hostname 和 mDNS `<hostname>.local`；DHCP 地址可能变化的本地开发设备推荐使用当前 Esp32Base hostname 对应的 `.local` 地址：
 
 ```ini
 extra_scripts =
@@ -208,7 +192,7 @@ custom_esp32base_webota_password = <current-web-auth-password>
 pio run -t webota
 ```
 
-`espota` 是 ArduinoOTA 标准协议；`webota` 是 Esp32Base 提供的 HTTP 上传方式，每次执行时由操作系统解析一次配置的 IP 或 hostname，显示本次解析到的地址，并让预检、状态采样和上传连接复用该地址；HTTP `Host` 和 HTTPS SNI 仍保留原 hostname。`.local` 依赖运行脚本的系统和当前网络支持 mDNS。它默认使用 `/esp32base/ota/raw` raw binary 路径和 64KB 分块，并在上传前预检认证、RSSI 和 OTA 目标分区容量，超出时不发送固件 body。raw 上传会根据弱 RSSI 自动把发送分块和节奏降到更保守的默认值，也可通过 `esp32base_webota_chunk_size`、`esp32base_webota_raw_pause_ms` 和 `esp32base_webota_socket_send_buffer` 显式覆盖；raw 传输中断时不会自动改走 `/esp32base/ota` multipart 路径。脚本会为 raw HTTP body 增加传输 padding，设备端只写入 `X-Firmware-Size` 声明的真实固件字节，以避免 Arduino `HTTPRaw` 最后一包短读等待超时。设备端把 raw 接收块直接交给 Arduino `Update` 内部缓冲，不再额外申请连续 64 KB heap。浏览器手工选择文件上传仍使用 `/esp32base/ota` multipart 表单路径，页面会在选择文件后立即显示固件大小，并在发送前按当前 OTA 目标 slot 容量拦截过大的固件，不受脚本默认值影响。详细配置见 `docs/05_ota.md`。
+`webota` 是 Esp32Base 提供的 HTTP 上传方式，每次执行时由操作系统解析一次配置的 IP 或 hostname，显示本次解析到的地址，并让预检、状态采样和上传连接复用该地址；HTTP `Host` 和 HTTPS SNI 仍保留原 hostname。`.local` 依赖运行脚本的系统和当前网络支持 mDNS。它默认使用 `/esp32base/ota/raw` raw binary 路径和 64KB 分块，并在上传前预检认证、RSSI 和 OTA 目标分区容量，超出时不发送固件 body。raw 上传会根据弱 RSSI 自动把发送分块和节奏降到更保守的默认值，也可通过 `esp32base_webota_chunk_size`、`esp32base_webota_raw_pause_ms` 和 `esp32base_webota_socket_send_buffer` 显式覆盖；raw 传输中断时不会自动改走 `/esp32base/ota` multipart 路径。脚本会为 raw HTTP body 增加传输 padding，设备端只写入 `X-Firmware-Size` 声明的真实固件字节，以避免 Arduino `HTTPRaw` 最后一包短读等待超时。设备端把 raw 接收块直接交给 Arduino `Update` 内部缓冲，不再额外申请连续 64 KB heap。浏览器手工选择文件上传仍使用 `/esp32base/ota` multipart 表单路径，页面会在选择文件后立即显示固件大小，并在发送前按当前 OTA 目标 slot 容量拦截过大的固件，不受脚本默认值影响。详细配置见 `docs/05_ota.md`。
 
 量产项目建议启用 `ESP32BASE_OTA_REQUIRE_MARK_VALID=1`，避免 Arduino core 在应用自检前过早把新 OTA 镜像标记为 valid。业务应把基础库启动、配置/API 注册、存储、传感器、执行器安全状态和核心任务纳入自检，通过后再调用 `Esp32BaseOta::markCurrentValid()`。确认期限在 Arduino `setup()` 前启动，不依赖业务进入 `Esp32Base::begin()`、loop 或持续调用 `Esp32Base::handle()`；期限届满会标记新镜像无效并重启回滚，`handle()` 只保留降级检查。最小配置和示例见 `docs/05_ota.md`。
 

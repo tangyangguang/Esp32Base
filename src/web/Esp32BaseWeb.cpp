@@ -485,14 +485,6 @@ void Esp32BaseWeb::setDefaultAuth(const char* user, const char* pass) {
     }
 }
 
-const char* Esp32BaseWeb::authUser() {
-    return nativeState().authUser.c_str();
-}
-
-const char* Esp32BaseWeb::authPassword() {
-    return nativeState().authPass.c_str();
-}
-
 bool Esp32BaseWeb::isAuthEnabled() {
     return nativeState().authEnabled;
 }
@@ -1270,14 +1262,6 @@ void Esp32BaseWeb::setDefaultAuth(const char* user, const char* pass) {
                     g_defaultAuthUser,
                     g_defaultAuthPass[0] ? "yes" : "no",
                     g_authLoadedFromStorage ? "no" : "yes");
-}
-
-const char* Esp32BaseWeb::authUser() {
-    return g_authUser;
-}
-
-const char* Esp32BaseWeb::authPassword() {
-    return g_authPass;
 }
 
 bool Esp32BaseWeb::isAuthEnabled() {

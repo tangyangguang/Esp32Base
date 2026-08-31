@@ -17,7 +17,7 @@
 确认：
 
 - Core 不包含 Bus / WiFi / Web / OTA / Fs / Watchdog。
-- Profile 数量固定为 7 个。
+- Profile数量固定为4个：MINIMAL、OFFLINE、LOCAL、IOT。
 - 不引入静态模块注册表。
 - 不引入复杂策略框架。
 - 不引入未列入边界的新模块。
@@ -26,7 +26,8 @@
 
 必须通过：
 
-- 7 个 profile。
+- `python3 scripts/check_profile_contract.py`，验证四Profile展开、显式覆盖、已删除宏和非法依赖组合。
+- 4个Profile。
 - ESP32 / ESP32-S3 / ESP32-C3。
 - Arduino Core 2.x / 3.x。
 - Core 3.x pioarduino 构建前运行 `scripts/ensure_arduino3_platformio.py`，并保留 env 的 `scripts/pioarduino_core3_preflight.py` 自动检查，确保 Arduino 3.x framework 主包和 libs 包已安装，避免 `FRAMEWORK_DIR` 为空的本地包状态错误。
@@ -39,7 +40,6 @@
 - map 符号。
 - 非法 `ESP32BASE_PROFILE` 必须编译失败。
 - 错误依赖组合必须编译失败，例如启用 `OTA` 但关闭 `WEB`。
-- 启用 `OTA` 时默认启用 `ARDUINO_OTA`；显式 `ESP32BASE_ENABLE_ARDUINO_OTA=0` 必须可关闭命令行 OTA。
 
 ## 4. 发布包检查
 
@@ -58,21 +58,21 @@
 
 ## 5. 裁剪检查
 
-- CORE profile 不能因为 Web 多编译单元被 `srcFilter` 编译而链接 WebServer、WiFi、Update、LittleFS 等非目标符号；先跑 `examples/basic -e esp32_core`，再跑 `scripts/check_trim_symbols.py`。
+- MINIMAL Profile不能因为Web多编译单元被 `srcFilter` 编译而链接WebServer、WiFi、Update、LittleFS等非目标符号；先构建 `examples/basic -e esp32_minimal -e esp32_offline -e esp32_local -e esp32_iot`，再跑 `scripts/check_trim_symbols.py`。
 
 必须证明：
 
-- CORE 不链接 WiFi/WebServer/Update/LittleFS。
-- NET 不链接 WebServer/Update/LittleFS，除非显式启用 FS。
-- WEB 不链接 Update。
+- MINIMAL不链接WiFi/WebServer/Update/LittleFS/MQTT。
+- OFFLINE不链接WiFi/WebServer/Update/MQTT。
+- LOCAL链接WebServer/Update，但不链接MQTT。
+- IOT链接WebServer/Update/MQTT。
 - FS 关闭时 FileLog 不拉入 LittleFS。
 - 关闭 Bus/Fs/Health 不产生静态对象。
 - Web 可选页面资源必须按能力宏裁剪，避免未启用 App Events、FS、OTA 或 FileLog 时仍带入对应专属资源。
-- 外部最小应用仅 `#include <Esp32Base.h>` 并启用 FULL profile 时，不额外声明 framework 内置库也必须编译通过，包括 ArduinoOTA。
 
 ## 4.1 MQTT 检查
 
-- MQTT 不随任何 Profile 自动开启；关闭构建中没有 `Esp32BaseMqtt`、`esp_mqtt_client_*` 和 `mqtt_task` 符号。
+- MQTT只随IOT Profile默认开启；MINIMAL、OFFLINE、LOCAL及显式关闭构建中没有 `Esp32BaseMqtt`、`esp_mqtt_client_*` 和 `mqtt_task` 符号。
 - `pio test -e native_mqtt_harness` 和 `pio test -e native_mqtt_secure_default_harness` 通过。
 - `examples/mqtt_tls` 完成 ESP32 / ESP32-S3 / ESP32-C3 Core 2.x 和代表性 Core 3.x 构建。
 - 有可用测试 Broker 时，`python3 scripts/check_mqtt_cloud_integration.py` 通过；本机 INI、CA 和凭据保持 Git 忽略且不进入发布包。
@@ -115,11 +115,8 @@
 
 - Web Auth 开启时，未认证不能写 flash。
 - Web Auth 关闭时，OTA route 仍注册且无密码保护。
-- espota 正确密码上传成功。
-- espota 错误密码上传失败且设备仍可访问。
 - `pio run -t webota` 通过 HTTP Web OTA 上传成功。
 - `webota` 错误 Web Auth 上传失败且设备仍可访问。
-- Web OTA 与 espota 不得同时写 flash。
 - SHA256 正确路径成功。
 - SHA256 错误路径失败。
 - `Update.end(true)` 只在 SHA256 通过后调用。
@@ -329,7 +326,7 @@
 
 必须完成 48 小时 soak：
 
-- FULL profile。
+- LOCAL/IOT Profile。
 - ESP32 / ESP32-S3 / ESP32-C3 各一台。
 - 高频 deferred NVS 写入。
 - 周期 Web 状态查询。

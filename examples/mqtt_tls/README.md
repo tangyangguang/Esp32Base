@@ -1,6 +1,6 @@
 # MQTT TLS Example
 
-This example enables the optional MQTT 3.1.1 client on `NET_RUNTIME`.
+This example uses the `IOT` Profile, which combines the local Web/OTA maintenance plane with the MQTT 3.1.1 client.
 
 Before flashing, copy `local_secrets.example.h` to `local_secrets.h` and replace
 the broker host, credentials and CA certificate. The local file is ignored by

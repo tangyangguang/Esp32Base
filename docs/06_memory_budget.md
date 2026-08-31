@@ -16,15 +16,14 @@
 
 必须满足：
 
-| Profile | 不应链接 |
-| --- | --- |
-| CORE | WiFi, WebServer, Update, LittleFS |
-| RUNTIME | WiFi, WebServer, Update |
-| NET | WebServer, Update |
-| NET_RUNTIME | WebServer, Update |
-| WEB | Update |
-| WEB_RUNTIME | Update |
-| FULL | 全部需要的能力 |
+| Profile | 必须链接 | 不应链接 |
+| --- | --- | --- |
+| MINIMAL | Config, System | WiFi, WebServer, Update, LittleFS, MQTT |
+| OFFLINE | LittleFS, FileLog, Watchdog, Health | WiFi, WebServer, Update, MQTT |
+| LOCAL | WiFi, WebServer, Update | MQTT |
+| IOT | WiFi, WebServer, Update, MQTT | 无Profile外强制能力 |
+
+四种Profile都不得链接ArduinoOTA/espota符号。
 
 关闭模块要求：
 
@@ -53,7 +52,7 @@ Status 页不创建后台任务、定时器、历史采样缓存或自动刷新�
 #define ESP32BASE_WEB_MAX_ROUTES 24
 ```
 
-该上限只控制应用通过 `addRoute()` / `addPage()` / `addApi()` 注册的静态 route 槽位；内置 Web 路由不占用此表。默认 24 是基础库当前 full profile 的设计目标，优先避免业务页面/API 增长时过早触发 route 容量不足。route 较少且需要节省静态 RAM 的应用，可以在构建参数里显式调小。
+该上限只控制应用通过 `addRoute()` / `addPage()` / `addApi()` 注册的静态 route 槽位；内置 Web 路由不占用此表。默认24是基础库当前LOCAL/IOT的设计目标，优先避免业务页面/API 增长时过早触发 route 容量不足。route 较少且需要节省静态 RAM 的应用，可以在构建参数里显式调小。
 
 ### 3.3 Config pending
 
@@ -64,11 +63,11 @@ Status 页不创建后台任务、定时器、历史采样缓存或自动刷新�
 #define ESP32BASE_CONFIG_PENDING_MAX ESP32BASE_EB_CONFIG_PENDING_MAX
 ```
 
-每个 pending blob 按实际长度动态分配，单个 blob 最大 256 字节。Config 只保留一个 256 字节静态 scratch buffer，用于 blob 和短字符串的写前比较；字符串读取优先直接写入调用方缓冲，调用方缓冲不足或长字符串需要写前比较时，才在当前调用期间按 NVS 实际长度临时分配，完成后立即释放。CORE 不再为最大 3999 字节字符串常驻预留 4000 字节 RAM。
+每个 pending blob 按实际长度动态分配，单个 blob 最大 256 字节。Config 只保留一个 256 字节静态 scratch buffer，用于 blob 和短字符串的写前比较；字符串读取优先直接写入调用方缓冲，调用方缓冲不足或长字符串需要写前比较时，才在当前调用期间按 NVS 实际长度临时分配，完成后立即释放。MINIMAL不再为最大3999字节字符串常驻预留4000字节RAM。
 
 ### 3.4 FileLog
 
-系统诊断日志仅在 FS profile 中启用，底层实现/API 名称是 `Esp32BaseFileLog`。默认路径为 `/esp32base/logs/system.log`，默认 `4 × 32KB = 128KB`，低优先级缓存 1KB，flush interval 2s。默认模式 ERROR，用于让全功能固件在无业务数据、应用事件或显式调试需求时保持很低的 Flash 写入量；现场排查可显式切到 WARN 或 INFO。Core 和默认 NET 不链接 LittleFS，也不产生 FileLog 静态状态。
+系统诊断日志仅在 FS profile 中启用，底层实现/API 名称是 `Esp32BaseFileLog`。默认路径为 `/esp32base/logs/system.log`，默认 `4 × 32KB = 128KB`，低优先级缓存 1KB，flush interval 2s。默认模式 ERROR，用于让全功能固件在无业务数据、应用事件或显式调试需求时保持很低的 Flash 写入量；现场排查可显式切到 WARN 或 INFO。MINIMAL不链接LittleFS，也不产生FileLog静态状态。
 
 ### 3.5 App Config
 
@@ -143,9 +142,9 @@ MQTT（仅 `ESP32BASE_ENABLE_MQTT=1`）：
 - 接收消息从 ESP-MQTT 分片复制到固定消息槽一次，业务 callback 直接读取该槽；callback 返回后指针失效。
 - `ESP32BASE_MQTT_ALLOW_UNCHECKED_CERTIFICATE_DATES` 只改变配置准入，不增加预握手、任务、缓冲或常驻 RAM；它也不会为官方 Core 补做证书日期校验。
 
-MQTT 默认关闭且不随 FULL 自动开启。开启后 Arduino Core 预编译 ESP-MQTT 基本同时带入 TLS transport，因此“只配置明文”不能作为显著裁剪 TLS Flash 的手段。发布测量必须分别记录 MQTT 关闭、MQTT 开启但未配置、真实 MQTTS 配置的 `firmware.elf/bin`，并在实机记录初始化、TCP、TLS 握手峰值和稳定连接后的 free/min heap。
+MQTT在IOT Profile中默认开启，在其他Profile中默认关闭。开启后 Arduino Core 预编译 ESP-MQTT 基本同时带入 TLS transport，因此“只配置明文”不能作为显著裁剪 TLS Flash 的手段。发布测量必须分别记录 MQTT 关闭、MQTT 开启但未配置、真实 MQTTS 配置的 `firmware.elf/bin`，并在实机记录初始化、TCP、TLS 握手峰值和稳定连接后的 free/min heap。
 
-2026-07-30 的 classic ESP32、Arduino Core 2.0.16、`-flto -fno-exceptions`、1.5MiB app slot 构建参考：`examples/basic` FULL/MQTT关闭为 Flash 988085 bytes、静态 RAM 59412 bytes；`examples/mqtt_tls` FULL/MQTT启用且实际调用配置/订阅/发布/LWT API 为 Flash 1132293 bytes、静态 RAM 62260 bytes，增量分别为 144208 和 2848 bytes。该示例使用不可工作的短 CA 占位文本，只证明链接和 wrapper 固定容量，不代表真实 CA 体积、TLS 握手或运行时 heap；产品验收不得把这组构建数值外推为实机资源结论。
+Profile重构后的Flash和静态RAM以 `examples/basic` 当前四Profile构建结果为准，不沿用旧Profile的历史数值。`examples/mqtt_tls` 使用不可工作的短CA占位文本，只证明链接和wrapper固定容量，不代表真实CA体积、TLS握手或运行时heap；产品验收不得把构建数值外推为实机资源结论。
 
 人性化容量显示：
 
@@ -204,7 +203,7 @@ Web 页面体积：
 - 每次 restart/deep sleep 前写入一条小记录。
 - 预期写入频率远低于普通业务配置；若应用存在高频重启，应优先修复重启原因，而不是扩大日志环。
 
-4MB Flash FULL profile 需要重点验证 OTA app slot 是否足够。
+4MB Flash LOCAL/IOT Profile 需要重点验证 OTA app slot 是否足够。
 
 ESP32-S3 8MB 可提供更宽松 app / fs 空间。
 
@@ -218,7 +217,7 @@ ESP32-C3 4MB 要控制 Web/OTA/Fs 组合的体积。
 | ESP32-S3 8MB | `partitions/esp32-s3-8mb-ota-balanced.csv` | `20 KB / 0x5000` | `2.25 MB / 0x240000` | `3.38 MB / 0x360000` | `64 KB / 0x10000` |
 | ESP32-C3 4MB | `partitions/esp32-c3-4mb-ota-balanced.csv` | `20 KB / 0x5000` | `1.50 MB / 0x180000` | `896 KB / 0xE0000` | `64 KB / 0x10000` |
 
-4MB FULL profile 必须持续关注 OTA slot 余量。ESP32 / ESP32-C3 4MB 推荐分区表提供 1.5MB 单 app slot；业务若继续增加大页面、证书、图片或大型逻辑，应优先改用 8MB Flash 板型，而不是压缩本库核心逻辑或重新引入多套 4MB 分区预设。
+4MB LOCAL/IOT Profile 必须持续关注 OTA slot 余量。ESP32 / ESP32-C3 4MB 推荐分区表提供 1.5MB 单 app slot；业务若继续增加大页面、证书、图片或大型逻辑，应优先改用 8MB Flash 板型，而不是压缩本库核心逻辑或重新引入多套 4MB 分区预设。
 
 ## 7. 容量验收
 
@@ -226,7 +225,7 @@ ESP32-C3 4MB 要控制 Web/OTA/Fs 组合的体积。
 
 发布前至少核对：
 
-- CORE / NET / WEB / FULL 的符号裁剪是否符合 profile 边界。
+- MINIMAL / OFFLINE / LOCAL / IOT的符号存在与裁剪是否符合Profile边界。
 - 代表目标的 `firmware.bin` 是否落在推荐分区表的 app slot 内。
 - `text / data / bss` 是否出现异常增长。
 - 实机 `free heap` / `min free heap` 是否覆盖启动、联网、Web 请求、OTA 和 LittleFS 主要路径。

@@ -4,6 +4,7 @@
 
 #include "WebInternal.h"
 #include "WebOtaPreflight.h"
+#include "../../update/internal/Esp32BaseOtaCompat.h"
 
 #include <string.h>
 
@@ -87,7 +88,7 @@ void handleOtaPage() {
     sendInfoRow("Running ELF SHA256", []() -> const char* {
         static char sha[65];
         sha[0] = '\0';
-        esp_ota_get_app_elf_sha256(sha, sizeof(sha));
+        esp32base_internal::appElfSha256(sha, sizeof(sha));
         return sha[0] ? sha : "unavailable";
     }());
     sendChunk("</table></div></section>");

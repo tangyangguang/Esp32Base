@@ -7,7 +7,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 BASIC_EXAMPLE = ROOT / "examples" / "basic"
-ARDUINO3_ENVS = ("esp32_full_arduino3", "esp32_core_arduino3")
+ARDUINO3_ENVS = ("esp32_local_arduino3", "esp32_minimal_arduino3")
 REQUIRED_PATHS = (
     Path("framework-arduinoespressif32") / "package.json",
     Path("framework-arduinoespressif32") / "cores" / "esp32" / "Arduino.h",

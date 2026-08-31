@@ -1,6 +1,6 @@
 # App Events Demo
 
-This sample enables `ESP32BASE_ENABLE_APP_EVENTS=1` on `ESP32BASE_PROFILE_FULL`. App Events are application/business events; the System Logs page at `/esp32base/logs` remains the `Esp32BaseFileLog` system diagnostic log for boot, WiFi, OTA, FS and other base-library diagnostics.
+This sample enables `ESP32BASE_ENABLE_APP_EVENTS=1` on `ESP32BASE_PROFILE_LOCAL`. App Events are application/business events; the System Logs page at `/esp32base/logs` remains the `Esp32BaseFileLog` system diagnostic log for boot, WiFi, OTA, FS and other base-library diagnostics.
 
 It writes compact discrete door-opening, feeding and watering events during boot. It also observes a synthetic sensor-unavailable condition every 250 ms: activation must remain observed for 5 seconds and recovery for 3 seconds, demonstrating that confirmation durations do not schedule hardware polling. It then exposes:
 
@@ -20,10 +20,10 @@ Build:
 
 ```sh
 pio run -d examples/app_events_demo
-pio run -d examples/app_events_demo -e esp32s3_full
-pio run -d examples/app_events_demo -e esp32c3_full
-pio run -d examples/app_events_demo -e esp32_arduino3
-pio run -d examples/app_events_demo -e esp32_discrete_only
+pio run -d examples/app_events_demo -e esp32s3_local
+pio run -d examples/app_events_demo -e esp32c3_local
+pio run -d examples/app_events_demo -e esp32_local_arduino3
+pio run -d examples/app_events_demo -e esp32_local_discrete_only
 ```
 
 Flashing commands are listed in [../FLASHING.md](../FLASHING.md).

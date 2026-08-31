@@ -13,7 +13,6 @@ bool g_ntpStartDebugLogged = false;
 bool g_ntpSyncObserved = false;
 #endif
 bool g_mdnsStartDebugLogged = false;
-bool g_otaStartDebugLogged = false;
 char g_firmwareName[33] = "app";
 char g_firmwareVersion[17] = "1.0.0";
 char g_firmwareBuild[33] = "";
@@ -125,7 +124,6 @@ bool Esp32Base::begin() {
     g_ntpSyncObserved = false;
 #endif
     g_mdnsStartDebugLogged = false;
-    g_otaStartDebugLogged = false;
 
     if (!Esp32BaseLog::begin()) {
         esp32base_internal::copySafe(g_lastError, sizeof(g_lastError), "log");
@@ -323,15 +321,6 @@ void Esp32Base::handle() {
         Esp32BaseMdns::stop();
     }
 #endif
-#if ESP32BASE_ENABLE_OTA
-    if (Esp32BaseWeb::isReady() && Esp32BaseOta::isReady()) {
-        if (!g_otaStartDebugLogged) {
-            ESP32BASE_LOG_D("base", "deferred_start module=ota_network reason=web_ready");
-            g_otaStartDebugLogged = true;
-        }
-        Esp32BaseOta::beginNetworkServices();
-    }
-#endif
 #if ESP32BASE_ENABLE_WEB
     Esp32BaseWeb::handle();
 #endif
@@ -382,20 +371,14 @@ bool Esp32Base::isValidHostname(const char* hostnameValue) {
 }
 
 const char* Esp32Base::profileName() {
-#if ESP32BASE_PROFILE == ESP32BASE_PROFILE_CORE
-    return "CORE";
-#elif ESP32BASE_PROFILE == ESP32BASE_PROFILE_RUNTIME
-    return "RUNTIME";
-#elif ESP32BASE_PROFILE == ESP32BASE_PROFILE_NET
-    return "NET";
-#elif ESP32BASE_PROFILE == ESP32BASE_PROFILE_NET_RUNTIME
-    return "NET_RUNTIME";
-#elif ESP32BASE_PROFILE == ESP32BASE_PROFILE_WEB
-    return "WEB";
-#elif ESP32BASE_PROFILE == ESP32BASE_PROFILE_WEB_RUNTIME
-    return "WEB_RUNTIME";
-#elif ESP32BASE_PROFILE == ESP32BASE_PROFILE_FULL
-    return "FULL";
+#if ESP32BASE_PROFILE == ESP32BASE_PROFILE_MINIMAL
+    return "MINIMAL";
+#elif ESP32BASE_PROFILE == ESP32BASE_PROFILE_OFFLINE
+    return "OFFLINE";
+#elif ESP32BASE_PROFILE == ESP32BASE_PROFILE_LOCAL
+    return "LOCAL";
+#elif ESP32BASE_PROFILE == ESP32BASE_PROFILE_IOT
+    return "IOT";
 #else
     return "CUSTOM";
 #endif
