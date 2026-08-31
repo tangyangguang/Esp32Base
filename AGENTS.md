@@ -6,7 +6,7 @@
 
 - `Esp32Base` 是面向 ESP32 / ESP32-S3 / ESP32-C3、基于 Arduino ESP32 Core 的轻量、可裁剪应用基础库；不是业务框架、Web 管理平台、云框架或大型组件系统。
 - 库只承担多类 ESP32 设备共同需要的底座能力。设备控制、业务状态机、业务协议、业务数据模型、产品策略和单项目便利封装默认留在应用层。
-- 当前仍处于试用和首版定型阶段，只有一个当前正确版本；不为旧 API、旧 key、旧行为保留迁移层、兼容别名或 fallback，除非用户明确改变这一阶段定位。
+- 当前只维护一个正确版本；不为旧 API、旧 key、旧行为保留迁移层、兼容别名或 fallback，除非用户明确要求改变产品策略。
 - 产品定位和使用方式以 `README.md` 为入口；架构、Profile、API 和限制分别以 `docs/01_architecture.md`、`docs/02_profiles.md`、`docs/03_api.md`、`docs/10_known_limitations.md` 为准；发布验收以 `docs/09_release_checklist.md` 为准。现有代码和示例用于核对实现，历史设计、评审记录和临时评估文件不作为当前契约。
 - 涉及芯片、Arduino ESP32 Core、ESP-IDF、PlatformIO、分区表、OTA、认证、安全、存储或协议的具体事实，先核对项目文档、当前构建配置和上游权威资料。
 

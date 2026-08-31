@@ -16,7 +16,7 @@
 - WiFi 初始化阶段连续复位时会先跳过所有 Arduino WiFi 初始化调用，让系统进入无 WiFi 诊断状态，并用中文日志提示疑似 WiFi/RF 启动瞬时电流导致供电跌落，建议检查电源、USB 线、稳压器、接线并考虑在板端 VIN/5V 与 GND 间增加低 ESR 储能电容。
 - OTA、NVS、Watchdog、LittleFS、Captive Portal 等关键路径按量产可靠性设计。
 
-已知限制、明确不支持能力和风险边界详见 [已知限制](docs/10_known_limitations.md)。
+新业务项目接入和旧 Profile/OTA 项目的一次性代码适配，先阅读 [应用接入与版本适配](docs/13_integration_and_upgrade.md)。已知限制、明确不支持能力和风险边界详见 [已知限制](docs/10_known_limitations.md)。
 
 业务记录的职责边界、磁盘格式、容量规划、断电恢复和经典 ESP32 实机性能基线详见 [Record Store 设计、接入与实机基准](docs/12_record_store.md)。
 
@@ -223,3 +223,5 @@ python path/to/Esp32Base/scripts/esp32base_serial_recover_ota.py \
 10. [发布检查清单](docs/09_release_checklist.md)
 11. [已知限制](docs/10_known_limitations.md)
 12. [Web UI 页面结构与样式基线](docs/11_web_ui_baseline.md)
+13. [Record Store 设计、接入与实机基准](docs/12_record_store.md)
+14. [应用接入与版本适配](docs/13_integration_and_upgrade.md)

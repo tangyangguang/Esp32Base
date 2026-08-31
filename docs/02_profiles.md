@@ -16,7 +16,7 @@ MINIMAL -> OFFLINE -> LOCAL -> IOT
 ESP32BASE_PROFILE_MINIMAL
 ```
 
-当前仍处于首版定型阶段，不提供旧 Profile 名称、兼容别名或迁移层。
+当前版本只支持这四个 Profile，不提供旧 Profile 名称、兼容别名或运行时迁移层。已有项目的一次性构建配置适配见 [应用接入与版本适配](13_integration_and_upgrade.md)。
 
 ## 2. 最终 Profile
 

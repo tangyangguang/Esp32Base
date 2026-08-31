@@ -83,7 +83,7 @@ App Events默认关闭，仅在 `ESP32BASE_ENABLE_APP_EVENTS=1` 时编译并初�
 
 App Event业务负载24字节，RecordStore公共元数据和CRC合计24字节，单条固定48字节。100KiB预算的估算容量为2113条；约4KiB完整段轮换时实际保留约2029～2113条，路径为 `/esp32base/records/app-events.v2/`。App Events在业务RecordStore之前创建，不提供单独最低剩余空间配置。
 
-App Events v1同样是每条48字节；v2只重新定义payload末尾4字节，不增加单条LittleFS占用或默认预算。v1目录不迁移、不自动删除，也不参与v2读取；试用阶段升级前应先清空旧事件或由用户明确格式化LittleFS。
+App Events v1同样是每条48字节；v2只重新定义payload末尾4字节，不增加单条LittleFS占用或默认预算。v1目录不迁移、不自动删除，也不参与v2读取；仍保存v1数据的设备在安装当前固件前，应通过经确认的维护操作清空旧事件，或在确认没有其它需保留文件后格式化LittleFS。
 
 项目可以覆盖最大字节预算。若事件频率高于“用户可解释的关键事件”，应降低写入频率或把完整浇水、开关门、喂食历史放到独立RecordStore。
 

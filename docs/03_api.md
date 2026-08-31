@@ -386,7 +386,7 @@ RecordStore的20字节时间/ID元数据位于payload前，CRC32位于payload后
 /esp32base/records/app-events.v2/
 ```
 
-v1与v2字段语义不同，不迁移、不兼容读取，也不自动删除v1目录；当前试用阶段的升级流程应在安装新固件前清空旧App Events，或由用户明确格式化LittleFS。
+v1与v2字段语义不同，不迁移、不兼容读取，也不自动删除v1目录；仍保存v1数据的设备应在安装当前固件前通过经确认的维护操作清空旧App Events，或在确认没有其它需保留文件后由用户明确格式化LittleFS。
 
 主要API：
 
