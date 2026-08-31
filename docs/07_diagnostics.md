@@ -23,11 +23,12 @@ Profile 裁剪以最终构建产物为准，不只看 `library.json` 或源码�
 推荐命令：
 
 ```bash
-pio test -e native_config_harness
-pio test -e native_web_harness
-pio test -e native_time_harness
-pio test -e native_time_pcf8563_harness
-pio run -d examples/basic -e esp32_minimal -e esp32_offline -e esp32_local -e esp32_iot
+python3 scripts/ensure_arduino_platformio.py
+python3 scripts/pio_arduino.py 2 test -e native_config_harness
+python3 scripts/pio_arduino.py 2 test -e native_web_harness
+python3 scripts/pio_arduino.py 2 test -e native_time_harness
+python3 scripts/pio_arduino.py 2 test -e native_time_pcf8563_harness
+python3 scripts/pio_arduino.py 2 run -d examples/basic -e esp32_minimal -e esp32_offline -e esp32_local -e esp32_iot
 python3 scripts/check_trim_symbols.py
 
 # 可选：读取 Git 忽略的本机配置，对真实 MQTTS Broker 验证

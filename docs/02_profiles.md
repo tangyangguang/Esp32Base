@@ -150,7 +150,8 @@ build_flags =
 至少运行：
 
 ```sh
-platformio run -d examples/basic \
+python3 scripts/ensure_arduino_platformio.py
+python3 scripts/pio_arduino.py 2 run -d examples/basic \
   -e esp32_minimal -e esp32_offline -e esp32_local -e esp32_iot
 python3 scripts/check_trim_symbols.py
 ```

@@ -18,11 +18,11 @@ for NTP; an RTC alone does not release the TLS gate.
 Build:
 
 ```sh
-pio run -d examples/mqtt_tls
-pio run -d examples/mqtt_tls -e esp32s3_mqtt_tls
-pio run -d examples/mqtt_tls -e esp32c3_mqtt_tls
-python3 scripts/ensure_arduino3_platformio.py
-python3 scripts/pio_arduino3.py run -d examples/mqtt_tls -e esp32_mqtt_tls_arduino3
+python3 scripts/ensure_arduino_platformio.py
+python3 scripts/pio_arduino.py 2 run -d examples/mqtt_tls
+python3 scripts/pio_arduino.py 2 run -d examples/mqtt_tls -e esp32s3_mqtt_tls
+python3 scripts/pio_arduino.py 2 run -d examples/mqtt_tls -e esp32c3_mqtt_tls
+python3 scripts/pio_arduino.py 3 run -d examples/mqtt_tls -e esp32_mqtt_tls_arduino3
 ```
 
 The example deliberately publishes only current state after connection and

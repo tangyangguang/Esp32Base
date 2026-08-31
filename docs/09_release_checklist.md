@@ -30,7 +30,7 @@
 - 4个Profile。
 - ESP32 / ESP32-S3 / ESP32-C3。
 - Arduino Core 2.x / 3.x。当前固定矩阵是 Core 2.0.16 下 ESP32 / ESP32-S3 / ESP32-C3 × 四 Profile，以及 Core 3.3.8 下代表性 ESP32 × 四 Profile；固定其它 Core minor 或板型时由业务项目追加目标组合。
-- Core 3.x pioarduino 构建前运行 `scripts/ensure_arduino3_platformio.py`，后续命令统一通过 `scripts/pio_arduino3.py` 使用隔离的 `.piohome/arduino3`；保留 env 的 `scripts/pioarduino_core3_preflight.py` 自动检查 framework、Network、Hash、libs和工具链关键路径，禁止与默认目录中的Core 2.x包交替覆盖。
+- 构建前运行`scripts/ensure_arduino_platformio.py`；Core 2.x/3.x命令分别统一通过`scripts/pio_arduino.py 2 ...`和`scripts/pio_arduino.py 3 ...`使用隔离的`.piohome/arduino2`、`.piohome/arduino3`。保留Core 3 env的`scripts/pioarduino_core3_preflight.py`检查framework、Network、Hash、libs和工具链，发布验证不得依赖默认`~/.platformio`。
 
 检查：
 
@@ -73,7 +73,7 @@
 ## 6. MQTT 检查
 
 - MQTT只随IOT Profile默认开启；MINIMAL、OFFLINE、LOCAL及显式关闭构建中没有 `Esp32BaseMqtt`、`esp_mqtt_client_*` 和 `mqtt_task` 符号。
-- `pio test -e native_mqtt_harness` 和 `pio test -e native_mqtt_secure_default_harness` 通过。
+- `python3 scripts/pio_arduino.py 2 test -e native_mqtt_harness`和`python3 scripts/pio_arduino.py 2 test -e native_mqtt_secure_default_harness`通过。
 - `examples/mqtt_tls` 完成 ESP32 / ESP32-S3 / ESP32-C3 Core 2.x 和代表性 Core 3.x 构建；该示例必须通过`symlink://`外部库引用和默认`chain` LDF验证，Core 2.x显式声明`ESP32 Async UDP`、`FS`等内置依赖，Core 3.x再声明`Networking`和`Hash`，不得用业务源码占位include或`deep+`掩盖依赖契约。
 - 有可用测试 Broker 时，`python3 scripts/check_mqtt_cloud_integration.py` 通过；本机 INI、CA 和凭据保持 Git 忽略且不进入发布包。
 - MQTTS 缺少 CA、缺少 NTP 时间或证书校验失败时不得降级明文；RTC 不能单独放行 MQTTS。
@@ -95,10 +95,10 @@
 
 必须通过：
 
-- `pio test -e native_time_harness`。
-- `pio test -e native_time_pcf8563_harness`。
-- `pio run -d examples/rtc_time_source -e esp32_ds3231`。
-- `pio run -d examples/rtc_time_source -e esp32_pcf8563`。
+- `python3 scripts/pio_arduino.py 2 test -e native_time_harness`。
+- `python3 scripts/pio_arduino.py 2 test -e native_time_pcf8563_harness`。
+- `python3 scripts/pio_arduino.py 2 run -d examples/rtc_time_source -e esp32_ds3231`。
+- `python3 scripts/pio_arduino.py 2 run -d examples/rtc_time_source -e esp32_pcf8563`。
 - DS3231 示例构建的 map/ELF 裁剪检查必须禁止 `pcf8563` / `Pcf8563`。
 - PCF8563 示例构建的 map/ELF 裁剪检查必须禁止 `ds3231` / `Ds3231`。
 - RTC 未启用的现有 profile 行为不应要求业务初始化 `Wire`，也不应改变 NTP-only 项目的对时语义。
@@ -211,7 +211,7 @@
 
 必须通过：
 
-- `pio test -e native_fs_harness`。
+- `python3 scripts/pio_arduino.py 2 test -e native_fs_harness`。
 - 任何启动路径都不得自动格式化 LittleFS。
 - 首次挂载失败不 halt。
 - 格式化 LittleFS 只能来自明确维护动作，例如 Web System 页 POST 或显式调用 `Esp32BaseFs::format()`。
@@ -310,14 +310,14 @@
 
 - `examples/basic` 继续覆盖 profile/芯片/Core 版本矩阵。
 - `examples/basic` 的 profile 依赖裁剪验证源码继续生效。
-- `examples/full_demo` 可在自身目录 `pio run`。
+- `examples/full_demo`可通过仓库根目录的Core 2 wrapper构建。
 - `examples/full_demo` 覆盖 App Config string/int/decimal/bool/enum、字段级校验、页面级校验、重启提示和回调。
-- `examples/web_ui_gallery` 可在自身目录 `pio run`。
+- `examples/web_ui_gallery`可通过仓库根目录的Core 2 wrapper构建。
 - `examples/web_ui_gallery` 覆盖 Web UI baseline 的状态、统计、分页记录、配置、命令、分步操作、维护、访问控制、确认、空状态和表单页面。
-- `examples/web_logs_ota` 可在自身目录 `pio run`。
-- `examples/net_runtime` 可在自身目录 `pio run`。
+- `examples/web_logs_ota`可通过仓库根目录的Core 2 wrapper构建。
+- `examples/net_runtime`可通过仓库根目录的Core 2 wrapper构建。
 - `examples/mqtt_tls` 可在自身目录完成三芯片和代表性 Core 3.x 构建，并展示重连后重发当前状态。
-- `examples/app_events_demo` 可在自身目录 `pio run`，并演示 App Events 写入、分页查看、JSON/CSV 和 POST 写入。
+- `examples/app_events_demo`可通过仓库根目录的Core 2 wrapper构建，并演示App Events写入、分页查看、JSON/CSV和POST写入。
 - `examples/record_store_demo` 至少完成 ESP32 / ESP32-S3 / ESP32-C3 和 Arduino Core 3.x 构建，并演示固定payload编码、动作开始快照、完成记录和最新优先读取。
 - `examples/rtc_time_source` 可在自身目录分别构建 DS3231 和 PCF8563 env，并清楚演示构建期二选一、I2C 初始化所有权和业务使用 `Esp32BaseTime` 的接入方式。
 - 所有启用 FS 的示例不应通过构建参数覆盖系统诊断日志默认模式；默认保持 ERROR，现场排查时再显式切到 WARN/INFO。

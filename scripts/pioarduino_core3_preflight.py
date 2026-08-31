@@ -94,7 +94,8 @@ if missing:
 if missing:
     raise RuntimeError(
         "pioarduino Core 3.x package preflight failed; run "
-        "`python3 scripts/ensure_arduino3_platformio.py` from the repository root. "
+        "`python3 scripts/ensure_arduino_platformio.py` from the repository root, then "
+        "use `python3 scripts/pio_arduino.py 3 ...`. "
         "Missing: " + ", ".join(missing)
     )
 

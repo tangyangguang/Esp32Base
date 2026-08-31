@@ -139,7 +139,13 @@ WiFi 默认关闭 modem sleep，让 Web 首屏和 OTA 不被 Arduino ESP32 默�
 - Arduino ESP32 Core 2.0.14+
 - Arduino ESP32 Core 3.0.4+
 
-当前发布矩阵实际验证 Core 2.0.16 和 3.3.8；其它范围内 minor 版本需要业务项目按目标板重新构建和验证。
+当前发布矩阵实际验证`platformio/espressif32@6.7.0` + Core 2.0.16，以及`pioarduino 55.03.38-1` + Core 3.3.8；其它范围内minor版本需要业务项目按目标板重新构建和验证。仓库将两代PlatformIO包分别固定在`.piohome/arduino2`和`.piohome/arduino3`，发布验证不使用默认`~/.platformio`：
+
+```sh
+python3 scripts/ensure_arduino_platformio.py
+python3 scripts/pio_arduino.py 2 run -d examples/basic -e esp32_local
+python3 scripts/pio_arduino.py 3 run -d examples/basic -e esp32_local_arduino3
+```
 
 不支持：
 

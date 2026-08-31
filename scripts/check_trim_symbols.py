@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 
+ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_ENVS = ("esp32_minimal", "esp32_offline", "esp32_local", "esp32_iot")
 
 MQTT_FORBIDDEN = ("Esp32BaseMqtt", "esp_mqtt_client_", "mqtt_task")
@@ -41,7 +42,12 @@ def find_nm(explicit: str | None) -> str:
         found = shutil.which(name)
         if found:
             return found
-    for base in (Path.home() / ".platformio" / "packages",):
+    package_roots = (
+        ROOT / ".piohome" / "arduino2" / "packages",
+        ROOT / ".piohome" / "arduino3" / "packages",
+        Path.home() / ".platformio" / "packages",
+    )
+    for base in package_roots:
         for candidate in base.glob("toolchain-*/bin/*-nm"):
             return str(candidate)
     raise SystemExit("error: no ESP nm tool found; pass --nm /path/to/*-nm")
@@ -56,7 +62,7 @@ def read_symbols(nm: str, elf: Path) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--build-dir", default="examples/basic/.pio/build")
+    parser.add_argument("--build-dir", default="examples/basic/.pio/build/arduino2")
     parser.add_argument("--nm", default=None)
     parser.add_argument("--elf", default=None, help="check one explicit ELF instead of build-dir/envs")
     parser.add_argument("--forbid", nargs="*", default=None, help="symbol substrings that must be absent")

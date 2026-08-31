@@ -160,23 +160,26 @@ Esp32Base 的策略：
 
 官方 `platformio/espressif32@6.7.0` 与 pioarduino 都使用 `framework-arduinoespressif32` 包名。如果共用默认 `~/.platformio`，Core 2.x / 3.x 交替解析时可能互相替换 framework，形成包清单显示3.x但目录部分来自2.x的非原子状态。该问题属于本机包管理冲突，不是源码兼容错误。
 
-仓库因此把 Core 3.x 验证固定隔离到 `.piohome/arduino3`：
+仓库将两代framework都做物理隔离，发布验证不使用默认`~/.platformio`：
 
-- `scripts/ensure_arduino3_platformio.py` 在隔离目录安装并检查 framework、Network、Hash、libs和工具链关键路径；
-- `scripts/pio_arduino3.py` 给后续 PlatformIO 命令设置同一个 `PLATFORMIO_CORE_DIR`；
-- Core 3.x env 的 `scripts/pioarduino_core3_preflight.py` 在真正编译前再次检查。
+- `.piohome/arduino2`只保存`platformio/espressif32@6.7.0`、Arduino Core 2.0.16及对应工具链；
+- `.piohome/arduino3`只保存固定发布`pioarduino 55.03.38-1`、Arduino Core 3.3.8、framework libs及对应工具链；
+- `scripts/ensure_arduino_platformio.py`安装并核对两边的固定版本和关键路径；
+- `scripts/pio_arduino.py 2 ...`与`scripts/pio_arduino.py 3 ...`分别设置对应`PLATFORMIO_CORE_DIR`，同时把每个工程的build/libdeps输出隔离到`.pio/.../arduino2`或`.pio/.../arduino3`，并拒绝明显选错代际的env；
+- Core 3.x env的`scripts/pioarduino_core3_preflight.py`在真正编译前再次检查。
 
 推荐验证顺序：
 
 ```sh
-pio run -d examples/basic -e esp32_minimal -e esp32_offline -e esp32_local -e esp32_iot -j 1
-python3 scripts/ensure_arduino3_platformio.py
-python3 scripts/pio_arduino3.py run -d examples/basic \
+python3 scripts/ensure_arduino_platformio.py
+python3 scripts/pio_arduino.py 2 run -d examples/basic \
+  -e esp32_minimal -e esp32_offline -e esp32_local -e esp32_iot -j 1
+python3 scripts/pio_arduino.py 3 run -d examples/basic \
   -e esp32_minimal_arduino3 -e esp32_offline_arduino3 \
   -e esp32_local_arduino3 -e esp32_iot_arduino3 -j 1
 ```
 
-不要在同一默认 PlatformIO core目录中交替执行官方 Core 2.x与pioarduino Core 3.x构建。预热或wrapper失败时先按输出修复隔离目录；不要把 `FRAMEWORK_DIR` 为空、Network/Hash头文件缺失或工具包反复安装直接判断为源码兼容失败。
+这种双目录方案会多占一份平台和工具链磁盘空间，但换来双向隔离和可复现验证；任何一代都不会受用户默认目录或其它项目替换同名framework包影响。预热或wrapper失败时先按输出修复对应隔离目录；不要把包目录不完整直接判断为源码兼容失败。
 
 外部应用通过 `lib_deps = file:///.../Esp32Base` 或 `symlink://.../Esp32Base` 引用本库时，必须在同一 `lib_deps` 中显式列出所选Profile使用的Arduino内置库。PlatformIO默认 `chain` LDF不会可靠递归扫描Esp32Base私有 `.cpp/.inc` 实现；不能依赖偶然的全局包状态，也不能让业务源码添加 `LittleFS.h`、`WiFi.h`、`WebServer.h`或`Update.h` 等无业务语义的占位include。LOCAL/IOT的完整清单以 `docs/13_integration_and_upgrade.md` 模板为准，MINIMAL/OFFLINE按 `examples/basic/platformio.ini` 裁减；Core 3.x必须额外声明拆分出的内置`Networking`和`Hash`。
 
@@ -185,4 +188,4 @@ python3 scripts/pio_arduino3.py run -d examples/basic \
 如需同时验证 Core 2.x 与 Core 3.x，记录首次失败时应区分：
 
 - 隔离目录完整且出现编译、链接、符号或 API 错误：按源码兼容问题处理；
-- framework包缺失、`FRAMEWORK_DIR` 为 `None`、Network/Hash头文件缺失或工具包反复安装：删除损坏的 `.piohome/arduino3` 后重新运行预热脚本，再通过wrapper重跑。
+- framework包缺失、`FRAMEWORK_DIR` 为 `None`、Network/Hash头文件缺失或工具包反复安装：只删除损坏的`.piohome/arduino2`或`.piohome/arduino3`，重新运行统一预热脚本，再通过对应代际wrapper重跑。

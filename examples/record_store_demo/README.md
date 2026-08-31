@@ -18,9 +18,9 @@ Check both results. Registration stores a pointer, so keep the Store object aliv
 Build all representative chips:
 
 ```sh
-pio run -d examples/record_store_demo -e esp32
-pio run -d examples/record_store_demo -e esp32s3
-pio run -d examples/record_store_demo -e esp32c3
-python3 scripts/ensure_arduino3_platformio.py
-python3 scripts/pio_arduino3.py run -d examples/record_store_demo -e esp32_arduino3
+python3 scripts/ensure_arduino_platformio.py
+python3 scripts/pio_arduino.py 2 run -d examples/record_store_demo -e esp32
+python3 scripts/pio_arduino.py 2 run -d examples/record_store_demo -e esp32s3
+python3 scripts/pio_arduino.py 2 run -d examples/record_store_demo -e esp32c3
+python3 scripts/pio_arduino.py 3 run -d examples/record_store_demo -e esp32_arduino3
 ```

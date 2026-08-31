@@ -5,8 +5,8 @@ This example shows the board-level configuration for an external RTC.
 Build one firmware for one chip. DS3231 and PCF8563 are mutually exclusive choices and are not auto-detected at runtime.
 
 ```sh
-pio run -d examples/rtc_time_source -e esp32_ds3231
-pio run -d examples/rtc_time_source -e esp32_pcf8563
+python3 scripts/pio_arduino.py 2 run -d examples/rtc_time_source -e esp32_ds3231
+python3 scripts/pio_arduino.py 2 run -d examples/rtc_time_source -e esp32_pcf8563
 ```
 
 Default I2C addresses are used when `ESP32BASE_RTC_I2C_ADDR=0`:

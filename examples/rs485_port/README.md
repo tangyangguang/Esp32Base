@@ -13,5 +13,5 @@ Default pins:
 The example uses `Serial2` at `9600 8N1`, sends a small text heartbeat every 5 seconds, and prints received bytes to the USB serial monitor.
 
 ```sh
-pio run -d examples/rs485_port
+python3 scripts/pio_arduino.py 2 run -d examples/rs485_port
 ```

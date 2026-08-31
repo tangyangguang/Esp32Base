@@ -23,20 +23,20 @@
 ## 构建
 
 ```bash
-pio run -d examples/web_ui_gallery -e esp32_local_ui_gallery
+python3 scripts/pio_arduino.py 2 run -d examples/web_ui_gallery -e esp32_local_ui_gallery
 ```
 
 ESP32-S3：
 
 ```bash
-pio run -d examples/web_ui_gallery -e esp32s3_local_ui_gallery
+python3 scripts/pio_arduino.py 2 run -d examples/web_ui_gallery -e esp32s3_local_ui_gallery
 ```
 
 ## 烧录查看
 
 ```bash
-pio run -d examples/web_ui_gallery -e esp32_local_ui_gallery -t upload
-pio device monitor -d examples/web_ui_gallery -b 115200
+python3 scripts/pio_arduino.py 2 run -d examples/web_ui_gallery -e esp32_local_ui_gallery -t upload
+python3 scripts/pio_arduino.py 2 device monitor -d examples/web_ui_gallery -b 115200
 ```
 
 默认 hostname 是 `esp32base-ui`。设备连网后访问：

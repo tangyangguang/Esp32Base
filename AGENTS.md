@@ -60,12 +60,12 @@
 
 - 验证按风险选择，不以单次成功构建代替行为验证。每项改动至少覆盖最相关的成功路径、边界值和失败路径，并检查 warnings、固件体积和未启用能力是否被意外带入。
 - Native harness 按影响范围运行：
-  - Web：`pio test -e native_web_harness`
-  - Config：`pio test -e native_config_harness`
-  - Time/RTC：`pio test -e native_time_harness`；涉及 PCF8563 时再运行 `pio test -e native_time_pcf8563_harness`
+  - Web：`python3 scripts/pio_arduino.py 2 test -e native_web_harness`
+  - Config：`python3 scripts/pio_arduino.py 2 test -e native_config_harness`
+  - Time/RTC：`python3 scripts/pio_arduino.py 2 test -e native_time_harness`；涉及 PCF8563 时再运行 `python3 scripts/pio_arduino.py 2 test -e native_time_pcf8563_harness`
 - Profile、依赖宏、LDF 或裁剪改动优先构建 `examples/basic` 的相关 env，并结合 map 文件和 `scripts/check_trim_symbols.py` 证明目标符号缺失；架构或安全边界改动同时运行相应的 `scripts/check_architecture_boundaries.py`、`scripts/check_security_boundaries.py`。
 - Web UI改动验证 `examples/web_ui_gallery`；App Config或完整集成验证 `examples/full_demo`；App Events验证 `examples/app_events_demo`；OTA验证 `examples/web_logs_ota` 或LOCAL示例；RTC/RS485分别验证对应示例。
-- 涉及公共头文件、Profile 或平台适配时，评估 ESP32 / ESP32-S3 / ESP32-C3 和 Arduino Core 2.x / 3.x 构建矩阵，至少选择能覆盖本次最高风险的组合；不能把单芯片单 Core 构建成功外推为全部兼容。Core 3.x必须先运行 `scripts/ensure_arduino3_platformio.py`，并通过 `scripts/pio_arduino3.py` 使用仓库隔离的 PlatformIO core目录，禁止和默认Core 2.x包交替覆盖。
+- 涉及公共头文件、Profile 或平台适配时，评估 ESP32 / ESP32-S3 / ESP32-C3 和 Arduino Core 2.x / 3.x 构建矩阵，至少选择能覆盖本次最高风险的组合；不能把单芯片单 Core 构建成功外推为全部兼容。首次验证先运行 `scripts/ensure_arduino_platformio.py`；所有Core 2.x/3.x命令分别通过 `scripts/pio_arduino.py 2 ...` 和 `scripts/pio_arduino.py 3 ...` 使用仓库隔离的 `.piohome/arduino2`、`.piohome/arduino3`，禁止发布验证依赖默认 `~/.platformio`。
 - 涉及 Web、OTA、WiFi、FileLog、Sleep、Watchdog、RTC、RS485、掉电恢复或资源边界时优先做实机验证。无法实机验证时，明确未覆盖场景、剩余风险和建议验证步骤，不能声称已完全验证。
 - 影响发布包、导出规则、依赖或示例内容时，运行 `platformio pkg pack .`，并按 `scripts/check_release_hygiene.py` 和 `docs/09_release_checklist.md` 核对包内容；完成后删除生成 tarball 和临时产物。
 - 不留下串口 monitor、后台 dev server 或测试进程。烧录时优先只刷 app 分区并保留 NVS/WiFi；烧录、OTA、清 NVS、格式化 LittleFS 和出厂重置都必须先取得用户确认。
