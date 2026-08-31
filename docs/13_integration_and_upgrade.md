@@ -33,20 +33,35 @@ board = esp32dev
 framework = arduino
 board_build.partitions = ../../Esp32Base/partitions/esp32-4mb-ota-balanced.csv
 lib_deps =
+  Preferences
   WiFi
   DNSServer
   ESPmDNS
   LittleFS
   WebServer
   Update
-  Wire
+  ESP32 Async UDP
+  FS
   symlink://../../Esp32Base
 build_flags =
   -D ESP32BASE_PROFILE=ESP32BASE_PROFILE_LOCAL
   -D ESP32BASE_DEFAULT_HOSTNAME=\"product-device\"
 ```
 
-`MINIMAL`、`OFFLINE` 和特殊裁剪组合应参考 `examples/basic/platformio.ini` 显式列出实际 Arduino 内置依赖，避免 PlatformIO LDF 因示例源码或全局包状态意外带入 WiFi/Web。ESP32-S3 与 ESP32-C3 应改用对应 board 和 `partitions/` 中对应分区表。
+上面的名称都指 Arduino ESP32 framework 自带库，不要添加 Registry 作者、版本约束或同名第三方包。使用 Arduino Core 3.x 时，在对应 env 追加 Core 3 新拆分出的两个内置库：
+
+```ini
+[env:product_arduino3]
+extends = env:product
+lib_deps =
+  ${env:product.lib_deps}
+  Networking
+  Hash
+```
+
+`MINIMAL`、`OFFLINE` 和特殊裁剪组合应参考 `examples/basic/platformio.ini` 显式列出实际 Arduino 内置依赖，避免 PlatformIO LDF 因示例源码或全局包状态意外带入 WiFi/Web。`Preferences` 是所有 Profile 的核心依赖；启用 FS 时增加 `LittleFS` 和 `FS`；启用 RTC 时增加 `Wire`。LOCAL/IOT 还需要上面模板中的网络、Web、OTA、AsyncUDP依赖，Core 3.x再增加`Networking`和`Hash`。不要在业务源码中为LDF添加无业务语义的framework占位include。
+
+Esp32Base 的 `library.json` 只为库自身私有实现提供framework头文件搜索路径；应用的 `lib_deps` 仍负责让PlatformIO编译和链接对应内置库。ESP32-S3 与 ESP32-C3 应改用对应 board 和 `partitions/` 中对应分区表。
 
 典型本地控制器可继续增加：
 
@@ -74,8 +89,8 @@ void setup() {
     // 第一项先把执行器置于安全态。
     initializeOutputsOff();
 
-    Wire.begin();
 #if ESP32BASE_ENABLE_RTC
+    Wire.begin();
     Esp32BaseRtc::configure(Wire);
 #endif
 

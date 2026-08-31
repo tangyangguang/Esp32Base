@@ -34,14 +34,6 @@
 #include <ctype.h>
 #include <string.h>
 
-#ifndef ESP32BASE_OTA_REQUIRE_MARK_VALID
-#define ESP32BASE_OTA_REQUIRE_MARK_VALID 0
-#endif
-
-#ifndef ESP32BASE_OTA_MARK_VALID_TIMEOUT_MS
-#define ESP32BASE_OTA_MARK_VALID_TIMEOUT_MS 30000
-#endif
-
 namespace {
 bool g_otaReady = false;
 Esp32BaseOta::Status g_otaStatus = Esp32BaseOta::IDLE;

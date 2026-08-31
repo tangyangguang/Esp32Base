@@ -84,8 +84,9 @@ pio run -d examples/basic -e esp32c3_iot -t upload
 ESP32 / Arduino Core 3.x：
 
 ```sh
-pio run -d examples/basic -e esp32_minimal_arduino3 -t upload
-pio run -d examples/basic -e esp32_offline_arduino3 -t upload
-pio run -d examples/basic -e esp32_local_arduino3 -t upload
-pio run -d examples/basic -e esp32_iot_arduino3 -t upload
+python3 scripts/ensure_arduino3_platformio.py
+python3 scripts/pio_arduino3.py run -d examples/basic -e esp32_minimal_arduino3 -t upload
+python3 scripts/pio_arduino3.py run -d examples/basic -e esp32_offline_arduino3 -t upload
+python3 scripts/pio_arduino3.py run -d examples/basic -e esp32_local_arduino3 -t upload
+python3 scripts/pio_arduino3.py run -d examples/basic -e esp32_iot_arduino3 -t upload
 ```

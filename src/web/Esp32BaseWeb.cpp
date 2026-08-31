@@ -1,9 +1,5 @@
 #include "../Esp32BaseProfile.h"
 
-#ifndef ESP32BASE_WEB_NATIVE_TEST
-#define ESP32BASE_WEB_NATIVE_TEST 0
-#endif
-
 #include "Esp32BaseWeb.h"
 
 #if ESP32BASE_ENABLE_RECORD_STORE

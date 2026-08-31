@@ -247,22 +247,9 @@ OTA 期间必须临时关闭 WiFi power save：
 
 ## 10. Brownout
 
-默认不关闭 brownout detector。
+Esp32Base 在 OTA 前、中、后都不关闭 brownout detector，也不提供绕过开关。供电跌落时应由芯片复位和双 OTA 分区保护阻止继续运行不完整镜像；应用不能用软件关闭欠压保护来掩盖电源、线材、稳压或板端储能问题。
 
-可选宏：
-
-```cpp
-ESP32BASE_OTA_DISABLE_BROWNOUT_DURING_WRITE=0
-```
-
-只有用户显式开启时，OTA 写入期间临时关闭 brownout，结束后恢复。
-
-风险：
-
-- 关闭 brownout 可能掩盖供电问题。
-- 不建议生产默认开启。
-
-具体实现受 Arduino Core / IDF 版本影响，兼容策略见 [Arduino Core 兼容性](08_arduino_core_compat.md)。
+产品必须在目标硬件上验证 OTA 写入峰值电流、供电跌落和中途断电恢复。发生 brownout 后，应通过启动日志、当前运行槽和 OTA state 判断结果，再修复供电链路。
 
 ## 11. 回滚
 

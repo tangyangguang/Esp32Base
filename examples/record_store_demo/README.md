@@ -21,5 +21,6 @@ Build all representative chips:
 pio run -d examples/record_store_demo -e esp32
 pio run -d examples/record_store_demo -e esp32s3
 pio run -d examples/record_store_demo -e esp32c3
-pio run -d examples/record_store_demo -e esp32_arduino3
+python3 scripts/ensure_arduino3_platformio.py
+python3 scripts/pio_arduino3.py run -d examples/record_store_demo -e esp32_arduino3
 ```

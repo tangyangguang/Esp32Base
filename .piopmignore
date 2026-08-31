@@ -12,6 +12,7 @@ bug-ticklish-kitten.md
 **/bug-ticklish-kitten.md
 **/.DS_Store
 **/.pio/
+**/.piohome/
 **/.pioenvs/
 **/.piolibdeps/
 **/.cache/

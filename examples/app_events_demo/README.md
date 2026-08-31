@@ -22,7 +22,8 @@ Build:
 pio run -d examples/app_events_demo
 pio run -d examples/app_events_demo -e esp32s3_local
 pio run -d examples/app_events_demo -e esp32c3_local
-pio run -d examples/app_events_demo -e esp32_local_arduino3
+python3 scripts/ensure_arduino3_platformio.py
+python3 scripts/pio_arduino3.py run -d examples/app_events_demo -e esp32_local_arduino3
 pio run -d examples/app_events_demo -e esp32_local_discrete_only
 ```
 

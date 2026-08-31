@@ -29,8 +29,8 @@
 - `python3 scripts/check_profile_contract.py`，验证四Profile展开、显式覆盖、已删除宏和非法依赖组合。
 - 4个Profile。
 - ESP32 / ESP32-S3 / ESP32-C3。
-- Arduino Core 2.x / 3.x。
-- Core 3.x pioarduino 构建前运行 `scripts/ensure_arduino3_platformio.py`，并保留 env 的 `scripts/pioarduino_core3_preflight.py` 自动检查，确保 Arduino 3.x framework 主包和 libs 包已安装，避免 `FRAMEWORK_DIR` 为空的本地包状态错误。
+- Arduino Core 2.x / 3.x。当前固定矩阵是 Core 2.0.16 下 ESP32 / ESP32-S3 / ESP32-C3 × 四 Profile，以及 Core 3.3.8 下代表性 ESP32 × 四 Profile；固定其它 Core minor 或板型时由业务项目追加目标组合。
+- Core 3.x pioarduino 构建前运行 `scripts/ensure_arduino3_platformio.py`，后续命令统一通过 `scripts/pio_arduino3.py` 使用隔离的 `.piohome/arduino3`；保留 env 的 `scripts/pioarduino_core3_preflight.py` 自动检查 framework、Network、Hash、libs和工具链关键路径，禁止与默认目录中的Core 2.x包交替覆盖。
 
 检查：
 
@@ -46,7 +46,7 @@
 必须通过：
 
 - `platformio pkg pack .` 成功。
-- 发布包包含可选模块和 Web 运行所需源码。
+- 发布包包含 `LICENSE`、可选模块和 Web 运行所需源码。
 - 发布包包含推荐分区表：`partitions/esp32-4mb-ota-balanced.csv`、`partitions/esp32-c3-4mb-ota-balanced.csv`、`partitions/esp32-s3-8mb-ota-balanced.csv`。
 - 推荐分区表的 `app0` 偏移必须和 PlatformIO / Arduino 上传地址一致；默认应为 `0x10000`。
 - classic ESP32 4MB 推荐分区表必须保持 `app0=0x10000`，不要求业务项目设置 `board_upload.offset_address`。
@@ -54,7 +54,7 @@
 - 发布包包含独立 PIO 示例 `examples/full_demo`、`examples/web_ui_gallery`、`examples/web_logs_ota`、`examples/net_runtime`。
 - 发布包包含 `examples/mqtt_tls`，只提交虚构 Broker 和空凭据模板，不包含 `local_secrets.h`、真实 CA、密码或私钥。
 - 发布包不包含历史设计、评审、评估等本地非发布材料。
-- 发布包不包含 `.pio/`、`.cache/`、`idf_component.yml` 等构建生成物。
+- 发布包不包含 `.pio/`、`.piohome/`、`.cache/`、`idf_component.yml` 等构建生成物。
 
 ## 5. 裁剪检查
 
@@ -70,11 +70,11 @@
 - 关闭 Bus/Fs/Health 不产生静态对象。
 - Web 可选页面资源必须按能力宏裁剪，避免未启用 App Events、FS、OTA 或 FileLog 时仍带入对应专属资源。
 
-## 4.1 MQTT 检查
+## 6. MQTT 检查
 
 - MQTT只随IOT Profile默认开启；MINIMAL、OFFLINE、LOCAL及显式关闭构建中没有 `Esp32BaseMqtt`、`esp_mqtt_client_*` 和 `mqtt_task` 符号。
 - `pio test -e native_mqtt_harness` 和 `pio test -e native_mqtt_secure_default_harness` 通过。
-- `examples/mqtt_tls` 完成 ESP32 / ESP32-S3 / ESP32-C3 Core 2.x 和代表性 Core 3.x 构建。
+- `examples/mqtt_tls` 完成 ESP32 / ESP32-S3 / ESP32-C3 Core 2.x 和代表性 Core 3.x 构建；该示例必须通过`symlink://`外部库引用和默认`chain` LDF验证，Core 2.x显式声明`ESP32 Async UDP`、`FS`等内置依赖，Core 3.x再声明`Networking`和`Hash`，不得用业务源码占位include或`deep+`掩盖依赖契约。
 - 有可用测试 Broker 时，`python3 scripts/check_mqtt_cloud_integration.py` 通过；本机 INI、CA 和凭据保持 Git 忽略且不进入发布包。
 - MQTTS 缺少 CA、缺少 NTP 时间或证书校验失败时不得降级明文；RTC 不能单独放行 MQTTS。
 - Core 未启用 `CONFIG_MBEDTLS_HAVE_TIME_DATE` 时，默认以 `ERROR_TLS_CERTIFICATE_DATE_CHECK_UNAVAILABLE` 拒绝 TLS；只有显式 opt-in 才允许继续，且 Status 必须报告真实能力。
@@ -91,7 +91,7 @@
 - RTC 关闭时不链接 DS3231/PCF8563 驱动符号。
 - DS3231 构建必须排除 PCF8563 驱动符号；PCF8563 构建必须排除 DS3231 驱动符号，证明两个 RTC 芯片是构建期二选一，不是运行时共存。
 
-## 6. RTC / 时间源检查
+## 7. RTC / 时间源检查
 
 必须通过：
 
@@ -109,7 +109,7 @@
 - 基础库不得占用 RTC 中断引脚，不得接管 DS3231/PCF8563 的闹钟、方波、定时器、温度或校准等扩展功能。
 - 实机条件允许时，分别记录 DS3231 正常时间、DS3231 缺失/OSF，PCF8563 正常时间、PCF8563 缺失/低电压或时钟无效状态；无法实机覆盖时必须在发布记录中写明缺口。
 
-## 7. OTA 检查
+## 8. OTA 检查
 
 必须通过：
 
@@ -131,7 +131,7 @@
 - 上传页进度显示正确。
 - 上传页进度容量只显示 KB/MB/B 人性化值；状态/API JSON 保留 raw `bytes` 字段。
 
-## 8. 配网检查
+## 9. 配网检查
 
 必须通过：
 
@@ -151,7 +151,7 @@
 - STA 已关联但上级 DHCP 暂时不可用时保持关联，不在普通 15 秒连接超时后反复调用 `WiFi.begin()`；DHCP 恢复后获得 IP 并启动 Web/mDNS，超过独立 DHCP 超时后才进入 backoff。
 - 已连接后只丢失 IPv4 时发布断开事件并等待 DHCP 恢复；互联网或 NTP 单独不可用不得改变 WiFi `CONNECTED` 状态。
 
-## 9. 存储检查
+## 10. 存储检查
 
 必须通过：
 
@@ -181,7 +181,7 @@
 - ESP32 / ESP32-S3恢复按键构建默认GPIO0，ESP32-C3默认GPIO9，默认10000ms；达到阈值立即进入配置热点，不清凭据、不在按下状态重启，同一次按下只触发一次。
 - System页能持久化启用状态、合法GPIO和1～60秒长按时间到`eb_wifi_rcv.button`，保存后立即生效；非法、无内部上拉能力和已知Flash GPIO必须拒绝。
 
-## 10. 系统诊断日志（FileLog）检查
+## 11. 系统诊断日志（FileLog）检查
 
 必须通过：
 
@@ -207,7 +207,7 @@
 - clear 幂等，清空后 current 可继续写入。
 - restart、deep sleep、OTA success、rollback restart 前 flush。
 
-## 11. 文件系统检查
+## 12. 文件系统检查
 
 必须通过：
 
@@ -245,7 +245,7 @@
 - listDir / mkdir / rmdir 正常。
 - FS 失败不影响 WiFi/Web。
 
-## 12. Watchdog / Sleep 检查
+## 13. Watchdog / Sleep 检查
 
 必须通过：
 
@@ -256,7 +256,7 @@
 - deep sleep 必须走统一生命周期流程。
 - ESP32-C3 不支持 wake source 返回 false。
 
-## 13. Web 检查
+## 14. Web 检查
 
 必须通过：
 
@@ -304,7 +304,7 @@
 - 慢请求日志。
 - 长 handler 限制已文档化。
 
-## 14. Examples 检查
+## 15. Examples 检查
 
 必须通过：
 
@@ -322,7 +322,7 @@
 - `examples/rtc_time_source` 可在自身目录分别构建 DS3231 和 PCF8563 env，并清楚演示构建期二选一、I2C 初始化所有权和业务使用 `Esp32BaseTime` 的接入方式。
 - 所有启用 FS 的示例不应通过构建参数覆盖系统诊断日志默认模式；默认保持 ERROR，现场排查时再显式切到 WARN/INFO。
 
-## 15. Soak 检查
+## 16. Soak 检查
 
 必须完成 48 小时 soak：
 

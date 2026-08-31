@@ -108,9 +108,7 @@ ESP32BASE_HEALTH_DEBUG_LOG_INTERVAL_MS=1800000
 
 ### 3.8 Restart log
 
-```cpp
-ESP32BASE_RESTART_LOG_CAPACITY=4
-```
+Restart log 固定保留4个槽位，当前不提供容量覆盖宏。
 
 ## 4. 字符串和缓冲
 

@@ -124,7 +124,7 @@ App Events 边界：
 ## 10. 兼容边界
 
 - 支持 Arduino ESP32 Core 2.0.14+ 和 3.0.4+。
-- Watchdog、WiFi event、mDNS、brownout 控制必须使用版本条件编译隔离。
+- Watchdog、WiFi event和mDNS必须使用版本条件编译隔离；brownout只读取reset reason，不修改detector寄存器。
 - mDNS `stop()` 对外语义是停止广告，不承诺释放底层 mDNS 全部资源。
 - ESP32-C3 不支持的 wake source 返回 false 并输出 warn。
 
@@ -133,7 +133,7 @@ App Events 边界：
 - OTA 只支持整包升级。
 - 未提供 SHA256 时允许跳过完整性校验；提供时必须严格校验。
 - SHA256 校验失败不得调用 `Update.end(true)`，不得重启到新固件。
-- 默认不关闭 brownout detector；临时关闭 brownout 仅作为显式开启的风险选项。
+- OTA 全程不关闭 brownout detector，也不提供绕过开关；供电问题必须在硬件侧解决。
 
 ## 12. 日志边界
 

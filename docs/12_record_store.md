@@ -165,7 +165,7 @@ Record Store只操作自己的版本目录，不删除或改写FileLog、其他R
 
 - 芯片：classic ESP32 D0WD-V3。
 - Arduino ESP32 Core：2.0.16。
-- 临时 LittleFS 分区：2.75 MiB；实验完成后已恢复正式 App Events demo。
+- 基准测试专用 LittleFS 分区：2.75 MiB；该容量不代表业务项目默认分区。
 - 模拟槽位：48 字节；各方案写满至目标逻辑总量。
 - reopen：每次 append 都 open/append/flush/close；30 次采样。
 - keep-open：保持文件句柄 append/flush；30 次采样，仅用于判断句柄策略。

@@ -20,7 +20,7 @@
 
 业务记录的职责边界、磁盘格式、容量规划、断电恢复和经典 ESP32 实机性能基线详见 [Record Store 设计、接入与实机基准](docs/12_record_store.md)。
 
-Web 页面结构、样式基线、业务页面模式和换肤策略详见 [Web UI 页面结构与样式基线](docs/11_web_ui_baseline.md)。
+Web 页面结构、样式基线、业务页面模式和换肤策略详见 [Web UI 页面结构与样式基线](docs/11_web_ui_baseline.md)。本项目采用 [MIT License](LICENSE)。
 业务项目接入前，建议先用 `examples/web_ui_gallery` 统一查看和验证状态、记录、配置、命令、分步操作、确认和空状态等页面样式；`examples/full_demo` 侧重完整功能集成。
 基础 Web CSS 由 `/esp32base/ui.css` 统一输出并允许浏览器缓存，业务页面通过 `sendHeader()` 自动引用，不需要复制样式；按钮按轻量设备控制台风格收敛，明确保存/执行动作和普通入口保持清楚层级；原生 `<dialog>` 可复用基础弹层、表单和按钮样式。
 
@@ -134,10 +134,12 @@ WiFi 默认关闭 modem sleep，让 Web 首屏和 OTA 不被 Arduino ESP32 默�
 - ESP32-S3
 - ESP32-C3
 
-框架：
+框架兼容目标：
 
 - Arduino ESP32 Core 2.0.14+
 - Arduino ESP32 Core 3.0.4+
+
+当前发布矩阵实际验证 Core 2.0.16 和 3.3.8；其它范围内 minor 版本需要业务项目按目标板重新构建和验证。
 
 不支持：
 

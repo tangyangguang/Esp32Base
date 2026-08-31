@@ -13,6 +13,8 @@ REQUIRED_PACKAGE_PATHS = {
         Path("package.json"),
         Path("tools") / "pioarduino-build.py",
         Path("cores") / "esp32" / "Arduino.h",
+        Path("libraries") / "Network" / "src" / "NetworkClient.h",
+        Path("libraries") / "Hash" / "src" / "PBKDF2_HMACBuilder.h",
     ),
     "framework-arduinoespressif32-libs": (
         Path("package.json"),

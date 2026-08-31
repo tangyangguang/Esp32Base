@@ -2,10 +2,12 @@
 
 ## 1. 支持范围
 
-支持：
+源码兼容目标：
 
 - Arduino ESP32 Core 2.0.14+
 - Arduino ESP32 Core 3.0.4+
+
+当前发布构建矩阵实际固定验证 Arduino Core 2.0.16 和 3.3.8。范围内其它 minor 版本属于兼容目标，不等于已经逐版本验证；产品固定其它版本时必须重新执行对应芯片、Profile、OTA 和资源检查。
 
 芯片：
 
@@ -137,18 +139,9 @@ ESP32-S3 开发板常见 USB-CDC 串口配置差异。
 - 示例文档应提示常见 `USB CDC On Boot` 设置。
 - 发布前必须实测 Serial 日志在 ESP32-S3 Arduino Core 2.x / 3.x 下可观察。
 
-## 11. Brownout 控制
+## 11. Brownout
 
-默认不关闭 brownout detector。
-
-当 `ESP32BASE_OTA_DISABLE_BROWNOUT_DURING_WRITE=1` 时：
-
-- 仅 OTA flash write 窗口内临时关闭。
-- 成功、失败、abort、client disconnect 全路径恢复。
-- 实现必须用版本和芯片条件编译隔离寄存器差异。
-- 不支持的 core/chip 组合下必须编译失败或降级为 warn，不允许静默假装成功。
-
-启用该宏前，需要在 Core 2.x / 3.x 分别确认 brownout register 名称和 restore 方式；未确认的组合必须保持默认关闭。
+Esp32Base 不修改 brownout detector 寄存器，不提供 OTA 期间关闭欠压保护的宏，因此没有 Core 2.x / 3.x 寄存器兼容分支。供电跌落诊断只读取 reset reason；实际 OTA 掉电安全依赖芯片复位、bootloader 和双 OTA 分区，并必须在目标硬件验证。
 
 ## 12. OTA rollback weak hook
 
@@ -165,28 +158,31 @@ Esp32Base 的策略：
 
 `examples/basic` 同时提供官方 PlatformIO Arduino Core 2.x 环境和 pioarduino Arduino Core 3.x 环境。
 
-官方 `platformio/espressif32@6.7.0` 与 pioarduino 当前都会使用 `framework-arduinoespressif32` 这个包名。两类环境交替构建时，PlatformIO 可能会卸载并重新安装对应 framework。`examples/basic` 的 Core 3.x env 显式固定 pioarduino 的 Arduino 3.3.8 framework 主包和 libs 包，并通过 `scripts/pioarduino_core3_preflight.py` 在构建前检查关键包路径。做 Core 3.x 验证前仍建议先运行预热脚本，避免构建脚本在主 framework 包缺失或半安装状态下拿到空的 `FRAMEWORK_DIR`：
+官方 `platformio/espressif32@6.7.0` 与 pioarduino 都使用 `framework-arduinoespressif32` 包名。如果共用默认 `~/.platformio`，Core 2.x / 3.x 交替解析时可能互相替换 framework，形成包清单显示3.x但目录部分来自2.x的非原子状态。该问题属于本机包管理冲突，不是源码兼容错误。
 
-```sh
-python3 scripts/ensure_arduino3_platformio.py
-```
+仓库因此把 Core 3.x 验证固定隔离到 `.piohome/arduino3`：
 
-如果该脚本失败，先按本地 PlatformIO 包管理状态处理；不要把 `FRAMEWORK_DIR` 为空、framework 主包缺失或工具包反复安装直接判断为源码兼容失败。
+- `scripts/ensure_arduino3_platformio.py` 在隔离目录安装并检查 framework、Network、Hash、libs和工具链关键路径；
+- `scripts/pio_arduino3.py` 给后续 PlatformIO 命令设置同一个 `PLATFORMIO_CORE_DIR`；
+- Core 3.x env 的 `scripts/pioarduino_core3_preflight.py` 在真正编译前再次检查。
 
 推荐验证顺序：
 
 ```sh
-platformio run -d examples/basic -e esp32_minimal -e esp32_local -e esp32_iot -j 1
+pio run -d examples/basic -e esp32_minimal -e esp32_offline -e esp32_local -e esp32_iot -j 1
 python3 scripts/ensure_arduino3_platformio.py
-platformio run -d examples/basic -e esp32_local_arduino3 -e esp32_iot_arduino3 -j 1
-platformio run -d examples/basic -e esp32_minimal_arduino3 -j 1
+python3 scripts/pio_arduino3.py run -d examples/basic \
+  -e esp32_minimal_arduino3 -e esp32_offline_arduino3 \
+  -e esp32_local_arduino3 -e esp32_iot_arduino3 -j 1
 ```
 
-外部应用通过 `lib_deps = file:///.../Esp32Base` 引用本库时，LOCAL/IOT及显式FS/Web/OTA能力必须能由本库自行触发PlatformIO LDF发现Arduino ESP32内置库，不要求业务代码额外include `LittleFS.h`、`WiFi.h`、`WebServer.h`或`Update.h`。
+不要在同一默认 PlatformIO core目录中交替执行官方 Core 2.x与pioarduino Core 3.x构建。预热或wrapper失败时先按输出修复隔离目录；不要把 `FRAMEWORK_DIR` 为空、Network/Hash头文件缺失或工具包反复安装直接判断为源码兼容失败。
 
-本库的可选实现文件使用直接framework include给LDF提供依赖线索。PlatformIO可能会为MINIMAL外部应用构建一些未链接的framework archive；裁剪验收以最终ELF/map是否链接WiFi/WebServer/Update/LittleFS符号为准。
+外部应用通过 `lib_deps = file:///.../Esp32Base` 或 `symlink://.../Esp32Base` 引用本库时，必须在同一 `lib_deps` 中显式列出所选Profile使用的Arduino内置库。PlatformIO默认 `chain` LDF不会可靠递归扫描Esp32Base私有 `.cpp/.inc` 实现；不能依赖偶然的全局包状态，也不能让业务源码添加 `LittleFS.h`、`WiFi.h`、`WebServer.h`或`Update.h` 等无业务语义的占位include。LOCAL/IOT的完整清单以 `docs/13_integration_and_upgrade.md` 模板为准，MINIMAL/OFFLINE按 `examples/basic/platformio.ini` 裁减；Core 3.x必须额外声明拆分出的内置`Networking`和`Hash`。
+
+本库`library.json`中的framework include flags只解决Esp32Base私有实现编译时的头文件可见性，不替代应用`lib_deps`对内置archive的发现和链接。声明依赖可能编译最终未使用的archive；裁剪验收仍以最终ELF/map是否链接WiFi/WebServer/Update/LittleFS符号为准。
 
 如需同时验证 Core 2.x 与 Core 3.x，记录首次失败时应区分：
 
-- 编译、链接、符号或 API 错误：按源码兼容问题处理。
-- framework 包缺失、`FRAMEWORK_DIR` 为 `None`、工具包反复安装：先运行 `scripts/ensure_arduino3_platformio.py`，安装完成后重跑确认。
+- 隔离目录完整且出现编译、链接、符号或 API 错误：按源码兼容问题处理；
+- framework包缺失、`FRAMEWORK_DIR` 为 `None`、Network/Hash头文件缺失或工具包反复安装：删除损坏的 `.piohome/arduino3` 后重新运行预热脚本，再通过wrapper重跑。

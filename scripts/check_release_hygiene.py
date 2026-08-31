@@ -29,6 +29,10 @@ def parse_partition_csv(path: str):
 
 errors = []
 
+license_path = ROOT / "LICENSE"
+if not license_path.exists() or "MIT License" not in license_path.read_text(encoding="utf-8"):
+    errors.append("LICENSE: declared MIT license text must be present in the release")
+
 library = read("library.json")
 libraryignore = read(".libraryignore")
 piopmignore = read(".piopmignore")
@@ -38,6 +42,8 @@ for path, text in (
     (".libraryignore", libraryignore),
     (".piopmignore", piopmignore),
 ):
+    if ".piohome" not in text:
+        errors.append(f"{path}: release/export filters must exclude the isolated PlatformIO core directory")
     if "__pycache__" not in text or "*.py[cod]" not in text:
         errors.append(f"{path}: release/export filters must exclude Python cache files")
     if "idf_component.yml" not in text:
@@ -45,11 +51,71 @@ for path, text in (
     if path != ".gitignore" and "local_secrets.h" not in text:
         errors.append(f"{path}: release/export filters must exclude MQTT local secrets")
 
+mqtt_ini = read("examples/mqtt_tls/platformio.ini")
+for dependency in (
+    "Preferences",
+    "WiFi",
+    "DNSServer",
+    "ESPmDNS",
+    "LittleFS",
+    "WebServer",
+    "Update",
+    "ESP32 Async UDP",
+    "FS",
+    "Networking",
+    "Hash",
+):
+    if f"\n  {dependency}\n" not in mqtt_ini:
+        errors.append(
+            f"examples/mqtt_tls/platformio.ini: external IOT build must declare built-in {dependency}"
+        )
+if "lib_ldf_mode = deep+" in mqtt_ini:
+    errors.append("examples/mqtt_tls/platformio.ini: external build must work with default chain LDF")
+
+for framework_library in (
+    "AsyncUDP",
+    "DNSServer",
+    "ESPmDNS",
+    "FS",
+    "Hash",
+    "LittleFS",
+    "Network",
+    "Preferences",
+    "Update",
+    "WebServer",
+    "WiFi",
+    "Wire",
+):
+    marker = f"framework-arduinoespressif32/libraries/{framework_library}/src"
+    if marker not in library:
+        errors.append(f"library.json: missing private implementation include path for {framework_library}")
+
 for path in ("src/Esp32BaseProfile.h", "src/runtime/Esp32BaseFs.inc"):
     text = read(path)
     for marker in ("AUTO_FORMAT", "formatOnFail", "LittleFS.begin(true", "auto-format requested"):
         if marker in text:
             errors.append(f"{path}: forbidden automatic format marker {marker!r}")
+
+all_docs = read("README.md") + "\n" + "\n".join(
+    path.read_text(encoding="utf-8") for path in sorted((ROOT / "docs").glob("*.md"))
+)
+for marker in (
+    "ESP32BASE_OTA_DISABLE_BROWNOUT_DURING_WRITE",
+    "ESP32BASE_RESTART_LOG_CAPACITY",
+):
+    if marker in all_docs:
+        errors.append(f"documentation: unsupported configuration marker {marker!r}")
+
+for ini_path in sorted((ROOT / "examples").glob("*/platformio.ini")):
+    text = ini_path.read_text(encoding="utf-8")
+    if "lib_extra_dirs = ../.." in text and "lib_ignore = .piohome" not in text:
+        errors.append(
+            f"{ini_path.relative_to(ROOT)}: examples scanning the repository root must ignore .piohome"
+        )
+    if "arduino3]" in text and "pioarduino_core3_preflight.py" not in text:
+        errors.append(
+            f"{ini_path.relative_to(ROOT)}: Core 3.x env must run the isolated package preflight"
+        )
 
 expected_partitions = {
     "partitions/esp32-4mb-ota-balanced.csv": {

@@ -66,7 +66,7 @@ bool optionalOk(bool ok, const char* module) {
     }
     esp32base_internal::copySafe(g_lastError, sizeof(g_lastError), module);
     ESP32BASE_LOG_E("base", "module begin failed: %s", module);
-#if defined(ESP32BASE_STRICT_OPTIONAL_BEGIN) && ESP32BASE_STRICT_OPTIONAL_BEGIN
+#if ESP32BASE_STRICT_OPTIONAL_BEGIN
     return false;
 #else
     return true;

@@ -18,6 +18,20 @@
   "platforms": ["espressif32"],
   "build": {
     "includeDir": "src",
+    "flags": [
+      "-I$PROJECT_PACKAGES_DIR/framework-arduinoespressif32/libraries/AsyncUDP/src",
+      "-I$PROJECT_PACKAGES_DIR/framework-arduinoespressif32/libraries/DNSServer/src",
+      "-I$PROJECT_PACKAGES_DIR/framework-arduinoespressif32/libraries/ESPmDNS/src",
+      "-I$PROJECT_PACKAGES_DIR/framework-arduinoespressif32/libraries/FS/src",
+      "-I$PROJECT_PACKAGES_DIR/framework-arduinoespressif32/libraries/Hash/src",
+      "-I$PROJECT_PACKAGES_DIR/framework-arduinoespressif32/libraries/LittleFS/src",
+      "-I$PROJECT_PACKAGES_DIR/framework-arduinoespressif32/libraries/Network/src",
+      "-I$PROJECT_PACKAGES_DIR/framework-arduinoespressif32/libraries/Preferences/src",
+      "-I$PROJECT_PACKAGES_DIR/framework-arduinoespressif32/libraries/Update/src",
+      "-I$PROJECT_PACKAGES_DIR/framework-arduinoespressif32/libraries/WebServer/src",
+      "-I$PROJECT_PACKAGES_DIR/framework-arduinoespressif32/libraries/WiFi/src",
+      "-I$PROJECT_PACKAGES_DIR/framework-arduinoespressif32/libraries/Wire/src"
+    ],
     "srcFilter": [
       "+<*.cpp>",
       "+<core/*.cpp>",
@@ -41,6 +55,8 @@
       ".piopmignore",
       ".pio",
       ".pio/**",
+      ".piohome",
+      ".piohome/**",
       ".cache",
       ".cache/**",
       "__pycache__",
