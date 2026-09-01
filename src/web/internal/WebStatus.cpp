@@ -368,7 +368,7 @@ void handleStatus() {
     sendEscapedJsonChunk(Esp32Base::hostname());
     sendChunk("\",\"uptimeMs\":");
     sendUintChunk(Esp32BaseSystem::uptimeMs64());
-    sendChunk("\",\"heap\":{\"free\":");
+    sendChunk(",\"heap\":{\"free\":");
     sendBytesJsonChunk(Esp32BaseSystem::freeHeap());
     sendChunk(",\"minFree\":");
     sendBytesJsonChunk(Esp32BaseSystem::minFreeHeap());
