@@ -836,6 +836,14 @@ static const char* errorName(Error error);
 
 应用必须在 `Esp32Base::begin()` 前完成 `configure()`、订阅和 callback 注册。模块自己的 begin/handle 由 `Esp32Base` facade 调度，不向业务公开。`Esp32Base::begin()` 只校验本地配置，不等待 WiFi、DNS、NTP、TCP、TLS 或 Broker；MQTT 未配置视为可用但 `NOT_CONFIGURED`，非法配置按 optional module begin 契约报告，只有 `ESP32BASE_STRICT_OPTIONAL_BEGIN=1` 才阻止整体 begin。
 
+需要在基础库主动停止 MQTT 前尽力发布应用层正常离线证据时，可在 `begin()` 前注册单个顶层回调：
+
+```cpp
+Esp32Base::setBeforeNetworkStopCallback(callback, context);
+```
+
+callback 在 restart/deep sleep 生命周期进入 MQTT 异步 DISCONNECT 前调用；启用 Web OTA 时，也会在每次上传开始、MQTT 首次进入 `SUSPENDED_FOR_OTA` 前调用一次，上传失败并恢复后允许下次再次调用。后注册会替换前一个 callback。它只适合在当前 loop/system task 中执行固定时间、非阻塞的最后 publish 或运行态标记，不得自行等待 PUBACK、sleep、访问慢外设或启动长流程。返回值是应用请求的有界网络发送宽限毫秒数：`0` 表示不等待，基础库将大于 `1000` 的值限制为 `1000`；restart/deep sleep 会在 callback 返回后、请求 MQTT DISCONNECT 前等待一次，并在请求后再等待一次，Web OTA 只在暂停 MQTT 前等待一次。该宽限仅给 ESP-MQTT task 发送已 enqueue 报文和处理断开机会，不轮询 PUBACK，也不把 `PUBLISH_ACCEPTED` 提升为 Broker 已收到；应用协议必须保留 LWT 作为异常或正常离线消息未送达时的兜底。未配置 MQTT、当前不在线、上传前已经断线或底层 enqueue 拒绝时，业务应返回 `0` 并接受本次正常离线证据无法发布，不能阻止安全重启、休眠或 OTA。
+
 `ConnectionConfig`：
 
 - `host`：1..253 字节、NUL 结尾。
@@ -919,7 +927,7 @@ typedef void (*MessageCallback)(const MessageView& message, void* context);
 
 `Status` 提供当前状态、稳定错误、TLS/credential-set、证书日期校验能力、Broker host/port/clientId 和最近连接的 uptime/epoch。`Diagnostics` 提供连接尝试、连接周期配置失败、成功、重连、断开、接收、publish accepted、PUBACK、订阅 ACK、送达状态不确定、超限/邮箱丢弃、enqueue 失败、outbox/inbox/control high-water、当前 QoS 1 in-flight 及 native ESP/TLS/socket/certificate flags。QoS 0 没有可观察的 Broker ACK，因此不伪造“已发送”计数；native code 只用于诊断，不作为跨 Core 稳定业务枚举。
 
-OTA 上传开始时 facade 异步请求 MQTT DISCONNECT 并拒绝新 publish；上传失败且设备继续运行时重新进入前置条件和连接流程。运行期不调用可能无限等待的 `esp_mqtt_client_stop()`；MQTT task 保留到重启，避免阻塞 loop/watchdog。restart/deep sleep 前只尽力异步请求 DISCONNECT，不等待 task 停止，也不承诺 DISCONNECT、在途 publish 或 PUBACK 已抵达。异常掉电的 LWT 行为由 Broker 和 MQTT 契约决定。WiFi safe boot/AP 配网时不连接 Broker；modem sleep 下 Keepalive 和重连需要产品实机验证。
+OTA 上传开始时 facade 先调用已注册的 `BeforeNetworkStopCallback`，再异步请求 MQTT DISCONNECT 并拒绝新 publish；上传失败且设备继续运行时重新进入前置条件和连接流程。运行期不调用可能无限等待的 `esp_mqtt_client_stop()`；MQTT task 保留到重启，避免阻塞 loop/watchdog。restart/deep sleep 同样先调用该应用回调，再尽力异步请求 DISCONNECT；基础库不等待 task 停止，也不承诺应用最后 publish、DISCONNECT、在途 publish 或 PUBACK 已抵达。异常掉电的 LWT 行为由 Broker 和 MQTT 契约决定。WiFi safe boot/AP 配网时不连接 Broker；modem sleep 下 Keepalive 和重连需要产品实机验证。
 
 容量宏及默认值见 [内存与容量预算](06_memory_budget.md)。最小安全接入见 `examples/mqtt_tls`。Topic 版本、命令去重/过期/授权、JSON、设备影子、业务状态同步和离线业务数据属于应用层。
 

@@ -2,6 +2,7 @@
 
 #include "core/Esp32BaseUtil.h"
 
+#include <Arduino.h>
 #include <string.h>
 
 namespace {
@@ -19,6 +20,12 @@ char g_firmwareBuild[33] = "";
 char g_defaultHostname[33] = "esp32base";
 char g_hostname[33] = "esp32base";
 char g_lastError[96] = "";
+Esp32Base::BeforeNetworkStopCallback g_beforeNetworkStopCallback = nullptr;
+void* g_beforeNetworkStopContext = nullptr;
+#if ESP32BASE_ENABLE_MQTT && ESP32BASE_ENABLE_OTA
+bool g_otaNetworkStopNotified = false;
+#endif
+constexpr uint16_t kMaximumNetworkStopGraceMs = 1000U;
 
 bool hostnameValid(const char* hostname) {
     if (!hostname || !hostname[0]) {
@@ -107,9 +114,27 @@ void logBootSessionStart() {
 
 }
 
+uint16_t Esp32Base::notifyBeforeNetworkStop() {
+    if (!g_beforeNetworkStopCallback) {
+        return 0;
+    }
+    const uint16_t requested =
+        g_beforeNetworkStopCallback(g_beforeNetworkStopContext);
+    return requested > kMaximumNetworkStopGraceMs
+               ? kMaximumNetworkStopGraceMs
+               : requested;
+}
+
 void Esp32Base::prepareForLifecycleStop() {
+    const uint16_t graceMs = notifyBeforeNetworkStop();
+    if (graceMs > 0U) {
+        delay(graceMs);
+    }
 #if ESP32BASE_ENABLE_MQTT
     Esp32BaseMqtt::prepareForLifecycleStop();
+    if (graceMs > 0U) {
+        delay(graceMs);
+    }
 #endif
 #if ESP32BASE_ENABLE_FILELOG
     Esp32BaseFileLog::flush();
@@ -299,13 +324,21 @@ void Esp32Base::handle() {
     }
 #endif
 #if ESP32BASE_ENABLE_MQTT
-    Esp32BaseMqtt::handle(
 #if ESP32BASE_ENABLE_OTA
-        Esp32BaseOta::isUploading()
+    const bool otaUploading = Esp32BaseOta::isUploading();
+    if (otaUploading && !g_otaNetworkStopNotified) {
+        const uint16_t graceMs = notifyBeforeNetworkStop();
+        if (graceMs > 0U) {
+            delay(graceMs);
+        }
+        g_otaNetworkStopNotified = true;
+    } else if (!otaUploading) {
+        g_otaNetworkStopNotified = false;
+    }
+    Esp32BaseMqtt::handle(otaUploading);
 #else
-        false
+    Esp32BaseMqtt::handle(false);
 #endif
-    );
 #endif
 #if ESP32BASE_ENABLE_MDNS
     if (Esp32BaseWiFi::isConnected() && !Esp32BaseMdns::isRunning()) {
@@ -338,6 +371,12 @@ void Esp32Base::handle() {
         logResources();
         g_startupLogged = true;
     }
+}
+
+void Esp32Base::setBeforeNetworkStopCallback(BeforeNetworkStopCallback callback,
+                                             void* context) {
+    g_beforeNetworkStopCallback = callback;
+    g_beforeNetworkStopContext = context;
 }
 
 void Esp32Base::setFirmwareInfo(const char* name, const char* version, const char* build) {

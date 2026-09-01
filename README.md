@@ -204,6 +204,8 @@ pio run -t webota
 
 量产项目建议启用 `ESP32BASE_OTA_REQUIRE_MARK_VALID=1`，避免 Arduino core 在应用自检前过早把新 OTA 镜像标记为 valid。业务应把基础库启动、配置/API 注册、存储、传感器、执行器安全状态和核心任务纳入自检，通过后再调用 `Esp32BaseOta::markCurrentValid()`。确认期限在 Arduino `setup()` 前启动，不依赖业务进入 `Esp32Base::begin()`、loop 或持续调用 `Esp32Base::handle()`；期限届满会标记新镜像无效并重启回滚，`handle()` 只保留降级检查。最小配置和示例见 `docs/05_ota.md`。
 
+IOT 产品如果协议要求正常离线消息，可在 `Esp32Base::begin()` 前注册 `Esp32Base::setBeforeNetworkStopCallback()`，在 Web OTA 上传、统一 restart 或 deep sleep 异步断开 MQTT 前执行一次固定时间、非阻塞的最后 publish。callback 可返回不超过 1000 ms 的有界网络发送宽限；基础库会在 restart/deep sleep 的异步断开前后应用该宽限，Web OTA 只在暂停 MQTT 前应用一次。它不会轮询 PUBACK，enqueue accepted 也不保证 Broker 已收到；异常掉电和正常离线消息未送达仍必须由 LWT 兜底。完整边界见 `docs/03_api.md`。
+
 双 OTA 设备如果已经通过 Web OTA 切换到另一个槽位，串口 `pio run -t upload` 的行为取决于分区表和 PlatformIO/Arduino flash plan。仓库标准分区通常会把启动选择重新初始化到 `ota_0`；但自定义分区如果只覆盖固定 app 槽而不更新 OTA data，设备仍可能继续从旧槽启动。串口恢复优先使用基础库脚本，它会按分区表写入两个 OTA app 槽并清理启动选择：
 
 ```sh

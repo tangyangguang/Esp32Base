@@ -85,7 +85,7 @@
 - QoS 0 只承诺 enqueue accepted；QoS 1 只有 Broker ACK 后发布确认事件。
 - 超限分片整条丢弃且计数，不截断交给业务。
 - 控制邮箱、入站邮箱、QoS 1 in-flight 和 outbox 达到上限时明确失败并保留诊断。
-- OTA、restart、deep sleep 异步请求 MQTT 断开时不等待可能阻塞的 stop，也不声称在途 publish 已完成；异常掉电 LWT 由 Broker 契约处理。
+- 需要正常离线证据的产品通过 `setBeforeNetworkStopCallback()` 在 OTA、restart、deep sleep 请求 MQTT 断开前尽力 enqueue 最后消息，并只按实际发送预算请求不超过 1000 ms 的有界宽限；回调自身非阻塞，宽限不等于 PUBACK，也不声称最后消息或其他在途 publish 已完成；异常掉电 LWT 仍由 Broker 契约处理。
 - 日志、安全脚本和发布包中没有密码、私钥、真实证书或敏感 payload。
 - 实机记录 TLS 握手峰值、稳定 heap、MQTT task stack、modem sleep Keepalive、路由器/Broker 恢复及至少一次长稳结果；未完成项写入发布记录。
 - RTC 关闭时不链接 DS3231/PCF8563 驱动符号。

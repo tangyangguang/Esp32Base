@@ -282,10 +282,11 @@ Esp32BaseSleep::deepSleep(...);
 1. 发布生命周期事件，如 Bus 启用。
 2. 写重启日志环。
 3. `Esp32BaseConfig::flushAll()`。
-4. MQTT 尽力异步请求 DISCONNECT，不等待或停止后台 task；task 随本次 restart / deep sleep 终止，不承诺 DISCONNECT、在途 publish 或 PUBACK 已抵达。
-5. 输出最后诊断。
-6. 处理 Watchdog。
-7. 执行底层 restart / sleep。
+4. 调用应用通过 `Esp32Base::setBeforeNetworkStopCallback()` 注册的固定时间、非阻塞回调，使产品可尽力 enqueue 正常离线等最后证据；Web OTA 首次进入上传态时也在 MQTT 暂停前执行一次。callback 可请求最多 1000 ms 的有界发送宽限，不能自行阻塞或把宽限解释为 PUBACK。
+5. MQTT 尽力异步请求 DISCONNECT；restart/deep sleep 在应用请求宽限时也会给断开相同的有界处理时间，但不停止或无限等待后台 task；task 随本次 restart / deep sleep 终止，不承诺应用最后 publish、DISCONNECT、在途 publish 或 PUBACK 已抵达。
+6. 输出最后诊断。
+7. 处理 Watchdog。
+8. 执行底层 restart / sleep。
 
 禁止模块内部直接调用：
 

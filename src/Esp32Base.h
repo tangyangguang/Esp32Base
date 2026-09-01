@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdint.h>
+
 #include "Esp32BaseProfile.h"
 #include "core/Esp32BaseLog.h"
 #include "core/Esp32BaseConfig.h"
@@ -69,9 +71,13 @@
 
 class Esp32Base {
 public:
+    typedef uint16_t (*BeforeNetworkStopCallback)(void* context);
+
     static bool begin();
     static void handle();
 
+    static void setBeforeNetworkStopCallback(BeforeNetworkStopCallback callback,
+                                             void* context = nullptr);
     static void setFirmwareInfo(const char* name, const char* version, const char* build = nullptr);
     static const char* firmwareName();
     static const char* firmwareVersion();
@@ -89,5 +95,6 @@ public:
     static void logResources();
 
 private:
+    static uint16_t notifyBeforeNetworkStop();
     static void prepareForLifecycleStop();
 };
