@@ -2,8 +2,13 @@
 
 #include "Esp32BaseWeb.h"
 
+#if ESP32BASE_ENABLE_FS
+#include "../runtime/Esp32BaseStorage.h"
+#endif
 #if ESP32BASE_ENABLE_RECORD_STORE
 #include "../runtime/Esp32BaseRecordStore.h"
+#endif
+#ifndef ESP32BASE_WEB_NATIVE_TEST
 #include "../core/Esp32BaseLog.h"
 #endif
 #if ESP32BASE_ENABLE_BUS
@@ -16,10 +21,6 @@
 namespace {
 Esp32BaseWeb::AfterFormatFsCallback g_afterFormatFsCallback = nullptr;
 void* g_afterFormatFsCallbackUser = nullptr;
-#if ESP32BASE_ENABLE_RECORD_STORE
-Esp32BaseRecordStore* g_businessRecordStores[Esp32BaseWeb::MAX_BUSINESS_RECORD_STORES] = {};
-uint8_t g_businessRecordStoreCount = 0;
-#endif
 
 void dispatchToolsFormatFsSuccess(bool mountSuccess,
                                   bool fileLogReloadSuccess,
@@ -55,41 +56,6 @@ void dispatchToolsFormatFsSuccess(bool mountSuccess,
     (void)publishEvent;
 #endif
 }
-}
-
-bool Esp32BaseWeb::registerBusinessRecordStore(Esp32BaseRecordStore& store) {
-#if ESP32BASE_ENABLE_RECORD_STORE
-    Esp32BaseRecordStore::StoreStatus status;
-    if (!store.readStatus(status)) {
-        ESP32BASE_LOG_W("web", "business_record_store_registration_rejected reason=not_initialized");
-        return false;
-    }
-    for (uint8_t i = 0; i < g_businessRecordStoreCount; ++i) {
-        if (g_businessRecordStores[i] == &store) {
-            return true;
-        }
-        Esp32BaseRecordStore::StoreStatus registeredStatus;
-        if (g_businessRecordStores[i] && g_businessRecordStores[i]->readStatus(registeredStatus) &&
-            registeredStatus.path && status.path && strcmp(registeredStatus.path, status.path) == 0) {
-            ESP32BASE_LOG_W("web", "business_record_store_registration_rejected reason=duplicate_path path=%s",
-                            status.path);
-            return false;
-        }
-    }
-    if (g_businessRecordStoreCount >= MAX_BUSINESS_RECORD_STORES) {
-        ESP32BASE_LOG_W("web", "business_record_store_registration_rejected reason=capacity path=%s",
-                        status.path ? status.path : "-");
-        return false;
-    }
-    g_businessRecordStores[g_businessRecordStoreCount++] = &store;
-    ESP32BASE_LOG_I("web", "business_record_store_registered path=%s count=%u",
-                    status.path ? status.path : "-",
-                    static_cast<unsigned>(g_businessRecordStoreCount));
-    return true;
-#else
-    (void)store;
-    return false;
-#endif
 }
 
 void Esp32BaseWeb::setAfterFormatFsCallback(AfterFormatFsCallback cb, void* user) {
@@ -411,7 +377,7 @@ void nativeSystemPage() {
     Esp32BaseWeb::sendChunk("<h1>System</h1>");
     static const char* actions[] = {
         "hostname", "wifi-recovery", "filelog", "footer-bar", "reboot", "watchdog-trip-reset",
-        "app-config-defaults", "format-fs", "logs-clear", "business-records-clear", "app-events-clear"
+        "app-config-defaults", "format-fs", "logs-clear", "business-records-clear"
     };
     for (const char* action : actions) {
         Esp32BaseWeb::sendChunk("<form method='post' action='/esp32base/system/");
@@ -447,7 +413,6 @@ void registerNativeBuiltinRoutes() {
     addNativeRoute("/esp32base/status", "Status", Esp32BaseWeb::METHOD_GET, nativeStatusPage, false);
     addNativeRoute("/esp32base/system", "System", Esp32BaseWeb::METHOD_GET, nativeSystemPage, false);
     addNativeRoute("/esp32base/logs", "System Logs", Esp32BaseWeb::METHOD_GET, nativeSimplePage, false);
-    addNativeRoute("/esp32base/app-events", "App Events", Esp32BaseWeb::METHOD_GET, nativeSimplePage, false);
     addNativeRoute("/esp32base/app-config", "App Config", Esp32BaseWeb::METHOD_GET, nativeSimplePage, false);
     addNativeRoute("/esp32base/wifi", "WiFi", Esp32BaseWeb::METHOD_GET, nativeSimplePage, false);
     addNativeRoute("/esp32base/auth", "Auth", Esp32BaseWeb::METHOD_GET, nativeSimplePage, false);
@@ -1071,11 +1036,11 @@ void notifyToolsFormatFsSuccess(bool mountSuccess,
 }
 #if ESP32BASE_ENABLE_RECORD_STORE
 uint8_t businessRecordStoreCount() {
-    return g_businessRecordStoreCount;
+    return Esp32BaseStorage::recordStoreCount();
 }
 
 Esp32BaseRecordStore* businessRecordStoreAt(uint8_t index) {
-    return index < g_businessRecordStoreCount ? g_businessRecordStores[index] : nullptr;
+    return Esp32BaseStorage::recordStoreAt(index);
 }
 #endif
 }
@@ -1134,11 +1099,6 @@ bool Esp32BaseWeb::begin() {
     g_server.on("/esp32base/logs", HTTP_GET, handleLogsPage);
     g_server.on("/esp32base/logs/raw", HTTP_GET, handleLogsRaw);
     g_server.on("/esp32base/logs/clear", HTTP_POST, handleLogsClear);
-#if ESP32BASE_ENABLE_APP_EVENTS
-    g_server.on("/esp32base/app-events", HTTP_GET, handleAppEventsPage);
-    g_server.on("/esp32base/api/app-events", HTTP_GET, handleAppEventsApi);
-    g_server.on("/esp32base/app-events.csv", HTTP_GET, handleAppEventsCsv);
-#endif
 #if ESP32BASE_ENABLE_FS
     g_server.on("/esp32base/fs", HTTP_GET, handleFsPage);
     g_server.on("/esp32base/fs/check", HTTP_GET, handleFsCheckGet);
@@ -1168,9 +1128,6 @@ bool Esp32BaseWeb::begin() {
     g_server.on("/esp32base/system/logs-clear", HTTP_POST, handleToolsLogsClearPost);
 #if ESP32BASE_ENABLE_RECORD_STORE
     g_server.on("/esp32base/system/business-records-clear", HTTP_POST, handleToolsBusinessRecordsClearPost);
-#endif
-#if ESP32BASE_ENABLE_APP_EVENTS
-    g_server.on("/esp32base/system/app-events-clear", HTTP_POST, handleToolsAppEventsClearPost);
 #endif
     g_server.on("/esp32base/api/restart", HTTP_POST, handleRestart);
     g_server.on("/generate_204", HTTP_GET, handleCaptiveProbe);

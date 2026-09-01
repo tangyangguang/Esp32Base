@@ -40,7 +40,7 @@ Log、Config、System是Facade无条件依赖的核心能力，不允许通过�
 - RTC
 - RS485 Port
 - Record Store
-- App Events及条件跟踪
+- Conditions
 - App Config
 
 这些能力存在跨设备复用价值，但不是每台典型设备都需要。Profile 不隐藏其容量、存储格式或硬件所有权。
@@ -53,7 +53,7 @@ build_flags =
   -D ESP32BASE_ENABLE_RTC=1
   -D ESP32BASE_RTC_DRIVER=ESP32BASE_RTC_DRIVER_DS3231
   -D ESP32BASE_ENABLE_RECORD_STORE=1
-  -D ESP32BASE_ENABLE_APP_EVENTS=1
+  -D ESP32BASE_ENABLE_CONDITIONS=1
   -D ESP32BASE_ENABLE_APP_CONFIG=1
   -D ESP32BASE_APP_CONFIG_MAX_GROUPS=3
   -D ESP32BASE_APP_CONFIG_MAX_FIELDS=12
@@ -95,11 +95,10 @@ build_flags =
 - `OTA` 需要 `WIFI + WEB`；启用即包含 OTA 核心、Web上传、分区诊断、SHA256、mark-valid与回滚；
 - `DNS`、`NTP`、`MDNS` 需要 `WIFI`；
 - `NTP`、`RTC`、`RECORD_STORE` 需要 `TIME`；
-- `TIME` 在启用 NTP、RTC、Record Store、App Events、Web或MQTT时默认开启；
+- `TIME` 在启用 NTP、RTC、Record Store、Web或MQTT时默认开启；
 - `MQTT` 需要 `WIFI + TIME`，MQTTS运行时还要求NTP来源；
 - `FILELOG` 需要 `FS`，启用FS时默认开启FileLog；
-- `APP_EVENTS` 需要 `RECORD_STORE`，后者需要 `FS + TIME`；
-- `APP_EVENT_CONDITIONS` 需要 `APP_EVENTS`；
+- `RECORD_STORE` 需要 `FS + TIME`；Conditions使用NVS，不依赖FS或RecordStore；
 - `APP_CONFIG` 需要 `WEB`；
 - `RS485_PORT` 无内部硬依赖。
 
@@ -125,7 +124,7 @@ build_flags =
 
 必须链接：WiFi、DNS、NTP、mDNS、WebServer、LittleFS、Update和Web OTA。
 
-必须不链接：MQTT。Bus、Sleep、RTC、RS485、Record Store、App Events和App Config只在显式开启时进入固件。
+必须不链接：MQTT。Bus、Sleep、RTC、RS485、Record Store、Conditions和App Config只在显式开启时进入固件。
 
 ### IOT
 

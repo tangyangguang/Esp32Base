@@ -60,9 +60,10 @@ Core 不包含 Event Bus。Bus 是 Runtime 可选模块。
 - `Esp32BaseWatchdog`
 - `Esp32BaseSleep`
 - `Esp32BaseFs`
+- `Esp32BaseStorage`
 - `Esp32BaseFileLog`
 - `Esp32BaseRecordStore`
-- `Esp32BaseAppEvents`
+- `Esp32BaseConditions`
 - `Esp32BaseTime`
 - `Esp32BaseRtc`
 - `Esp32BaseRs485Port`
@@ -73,10 +74,11 @@ Core 不包含 Event Bus。Bus 是 Runtime 可选模块。
 - loop-task-only 同步事件总线。
 - Task Watchdog。
 - Sleep。
-- LittleFS。
-- 系统诊断日志 sink（`Esp32BaseFileLog`），依赖 Fs，通过 Core Log 的 line sink 接收日志。
-- 固定长度业务 Record Store，依赖 Fs 和 Time，提供按段追加、完整段淘汰、CRC恢复和分页读取，不解释payload业务语义。
-- App Events 复用 Record Store，是基础库预定义紧凑payload的一类低频业务事件记录，不是第二套系统诊断日志。可选条件跟踪位于同一Runtime模块，只接受应用观察结果并用Core NVS保存固定32位活动ID集合；它不依赖或解释RTC、传感器、门锁等业务模块。
+- LittleFS网关及全局递归串行化。
+- 存储协调层（`Esp32BaseStorage`）：统一容量、受管路径、Store登记、格式化恢复和OTA写暂停，不理解各模块格式。
+- 系统诊断日志 sink（`Esp32BaseFileLog`），依赖Fs，通过Core Log的line sink接收日志。
+- 固定长度业务RecordStore，依赖Fs和Time，提供顺序追加、完整段淘汰、CRC恢复和分页读取，不解释payload业务语义。
+- Conditions使用Core NVS保存固定32位当前活动集合和确认状态机，不建立LittleFS历史；应用可按需把成功转换写入独立审计Store。
 - 统一可信时间门面（`Esp32BaseTime`），整合 uptime、RTC 和 NTP。
 - 外部 RTC 时间源（`Esp32BaseRtc`），支持 DS3231 / PCF8563 构建期二选一。
 - RS485 半双工串口方向控制（`Esp32BaseRs485Port`），封装 `HardwareSerial`、RX/TX/DE 引脚、发送前后 DE 切换和轮询读取，不包含 Modbus 或业务协议。
@@ -125,7 +127,7 @@ MQTT 只向下依赖 WiFi、统一 Time 和 Core 日志/诊断，不直接调用
 - `src/web/internal/WebResponse.cpp`：HTTP header、chunked 输出、HTML/JSON/CSV escape、断连和 watchdog 喂狗。
 - `src/web/internal/WebLayout.cpp`：导航、header/footer、panel、metric、pagination 等 HTML 组件。
 - `src/web/internal/WebAssets.cpp`：`/esp32base/ui.css`、基础 head 片段和页面级 PROGMEM 资源。
-- `src/web/internal/WebStatus.cpp`、`WebWifi.cpp`、`WebAuth.cpp`、`WebTools.cpp`、`WebLogs.cpp`、`WebAppEvents.cpp`、`WebFs.cpp`、`WebOta.cpp`、`WebAppConfig.cpp`：按功能分组的 handler。
+- `src/web/internal/WebStatus.cpp`、`WebWifi.cpp`、`WebAuth.cpp`、`WebTools.cpp`、`WebLogs.cpp`、`WebFs.cpp`、`WebOta.cpp`、`WebAppConfig.cpp`：按功能分组的 handler。
 
 职责：
 
@@ -203,16 +205,17 @@ Core 不 include Runtime/FileLog、Web、Network 或 OTA。重启和休眠前需
 4. OTA boot 初始化，如启用 OTA；该步骤只处理 rollback/mark-valid 相关启动状态，不启动网络 OTA 服务
 5. Time boot session，如启用
 6. RTC，如启用
-7. NTP boot session / AppEvents time provider，如启用
+7. NTP boot session，如启用
 8. Bus，如启用
 9. Fs，如启用
-10. AppEvents，如启用
-11. FileLog，如启用
-12. Watchdog，如启用
-13. Sleep，如启用
-14. Health，如启用
-15. WiFi，如启用
-16. 标记 ready
+10. Storage协调层，如启用FS
+11. Conditions，如启用
+12. FileLog，如启用
+13. Watchdog，如启用
+14. Sleep，如启用
+15. Health，如启用
+16. WiFi，如启用
+17. 标记ready
 
 `begin()` 不等待网络相关状态。
 

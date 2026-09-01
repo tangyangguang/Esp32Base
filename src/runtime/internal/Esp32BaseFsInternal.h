@@ -18,6 +18,16 @@ using FsFixedSlotVisitor = bool (*)(uint32_t slotIndex,
                                     size_t length,
                                     void* user);
 
+// All LittleFS calls are serialized by the implementation. Maintenance keeps
+// the recursive filesystem lock across a multi-step format/remount/reload
+// sequence. Write suspension is used by OTA and rejects new filesystem
+// mutations after any in-flight operation has completed.
+bool fsBeginExclusiveMaintenance();
+void fsEndExclusiveMaintenance();
+bool fsSetWritesSuspended(bool suspended);
+bool fsWritesSuspended();
+bool fsCurrentTaskInOperation();
+
 bool fsWriteSegmentsAt(const char* path,
                        uint32_t offset,
                        const FsWriteSegment* segments,

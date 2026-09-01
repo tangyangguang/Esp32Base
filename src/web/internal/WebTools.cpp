@@ -211,7 +211,7 @@ void sendBusinessRecordStoresClearPanel() {
     const uint8_t count = businessRecordStoreCount();
     if (count == 0) return;
     bool allReady = true;
-    sendChunk("<section class='panel dangerpanel'><h2>Clear Business Records</h2><p class='dangertext'>Logically clear every registered current-version business RecordStore. IDs continue increasing. App Events, system logs, settings, WiFi and historical unregistered versions are not changed.</p><div class='tablewrap'><table class='kv'>");
+    sendChunk("<section class='panel dangerpanel'><h2>Clear Business Records</h2><p class='dangertext'>Logically clear every registered current-version business RecordStore. IDs continue increasing. Conditions, system logs, settings, WiFi and historical unregistered versions are not changed.</p><div class='tablewrap'><table class='kv'>");
     for (uint8_t i = 0; i < count; ++i) {
         Esp32BaseRecordStore* store = businessRecordStoreAt(i);
         Esp32BaseRecordStore::StoreStatus status;
@@ -280,14 +280,6 @@ void handleToolsPage() {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_DANGER, "Business records were only partially cleared", message);
     } else if (g_server.hasArg("business_records_not_ready")) {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_DANGER, "Business records were not cleared", "At least one registered Store was unavailable or structurally invalid. No Store was changed.");
-#endif
-#if ESP32BASE_ENABLE_APP_EVENTS
-    } else if (g_server.hasArg("app_events_cleared")) {
-#if ESP32BASE_ENABLE_APP_EVENT_CONDITIONS
-        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "App Event history cleared", "Confirmed condition states were preserved.");
-#else
-        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "App Event history cleared");
-#endif
 #endif
     } else if (g_server.hasArg("filelog_saved")) {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "System log mode saved");
@@ -410,13 +402,6 @@ void handleToolsPage() {
 #endif
 #if ESP32BASE_ENABLE_RECORD_STORE
     sendBusinessRecordStoresClearPanel();
-#endif
-#if ESP32BASE_ENABLE_APP_EVENTS
-#if ESP32BASE_ENABLE_APP_EVENT_CONDITIONS
-    sendChunk("<section class='panel dangerpanel'><h2>Clear App Event History</h2><p class='dangertext'>Delete retained App Event records. Confirmed condition states, system diagnostic logs, runtime settings and WiFi credentials are not changed.</p><form method='post' action='/esp32base/system/app-events-clear' onsubmit=\"return confirm('Clear App Event history?')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Clear App Event History'></div></form></section>");
-#else
-    sendChunk("<section class='panel dangerpanel'><h2>Clear App Event History</h2><p class='dangertext'>Delete retained App Event records. System diagnostic logs, runtime settings and WiFi credentials are not changed.</p><form method='post' action='/esp32base/system/app-events-clear' onsubmit=\"return confirm('Clear App Event history?')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Clear App Event History'></div></form></section>");
-#endif
 #endif
 #if ESP32BASE_ENABLE_FS
     sendChunk("<section class='panel dangerpanel'><h2>Format LittleFS</h2><p class='dangertext'>This deletes logs and all files stored in LittleFS. WiFi, Web Auth and NVS config are not cleared.</p><form method='post' action='/esp32base/system/format-fs' onsubmit=\"return confirm('Format LittleFS? This deletes logs and all files stored in LittleFS.')&&once(this)\"><div class='actions'><input class='danger' type='submit' value='Format LittleFS'></div></form></section>");
@@ -543,66 +528,27 @@ void handleToolsFormatFsPost() {
     }
 #if ESP32BASE_ENABLE_FS
     ESP32BASE_LOG_W("web", "fs_format_requested source=tools");
-#if ESP32BASE_ENABLE_FILELOG
-    Esp32BaseFileLog::flush();
-#endif
-    const bool formatted = Esp32BaseFs::format();
-    const bool mounted = formatted && Esp32BaseFs::begin();
-    bool fileLogReloaded = false;
-    bool appEventsRecreated = false;
-    uint8_t businessStoreCount = 0;
-    uint8_t businessStoresReloaded = 0;
-#if ESP32BASE_ENABLE_FILELOG
-    if (mounted) {
-        fileLogReloaded = Esp32BaseFileLog::begin();
+    Esp32BaseStorage::FormatResult result;
+    const bool ok = Esp32BaseStorage::formatAndReload(result);
+    ESP32BASE_LOG_W("web", "fs_format_completed source=tools format=%s mount=%s filelog_reload=%s business_stores_reload=%u/%u result=%s",
+                    result.formatSuccess ? "success" : "failed",
+                    result.mountSuccess ? "success" : "failed",
+                    result.fileLogReloadSuccess ? "success" : "failed",
+                    static_cast<unsigned>(result.recordStoreReloadedCount),
+                    static_cast<unsigned>(result.recordStoreCount),
+                    ok ? "success" : Esp32BaseStorage::lastErrorReason());
+    if (result.formatSuccess) {
+        notifyToolsFormatFsSuccess(result.mountSuccess,
+                                   result.fileLogReloadSuccess,
+                                   result.recordStoreCount,
+                                   result.recordStoreReloadedCount);
     }
-#endif
-#if ESP32BASE_ENABLE_APP_EVENTS
-    if (mounted) {
-        appEventsRecreated = Esp32BaseAppEvents::reload();
-    }
-#endif
-#if ESP32BASE_ENABLE_RECORD_STORE
-    businessStoreCount = businessRecordStoreCount();
-    if (mounted) {
-        for (uint8_t i = 0; i < businessStoreCount; ++i) {
-            Esp32BaseRecordStore* store = businessRecordStoreAt(i);
-            Esp32BaseRecordStore::StoreStatus status;
-            if (store && store->reload() && store->readStatus(status) && status.ready) {
-                ++businessStoresReloaded;
-            } else {
-                ESP32BASE_LOG_W("web", "business_record_store_reload_failed source=tools_format path=%s state=%s error=%s",
-                                store && store->path() ? store->path() : "-",
-                                store ? Esp32BaseRecordStore::storeStateName(store->state()) : "missing",
-                                store && store->lastErrorReason() ? store->lastErrorReason() : "unavailable");
-            }
-        }
-    }
-#endif
-    ESP32BASE_LOG_W("web", "fs_format_completed source=tools format=%s mount=%s filelog_reload=%s app_events_recreate=%s business_stores_reload=%u/%u",
-                    formatted ? "success" : "failed",
-                    mounted ? "success" : "failed",
-                    fileLogReloaded ? "success" : "skipped",
-                    appEventsRecreated ? "success" : "skipped",
-                    static_cast<unsigned>(businessStoresReloaded),
-                    static_cast<unsigned>(businessStoreCount));
-    if (formatted) {
-        notifyToolsFormatFsSuccess(mounted, fileLogReloaded, businessStoreCount, businessStoresReloaded);
-    }
-    if (formatted && mounted
-#if ESP32BASE_ENABLE_APP_EVENTS
-        && appEventsRecreated
-#endif
-        && businessStoresReloaded == businessStoreCount
-    ) {
+    if (ok) {
         redirectSeeOther("/esp32base/system?formatted=1");
     } else {
-        redirectSeeOther(!formatted ? "/esp32base/system?error=format_failed" :
-                         !mounted ? "/esp32base/system?error=mount_failed" :
-#if ESP32BASE_ENABLE_APP_EVENTS
-                         !appEventsRecreated ? "/esp32base/system?error=app_events_recreate_failed" :
-#endif
-                         "/esp32base/system?error=business_record_stores_recreate_failed");
+        redirectSeeOther(!result.formatSuccess ? "/esp32base/system?error=format_failed" :
+                         !result.mountSuccess ? "/esp32base/system?error=mount_failed" :
+                         "/esp32base/system?error=storage_reload_failed");
     }
 #else
     ESP32BASE_LOG_W("web", "fs_format_requested source=tools result=unavailable");
@@ -629,88 +575,31 @@ void handleToolsBusinessRecordsClearPost() {
     if (!ensurePostAllowed("tools_business_records_clear")) {
         return;
     }
-    const uint8_t total = businessRecordStoreCount();
-    if (total == 0) {
-        ESP32BASE_LOG_W("web", "business_records_clear_rejected reason=no_registered_stores");
-        redirectSeeOther("/esp32base/system?business_records_not_ready=1");
-        return;
-    }
-    for (uint8_t i = 0; i < total; ++i) {
-        Esp32BaseRecordStore* store = businessRecordStoreAt(i);
-        Esp32BaseRecordStore::StoreStatus status;
-        if (!store || !store->readStatus(status) || !status.ready) {
-            ESP32BASE_LOG_W("web", "business_records_clear_rejected reason=store_not_ready path=%s state=%s",
-                            store && store->path() ? store->path() : "-",
-                            store ? Esp32BaseRecordStore::storeStateName(store->state()) : "missing");
-            redirectSeeOther("/esp32base/system?business_records_not_ready=1");
-            return;
-        }
-    }
-
+    Esp32BaseStorage::ClearResult result;
     ESP32BASE_LOG_W("web", "business_records_clear_requested source=tools stores=%u",
-                    static_cast<unsigned>(total));
-    uint8_t cleared = 0;
-    uint8_t cleanupWarnings = 0;
-    for (uint8_t i = 0; i < total; ++i) {
-        Esp32BaseRecordStore* store = businessRecordStoreAt(i);
-        const char* path = store && store->path() ? store->path() : "-";
-        Esp32BaseRecordStore::StoreStatus beforeStatus;
-        Esp32BaseRecordStore::StoreStatus status;
-        const bool beforeReadable = store && store->readStatus(beforeStatus);
-        const bool clearReturned = beforeReadable && store->clear();
-        const bool statusReadable = store && store->readStatus(status);
-        const bool logicallyEmpty = clearReturned && statusReadable && status.ready &&
-                                    status.recordCount == 0 &&
-                                    status.nextRecordId == beforeStatus.nextRecordId;
-        if (!logicallyEmpty) {
-            ESP32BASE_LOG_W("web", "business_record_store_clear_failed path=%s clear=%s status=%s records=%lu error=%s",
-                            path,
-                            clearReturned ? "success" : "failed",
-                            statusReadable ? Esp32BaseRecordStore::storeStateName(status.state) : "unavailable",
-                            static_cast<unsigned long>(statusReadable ? status.recordCount : 0),
-                            statusReadable && status.errorReason ? status.errorReason : "status_unavailable");
-            break;
-        }
-        ++cleared;
-        if (status.state != Esp32BaseRecordStore::StoreState::Ready) {
-            ++cleanupWarnings;
-        }
-        ESP32BASE_LOG_W("web", "business_record_store_cleared path=%s state=%s next_id=%lu",
-                        path,
-                        Esp32BaseRecordStore::storeStateName(status.state),
-                        static_cast<unsigned long>(status.nextRecordId));
-    }
-
+                    static_cast<unsigned>(Esp32BaseStorage::recordStoreCount()));
+    const bool ok = Esp32BaseStorage::clearRecordStores(result);
     char location[128];
-    if (cleared == total) {
+    if (ok) {
         snprintf(location, sizeof(location),
                  "/esp32base/system?business_records_cleared=%u%s",
-                 static_cast<unsigned>(cleared),
-                 cleanupWarnings ? "&cleanup_warning=1" : "");
+                 static_cast<unsigned>(result.recordStoreClearedCount),
+                 result.cleanupWarningCount ? "&cleanup_warning=1" : "");
     } else {
         snprintf(location, sizeof(location),
                  "/esp32base/system?business_records_clear_failed=1&cleared=%u&total=%u",
-                 static_cast<unsigned>(cleared),
-                 static_cast<unsigned>(total));
+                 static_cast<unsigned>(result.recordStoreClearedCount),
+                 static_cast<unsigned>(result.recordStoreCount));
     }
-    ESP32BASE_LOG_W("web", "business_records_clear_completed source=tools cleared=%u total=%u warnings=%u",
-                    static_cast<unsigned>(cleared),
-                    static_cast<unsigned>(total),
-                    static_cast<unsigned>(cleanupWarnings));
+    ESP32BASE_LOG_W("web", "business_records_clear_completed source=tools cleared=%u total=%u warnings=%u result=%s",
+                    static_cast<unsigned>(result.recordStoreClearedCount),
+                    static_cast<unsigned>(result.recordStoreCount),
+                    static_cast<unsigned>(result.cleanupWarningCount),
+                    ok ? "success" : "failed");
     redirectSeeOther(location);
 }
 #endif
 
-#if ESP32BASE_ENABLE_APP_EVENTS
-void handleToolsAppEventsClearPost() {
-    markRequest();
-    if (!ensurePostAllowed("tools_app_events_clear")) {
-        return;
-    }
-    const bool ok = Esp32BaseAppEvents::clearEventHistory();
-    redirectSeeOther(ok ? "/esp32base/system?app_events_cleared=1" : "/esp32base/system?error=app_events_clear_failed");
-}
-#endif
 
 } // namespace esp32base_web
 

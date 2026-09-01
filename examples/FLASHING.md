@@ -15,13 +15,6 @@ python3 scripts/pio_arduino.py 2 device monitor -d examples/<sample> -e <env>
 python3 scripts/pio_arduino.py 2 run -d examples/<sample> -e <env> -t upload --upload-port /dev/cu.usbserial-XXXX
 ```
 
-## app_events_demo
-
-```sh
-python3 scripts/pio_arduino.py 2 run -d examples/app_events_demo -e esp32_local -t upload
-python3 scripts/pio_arduino.py 2 run -d examples/app_events_demo -e esp32s3_local -t upload
-```
-
 ## full_demo
 
 ```sh

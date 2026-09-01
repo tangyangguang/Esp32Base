@@ -248,9 +248,6 @@ void sendAppLinks(bool paragraph, const char* activePath) {
 void sendSystemLinks(bool paragraph, const char* activePath = nullptr) {
     sendNavLink("/esp32base/status", g_builtinLabels[Esp32BaseWeb::BUILTIN_HOME], paragraph, activePath);
     sendNavLink("/esp32base/logs", g_builtinLabels[Esp32BaseWeb::BUILTIN_LOGS], paragraph, activePath);
-#if ESP32BASE_ENABLE_APP_EVENTS
-    sendNavLink("/esp32base/app-events", g_builtinLabels[Esp32BaseWeb::BUILTIN_APP_EVENTS], paragraph, activePath);
-#endif
 #if ESP32BASE_ENABLE_APP_CONFIG
     sendNavLink("/esp32base/app-config", "App Config", paragraph, activePath);
 #endif

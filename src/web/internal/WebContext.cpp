@@ -349,14 +349,12 @@ bool Esp32BaseWebServer::preflightStreamBody(WiFiClient& client, bool isForm) {
 #endif
 #if ESP32BASE_ENABLE_FS
     if (kind == StreamBodyKind::FsMultipart) {
-        size_t total = 0;
-        size_t used = 0;
-        if (!Esp32BaseFs::storageInfo(total, used)) {
+        if (!Esp32BaseFs::isReady()) {
             ESP32BASE_LOG_W("web", "stream_upload_rejected reason=fs_unavailable");
             rejectHttpRequest(client, 503, "Service Unavailable");
             return false;
         }
-        availablePayloadBytes = total > used ? total - used : 0;
+        availablePayloadBytes = Esp32BaseStorage::unmanagedWritableBytes();
     }
 #endif
 
@@ -608,7 +606,7 @@ WebContext::WebContext()
       homeMode(Esp32BaseWeb::HOME_ESP32BASE),
       systemNavMode(Esp32BaseWeb::SYSTEM_NAV_SECTION),
       footerBarMode(Esp32BaseWeb::FOOTER_BAR_FULL),
-      builtinLabels{"Status", "WiFi", "OTA", "System Logs", "App Events", "System", "System", "Auth"},
+      builtinLabels{"Status", "WiFi", "OTA", "System Logs", "System", "System", "Auth"},
       headExtraCallback(nullptr),
       pageHeadProgmem(nullptr),
       chunkBuffer{""},
@@ -678,7 +676,7 @@ char (&g_homePath)[48] = ctx().homePath;
 Esp32BaseWeb::HomeMode& g_homeMode = ctx().homeMode;
 Esp32BaseWeb::SystemNavMode& g_systemNavMode = ctx().systemNavMode;
 Esp32BaseWeb::FooterBarMode& g_footerBarMode = ctx().footerBarMode;
-char (&g_builtinLabels)[8][16] = ctx().builtinLabels;
+char (&g_builtinLabels)[7][16] = ctx().builtinLabels;
 Esp32BaseWeb::Handler& g_headExtraCallback = ctx().headExtraCallback;
 const char*& g_pageHeadProgmem = ctx().pageHeadProgmem;
 char (&g_chunkBuffer)[512] = ctx().chunkBuffer;

@@ -58,6 +58,11 @@ void setup() {
         ESP32BASE_LOG_E("example", "record_store_begin_failed error=%s", g_doorOpeningRecords.lastErrorReason());
         return;
     }
+    if (!Esp32BaseStorage::registerRecordStore(g_doorOpeningRecords)) {
+        ESP32BASE_LOG_E("example", "record_store_registration_failed error=%s",
+                        Esp32BaseStorage::lastErrorReason());
+        return;
+    }
 
     Esp32BaseRecordStore::RecordStartTime started;
     if (!g_doorOpeningRecords.captureStartTime(started)) {

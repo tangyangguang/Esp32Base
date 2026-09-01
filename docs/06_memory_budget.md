@@ -67,37 +67,19 @@ Status 页不创建后台任务、定时器、历史采样缓存或自动刷新�
 
 ### 3.4 FileLog
 
-系统诊断日志仅在 FS profile 中启用，底层实现/API 名称是 `Esp32BaseFileLog`。默认路径为 `/esp32base/logs/system.log`，默认 `4 × 32KB = 128KB`，低优先级缓存 1KB，flush interval 2s。默认模式 ERROR，用于让全功能固件在无业务数据、应用事件或显式调试需求时保持很低的 Flash 写入量；现场排查可显式切到 WARN 或 INFO。MINIMAL不链接LittleFS，也不产生FileLog静态状态。
+系统诊断日志仅在 FS profile 中启用，底层实现/API 名称是 `Esp32BaseFileLog`。默认路径为 `/esp32base/logs/system.log`，默认 `4 × 32KB = 128KB`，低优先级缓存 1KB，flush interval 2s。默认模式 ERROR，用于让全功能固件在无业务数据或显式调试需求时保持很低的 Flash 写入量；现场排查可显式切到 WARN 或 INFO。MINIMAL不链接LittleFS，也不产生FileLog静态状态。
 
 ### 3.5 App Config
 
 App Config 注册字符串和 enum option 数组只保存指针，不按 label、help 或 unit 的最大长度为每个字段预留 RAM，也不把这些显示文字写入 NVS 或 LittleFS。help 最大 192 个 UTF-8 字节；提高或使用该上限不会扩大固定 512 字节 Web 流式输出缓冲。固件 Flash 和页面传输量只按业务实际提供的文字长度增加，注册时的长度校验和页面 HTML 转义时间也随实际长度线性增加。
 
-### 3.6 App Events
+### 3.6 Storage、RecordStore 与 Conditions
 
-App Events默认关闭，仅在 `ESP32BASE_ENABLE_APP_EVENTS=1` 时编译并初始化，依赖RecordStore、FS和Time。默认最大逻辑存储预算：
+Storage协调层固定保存最多8个Store指针、合计预算和少量状态，不复制payload或记录内容。默认业务Store合计预算上限为512 KiB，FileLog默认预算128 KiB，并保留 `max(128 KiB, LittleFS/4)` 安全余量。具体容量规划见 [Record Store与统一存储协调](12_record_store.md)。
 
-```cpp
-#define ESP32BASE_APP_EVENT_STORE_MAX_BYTES (100UL * 1024UL)
-```
+RecordStore逻辑占用为 `128字节控制文件 + 各段32字节段头 + 记录数 × (payloadSizeBytes + 24)`。分段按预算和槽位自适应选择8/16/32/64 KiB级别，常见32～512 KiB Store通常维持不超过16个段文件。
 
-App Event业务负载24字节，RecordStore公共元数据和CRC合计24字节，单条固定48字节。100KiB预算的估算容量为2113条；约4KiB完整段轮换时实际保留约2029～2113条，路径为 `/esp32base/records/app-events.v2/`。App Events在业务RecordStore之前创建，不提供单独最低剩余空间配置。
-
-App Events v1同样是每条48字节；v2只重新定义payload末尾4字节，不增加单条LittleFS占用或默认预算。v1目录不迁移、不自动删除，也不参与v2读取；仍保存v1数据的设备在安装当前固件前，应通过经确认的维护操作清空旧事件，或在确认没有其它需保留文件后格式化LittleFS。
-
-项目可以覆盖最大字节预算。若事件频率高于“用户可解释的关键事件”，应降低写入频率或把完整浇水、开关门、喂食历史放到独立RecordStore。
-
-记录字段空间分配：
-
-- `eventCode`、`reasonCode`、`objectId` 各4字节。
-- `value1`、`value2` 各4字节。
-- `flags`、`level`、`eventKind`、`conditionId` 各1字节。
-
-条件跟踪没有固定槽数组。库内常驻两个32位条件ID位图及少量加载/故障状态；应用每实际使用一个条件，长期持有一个不动态分配的 `ConditionStateTracker`。在当前支持的32位ESP32工具链布局下每个tracker为20字节。NVS只保存 `eb_app_events.active_id_bits` 一个 `uint32_t`；普通观察、确认等待和状态不变均不写NVS或LittleFS，只有确认生效/恢复各追加一条48字节事件并更新一次该整数。按照 [ESP-IDF NVS存储格式](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/storage/nvs_flash.html)，整数值占一个32字节entry；更新会顺序追加新entry并使旧值失效，由NVS按page回收，不是每次转换立即擦除一个Flash sector。显式关闭 `ESP32BASE_ENABLE_APP_EVENT_CONDITIONS` 后不编译条件状态机和专属NVS访问。
-
-通用RecordStore的当前逻辑占用为 `128字节控制文件 + 各段32字节段头 + 记录数 × (payloadSizeBytes + 24)`。业务应在设计固定负载后根据LittleFS分区一次性确定各Store预算；基础库不建立全局预算管理器。段大小由预算自适应选择，详细规划和实机数据见 [Record Store 设计、接入与实机基准](12_record_store.md)。
-
-同时启用 Web 和 RecordStore 时，System 工具页为最多8个当前业务Store保留固定指针登记表，在32位ESP32上为32字节指针空间外加1字节计数；不复制Store状态、payload或记录内容。未启用RecordStore时不编译对应管理页面和处理逻辑。
+Conditions默认关闭，仅在 `ESP32BASE_ENABLE_CONDITIONS=1` 时编译。库内常驻活动ID位图、已登记ID位图和少量加载状态；应用每实际条件长期持有一个不动态分配的 `ConditionTracker`。NVS只保存 `eb_conditions.active_bits` 一个 `uint32_t`。普通观察、确认等待、Unknown和状态不变不写NVS或LittleFS；确认转换只更新该整数，Conditions本身不保存历史。
 
 ### 3.7 Health
 

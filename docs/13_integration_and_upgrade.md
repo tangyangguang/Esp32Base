@@ -5,7 +5,7 @@
 ## 1. 新项目接入顺序
 
 1. 根据产品是否需要网络、本地维护面和 MQTT，选择一个 Profile。
-2. 按硬件和业务需要显式开启 RTC、RS485、Record Store、App Events、App Config 等正交能力。
+2. 按硬件和业务需要显式开启 RTC、RS485、Record Store、Conditions、App Config 等正交能力。
 3. 选择与芯片和 Flash 容量匹配的仓库分区表。
 4. 在 `Esp32Base::begin()` 前完成硬件安全态、Web 默认认证、RTC 总线和业务 Web/API 注册。
 5. 检查 `Esp32Base::begin()` 返回值；正常循环持续调用 `Esp32Base::handle()`。
@@ -20,7 +20,7 @@
 | 需要 WiFi、配网、NTP、mDNS、认证 Web 和 HTTP Web OTA | `ESP32BASE_PROFILE_LOCAL` |
 | 在 LOCAL 基础上还需要 MQTT/MQTTS | `ESP32BASE_PROFILE_IOT` |
 
-RTC、Bus、Sleep、RS485、Record Store、App Events 和 App Config 不随 Profile 自动开启。不要为了一个正交能力选择更重的 Profile，也不要创建新的组合 Profile。
+RTC、Bus、Sleep、RS485、Record Store、Conditions和App Config 不随 Profile 自动开启。不要为了一个正交能力选择更重的 Profile，也不要创建新的组合 Profile。
 
 ## 2. PlatformIO 最小模板
 
@@ -71,7 +71,7 @@ build_flags =
   -D ESP32BASE_ENABLE_RTC=1
   -D ESP32BASE_RTC_DRIVER=ESP32BASE_RTC_DRIVER_DS3231
   -D ESP32BASE_ENABLE_RECORD_STORE=1
-  -D ESP32BASE_ENABLE_APP_EVENTS=1
+  -D ESP32BASE_ENABLE_CONDITIONS=1
   -D ESP32BASE_ENABLE_APP_CONFIG=1
   -D ESP32BASE_APP_CONFIG_MAX_GROUPS=3
   -D ESP32BASE_APP_CONFIG_MAX_FIELDS=12

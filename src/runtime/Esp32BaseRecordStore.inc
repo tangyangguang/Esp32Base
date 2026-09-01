@@ -28,7 +28,7 @@ constexpr uint32_t kSegmentHeaderBytes = 32;
 constexpr uint32_t kRecordMetadataBytes = 20;
 constexpr uint32_t kRecordCrcBytes = 4;
 constexpr uint32_t kLittleFsBlockBytes = 4096;
-constexpr uint32_t kTargetMaximumSegments = 33;
+constexpr uint32_t kTargetMaximumSegments = 16;
 constexpr size_t kMaximumDiscoveredSegments = 40;
 
 enum RecordSlotState : uint8_t {
@@ -122,12 +122,26 @@ uint32_t recordStoreCtzFileLimit(uint32_t blockCount) {
 }
 
 uint32_t recordStoreChooseSegmentLimit(uint32_t maximumStoreBytes, uint32_t slotSize) {
-    uint32_t blocks = 1;
+    // Product-sized stores use 8-16 segments in the common 32-512 KiB range.
+    // This keeps startup/file counts bounded without making one rotation discard
+    // one eighth of a large 512 KiB history. Only power-of-two block counts are
+    // selected so the CTZ boundary remains predictable on LittleFS.
+    uint32_t preferredBlocks = 1;
+    if (maximumStoreBytes > 48UL * 1024UL) preferredBlocks = 2;   // 8 KiB
+    if (maximumStoreBytes > 96UL * 1024UL) preferredBlocks = 4;   // 16 KiB
+    if (maximumStoreBytes > 192UL * 1024UL) preferredBlocks = 8;  // 32 KiB
+
+    uint32_t blocks = preferredBlocks;
     while (true) {
         const uint32_t limit = recordStoreCtzFileLimit(blocks);
         if (limit >= kSegmentHeaderBytes + slotSize) {
             const uint32_t usableBudget = maximumStoreBytes - kControlFileBytes;
-            const uint32_t segmentEstimate = (usableBudget + limit - 1U) / limit;
+            const uint32_t slotsPerFullSegment =
+                (limit - kSegmentHeaderBytes) / slotSize;
+            const uint32_t fullSegmentBytes =
+                kSegmentHeaderBytes + slotsPerFullSegment * slotSize;
+            const uint32_t segmentEstimate =
+                (usableBudget + fullSegmentBytes - 1U) / fullSegmentBytes;
             if (segmentEstimate <= kTargetMaximumSegments) return limit;
         }
         if (blocks > (UINT32_MAX / kLittleFsBlockBytes) / 2U) return 0;

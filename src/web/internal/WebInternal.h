@@ -265,9 +265,6 @@ void handleToolsLogsClearPost();
 #if ESP32BASE_ENABLE_RECORD_STORE
 void handleToolsBusinessRecordsClearPost();
 #endif
-#if ESP32BASE_ENABLE_APP_EVENTS
-void handleToolsAppEventsClearPost();
-#endif
 void handleCaptiveProbe();
 void handleRootRedirect();
 void handleStatusRedirect();
@@ -298,11 +295,6 @@ void sendLogSegmentTabs(uint8_t selected);
 void handleLogsPage();
 void handleLogsRaw();
 void handleLogsClear();
-#if ESP32BASE_ENABLE_APP_EVENTS
-void handleAppEventsPage();
-void handleAppEventsApi();
-void handleAppEventsCsv();
-#endif
 void handleAuthPage();
 void handleAuthSubmit();
 

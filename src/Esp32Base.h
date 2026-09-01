@@ -22,12 +22,13 @@
 #endif
 #if ESP32BASE_ENABLE_FS
 #include "runtime/Esp32BaseFs.h"
+#include "runtime/Esp32BaseStorage.h"
 #endif
 #if ESP32BASE_ENABLE_RECORD_STORE
 #include "runtime/Esp32BaseRecordStore.h"
 #endif
-#if ESP32BASE_ENABLE_APP_EVENTS
-#include "runtime/Esp32BaseAppEvents.h"
+#if ESP32BASE_ENABLE_CONDITIONS
+#include "runtime/Esp32BaseConditions.h"
 #endif
 #if ESP32BASE_ENABLE_FILELOG
 #include "runtime/Esp32BaseFileLog.h"

@@ -39,11 +39,8 @@
 #define ESP32BASE_WEB_MAX_STATIC_ASSETS 8
 #endif
 
-class Esp32BaseRecordStore;
-
 class Esp32BaseWeb {
 public:
-    static constexpr uint8_t MAX_BUSINESS_RECORD_STORES = 8;
     static constexpr const char* EVENT_READY = "web.ready";
     static constexpr const char* EVENT_STOPPED = "web.stopped";
     static constexpr const char* EVENT_TOOLS_FORMAT_FS_SUCCESS = "web.tools.format_fs.success";
@@ -78,7 +75,6 @@ public:
         BUILTIN_WIFI,
         BUILTIN_OTA,
         BUILTIN_LOGS,
-        BUILTIN_APP_EVENTS,
         BUILTIN_TOOLS,
         BUILTIN_SYSTEM,
         BUILTIN_AUTH
@@ -159,7 +155,6 @@ public:
     static bool addStaticAsset(const char* path, const char* contentType, const uint8_t* data, size_t len,
                                uint32_t cacheMaxAgeSec = 86400, bool authRequired = true);
     static bool addNavItem(const char* path, const char* title);
-    static bool registerBusinessRecordStore(Esp32BaseRecordStore& store);
 
     static bool setDeviceName(const char* name);
     static bool setHomePath(const char* path);

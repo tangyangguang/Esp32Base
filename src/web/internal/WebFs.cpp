@@ -87,23 +87,8 @@ void sendFsPathTooLongRow(const char* dir, const char* name, bool isDir) {
     sendChunk("</td><td>-</td></tr>");
 }
 
-#if ESP32BASE_ENABLE_APP_EVENTS
-bool appEventsOwnsPath(const char* path) {
-    return path && strcmp(path, Esp32BaseAppEvents::eventStorePath()) == 0;
-}
-
-void sendFsAppEventsTag() {
-    sendStatusTag(Esp32BaseWeb::UI_INFO, "app events store");
-}
-#endif
-
-bool recordStoreOwnsPath(const char* path) {
-    static const char prefix[] = "/esp32base/records/";
-    return path && strncmp(path, prefix, sizeof(prefix) - 1U) == 0;
-}
-
-bool esp32BaseOwnsPath(const char* path) {
-    return path && (strcmp(path, "/esp32base") == 0 || strncmp(path, "/esp32base/", 11) == 0);
+bool storageOwnsPath(const char* path) {
+    return Esp32BaseStorage::isManagedPath(path);
 }
 
 void sendFsEsp32BaseTag() {
@@ -128,17 +113,12 @@ void fsFormatModifiedTime(uint32_t modifiedEpoch, char* out, size_t len) {
 }
 
 void sendFsFileStatus(const char* path, bool readable) {
-#if ESP32BASE_ENABLE_APP_EVENTS
-    if (appEventsOwnsPath(path)) {
-        sendFsAppEventsTag();
-    } else
-#endif
 #if ESP32BASE_ENABLE_FILELOG
     if (fileLogOwnsPath(path)) {
         sendStatusTag(Esp32BaseWeb::UI_INFO, "filelog");
     } else
 #endif
-    if (esp32BaseOwnsPath(path)) {
+    if (storageOwnsPath(path)) {
         sendFsEsp32BaseTag();
     } else if (readable) {
         sendStatusTag(Esp32BaseWeb::UI_OK, "ok");
@@ -149,7 +129,7 @@ void sendFsFileStatus(const char* path, bool readable) {
 }
 
 void sendFsDirStatus(const char* path) {
-    if (esp32BaseOwnsPath(path)) {
+    if (storageOwnsPath(path)) {
         sendFsEsp32BaseTag();
     } else {
         sendStatusTag(Esp32BaseWeb::UI_OK, "ok");
@@ -159,7 +139,7 @@ void sendFsDirStatus(const char* path) {
 void sendFsFileActions(const char* path, bool manage) {
     sendChunk("<div class='fsactions'>");
     sendFsDownloadForm(path);
-    if (manage && !recordStoreOwnsPath(path)) {
+    if (manage && !storageOwnsPath(path)) {
         sendFsDeleteForm(path);
     }
     sendChunk("</div>");
@@ -167,7 +147,7 @@ void sendFsFileActions(const char* path, bool manage) {
 
 void sendFsUnreadableActions(const char* path, bool manage) {
     sendChunk("<div class='fsactions'>");
-    if (manage && !recordStoreOwnsPath(path)) {
+    if (manage && !storageOwnsPath(path)) {
         sendFsDeleteForm(path);
     } else {
         sendChunk("-");
@@ -907,8 +887,8 @@ void handleFsCheckGet() {
         fsSendUploadJson(400, false, "Invalid filename or target path", nullptr);
         return;
     }
-    if (recordStoreOwnsPath(path)) {
-        fsSendUploadJson(403, false, "Record store files are managed by Esp32Base", path);
+    if (storageOwnsPath(path)) {
+        fsSendUploadJson(403, false, "Esp32Base files require their owning maintenance action", path);
         return;
     }
     if (fsUploadTargetIsDirectory(path)) {
@@ -1043,10 +1023,10 @@ void handleFsUpload() {
             fsSetUploadError("Invalid filename or target path");
             return;
         }
-        if (recordStoreOwnsPath(g_fsUploadPath)) {
+        if (storageOwnsPath(g_fsUploadPath)) {
             g_fsUploadForbidden = true;
             g_fsUploadStartFailed = true;
-            fsSetUploadError("Record store files are managed by Esp32Base");
+            fsSetUploadError("Esp32Base files require their owning maintenance action");
             return;
         }
 #if ESP32BASE_ENABLE_FILELOG
@@ -1082,6 +1062,12 @@ void handleFsUpload() {
         g_fsUploadActive = true;
     } else if (upload.status == UPLOAD_FILE_WRITE) {
         if (g_fsUploadForbidden || g_fsUploadStartFailed || !g_fsUploadActive) {
+            return;
+        }
+        if (upload.currentSize > Esp32BaseStorage::unmanagedWritableBytes()) {
+            g_fsUploadStartFailed = true;
+            fsSetUploadError("Upload would consume reserved storage");
+            fsCloseUploadFile();
             return;
         }
         if (!Esp32BaseFs::appendBytes(g_fsUploadTempPath, upload.buf, upload.currentSize)) {
@@ -1134,8 +1120,8 @@ void handleFsDeletePost() {
         redirectSeeOther("/esp32base/fs?manage=1&error=delete_missing");
         return;
     }
-    if (recordStoreOwnsPath(path)) {
-        ESP32BASE_LOG_W("web", "fs_delete_rejected path=%s reason=record_store_managed", path);
+    if (storageOwnsPath(path)) {
+        ESP32BASE_LOG_W("web", "fs_delete_rejected path=%s reason=esp32base_managed", path);
         redirectSeeOther("/esp32base/fs?manage=1&error=delete_managed");
         return;
     }

@@ -66,7 +66,7 @@
 - `Esp32BaseBus::publish()` 只允许在 Arduino loop 任务调用。
 - WiFi callback、timer callback、ISR、LWIP 回调不得直接 publish，只能入队后在 `handle()` 中处理。
 - 本库不提供跨任务事件总线，不包装 FreeRTOS 队列作为公开通用消息系统。
-- `Esp32BaseRecordStore` 和 `Esp32BaseAppEvents` 同样不是线程安全或回调可重入API；其他任务必须把追加、读取、reload和清空请求投递到同一system/loop任务。
+- `Esp32BaseRecordStore` 同样不是线程安全或回调可重入API；其他任务必须把追加、读取、reload和清空请求投递到同一system/loop任务。
 
 ## 6. RecordStore 边界
 
@@ -75,7 +75,7 @@
 - `maximumStoreBytes` 是最大逻辑预算，不预分配大文件；调大预算可在下次 `begin()`/`reload()` 生效，改变payload长度或字段版本应使用新storeVersion。
 - 清空由双控制头提交逻辑可见边界，再尽力删除旧段，不提供安全擦除保证。
 - 启动会扫描当前有限段内的全部候选槽位；业务应根据嵌入式设备实际保留需求设置合理预算，不把它当成无限数据库。
-- 追加是同步持久化操作，包含LittleFS flush和写后验证。经典ESP32、Arduino Core 2.0.16实测：旧100KiB单文件同步覆盖约1.08～1.11秒；当前分段方案在100KiB～1MiB总预算下普通追加P50约46～54ms，但P95/最大值仍可达数百毫秒或偶发超过1秒。这不适合实时控制路径，业务应通过队列交给system/loop任务。详细条件和完整数据见 [Record Store 设计、接入与实机基准](12_record_store.md)。
+- 追加是同步持久化操作，包含LittleFS flush和写后验证，可能耗时数十毫秒到更久，不适合实时控制路径；业务应通过队列交给system/loop任务。当前分段策略变更后的延迟和轮转尖峰尚需在目标分区、Core版本和真实Flash上重新测量，旧分段基准不能作为本版本验收数据。
 - 动作过程中断电且尚未调用`appendCompleted()`时，不存在可恢复的完成记录。需要持久化“进行中动作”的业务必须自行设计恢复状态。
 
 ## 7. 存储边界
@@ -88,22 +88,18 @@
 - 应用不得使用 `eb_` 前缀作为自己的 NVS namespace。
 - LittleFS 默认不自动格式化；首次空分区 mount failed 不会 halt。格式化 LittleFS 只能来自明确维护动作，因为该操作会清空当前 LittleFS 分区全部文件。
 
-App Events 边界：
+Conditions与多Store边界：
 
-- App Events 是基于 RecordStore 的固定容量事件记录，适合低频关键业务事件；完整的浇水、开关门、喂食历史应使用各自的业务 RecordStore。
-- 用水量统计、报表数据、累计量、传感器采样历史、完整执行历史、大 payload、高频明细和不允许覆盖的业务数据，应由业务自己的数据文件或存储结构负责。
-- `/esp32base/records/**` 是基础库管理的 RecordStore 容器；FS 管理页允许下载检查，但不允许上传、覆盖或删除，以免绕过结构和完整性约束。App Events 通过自己的 System 危险操作逻辑清空；当前业务 RecordStore 在应用显式调用 `Esp32BaseWeb::registerBusinessRecordStore()` 后，由 System 页统一预检并逻辑清空。未登记历史版本不在该操作范围内；其目录级删除需要独立、安全的文件维护流程，当前 FS 管理页尚不提供。
-- App Events 也不是第二套系统诊断日志。boot/reset/restart reason、WiFi、NTP、OTA、LittleFS、FileLog fault、基础库健康状态等 Esp32Base 系统事件仍归 Status、System diagnostics 和 FileLog；App Events 只记录应用业务决策或业务可解释事件。同一故障可同时有系统诊断日志和 App Event，但前者写技术事实和内部错误链路，后者写业务影响、保护动作、跳过原因、用户维护结果或外部决策结果。
-- `appendDiscreteEvent()` 不去重；调用方把周期故障误当离散事件反复提交，仍会产生事件风暴。周期状态必须使用 `observeConditionState()`，方法名和返回枚举用于显式区分两种语义。
-- `conditionId` 是持久化位图schema，不是可以随固件版本任意复用的临时编号。保留 `eb_app_events` NVS 的升级必须维持ID含义；需要改变映射时由应用安排显式状态清理或迁移。
-- 条件确认依赖应用继续调用 `observeConditionState()`，基础库不调度下一次硬件访问。确认时间最大为 `INT32_MAX` 毫秒；正常秒/分钟级配置可跨越约49.7天的 `millis()` 回绕。已经确认且长期不恢复的条件不继续计时，因此不会在49天后失效。
-- 条件事件先提交LittleFS，再更新 `eb_app_events.active_id_bits`。若事件写入成功后、NVS提交前掉电，重启后可能额外产生一次相同转换；基础库不为消除这一极小窗口增加事务日志。NVS写失败会显式返回部分失败并阻止后续条件转换，直到 `reload()` 保存成功。
-- `factoryReset()`清除条件NVS但不反向调用Runtime。若RAM中正有事件已写而条件状态待保存，随后调用`reload()`会优先重试该状态并重新写入NVS；完整出厂重置应在清理成功后重启，不能在这一失败状态下用`reload()`代替重启。
+- Conditions只保存当前活动位图，不是历史数据库；需要发生/恢复历史时由应用在成功转换后写入独立审计Store。
+- `conditionId` 是保留 `eb_conditions` NVS时必须稳定的schema；改变映射前应显式清理或迁移。
+- 确认依赖应用持续调用 `observe()`，基础库不调度硬件访问。NVS提交失败时RAM状态不变，调用方不得记录成功转换。
+- 每种主要业务事实使用独立固定payload Store；基础库不提供跨Store事务、字段查询、持久全局索引或自动K路合并。
+- Store通过 `Esp32BaseStorage::registerRecordStore()` 登记；未登记历史版本不参与统一维护。
 
 ## 8. 文件系统边界
 
 - LittleFS 用于小型配置文件、诊断文件和 Web 静态小资源。
-- 系统诊断日志默认位于 `/esp32base/logs/system.log`，App Events store 默认位于 `/esp32base/records/app-events.v2/`；业务 RecordStore 也位于 `/esp32base/records/**`，其他业务文件应放在 `/app/**`、`/data/**` 或项目自定义目录。
+- 系统诊断日志默认位于 `/esp32base/logs/system.log`，业务RecordStore位于 `/esp32base/records/**`；`/esp32base/**` 是受管根。其他业务文件应放在 `/app/**`、`/data/**` 或项目目录，并遵守Storage报告的非受管可写容量。
 - 业务需要可靠、轮换、分页的固定长度历史时应优先使用 `Esp32BaseRecordStore`；只有其语义不适用时才直接使用 `Esp32BaseFs` 设计自己的文件结构。
 - `writeBytesAt()` 只覆盖已有文件内容，不创建、不扩展文件；环形文件容量应由 `createFixedFile()` 初始化或校验。
 - `createFixedFile()` 会在文件不存在、大小不匹配或同尺寸但末端不可读时重建固定大小文件；同尺寸且可读时保留原内容，避免启动期清空持久环形记录。`appendBytes()` 适合低频追加，不适合循环零填充大文件。
@@ -111,7 +107,8 @@ App Events 边界：
 - 写入失败不等于已回滚；FS 满、电源异常或底层写失败后，文件可能部分更新、大小不符或内容不可读，业务必须检查返回值并按业务语义重试、丢弃暂存或提示维护。
 - 逻辑文件大小不等于内容一定可读；brownout、FS 满、跨项目反复烧录或业务侧未处理写失败后，LittleFS 可能仍能列出文件大小，但读取内容失败。`Esp32BaseFs` 会把这种“未到 EOF 却读出 0 字节”的情况返回为失败，业务必须检查返回值。
 - 不提供大型文件管理器。
-- 不保证在 OTA 写 flash 时并行执行大量 FS 写入的实时性。
+- OTA期间Storage会暂停新的LittleFS写入；恢复只保证生命周期闭环，不保证Flash写入实时性。
+- FileLog不做通用“同文本去重”，因为sink无法判断不同故障是否可安全合并；重复错误应由WiFi、MQTT、RTC等来源模块按业务重试周期限频。FileLog默认仅写ERROR，且自身FS写故障会锁定停写；FS操作中的错误日志不会递归写回FileLog。
 - Fs 没有 maintenance handle；挂载后按显式 API 操作。
 
 ## 9. 资源边界

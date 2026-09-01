@@ -297,7 +297,7 @@ void test_status_auth_footer_recovery_and_system_routes() {
     TEST_ASSERT_EQUAL(200, Esp32BaseWeb::nativeTestResponse().code);
     static const char* actions[] = {
         "hostname", "wifi-recovery", "filelog", "footer-bar", "reboot", "watchdog-trip-reset",
-        "app-config-defaults", "format-fs", "logs-clear", "business-records-clear", "app-events-clear"
+        "app-config-defaults", "format-fs", "logs-clear", "business-records-clear"
     };
     for (const char* action : actions) {
         std::string expected = "action='/esp32base/system/";
@@ -314,7 +314,7 @@ void test_status_auth_footer_recovery_and_system_routes() {
 void test_other_builtin_page_routes_remain_available() {
     Esp32BaseWeb::nativeTestReset();
     static const char* paths[] = {
-        "/esp32base/logs", "/esp32base/app-events", "/esp32base/app-config",
+        "/esp32base/logs", "/esp32base/app-config",
         "/esp32base/wifi", "/esp32base/auth", "/esp32base/ota", "/esp32base/fs"
     };
     for (const char* path : paths) {

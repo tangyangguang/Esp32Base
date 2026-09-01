@@ -48,7 +48,7 @@ python3 scripts/check_mqtt_cloud_integration.py
 - LittleFS 挂载、文件读写、损坏文件处理和 Web FS 维护操作。
 - Watchdog、Sleep、RTC/NTP、mDNS 和长时间运行。
 - Web Auth、危险 POST、同源检查、状态/API 页面和业务路由。
-- App Events、FileLog 和系统诊断日志在 FS 故障、格式化、清空和重启后的行为。
+- Storage、RecordStore和FileLog在FS故障、格式化、清空、OTA写暂停和重启后的行为。
 
 无法实机覆盖的高风险路径应在发布记录中写清缺口。
 
@@ -108,7 +108,7 @@ MQTT 至少区分：未配置、配置非法、等待 WiFi、等待可信时间�
 - Web Auth 失败、危险 POST 被拒绝、WiFi 表单校验失败。
 - LittleFS mount/read/write/format 失败。
 - FileLog append/rotate/clear/reload 失败。
-- App Events append/read/header/record/clear 失败。
+- RecordStore append/read/header/record/clear失败，以及Storage容量、受管路径和维护冲突。
 - OTA start/write/verify/end 失败和低频进度。
 - Watchdog reset、rollback reason、sleep/restart 生命周期。
 - MQTT 配置、WiFi/Time gate、Broker 拒绝、TLS、分片超限、邮箱/outbox/in-flight 满、断线后送达状态不确定和重新订阅。

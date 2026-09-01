@@ -1048,8 +1048,8 @@ bool Esp32BaseConfig::factoryReset() {
     ok = clearSystemConfig() && ok;
     ok = clearLogConfig() && ok;
     ok = clearUiConfig() && ok;
-#if ESP32BASE_ENABLE_APP_EVENT_CONDITIONS
-    ok = clearNamespace("eb_app_events") && ok;
+#if ESP32BASE_ENABLE_CONDITIONS
+    ok = clearNamespace("eb_conditions") && ok;
 #endif
     return ok;
 }

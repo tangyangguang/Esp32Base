@@ -319,15 +319,16 @@ ID和轮换：
 - `StoreStatus` 返回状态、错误、记录数、估算容量、损坏数、最早/最新/下一个ID、槽位大小、段数、段上限、当前/最大逻辑存储字节以及LittleFS总量/使用量/剩余量。
 - `clear()` 先通过双控制头提交新的可见边界，再尽力删除旧段；删除失败也不会让旧记录重新可见。它不是安全擦除，调用方必须先取得用户明确确认。
 
-RecordStore构造函数不访问FS，也不会自动登记到Web。业务在 `Esp32Base::begin()` 成功后调用各实例的 `begin()`；同一路径只能有一个活动实例。API不提供mutex，同一Store的begin/reload/append/read/clear必须由业务串行调用，最简单的做法是集中在同一loop/system task；业务也可以使用自己的等效串行化机制。读取回调中的payload只在本次回调期间有效，且不得在回调中重入同一Store。
+RecordStore构造函数不访问FS，也不会自动登记到Storage。业务在 `Esp32Base::begin()` 成功后调用各实例的 `begin()`；同一路径只能有一个活动实例。API不提供mutex，同一Store的begin/reload/append/read/clear必须由业务串行调用，最简单的做法是集中在同一loop/system task；业务也可以使用自己的等效串行化机制。读取回调中的payload只在本次回调期间有效，且不得在回调中重入同一Store。
 
-启用Web并希望由基础库System页统一展示、清空和格式化后恢复业务记录时，每个当前版本Store只需在首次 `begin()` 调用完成后登记一次。重复登记同一对象是幂等的。即使 `begin()` 因已有Store损坏而返回失败，只要定义已经建立，登记仍可成功并展示故障；无效定义会使两者都失败。应用应分别检查两个返回值：
+每个当前版本Store在首次 `begin()` 后通过存储协调层登记一次。重复登记同一对象幂等；不同对象使用相同路径、超过8个Store、所有Store合计预算超过 `ESP32BASE_RECORD_STORE_TOTAL_MAX_BYTES`，或FileLog + Store预算 + 安全余量超过LittleFS分区时会被拒绝。应用应分别检查初始化和登记结果：
 
 ```cpp
 const bool storeReady = wateringRecords.begin(wateringDefinition);
-const bool storeRegistered = Esp32BaseWeb::registerBusinessRecordStore(wateringRecords);
+const bool storeRegistered = Esp32BaseStorage::registerRecordStore(wateringRecords);
 if (!storeRegistered) {
-    ESP32BASE_LOG_E("watering", "record_store_web_registration_failed");
+    ESP32BASE_LOG_E("watering", "record_store_registration_failed error=%s",
+                    Esp32BaseStorage::lastErrorReason());
 }
 if (!storeReady) {
     ESP32BASE_LOG_E("watering", "record_store_begin_failed error=%s",
@@ -335,7 +336,7 @@ if (!storeReady) {
 }
 ```
 
-登记只保存对象指针且当前不提供反登记，因此对象从登记成功起必须持续有效到设备重启；全局对象、静态对象或由应用长期持有的成员对象都可以，不要求采用某一种代码组织方式。只登记当前实际使用的版本；未登记历史版本不属于 `Clear Business Records`。清空前基础库预检全部已登记Store；任一Store未初始化或结构故障时一个都不清。执行中发生I/O失败时停止后续Store并报告已完成数量，不能承诺多个独立文件之间的事务原子性。成功清空会直接更新原对象的可见边界、计数、状态和 `nextRecordId`，应用继续使用该对象即可，无需重新 `begin()`，也不得自行把ID重置为1。App Events使用独立入口，不进入业务Store登记表。
+登记只保存对象指针且不提供反登记，因此对象必须持续有效到设备重启。只登记当前实际使用的版本；未登记历史版本不参与统一状态、清空或格式化后reload。清空前协调层预检全部已登记Store；任一Store不可操作时一个都不清。执行中I/O失败时停止后续Store并报告已完成数量，多个独立文件之间不提供事务原子性。成功清空后原对象继续可用且ID继续递增。
 
 `appendCompleted()` 是同步持久化操作：返回成功前会顺序追加当前段、执行LittleFS flush并做写后验证；正常追加不写控制头。具体耗时取决于芯片、Arduino Core、LittleFS分区和段大小；不得从ISR或timer callback调用，也不适合阻塞实时控制任务。通常把已完成的浇水、开关门、喂食记录投递到负责串行存储的任务；如果应用本身就在非实时loop中运行，也可以直接调用。不能为了缩短返回时间跳过flush，否则“返回成功”不再代表记录已经提交到Flash。
 
@@ -343,130 +344,83 @@ if (!storeReady) {
 
 详细磁盘格式、容量规划、失败矩阵和实机性能数据见 [Record Store 设计、接入与实机基准](12_record_store.md)。
 
-### 3.6 Esp32BaseAppEvents
+### 3.6 Esp32BaseStorage
 
-仅在 `ESP32BASE_ENABLE_APP_EVENTS=1` 时可用；它自动启用RecordStore，并由 `Esp32Base::begin()` 在业务Store之前创建。条件跟踪宏 `ESP32BASE_ENABLE_APP_EVENT_CONDITIONS` 默认跟随App Events开启；显式设为0时仍保留离散事件记录，但不编译条件状态机、专属NVS访问和Web条件状态。默认预算：
-
-```cpp
-#define ESP32BASE_APP_EVENT_STORE_MAX_BYTES (100UL * 1024UL)
-```
-
-App Events不提供单独最低剩余空间宏。业务应在App Events创建后，根据LittleFS剩余空间规划自己的Store。v2固定24字节事件payload：
-
-```text
-offset  size  field
-0       4     eventCode
-4       4     reasonCode
-8       4     objectId
-12      4     value1
-16      4     value2
-20      1     flags
-21      1     level
-22      1     eventKind
-23      1     conditionId
-```
-
-调用方输入不包含由基础库填写的 `eventKind/conditionId`：
-
-```cpp
-struct EventInput {
-    uint32_t eventCode;   // 0 无效
-    uint32_t reasonCode;  // 0 表示无
-    uint32_t objectId;    // 0 表示无
-    int32_t value1;
-    int32_t value2;
-    uint8_t flags;        // 完全由业务定义，8位
-    Level level;          // uint8_t: Info/Warning/Error
-};
-```
-
-RecordStore的20字节时间/ID元数据位于payload前，CRC32位于payload后，每条App Event仍为48字节。100 KiB逻辑预算估算容量2113条；按约4 KiB完整段轮换时实际保留约2029～2113条，路径为：
-
-```text
-/esp32base/records/app-events.v2/
-```
-
-v1与v2字段语义不同，不迁移、不兼容读取，也不自动删除v1目录；仍保存v1数据的设备应在安装当前固件前通过经确认的维护操作清空旧App Events，或在确认没有其它需保留文件后由用户明确格式化LittleFS。
+仅在 `ESP32BASE_ENABLE_FS=1` 时可用。它是LittleFS协调层，不是新的文件格式或数据库。`Esp32Base::begin()` 在挂载FS后自动调用 `Esp32BaseStorage::begin()`；FileLog、RecordStore和普通业务文件仍各自维护数据格式。
 
 主要API：
 
 ```cpp
-begin();
-reload();
-appendDiscreteEvent(const EventInput&);
-observeConditionState(ConditionStateTracker&, ObservedConditionState, const EventInput&);
-forgetConditionState(conditionId);
-forgetAllConditionStates();
-readLatest(offset, limit, callback, user);
-readById(recordId, EventRecord&);
-readStatus(AppEventsStatus&);
-clearEventHistory();
+bool begin();
+bool registerRecordStore(Esp32BaseRecordStore&);
+uint8_t recordStoreCount();
+Esp32BaseRecordStore* recordStoreAt(uint8_t index);
+bool clearRecordStores(ClearResult&);
+bool formatAndReload(FormatResult&);
+bool setOtaWriteSuspended(bool);
+bool isManagedPath(const char* path);
+size_t unmanagedWritableBytes();
+bool readStatus(StorageStatus&);
 ```
 
-`eventCode`、`reasonCode`、`objectId`、`value1/value2`和`flags`的业务含义完全由应用定义；基础库不解释RTC、缺料、门锁或通信语义，不保存显示文本，也不建立代码文字注册中心。所有App Event的RecordStore公共 `durationSec=0`；条件确认时间不是该字段的含义。
+容量契约：
 
-离散事件必须调用 `appendDiscreteEvent()`。每次调用都表示一次独立事实，即使所有字段与上一条完全相同也逐条保存。返回 `DiscreteEventAppendResult`，明确区分 `Stored`、`InvalidEvent`、`EventStoreUnavailable` 与 `EventStoreWriteFailed`；删除旧 `append()`，避免名称掩盖离散语义。
+- 最多登记8个当前Store；默认所有Store合计逻辑预算上限为 `ESP32BASE_RECORD_STORE_TOTAL_MAX_BYTES = 512 KiB`。
+- FileLog预算按 `ESP32BASE_EB_FILELOG_MAX_BYTES × ESP32BASE_EB_FILELOG_ROTATE_FILES` 计算。
+- 额外保留 `max(ESP32BASE_FS_MINIMUM_SAFETY_RESERVE_BYTES, LittleFS总量/4)`；默认绝对下限128 KiB。
+- `unmanagedWritableBytes()` 从当前剩余空间中扣除安全余量和所有已登记Store尚未使用的预算。Web上传必须以这个结果为上限，不能侵占关键Store保留空间。
 
-周期检测的持续状态使用一个由应用长期持有的tracker：
+路径和维护契约：
+
+- `/esp32base/**` 是基础库受管根；已登记Store路径和FileLog轮转文件也由 `isManagedPath()` 识别。Web不得上传、覆盖或删除受管路径。
+- `formatAndReload()` 在一个FS独占维护区间内完成flush、format、mount、FileLog begin以及所有已登记Store reload；调用方从 `FormatResult` 判断每层结果。
+- OTA开始前先flush FileLog，再调用 `setOtaWriteSuspended(true)`；结束、失败和中止路径都必须恢复。暂停只阻止LittleFS变更，不阻止读。
+- 所有LittleFS公开操作都经 `Esp32BaseFs` 的递归串行化锁；RecordStore多步操作仍要求应用从同一loop/system task串行调用，不能从ISR或实时timer执行。
+
+`StorageStatus` 返回协调状态、最后错误、FS容量、FileLog预算、已登记Store预算、最小安全余量、非受管可写容量及写暂停状态。协调层不解析业务payload，不跨Store合并记录，也不承担IoT同步。
+
+### 3.7 Esp32BaseConditions
+
+仅在 `ESP32BASE_ENABLE_CONDITIONS=1` 时可用。它保存少量持续异常的**当前活动集合**，不保存事件历史，不依赖FS、RecordStore或Web。
 
 ```cpp
-Esp32BaseAppEvents::ConditionStateTracker rtcUnavailableCondition(
-    1,      // conditionId: 1..32，在保留该NVS状态的固件版本间唯一且稳定
-    5000,   // activationConfirmationMs
-    10000   // recoveryConfirmationMs
-);
+class Esp32BaseConditions {
+public:
+    enum class ObservedState : uint8_t { Unknown, Inactive, Active };
+    enum class ObservationResult : uint8_t {
+        ConditionUnchanged,
+        ActivationConfirmationPending,
+        RecoveryConfirmationPending,
+        Activated,
+        Recovered,
+        ObservationUnknown,
+        InvalidArgument,
+        StateUnavailable,
+        StateWriteFailed
+    };
 
-Esp32BaseAppEvents::EventInput transitionEvent;
-transitionEvent.eventCode = rtcMissing ? 3001 : 3002;
-transitionEvent.level = rtcMissing ? Esp32BaseAppEvents::Level::Warning
-                                   : Esp32BaseAppEvents::Level::Info;
+    class ConditionTracker {
+    public:
+        ConditionTracker(uint8_t conditionId,
+                         uint32_t activationConfirmationMs,
+                         uint32_t recoveryConfirmationMs);
+    };
 
-const auto result = Esp32BaseAppEvents::observeConditionState(
-    rtcUnavailableCondition,
-    rtcMissing ? Esp32BaseAppEvents::ObservedConditionState::Active
-               : Esp32BaseAppEvents::ObservedConditionState::Inactive,
-    transitionEvent);
+    static bool begin();
+    static bool reload();
+    static ObservationResult observe(ConditionTracker&, ObservedState);
+    static bool isActive(uint8_t conditionId, bool& active);
+    static bool forget(uint8_t conditionId);
+    static bool forgetAll();
+    static bool readStatus(ConditionsStatus&);
+};
 ```
 
-`ConditionStateTracker`只保存当前确认过程，不执行轮询、不持有硬件对象、不创建任务；它不可复制，必须是全局、静态或由应用长期持有且覆盖全部观察调用的成员对象。应用仍按自己的周期访问RTC或传感器。第一次观察到相反状态时开始确认，应用后续调用继续观察到同一状态且达到确认时间，才在该次调用中提交转换。确认时间为0表示立即确认，最大为 `INT32_MAX` 毫秒。计时使用无符号 `millis()` 差值，秒/分钟级确认可正常跨越约49.7天回绕；条件确认后不再计时，持续故障超过49天不会失效。`Unknown`取消尚未完成的确认，但保留已经确认的活动状态且不写存储。
+`conditionId` 范围为1～32，是保留NVS升级时必须稳定的schema。活动集合保存在单个 `eb_conditions.active_bits` `uint32_t`；key不存在表示全部未活动，NVS读取错误返回不可用，不能按不存在处理。tracker必须由应用长期持有，不可复制；重复使用同一ID的不同tracker会返回 `InvalidArgument`。
 
-条件ID固定为1～32；0保留给离散事件。它不是临时数组下标，而是 `active_id_bits` 的持久化schema：只要升级时保留 `eb_app_events` NVS，同一ID就必须继续表示同一个条件。计划删除或改变条件映射时，应用应在受控升级流程中先调用 `forgetConditionState()`/`forgetAllConditionStates()`或执行明确的基础库配置重置，不能直接复用仍可能活动的旧ID。基础库没有固定10槽数组：每个实际条件由应用持有一个tracker，库内只用32位活动ID位图和32位已登记ID位图。首次使用tracker时登记ID，重复ID返回 `InvalidArgument`。`EventKind`固定为 `Discrete`、`ConditionActivated`、`ConditionRecovered`，读取记录时同时返回 `conditionId`；激活和恢复可以使用相同或不同业务eventCode。
+第一次观察到相反状态时开始确认；持续观察达到配置时间才提交。确认时间为0表示立即确认，最大为 `INT32_MAX` ms；使用无符号 `millis()` 差值支持回绕。`Unknown` 取消未完成确认，但不改变已经确认的状态。状态不变、Unknown和确认等待不写NVS。
 
-`ConditionObservationResult`明确区分：状态不变、激活/恢复确认中、激活/恢复事件已保存、未知观察、参数错误、Event Store不可用/写失败、条件NVS状态不可用、事件已保存但条件状态保存失败，以及因待保存状态而阻止转换。调用方不得把确认中、状态不变或部分失败伪装成“事件写入成功”。
-
-确认转换时先同步提交一条LittleFS App Event，再更新RAM位图并把全部活动条件写入NVS的单个 `uint32_t`：
-
-```text
-eb_app_events.active_id_bits
-```
-
-状态不变、`Unknown`和确认等待均不写LittleFS或NVS。App Event写失败时不改变条件状态，RecordStore沿用 `WriteFault` 锁定，后续观察不继续尝试Flash写入；显式 `reload()` 后才恢复。事件成功但NVS失败时，返回 `EventStoredButConditionStateSaveFailed`，RAM保留新状态并阻止其他条件转换；`reload()`优先重试该位图。若在事件提交成功、NVS提交前掉电，重启后最多可能额外记录一次转换；为保持轻量不增加事务日志。
-
-启动时NVS key不存在表示全部条件未确认；NVS读取错误不能按不存在处理，条件观察返回不可用，但离散事件仍可使用。重启后已活动条件再次观察为Active不会重复写；观察为Inactive则经过恢复确认。`forgetConditionState()`和`forgetAllConditionStates()`行政性忘记状态，不生成恢复事件；成功后会使当前进程内所有tracker的登记和未完成确认失效，各长期tracker在下一次观察时自动重新登记。忘记一个本来未活动的ID不写NVS，但同样允许替换该ID原先登记的tracker。`clearEventHistory()`只清LittleFS历史并保留条件NVS；LittleFS格式化后`reload()`重建v2 Store并重新读取NVS。启用条件跟踪时，`factoryReset()`/`clearLibraryNamespaces()`清除 `eb_app_events`，但不反向修改Runtime内存；正常情况下`reload()`重新读取已清空的NVS，若此前正有 `conditionStateSavePending`，`reload()`会按失败恢复契约优先重试RAM待保存状态。因此出厂重置完成后应重启设备，不能在待保存状态下用`reload()`代替重启。
-
-System Logs、App Events和完整业务记录的边界：
-
-| 能力 | 记录内容 |
-| --- | --- |
-| `Esp32BaseFileLog` | boot、WiFi、OTA、LittleFS等技术诊断文本 |
-| `Esp32BaseAppEvents` | 开门受阻、喂食因缺料跳过、浇水因缺水停止等低频业务决策和影响 |
-| `Esp32BaseRecordStore` | 完整开关门、喂食、浇水历史事实 |
-
-内置HTML、JSON和CSV只输出CRC有效事件，支持最新优先分页以及level、真实/相对时间、eventCode和reasonCode筛选。内置HTML列表按行提供详情弹层，分组展示该事件的全部公开通用时间元数据和数值字段；页面不替业务映射中文说明，也不暴露CRC、slot等内部存储布局。损坏记录只在Store状态中计数，不作为事件返回。
-
-示例：
-
-```cpp
-Esp32BaseAppEvents::EventInput event;
-event.level = Esp32BaseAppEvents::Level::Warning;
-event.eventCode = 1002;   // 业务定义：开门受阻
-event.reasonCode = 2101;  // 业务定义：电流过高
-event.objectId = 1;       // 门1
-event.value1 = 1450;      // 业务定义：峰值mA
-event.value2 = 2;         // 业务定义：重试次数
-event.flags = 0x01;       // 业务定义
-const auto result = Esp32BaseAppEvents::appendDiscreteEvent(event);
-```
+转换时先成功提交NVS位图，再更新RAM并返回 `Activated` 或 `Recovered`；提交失败返回 `StateWriteFailed`，RAM状态保持不变，后续观察可重试。因此应用只能在收到成功转换结果后，按产品需要自行向某个紧凑审计RecordStore追加发生/恢复事实。Conditions本身不隐式写LittleFS，不创建通用Event模型。`forget()`/`forgetAll()` 是行政性清理，不生成恢复记录，并使对应tracker在下次观察时重新登记。
 
 ## 4. Esp32BaseConfig
 
@@ -478,8 +432,8 @@ const auto result = Esp32BaseAppEvents::appendDiscreteEvent(event);
 - key 长度 `1..15`。
 - string value 可见内容长度不超过 3999 字节。
 - blob value 长度为 `1..256` 字节，用于小型固定大小 POD 元数据，不用于日志、记录正文或大块业务数据。
-- 库内部 namespace 全部使用 `eb_` 前缀，例如 `eb_wifi`、`eb_sys`、`eb_log`、`eb_ui`、`eb_app_events`。
-- namespace 已表达库和模块归属，key 不重复模块前缀，例如 `eb_wifi.ssid`、`eb_wifi.pass`、`eb_sys.rst_cnt`、`eb_sys.wdt_cnt`、`eb_sys.wdt_trip_base`、`eb_sys.wdt_trip_time`、`eb_log.mode`、`eb_web.auth_user`、`eb_web.auth_pass`、`eb_ui.footer_mode`、`eb_app_events.active_id_bits`。
+- 库内部 namespace 全部使用 `eb_` 前缀，例如 `eb_wifi`、`eb_sys`、`eb_log`、`eb_ui`、`eb_conditions`。
+- namespace 已表达库和模块归属，key 不重复模块前缀，例如 `eb_wifi.ssid`、`eb_wifi.pass`、`eb_sys.rst_cnt`、`eb_sys.wdt_cnt`、`eb_log.mode`、`eb_web.auth_user`、`eb_ui.footer_mode`、`eb_conditions.active_bits`。
 - 应用不得使用 `eb_` 前缀，避免被库维护 API 清理。
 - `Esp32BaseConfig` 不是跨任务线程安全 API；推荐和 `Esp32Base::begin()` / `handle()`、Web、Bus 固定在同一个 loop/system task 中调用，其他任务通过队列投递配置变更。
 - 单个 NVS key 写入依赖 NVS 自身的断电保护；多个 key 组成的业务动作不是事务。App Config 多字段提交会逐字段写入，某字段失败后停止继续写后续字段并返回 partial；需要强一致的一组业务配置应合并为单个 POD/blob 或使用业务自定义提交模型。
@@ -559,13 +513,13 @@ deferred 语义：
 - `setXxxDeferred()` 如果 pending 中已有相同值，会返回 true 并保留原 pending/due 时间；如果 NVS 旧值已经相同，会返回 true、清除同 key pending 并跳过新的 NVS 写入。
 - deferred 到期判断使用 `millis()` 差值比较，覆盖正常延迟窗口内的 49 天回绕；不要把 deferred delay 设置为接近或超过 `INT32_MAX` ms 的长期定时任务。
 - OTA 上传期间只暂停 deferred flush；`getXxx()`、`pendingCount()`、`flushAll()` 和 `clearLibraryNamespaces()` 仍按各自语义工作。
-- `factoryReset()` 只清理当前已启用的基础库 NVS 配置（启用条件跟踪时包括 `eb_app_events`），不重启、不格式化 LittleFS、不删除App Event/FileLog内容、不清理业务 namespace，不清理 boot/restart/watchdog 统计诊断资产。namespace不存在按已清理处理；NVS namespace打开或清除失败必须返回false，不能伪装成不存在。它不直接修改App Events运行态缓存，出厂重置流程应在成功后重启；只有确认不存在条件状态待保存时，才可用显式 `Esp32BaseAppEvents::reload()` 重新读取已清理NVS。
+- `factoryReset()` 只清理当前已启用的基础库NVS配置（启用Conditions时包括 `eb_conditions`），不重启、不格式化LittleFS、不删除FileLog或业务RecordStore、不清理业务namespace，也不清理boot/restart/watchdog统计。namespace不存在按已清理处理；打开或清除失败必须返回false。它不直接修改Conditions运行态，完整出厂重置成功后应重启。
 - `clearWifiConfig()` 清理 `eb_wifi`，包含 WiFi SSID/password。
 - `clearWebAuthConfig()` 清理 `eb_web`，包含 Web Auth user/password。
 - `clearSystemConfig()` 只清理 `eb_sys.hostname`；`eb_sys.rst_cnt`、restart log、`boot_cnt`、`wdt_cnt`、`wdt_trip_base`、`wdt_trip_time` 等统计/诊断 key 必须保留。
 - `clearLogConfig()` 清理 `eb_log`，包含 FileLog 配置。
 - `clearUiConfig()` 清理 `eb_ui`，包含 Footer bar 显示模式。
-- 启用条件跟踪时，`factoryReset()` 和 `clearLibraryNamespaces()` 清理内部 `eb_app_events.active_id_bits`；能力关闭时不引用该namespace，也不提供业务直接写该key的公开API。
+- 启用Conditions时，`factoryReset()` 和 `clearLibraryNamespaces()` 清理内部 `eb_conditions.active_bits`；能力关闭时不引用该namespace，也不提供业务直接写该key的公开API。
 - `clearLibraryNamespaces()` 是库级配置清理入口，当前语义等价于 `factoryReset()`：只清理基础库 NVS 配置，保留统计/诊断资产、业务 namespace 和 LittleFS 内容。
 - `clearNamespace()` 和各出厂重置 API 在 namespace 不存在时返回成功，不创建空 namespace，也不输出底层 `NOT_FOUND` 噪声。
 
@@ -1223,7 +1177,6 @@ public:
         BUILTIN_WIFI,
         BUILTIN_OTA,
         BUILTIN_LOGS,
-        BUILTIN_APP_EVENTS,
         BUILTIN_TOOLS,
         BUILTIN_SYSTEM,
         BUILTIN_AUTH
@@ -1302,7 +1255,6 @@ public:
     static bool addStaticAsset(const char* path, const char* contentType, const uint8_t* data, size_t len,
                                uint32_t cacheMaxAgeSec = 86400, bool authRequired = true);
     static bool addNavItem(const char* path, const char* title);
-    static bool registerBusinessRecordStore(Esp32BaseRecordStore& store);
 
     static bool setDeviceName(const char* name);
     static bool setHomePath(const char* path);
@@ -1397,10 +1349,10 @@ Route 缓冲机制：
 - title 最大可见长度为 23 字节；空 title 返回 false。
 - `addRoute()` 和 `addApi()` 不进入业务入口列表，避免 API 或隐藏路由污染导航。
 - `addStaticAsset()` 注册业务 CSS/JS/图片等固件内固定资源，使用独立固定容量表，不消耗应用 route 表；path 必须以 `/` 开头且最大可见长度为 47 字节，不能位于 `/esp32base/**` 内置命名空间，content type 最大 63 字节，data 指针和 content type 字符串必须在固件生命周期内有效。默认 `authRequired=true`，响应包含固定 `Content-Length`、`X-Content-Type-Options: nosniff` 和 `Cache-Control`；受保护资源使用 `private, max-age=...`，公开资源使用 `public, max-age=...`，`cacheMaxAgeSec=0` 时发送 `no-store`。业务静态资源应优先用该 API 注册，不应绕开 Esp32Base WebServer。
-- `registerBusinessRecordStore(store)` 仅在RecordStore启用时有效，用于把当前版本Store交给基础库System页管理。首次 `begin()` 完成后登记一次并检查返回值即可；最多登记8个对象，重复登记同一对象幂等，不同对象登记同一路径会被拒绝。登记表只保存指针且不提供反登记，因此对象在登记后必须持续有效到设备重启。System页不扫描目录、不登记App Events，也不处理未登记历史版本；它统一提供状态展示、全量逻辑清空，并在System页格式化LittleFS后自动 `reload()` 已登记Store。
+- `Esp32BaseStorage::registerRecordStore(store)` 在RecordStore启用时把当前版本Store交给统一存储协调层。首次 `begin()` 后登记一次并检查返回值；最多8个对象，重复对象幂等，重复路径、合计预算越界或分区安全余量不足会被拒绝。System页不扫描目录，也不处理未登记历史版本；它从Storage读取状态并统一执行逻辑清空和格式化后reload。
 - `setDeviceName()` 设置导航品牌和默认标题；`setHomePath()` 设置业务首页路径。
 - `setHomeMode(HOME_ESP32BASE)` 让 `/` 跳转 `/esp32base/status`；`HOME_APP` 和 `HOME_COMBINED` 只改变裸 `/` 的业务首页行为。`/esp32base/status` 始终是 Status 页，`/esp32base` 与 `/esp32base/` 始终重定向到该规范地址。未显式 `setHomePath()` 时优先使用已注册的 `/index` 业务页作为首页；显式 `setHomePath("/")` 且注册 GET `/` 业务页时，裸 `/` 直接调用业务 handler，不产生自跳转。
-- `setSystemNavMode()` 控制系统入口位置：顶部、底部或底部紧凑系统工具区；默认使用 `SYSTEM_NAV_SECTION`，把 Status、System Logs、System 作为小字链接与 `Free heap`、`Up`、`RSSI` 放在同一 footer 区域，窄屏可自然换行；启用 App Config 或 App Events 时系统入口同时显示对应直达链接。System Logs 是 `/esp32base/logs` 的默认用户标签，底层枚举仍是 `BUILTIN_LOGS`。
+- `setSystemNavMode()` 控制系统入口位置：顶部、底部或底部紧凑系统工具区；默认使用 `SYSTEM_NAV_SECTION`，把 Status、System Logs、System 作为小字链接与运行摘要放在同一footer区域；启用App Config时同时显示其直达链接。System Logs对应 `/esp32base/logs`，底层枚举为 `BUILTIN_LOGS`。
 - `FooterBarMode` 控制 `sendFooter()` 的底部横条输出：`FOOTER_BAR_OFF` 不显示，`FOOTER_BAR_STATUS_ONLY` 只显示运行摘要，`FOOTER_BAR_FULL` 显示系统入口和运行摘要。默认 `FOOTER_BAR_FULL`，System 页面保存后写入 `eb_ui.footer_mode` 并立即影响后续页面输出。
 - `setBuiltinLabel()` 覆盖内置导航标签，可用于中文本地化；系统工具页统一使用 `BUILTIN_TOOLS`，不提供旧 Reboot 历史别名。
 - `setHeadExtraCallback()` 设置额外 head 输出回调；`sendHeader()` 在默认 `WEB_HEAD` 后、`</head><body>` 和顶部导航前调用它，业务项目可在这里输出 `<style>`，避免页面刷新时先显示基础库默认导航样式。该回调不会注入 `/esp32base` 及其子路径的内置页面，避免业务 CSS 增加内置页体积。
@@ -1413,10 +1365,10 @@ Route 缓冲机制：
 - `/esp32base/logs` 和 `/esp32base/logs/raw` 是只读系统诊断日志查看入口，只读取已经落盘的 FileLog segment 快照；GET 读取不得主动 `flush()`、创建、清空、重建文件或改变 FileLog fault 状态。INFO 缓存中的新日志按常规 flush interval 落盘，清空/格式化/重启等维护副作用必须通过 POST 路径。
 - `/esp32base/fs` 是启用 FS profile 时注册的 LittleFS 诊断页，默认只读，展示容量摘要、主要文件和文件树。文件树区分普通文件、不可读文件和基础库管理文件；不可读文件不能给出会生成 0 字节伪成功的下载入口。当 `FS used` 明显大于可见文件合计时，页面应提示可能存在内部、历史或不可见占用。
 - `/esp32base/fs/download?path=/file` 下载一个已存在且可读取的文件，复用 Basic Auth 和路径校验，目录、缺失文件和非法路径不会下载；如果文件声明有大小但无法读取首块，返回 `500 File read failed`。
-- `/esp32base/fs?manage=1` 进入单文件删除和受限上传管理模式；`POST /esp32base/fs/delete` 只接受一个已存在文件路径，复用 Basic Auth、同源检查和 `POST -> 303 -> GET`，不提供目录删除、批量删除、编辑或任意路径输入。不可读文件仍允许删除，便于清理损坏文件；删除不以文件内容可读为前提。基础库管理文件会在文件树中给出维护提醒；维护操作修改 FileLog 或 App Events store 后，应刷新对应运行态。
+- `/esp32base/fs?manage=1` 进入单文件删除和受限上传模式；`POST /esp32base/fs/delete` 只接受一个已存在文件路径，复用Basic Auth、同源检查和 `POST -> 303 -> GET`。`/esp32base/**`、FileLog轮转文件和已登记Store路径是受管路径，不允许上传、覆盖或删除；上传上限还受 `unmanagedWritableBytes()` 约束。
 - `/esp32base/fs/check?dir=/data&name=records.bin` 是上传前检查接口，复用 Basic Auth，按“已有目录 + 本地文件名”计算目标路径，返回目标是否存在、是否是目录以及是否允许上传；路径拼接如果超过内部路径上限会直接拒绝，不截断成另一个目标。
 - `POST /esp32base/fs/upload` 是 multipart 上传接口，复用 Basic Auth 和同源检查；上传保留本地文件名，可以写入任何已有目录，不创建目录。目标文件存在时必须传 `overwrite=1` 才会覆盖；覆盖上传必须避免上传中断时先清空旧文件。路径过长、缺少文件、目标非法或写入失败会返回错误，不会复用上一笔上传状态。上传只负责写入 LittleFS，不校验业务数据语义、索引、NVS 状态或运行时缓存。
-- `/esp32base/system` System 页承载低频维护入口和操作，App Config 启用时作为首个入口显示，后面是 WiFi Setup、Web Auth、Firmware OTA、File system 直达入口、hostname 保存、Watchdog trip reset、重启设备；存在已注册 App Config 字段时，危险操作区提供 `Restore App Config Defaults`，二次确认后只删除注册字段对应的 NVS key，使读取重新落到当前固件默认值，不清同 namespace 的未注册 key，也不清 WiFi、Web Auth、基础库设置或 LittleFS。启用 FS 的 profile 还提供手动格式化 LittleFS 操作，会清除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth、业务 namespace 或任何 NVS 配置。格式化成功后会重新 mount FS、reload FileLog、重新创建 App Events，并自动 reload 已登记的当前业务 RecordStore；业务仍应通过 after-format 回调或事件同步自己的派生统计、文件索引或缓存。
+- `/esp32base/system` System 页承载低频维护入口和操作，App Config 启用时作为首个入口显示，后面是 WiFi Setup、Web Auth、Firmware OTA、File system 直达入口、hostname 保存、Watchdog trip reset、重启设备；存在已注册 App Config 字段时，危险操作区提供 `Restore App Config Defaults`，二次确认后只删除注册字段对应的 NVS key，使读取重新落到当前固件默认值，不清同 namespace 的未注册 key，也不清 WiFi、Web Auth、基础库设置或 LittleFS。启用 FS 的 profile 还提供手动格式化 LittleFS 操作，会清除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth、业务 namespace 或任何 NVS 配置。格式化成功后由Storage重新mount FS、reload FileLog并自动reload已登记的当前业务RecordStore；业务仍应通过 after-format 回调或事件同步自己的派生统计、文件索引或缓存。
 - `/esp32base/auth` 是内置认证管理页面，受当前 Basic Auth 保护，提交成功后新账号密码立即生效。
 - Web Auth 认证优先级为：已保存认证 > 应用默认认证。未设置应用默认认证且没有已保存认证时，Web 服务不会启动。
 - 内置 Web 不提供首次登录强制改密；量产或可被他人访问的设备必须在业务启动时调用 `setDefaultAuth()`，或通过业务流程先保存认证。

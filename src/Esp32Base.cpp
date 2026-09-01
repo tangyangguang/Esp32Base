@@ -205,17 +205,22 @@ bool Esp32Base::begin() {
 #if ESP32BASE_ENABLE_FS
     ESP32BASE_LOG_D("base", "module_begin name=fs");
     {
-        const bool ok = Esp32BaseFs::begin();
-        if (!optionalOk(ok, "fs")) return false;
-        if (ok) ESP32BASE_LOG_D("base", "module_ready name=fs");
+        const bool fsOk = Esp32BaseFs::begin();
+        if (!optionalOk(fsOk, "fs")) return false;
+        if (fsOk) {
+            const bool storageOk = Esp32BaseStorage::begin();
+            if (!optionalOk(storageOk, "storage")) return false;
+            if (storageOk) ESP32BASE_LOG_D("base", "module_ready name=storage");
+            ESP32BASE_LOG_D("base", "module_ready name=fs");
+        }
     }
 #endif
-#if ESP32BASE_ENABLE_APP_EVENTS
-    ESP32BASE_LOG_D("base", "module_begin name=app_events");
+#if ESP32BASE_ENABLE_CONDITIONS
+    ESP32BASE_LOG_D("base", "module_begin name=conditions");
     {
-        const bool ok = Esp32BaseAppEvents::begin();
-        if (!optionalOk(ok, "app_events")) return false;
-        if (ok) ESP32BASE_LOG_D("base", "module_ready name=app_events");
+        const bool ok = Esp32BaseConditions::begin();
+        if (!optionalOk(ok, "conditions")) return false;
+        if (ok) ESP32BASE_LOG_D("base", "module_ready name=conditions");
     }
 #endif
 #if ESP32BASE_ENABLE_FILELOG
@@ -455,12 +460,13 @@ void Esp32Base::logResources() {
 #endif
 #if ESP32BASE_ENABLE_FS
 #include "runtime/Esp32BaseFs.inc"
+#include "runtime/Esp32BaseStorage.inc"
 #endif
 #if ESP32BASE_ENABLE_RECORD_STORE
 #include "runtime/Esp32BaseRecordStore.inc"
 #endif
-#if ESP32BASE_ENABLE_APP_EVENTS
-#include "runtime/Esp32BaseAppEvents.inc"
+#if ESP32BASE_ENABLE_CONDITIONS
+#include "runtime/Esp32BaseConditions.inc"
 #endif
 #if ESP32BASE_ENABLE_FILELOG
 #include "runtime/Esp32BaseFileLog.inc"

@@ -867,19 +867,16 @@ void handleStatusPage() {
         sendInfoRow("Log buffer", value);
     }
 #endif
-#if ESP32BASE_ENABLE_APP_EVENTS
-    Esp32BaseAppEvents::AppEventsStatus appEventStatus = {};
-    if (Esp32BaseAppEvents::readStatus(appEventStatus)) {
-        sendInfoRowStart("Application events");
-        sendStatusTag(appEventStatus.eventStore.ready ? Esp32BaseWeb::UI_OK : Esp32BaseWeb::UI_WARN,
-                      Esp32BaseRecordStore::storeStateName(appEventStatus.eventStore.state));
-        sendSubmetricsStart();
-        snprintf(value, sizeof(value), "%lu / %lu", static_cast<unsigned long>(appEventStatus.eventStore.recordCount), static_cast<unsigned long>(appEventStatus.eventStore.capacity));
-        sendSubmetric("Records", value);
-        snprintf(value, sizeof(value), "%lu", static_cast<unsigned long>(appEventStatus.eventStore.damagedRecordCount));
-        sendSubmetric("Damaged", value);
-        sendSubmetricsEnd(); sendInfoRowEnd();
-    }
+#if ESP32BASE_ENABLE_CONDITIONS
+    Esp32BaseConditions::ConditionsStatus conditions = {};
+    Esp32BaseConditions::readStatus(conditions);
+    sendInfoRowStart("Conditions");
+    sendStatusTag(conditions.stateLoaded ? Esp32BaseWeb::UI_OK : Esp32BaseWeb::UI_WARN,
+                  conditions.stateLoaded ? "ready" : "unavailable");
+    sendSubmetricsStart();
+    snprintf(value, sizeof(value), "%u", static_cast<unsigned>(conditions.activeConditionCount));
+    sendSubmetric("Active", value);
+    sendSubmetricsEnd(); sendInfoRowEnd();
 #endif
 #if ESP32BASE_ENABLE_RECORD_STORE
     uint32_t businessRecords = 0;

@@ -120,7 +120,7 @@ OTA 规则：
 - `setHomeMode()` 只控制裸 `/` 的首页模型：基础库首页、业务首页优先或融合首页；`/esp32base` 和 `/esp32base/` 固定重定向到 `/esp32base/status`。
 - `setSystemNavMode()` 控制 Status、System Logs、System 等系统入口在顶部、底部或底部紧凑系统工具区展示；默认使用底部紧凑系统工具区，让顶部主要服务业务导航。
 - `setFooterBarMode()` 控制 `sendFooter()` 输出的底部横条：Off 不显示，Status only 只显示右侧运行摘要，Links + status 同时显示左侧系统入口和右侧运行摘要。
-- `setBuiltinLabel()` 可覆盖 Status/WiFi/OTA/System Logs/App Events/System/Auth 标签，用于应用统一本地化；系统诊断日志底层枚举仍是 `BUILTIN_LOGS`，系统维护页统一使用 `BUILTIN_TOOLS`，不提供旧 Reboot 历史别名。
+- `setBuiltinLabel()` 可覆盖 Status/WiFi/OTA/System Logs/System/Auth 标签，用于应用统一本地化；系统诊断日志底层枚举仍是 `BUILTIN_LOGS`，系统维护页统一使用 `BUILTIN_TOOLS`，不提供旧 Reboot 历史别名。
 - `setHeadExtraCallback()` 可在 `sendHeader()` 的 `</head>` 和顶部导航输出前注入业务 CSS，业务页面不需要复制基础库 header/nav；`/esp32base` 及其子路径的内置页面会跳过该业务注入，避免内置页重复下发业务样式。
 - 导航按当前请求路径输出 `active` class：完全匹配优先，嵌套路由按最长 path 前缀匹配；`SYSTEM_NAV_SECTION` 下系统维护入口只在 footer 中展示，WiFi/Auth/OTA 二级页会把 System 标记为 active，App Config 页面在启用时标记自己的 footer 入口。
 - 默认 Web 样式采用简洁中性色，普通链接、导航和 tabs 不使用蓝色主色；业务项目最终视觉仍由 `setHeadExtraCallback()` 注入 CSS 覆盖。
@@ -180,13 +180,6 @@ System Logs:
 - `GET /esp32base/logs/raw?segment=N`，以 `text/plain; charset=utf-8` 流式输出单个系统诊断日志 segment，供 System Logs 页面 iframe 和原文查看使用
 - `POST /esp32base/logs/clear`，保留直达入口，成功后回到 System Logs 页面
 
-App Events，仅 `ESP32BASE_ENABLE_APP_EVENTS=1`：
-
-- `GET /esp32base/app-events`，独立应用业务事件页面，不混入系统诊断日志；支持 `page/per/level/time/eventCode/reasonCode` 筛选参数，非法筛选返回 `400 invalid_filter`。
-- `GET /esp32base/api/app-events?offset=0&limit=50`，按最新优先分页输出 JSON；支持 `level/time/eventCode/reasonCode` 筛选参数，非法筛选返回 `400 {"ok":false,"error":"invalid_filter"}`。
-- `GET /esp32base/app-events.csv`，导出当前筛选后的应用事件 CSV；非法筛选返回 `400 invalid_filter`。
-- HTML详情、JSON和CSV输出 `eventKind` 与 `conditionId`；状态区输出条件状态是否已加载、是否有NVS保存待恢复以及当前活动条件数量，不解释业务条件名称。
-
 System:
 
 - `GET /esp32base/system`
@@ -203,8 +196,7 @@ System:
 - `POST /esp32base/system/footer-bar`
 - `POST /esp32base/system/filelog`
 - `POST /esp32base/system/logs-clear`，System 页面主入口，成功后回到 System 页面
-- `POST /esp32base/system/business-records-clear`，仅 `ESP32BASE_ENABLE_RECORD_STORE=1`，逻辑清空所有通过 `registerBusinessRecordStore()` 登记的当前版本业务 Store；需要认证、同源 POST 和用户二次确认
-- `POST /esp32base/system/app-events-clear`，仅 `ESP32BASE_ENABLE_APP_EVENTS=1`，清空事件日志；System 页面危险操作入口，成功后回到 System 页面
+- `POST /esp32base/system/business-records-clear`，仅 `ESP32BASE_ENABLE_RECORD_STORE=1`，逻辑清空所有通过 `Esp32BaseStorage::registerRecordStore()` 登记的当前版本业务Store；需要认证、同源POST和用户二次确认
 - `POST /esp32base/system/watchdog-trip-reset`
 - `POST /esp32base/system/format-fs`，仅 `ESP32BASE_ENABLE_FS=1`，只格式化 LittleFS；格式化成功后通知 after-format 回调/事件，不清任何 NVS
 - `POST /esp32base/api/restart`
@@ -227,7 +219,7 @@ WiFi 配置页：
 
 System 维护页：
 
-- 默认底部系统导航展示 Status、System Logs、System；`System Logs` 对应 `/esp32base/logs`，是系统诊断日志查看入口，底层实现仍为 `Esp32BaseFileLog`。启用 App Events 时额外展示 App Events 直达入口，启用 App Config 时额外展示 App Config 直达入口。WiFi、Auth、OTA 是低频配置/维护入口，收在 System 页面中并显示为 WiFi Setup、Web Auth、Firmware OTA，但保留原直达 URL。
+- 默认底部系统导航展示 Status、System Logs、System；`System Logs` 对应 `/esp32base/logs`，底层实现为 `Esp32BaseFileLog`。启用App Config时额外展示App Config直达入口。WiFi、Auth、OTA 是低频配置/维护入口，收在 System 页面中并显示为 WiFi Setup、Web Auth、Firmware OTA，但保留原直达 URL。
 - System 页面应把低频入口、设置项、普通维护项和危险操作分区展示，保证桌面端和手机端都能清楚区分说明、当前状态和操作入口。
 - 启用 App Config 时，System 页面首位仍显示 App Config 入口；App Config 是业务持久化参数配置页，不和基础库维护参数混在 System 长页面中。
 - Hostname 设置区显示当前 hostname、构建默认 hostname、已保存 hostname 和是否需要重启；保存只写入 `eb_sys.hostname`，不热切换当前 DHCP hostname、mDNS、OTA 或 Web 身份，页面必须提示重启后生效。
@@ -239,13 +231,12 @@ System 维护页：
 - 启用 Watchdog 的 profile 显示 Watchdog lifetime/trip 小计维护；当 `wdt_trip_base` 大于 lifetime 时显示 `invalid baseline`，Reset Watchdog Trip 写入并回读确认 `eb_sys.wdt_trip_base` 和 `eb_sys.wdt_trip_time`，不清 `eb_sys.wdt_cnt`。
 - 启用 FS 的 profile 显示 `Format LittleFS`，该操作会删除日志和所有 LittleFS 文件，但不清除 WiFi、Web Auth、业务 namespace 或任何 NVS 配置。
 - 启用 FileLog 的 profile 显示系统诊断日志模式设置、运行态和 `Clear system logs`；模式设置只接受 OFF、ERROR、WARN、INFO，保存后立即生效并写入 `eb_log.mode`，清空日志只接受 POST，成功后回到 System 页面显示结果。运行态为 `write fault` 时表示配置模式仍开启，但 FileLog 因 FS 写入故障被运行期保护停写；已有日志仍可能可读，不应显示成 `disabled`。运行态为 `unavailable` 时表示配置模式开启但 FS/init 前置条件未满足。运行态为 `disabled` 时明确 FileLog 模式为 OFF，新日志不会写入。
-- 系统诊断日志默认文件为 `/esp32base/logs/system.log`，App Events store 默认目录为 `/esp32base/records/app-events.v2/`；二者都位于 `/esp32base/**` 基础库管理命名空间。
-- 启用 RecordStore 且业务通过 `registerBusinessRecordStore()` 登记当前 Store 后，System 页显示独立的 `Clear Business Records` 红色危险操作框，列出每个 Store 的版本目录、状态和记录数。清空前必须先确认所有 Store 可操作；预检失败时零修改，执行中失败时停止并报告已清空数量。成功后原 Store 对象保持可用、记录数为0、ID继续递增。该操作不扫描 `/esp32base/records/**`，不清 App Events，也不处理未登记历史版本。
-- 启用 App Events 的 profile 显示 `Clear App Event History` 危险操作；它只对 App Events store 做逻辑清空，不重写数据区，也不清条件活动状态、系统诊断日志、WiFi、Web Auth、NVS 配置或其他 LittleFS 文件。
-- 格式化 FS 是显式 POST 操作；执行前 flush 系统诊断日志，格式化成功后重新 mount FS、重新加载 FileLog 模式、重新创建 App Events，并逐个 `reload()` 已登记的当前业务 Store；任一 Store 恢复失败都不能提示整体成功。只有 `Esp32BaseFs::format()` 成功时才触发 `Esp32BaseWeb::setAfterFormatFsCallback()` 注册的回调和 `EVENT_TOOLS_FORMAT_FS_SUCCESS` 事件；格式化失败、启动挂载失败和其他 FS 维护动作不触发。回调结果除原字段外还包含 `businessRecordStoreCount`、`businessRecordStoreReloadedCount` 和 `businessRecordStoresReloadSuccess`；业务仍负责在回调/事件里同步自己的派生统计、文件索引或缓存。重启请求同样输出 WARN 级维护日志。
+- 系统诊断日志默认文件为 `/esp32base/logs/system.log`；基础库受管根为 `/esp32base/**`，包括已登记RecordStore。
+- 业务通过 `Esp32BaseStorage::registerRecordStore()` 登记当前Store后，System页显示独立的 `Clear Business Records` 危险操作框，列出各Store状态。预检失败时零修改，执行中失败时停止并报告已清空数量。成功后原Store对象保持可用、记录数为0、ID继续递增。该操作不扫描目录，也不处理未登记历史版本。
+- 格式化FS是显式POST操作；由Storage在独占维护区间flush日志、format、mount、恢复FileLog并逐个reload已登记Store；任一恢复失败都不能提示整体成功。只有 `Esp32BaseFs::format()` 成功时才触发 `Esp32BaseWeb::setAfterFormatFsCallback()` 注册的回调和 `EVENT_TOOLS_FORMAT_FS_SUCCESS` 事件；格式化失败、启动挂载失败和其他 FS 维护动作不触发。回调结果除原字段外还包含 `businessRecordStoreCount`、`businessRecordStoreReloadedCount` 和 `businessRecordStoresReloadSuccess`；业务仍负责在回调/事件里同步自己的派生统计、文件索引或缓存。重启请求同样输出 WARN 级维护日志。
 - 普通 `GET` 页面慢请求只输出 DEBUG；`POST` 等操作慢请求输出 INFO，默认 ERROR 系统日志不记录，现场排查时可切到 INFO 查看。
 - API 层仍建议要求 POST，不使用 GET 触发重启。
-- 内置危险 POST 包括 WiFi 保存/清除、App Config 保存、App Config 恢复默认值、Hostname 保存、Auth 保存、重启、System 操作、System Logs clear、Business Records clear、App Events clear、Web OTA upload/done；跨站 `Origin` 或 `Referer` 会被拒绝。
+- 内置危险POST包括WiFi保存/清除、App Config保存/恢复默认值、Hostname保存、Auth保存、重启、System操作、System Logs clear、Business Records clear、FS上传/删除和Web OTA；跨站 `Origin` 或 `Referer` 会被拒绝。
 - 业务自定义 POST 或危险操作应优先调用 `Esp32BaseWeb::checkPostAllowed(context)`，不要只做 `checkAuth()`；即使业务误把危险 handler 注册为 `METHOD_ANY`，该 helper 也会拒绝非 POST 请求。
 
 Status 页：
@@ -294,7 +285,7 @@ System Logs 页面：
 - Clear system logs POST 后通过 303 回到 System Logs 页，并在页面顶部显示成功或失败提示；刷新页面不重复提交。
 - FileLog 模式为 OFF 时，System Logs 页面仍展示已有历史日志；OFF 只表示停止后续写入。
 - `GET /esp32base/logs` 和 `GET /esp32base/logs/raw` 必须保持只读，只读取已经落盘的系统诊断日志快照，不主动 `flush()`、创建、清空或重建文件。页面会展示当前 buffer used/total，尚在缓存中的 INFO 日志可等待常规 flush interval；清空、格式化、重启等维护副作用仍必须通过 POST，不通过 GET 触发。
-- System Logs 页面只面向 Esp32Base 系统诊断日志，不读取 `Esp32BaseAppEvents`，也不展示业务事件。页面命名面向用户，`Esp32BaseFileLog` 是底层实现/API 名称。
+- System Logs页面只面向Esp32Base系统诊断日志，不展示业务RecordStore内容。页面命名面向用户，`Esp32BaseFileLog`是底层实现/API名称。
 - 显示系统诊断日志的启用状态、路径、模式、轮转、缓冲区和容量摘要；容量值用 KB/MB/B 人性化格式展示，不重复暴露 raw bytes。
 - 页面提供 current 和历史 segment 的切换入口，并展示各 segment 的文件名和大小。
 - 默认显示 `current-0`；可通过 `?segment=N` 查看单个历史文件，非法或越界 segment 回落到 `current-0`。
@@ -303,21 +294,6 @@ System Logs 页面：
 - 日志正文一次只展示一个 segment，包括 0 字节文件；非法或越界 segment 回落到 `current-0`。
 - raw 日志内容不折叠、不省略、不规整空白行，页面展示应忠实反映文件内容。
 - 日志正文流式输出期间必须周期性 yield/feed Watchdog，避免大日志页面长请求触发看门狗。
-
-App Events 页面：
-
-- 仅在 `ESP32BASE_ENABLE_APP_EVENTS=1` 时注册，标题和导航标签为 `App Events`，可通过 `setBuiltinLabel(BUILTIN_APP_EVENTS, "...")` 覆盖。
-- 这是App Events的数值诊断视图，不属于System Logs，也不注册业务代码到显示文字的映射。
-- 页面以分区清楚的状态摘要、筛选区和最新优先分页列表展示容量、文件大小、有效记录数、损坏记录数、存储路径和事件内容，并提供CSV导出。
-- 筛选条件包括等级、时间类型、`eventCode` 和 `reasonCode`；HTML、JSON API、CSV共用同一组数值筛选语义。
-- 列表紧凑展示ID、完成时间及相对时间、等级、事件码、原因码、对象ID、两个value和flags；每条事件提供详情入口，按Identity & level、Timing、Event fields、Values & flags分组展示全部公开字段。CRC损坏或不完整记录绝不展示，只在存储状态中报告数量和错误；CRC、slot、magic和commit等内部存储字段不属于事件详情。
-- 有可信epoch或本次boot可解析时显示真实完成时间；否则显示 `boot N uptime N s`，不伪造日期。
-- 清空事件日志是危险操作，只在 System 页面提供 `POST /esp32base/system/app-events-clear`，必须通过 Web Auth 和同源检查，成功后 303 回到 System 页面。
-- JSON事件包含通用记录时间、`eventCode/reasonCode/objectId/value1/value2/flags/level`，并给出可解析的开始和完成epoch；0表示无法解析。
-- JSON API只输出CRC有效的事件。业务页面负责把数字代码和flags映射为业务语言。
-- CSV导出同样只包含有效语义字段，不输出slot、magic、CRC或commit等内部布局。
-- 该页面明确和 `/esp32base/logs` 分离：`/esp32base/logs` 是 System Logs，展示 `Esp32BaseFileLog` 系统诊断日志，记录启动、联网、OTA、基础库运行等系统信息；`/esp32base/app-events` 是应用业务事件日志，记录应用显式写入的业务事件。
-- 应用页面不应把 boot/reset、WiFi、NTP、OTA、LittleFS、FileLog fault 或基础库健康状态重复写入 App Events；这些系统诊断信息继续由 Status、System diagnostics 和 FileLog 展示。同一故障如果同时影响业务，App Events 应只表达业务影响、保护动作、跳过原因、用户维护结果或外部决策结果。App Events 页面只用于查看应用因业务原因写入的事件。
 
 状态页/API：
 
@@ -331,7 +307,7 @@ App Events 页面：
 - Status 页展示设备身份、网络、运行健康、存储与日志、固件 OTA 和硬件摘要。多值信息使用紧凑子指标，避免逗号串联造成阅读困难。
 - Status 页不打开日志段文件、不扫描完整文件树、不统计 Top 文件列表、不枚举完整分区表，也不校验整份运行镜像；较重的文件细节放在 `/esp32base/fs`。网络参数、NVS 条目摘要、运行 ELF SHA 和 eFuse MAC 直接显示，均只在本次页面请求中读取。
 - `/esp32base/fs` 默认是只读 LittleFS 详情页，展示容量摘要、主要文件和文件树。文件树应区分普通文件、不可读文件和基础库管理文件；不可读文件不能给出会生成 0 字节伪成功的下载入口。当 FS used 明显大于可见文件合计时，应提示可能存在内部、历史或不可见占用。业务侧如果使用 `Esp32BaseFs` 读写文件，也必须检查返回值；逻辑大小存在不代表内容块一定可读。
-- `/esp32base/fs?manage=1` 增加单文件删除和受限上传，不提供目录删除、批量删除、编辑、重命名、移动或任意路径输入；删除必须通过 `POST /esp32base/fs/delete -> 303 -> GET`，格式化仍只在 System 页危险操作区。上传保留本地文件名，只写入已有目录；覆盖上传必须显式确认，并避免上传中断时先清空旧文件。基础库管理文件应在文件树中给出维护提醒；维护操作修改 FileLog 或 App Events store 后，应刷新对应运行态。
+- `/esp32base/fs?manage=1` 增加单文件删除和受限上传，不提供目录删除、批量删除、编辑、重命名、移动或任意路径输入；删除必须通过 `POST /esp32base/fs/delete -> 303 -> GET`，格式化仍只在 System 页危险操作区。上传保留本地文件名，只写入已有目录；覆盖上传必须显式确认，并避免上传中断时先清空旧文件。`/esp32base/**`、FileLog轮转文件和已登记Store路径禁止上传、覆盖或删除；上传大小不能超过Storage报告的非受管可写容量。
 - Firmware & OTA 默认显示运行 app slot、下一 OTA slot、Max OTA upload、rollback 状态，以及仅在存在错误时显示的 Last OTA error；默认状态页不调用当前镜像 size 校验，也不计算 `OTA headroom`。Max OTA upload 是下一 OTA slot 的上传硬上限。
 - 启用 Watchdog 时显示 `enabled, lifetime resets N, trip resets M` 或 invalid baseline 和 trip reset time；Reset Trip 保存时间使用和页面 Time 行一致的可信 epoch 判断，无可用时间则显示 `unknown (time unavailable)`。
 - 启用 Time 时，Status 页显示统一 `Time` 行，包含当前来源 `uptime/rtc/ntp`、可信状态、当前时间和 uptime；启用 RTC 时额外显示 `RTC` 行，包含驱动、状态、最近读取 epoch 和读取时的 uptime；启用 NTP 时显示 `NTP` 行，只表示联网对时客户端自身状态。
@@ -344,7 +320,7 @@ App Events 页面：
 - 字号和控件尺寸采用主次清晰的设备控制台尺度，避免页面在桌面端显得松散、在手机端难以点击。
 - 页面宽度、背景和内容块样式保持统一，避免正文和操作块错位。
 - 顶部导航使用中性色和主色浅底 active 状态，主色由 CSS 变量控制。
-- 内置状态、WiFi、Auth、OTA、System Logs、App Events、System 页面使用统一标题、内容块、按钮和表单节奏；页面标题、正文、导航和 footer 使用同一布局宽度。
+- 内置状态、WiFi、Auth、OTA、System Logs、System页面使用统一标题、内容块、按钮和表单节奏；页面标题、正文、导航和 footer 使用同一布局宽度。
 - 内置页的 `POST -> 303 -> GET` 操作结果提示统一紧跟页面标题，先反馈结果，再进入具体内容块。
 - 默认输入框样式只作用于文本类输入，例如未声明 type 的 input、text、password、number、email、url、tel、search。
 - checkbox、radio、file、range、color、hidden 等非文本控件保持浏览器原生尺寸和行为，业务页面不需要额外覆盖基础 CSS。

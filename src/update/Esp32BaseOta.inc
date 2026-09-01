@@ -47,6 +47,7 @@ mbedtls_sha256_context g_otaSha;
 bool g_otaShaActive = false;
 bool g_otaPrevPowerSave = true;
 bool g_otaLongOpsActive = false;
+bool g_otaStorageWritesSuspended = false;
 uint32_t g_otaTransferStartedMs = 0;
 uint32_t g_otaTransferFinishedMs = 0;
 bool g_otaSummaryLogged = false;
@@ -255,11 +256,23 @@ void cleanupLongOps() {
 #if ESP32BASE_ENABLE_WIFI
     Esp32BaseWiFi::setPowerSave(g_otaPrevPowerSave);
 #endif
+#if ESP32BASE_ENABLE_FS
+    if (g_otaStorageWritesSuspended) {
+        Esp32BaseStorage::setOtaWriteSuspended(false);
+        g_otaStorageWritesSuspended = false;
+    }
+#endif
     Esp32BaseConfig::resumeDeferredFlush();
     g_otaLongOpsActive = false;
 }
 
-void prepareLongOps() {
+bool prepareLongOps() {
+#if ESP32BASE_ENABLE_FS
+    if (!Esp32BaseStorage::setOtaWriteSuspended(true)) {
+        return false;
+    }
+    g_otaStorageWritesSuspended = true;
+#endif
     g_otaLongOpsActive = true;
     Esp32BaseConfig::pauseDeferredFlush();
 #if ESP32BASE_ENABLE_WATCHDOG
@@ -269,6 +282,7 @@ void prepareLongOps() {
     g_otaPrevPowerSave = Esp32BaseWiFi::powerSave();
     Esp32BaseWiFi::setPowerSave(false);
 #endif
+    return true;
 }
 
 void sha256Starts(mbedtls_sha256_context* ctx) {
@@ -582,7 +596,12 @@ bool Esp32BaseOta::startUpload(size_t totalSize, const char* expectedSha256Hex) 
         }
     }
 
-    prepareLongOps();
+    if (!prepareLongOps()) {
+        setError("storage unavailable for ota");
+        logOtaTransferSummary("upload_failed");
+        g_otaStatus = FAILED;
+        return false;
+    }
 
     if (!Update.begin(totalSize)) {
         cleanupLongOps();

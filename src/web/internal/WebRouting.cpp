@@ -628,9 +628,6 @@ const char* activeNavPath(bool includeSystemLinks) {
             activeLen = strlen(activePath);
         }
         updateActivePath("/esp32base/logs", currentPath, activePath, activeLen);
-#if ESP32BASE_ENABLE_APP_EVENTS
-        updateActivePath("/esp32base/app-events", currentPath, activePath, activeLen);
-#endif
 #if ESP32BASE_ENABLE_APP_CONFIG
         updateActivePath("/esp32base/app-config", currentPath, activePath, activeLen);
 #endif

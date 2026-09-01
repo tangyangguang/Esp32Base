@@ -7,8 +7,7 @@
 #include "../core/Esp32BaseConfig.h"
 #include "../core/Esp32BaseLog.h"
 #include "internal/Esp32BaseLongOperation.h"
-
-#include <LittleFS.h>
+#include "internal/Esp32BaseFsInternal.h"
 
 #include <string.h>
 
@@ -93,12 +92,10 @@ bool ensureSegmentFiles() {
             ok = false;
             break;
         }
-        File file = LittleFS.open(seg, "a", true);
-        if (!file) {
+        if (!Esp32BaseFs::exists(seg) && !Esp32BaseFs::appendBytes(seg, nullptr, 0)) {
             ok = false;
             break;
         }
-        file.close();
         Esp32BaseLongOperation::service();
     }
     Esp32BaseLongOperation::service();
@@ -305,7 +302,12 @@ bool writeLineBuffered(const char* line) {
 }
 
 void logLineSink(Esp32BaseLog::Level level, const char*, const char*, const char* line) {
-    if (!g_fileLogEnabled || !line) {
+    // A filesystem failure may itself emit a log line. Never re-enter FileLog
+    // from inside an active filesystem operation; Serial has already received
+    // the line and a recursive write could hide the original failure.
+    if (esp32base_internal::fsCurrentTaskInOperation() ||
+        esp32base_internal::fsWritesSuspended() ||
+        !g_fileLogEnabled || !line) {
         return;
     }
     const Esp32BaseLog::Level fileLevel = modeLevel(g_fileLogMode);
@@ -543,6 +545,23 @@ bool Esp32BaseFileLog::segmentPath(uint8_t index, char* out, size_t len) {
     return written > 0 && static_cast<size_t>(written) < len;
 }
 
+namespace {
+struct FileLogStreamContext {
+    Esp32BaseFileLog::SegmentChunkFn callback;
+    void* user;
+};
+
+bool streamFileLogChunk(const uint8_t* data, size_t length, void* user) {
+    FileLogStreamContext* context = static_cast<FileLogStreamContext*>(user);
+    if (!context || !context->callback) {
+        return false;
+    }
+    context->callback(reinterpret_cast<const char*>(data), length, context->user);
+    yield();
+    return true;
+}
+}
+
 bool Esp32BaseFileLog::streamSegment(uint8_t index, SegmentChunkFn cb, void* user) {
     if (!cb || !Esp32BaseFs::isReady()) {
         return false;
@@ -551,20 +570,16 @@ bool Esp32BaseFileLog::streamSegment(uint8_t index, SegmentChunkFn cb, void* use
     if (!segmentPath(index, seg, sizeof(seg)) || !Esp32BaseFs::exists(seg)) {
         return false;
     }
-    File file = LittleFS.open(seg, "r");
-    if (!file) {
+    const int64_t size = Esp32BaseFs::fileSize(seg);
+    if (size < 0 || static_cast<uint64_t>(size) > UINT32_MAX) {
         return false;
     }
-    char buf[128];
-    while (file.available()) {
-        const size_t n = file.readBytes(buf, sizeof(buf));
-        if (n > 0) {
-            cb(buf, n, user);
-        }
-        yield();
-    }
-    file.close();
-    return true;
+    FileLogStreamContext context = {cb, user};
+    return esp32base_internal::fsVisitBytesAt(seg,
+                                              0,
+                                              static_cast<uint32_t>(size),
+                                              streamFileLogChunk,
+                                              &context);
 }
 
 #endif

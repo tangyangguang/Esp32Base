@@ -68,7 +68,6 @@
 - IOT链接WebServer/Update/MQTT。
 - FS 关闭时 FileLog 不拉入 LittleFS。
 - 关闭 Bus/Fs/Health 不产生静态对象。
-- Web 可选页面资源必须按能力宏裁剪，避免未启用 App Events、FS、OTA 或 FileLog 时仍带入对应专属资源。
 
 ## 6. MQTT 检查
 
@@ -103,9 +102,9 @@
 - PCF8563 示例构建的 map/ELF 裁剪检查必须禁止 `ds3231` / `Ds3231`。
 - RTC 未启用的现有 profile 行为不应要求业务初始化 `Wire`，也不应改变 NTP-only 项目的对时语义。
 - 启用 RTC 但目标板未接芯片时，`Esp32Base::begin()` 不能失败，Status/日志应显示 RTC 诊断异常。
-- RTC 芯片寄存器必须按 UTC 日历字段读写；Web、日志、App Events 和文件 Last modified 展示使用统一固定偏移格式化。
+- RTC 芯片寄存器必须按 UTC 日历字段读写；Web、日志和文件Last modified展示使用统一固定偏移格式化。
 - NTP 成功后按 `ESP32BASE_RTC_NTP_WRITEBACK` 和 `ESP32BASE_RTC_WRITEBACK_THRESHOLD_SEC` 决定是否写回所选 RTC，写回失败不得影响 NTP 时间生效。
-- App Events、Web Status、Watchdog reset time、FS Last modified 和系统诊断日志不得继续把 NTP 当作唯一真实时间来源；应统一通过 `Esp32BaseTime` 读取或解析。
+- Web Status、Watchdog reset time、FS Last modified和系统诊断日志不得继续把 NTP 当作唯一真实时间来源；应统一通过 `Esp32BaseTime` 读取或解析。
 - 基础库不得占用 RTC 中断引脚，不得接管 DS3231/PCF8563 的闹钟、方波、定时器、温度或校准等扩展功能。
 - 实机条件允许时，分别记录 DS3231 正常时间、DS3231 缺失/OSF，PCF8563 正常时间、PCF8563 缺失/低电压或时钟无效状态；无法实机覆盖时必须在发布记录中写明缺口。
 
@@ -165,13 +164,12 @@
 - restart 前全部落盘。
 - NVS 写满返回 false。
 - App Config group/field 注册失败输出 ERROR，日志包含明确 `reason`、对象标识、当前计数和编译容量；调用方仍通过 bool 决定业务启动策略。
-- `factoryReset()` 清理 `eb_wifi`、`eb_wifi_rcv`、`eb_web`、`eb_log`、`eb_ui`、`eb_sys.hostname`，并在条件跟踪启用时清理 `eb_app_events`。
+- `factoryReset()` 清理 `eb_wifi`、`eb_wifi_rcv`、`eb_web`、`eb_log`、`eb_ui`、`eb_sys.hostname`，并在Conditions启用时清理 `eb_conditions`。
 - `factoryReset()` 保留 `eb_sys` 中的 boot/restart/watchdog 统计诊断 key。
 - 单项清理 API 只影响对应配置范围；`clearSystemConfig()` 只清 hostname，不清统计诊断 key。
 - namespace 不存在时出厂重置返回成功，不创建空 namespace。
 - `factoryReset()` 不误删业务 namespace，不格式化 LittleFS，不删除 FileLog 日志文件内容。
 - `factoryReset()` 只把NVS namespace确实不存在视为无需清理；namespace打开失败或清除失败必须返回false。
-- `factoryReset()`成功后完整出厂重置流程必须重启设备；条件状态存在NVS待保存失败时，不得用App Events `reload()`替代重启。
 - `clearLibraryNamespaces()` 与 `factoryReset()` 行为一致。
 - `enableConfigAudit(true)` / `enableConfigReadAudit(true)` 在 `Esp32Base::begin()` 前开启时能覆盖基础库初始化配置读写。
 - 未配置 `ESP32BASE_DEFAULT_HOSTNAME` 时默认 hostname 为 `esp32base`。
@@ -199,7 +197,6 @@
 - FileLog OFF 后 System Logs 页面仍能查看已有历史 segment。
 - `GET /esp32base/logs` 和 `GET /esp32base/logs/raw` 必须只读，不得主动 `flush()`、创建、清空、重建或改变 FileLog fault 状态；需要写入/清理/格式化的维护动作必须走 POST。
 - System 页格式化 LittleFS 成功后必须触发 after-format 回调/事件，结果应说明格式化、重新挂载和 FileLog reload 状态；格式化失败不得触发。
-- System 页格式化 LittleFS 成功并重新 mount 后，启用 App Events 时必须重新创建 `/esp32base/records/app-events.v2/`，并逐个reload已登记的当前业务Store；条件活动状态保留在NVS，后续append/read不得沿用格式化前的运行态，任一恢复失败不得提示整体成功。
 - `setSerialLevel(NONE)` 后 Serial 不输出，但 FileLog 仍按当前模式写入。
 - `setRuntimeLevel(NONE)` 后 Serial 和 FileLog 都停止。
 - WARN/ERROR 立即写入。
@@ -234,11 +231,9 @@
 - RecordStore启动扫描和reload必须按段批量遍历槽位，最新分页必须按段倒序批量读取；不得按记录反复打开文件，千条容量的Store不能造成数十秒启动延迟。
 - `readLatest()`、`readById()`、`readStatus()`不得从只读路径隐式创建或重写Store。
 - `clear()`通过双控制头提交逻辑可见边界，再尽力删除旧段；清空后保留递增ID并可继续写入，它不是安全擦除。
-- Web登记当前业务Store后，System页必须显示各Store路径、状态和记录数，并通过独立红色 `Clear Business Records` 危险操作统一清空；App Events和未登记历史版本不得进入该列表。
+- Storage登记当前业务Store后，System页必须显示各Store路径、状态和记录数，并通过独立红色 `Clear Business Records` 危险操作统一清空；未登记历史版本不得进入该列表。
 - Business Records清空必须先全量预检：任一Store未初始化或结构故障时零修改；执行中失败时停止并报告已清空数。成功后原Store对象记录数为0、ID继续递增且可继续append/read；cleanup失败时旧记录保持不可见并报告degraded。
-- App Events默认100KiB、单条48字节、估算容量2113条、实际按段保留约2029～2113条，并在业务Store之前创建。
 - `/esp32base/records/**`在FS管理页可查看和下载，但禁止上传覆盖和直接删除。
-- App Events HTML/API/CSV只输出有效语义字段和状态，不输出损坏槽位或内部CRC布局；HTML页面必须保持结构清楚的状态摘要、筛选、最新优先分页列表，以及每条记录可打开并覆盖全部公开字段的详情视图。
 - `/esp32base/fs?manage=1` 对 `unreadable` 文件仍必须提供单文件删除入口，但不能提供下载入口。
 - 单文件删除失败后应尝试截断为 0；如果因此释放可见文件占用，页面应区分“已清空”和“彻底失败”。
 - 清理文件后如果 FileLog 处于写入故障保护，应重新加载当前 FileLog 模式以便恢复写入。
@@ -282,11 +277,8 @@
 - `POST /esp32base/system/business-records-clear` 必须需要 Basic Auth、POST 和同源检查；GET不得清空，业务页面不应再提供平行的业务记录清空入口。
 - Tools 维护页可保存 hostname，显示当前值、默认值、已保存值和重启需求；保存后不热切换当前运行时 hostname。
 - 启用 `ESP32BASE_ENABLE_APP_CONFIG` 后，System 页显示 App Config 入口，`/esp32base/app-config` 可按 group 展示业务参数。
-- 启用 `ESP32BASE_ENABLE_APP_EVENTS` 后，系统导航显示 App Events 入口，`/esp32base/app-events`、`/esp32base/api/app-events`、`/esp32base/app-events.csv` 可用；内置页面的状态、筛选、分页列表和逐条详情在桌面及窄屏下均不得挤压、重叠或丢失字段。
-- App Events默认启用条件跟踪；持续观察、瞬时失败、确认生效、恢复、再次发生、多条件隔离、相同离散事件、`millis()`回绕、跨重启、NVS失败、Event Store失败、清空/格式化/reload、忘记活动/非活动/全部状态及替换tracker均有原生测试。NVS同值写必须跳过，错误类型不得被同值判断掩盖。显式关闭 `ESP32BASE_ENABLE_APP_EVENT_CONDITIONS` 后仍能编译离散事件，且不得保留条件NVS和Web状态符号。
-- `POST /esp32base/system/app-events-clear` 必须需要 Basic Auth、POST 和同源检查；GET 不得清空，App Events 页面不得保留清空入口。清空只删除事件历史，必须保留NVS条件活动状态并在页面明确提示。
 - 业务 `METHOD_ANY` 危险 handler 调用 `Esp32BaseWeb::checkPostAllowed(context)` 时，GET 必须返回 405 且不执行副作用。
-- `/esp32base/logs` 不包含 App Events，仍只展示 FileLog 系统日志。
+- `/esp32base/logs`只展示FileLog系统日志，不读取业务Store。
 - App Config 注册校验覆盖非法 namespace、重复 `ns/key`、非法长度/范围/step/decimal scale/enum option 和超容量。
 - App Config POST 必须服务端重新校验；字段级 validator 和页面级 validator 失败时零写入、零 change 回调。
 - App Config 保存前 veto 必须使用页面级 validator；回调可读取全部提交值，拒绝时不得写入任何 App Config NVS 字段，也不得触发 save callback。
@@ -317,7 +309,6 @@
 - `examples/web_logs_ota`可通过仓库根目录的Core 2 wrapper构建。
 - `examples/net_runtime`可通过仓库根目录的Core 2 wrapper构建。
 - `examples/mqtt_tls` 可在自身目录完成三芯片和代表性 Core 3.x 构建，并展示重连后重发当前状态。
-- `examples/app_events_demo`可通过仓库根目录的Core 2 wrapper构建，并演示App Events写入、分页查看、JSON/CSV和POST写入。
 - `examples/record_store_demo` 至少完成 ESP32 / ESP32-S3 / ESP32-C3 和 Arduino Core 3.x 构建，并演示固定payload编码、动作开始快照、完成记录和最新优先读取。
 - `examples/rtc_time_source` 可在自身目录分别构建 DS3231 和 PCF8563 env，并清楚演示构建期二选一、I2C 初始化所有权和业务使用 `Esp32BaseTime` 的接入方式。
 - 所有启用 FS 的示例不应通过构建参数覆盖系统诊断日志默认模式；默认保持 ERROR，现场排查时再显式切到 WARN/INFO。
@@ -336,3 +327,13 @@
 - 路由器掉电恢复。
 - 周期读取 System Logs 页面。
 - 无意外重启、卡死、heap 持续退化或重连失败。
+
+## 存储协调与Conditions
+
+- 所有LittleFS调用必须经 `Esp32BaseFs` 串行化；FileLog不得直接调用 `LittleFS.open()`。
+- 最多8个Store，重复路径、合计预算超过512 KiB、FileLog + Store + 安全余量超过分区时必须拒绝。
+- Web上传/删除不得进入 `/esp32base/**`、FileLog轮转文件或已登记Store路径；上传容量不得侵占Store剩余配额和安全余量。
+- 格式化必须在独占维护区间完成flush、format、mount、FileLog恢复和全部已登记Store reload；任一层失败不得提示整体成功。
+- OTA开始前必须flush FileLog并暂停FS写入，成功、失败和中止路径都必须恢复。
+- Conditions必须覆盖激活/恢复确认、Unknown取消、millis回绕、重启恢复、重复ID、NVS读写失败及forget；它不得隐式建立LittleFS历史。
+- RecordStore必须覆盖多Store登记、预算边界、受管路径、统一清空、格式化恢复、尾部损坏和常见64/128/256/384/512 KiB分段。

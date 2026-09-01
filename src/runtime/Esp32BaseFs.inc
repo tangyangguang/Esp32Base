@@ -15,10 +15,79 @@ extern "C" {
 #include <string.h>
 #include <time.h>
 
+#if defined(ARDUINO_ARCH_ESP32)
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+#include <freertos/task.h>
+#endif
+
 namespace {
 bool g_fsReady = false;
+bool g_fsWritesSuspended = false;
+uint16_t g_fsOperationDepth = 0;
+uint16_t g_fsMaintenanceDepth = 0;
 constexpr size_t kFsIoChunkSize = 512;
 constexpr size_t kFsServiceEveryBytes = 4096;
+
+#if defined(ARDUINO_ARCH_ESP32)
+StaticSemaphore_t g_fsMutexStorage;
+SemaphoreHandle_t g_fsMutex = nullptr;
+
+bool ensureFsMutex() {
+    if (g_fsMutex) {
+        return true;
+    }
+    g_fsMutex = xSemaphoreCreateRecursiveMutexStatic(&g_fsMutexStorage);
+    return g_fsMutex != nullptr;
+}
+
+bool takeFsMutex() {
+    return ensureFsMutex() && xSemaphoreTakeRecursive(g_fsMutex, portMAX_DELAY) == pdTRUE;
+}
+
+void giveFsMutex() {
+    if (g_fsMutex) {
+        xSemaphoreGiveRecursive(g_fsMutex);
+    }
+}
+#else
+bool ensureFsMutex() { return true; }
+bool takeFsMutex() { return true; }
+void giveFsMutex() {}
+#endif
+
+class FsOperationScope {
+public:
+    explicit FsOperationScope(bool write) : acquired_(takeFsMutex()) {
+        if (!acquired_) {
+            return;
+        }
+        if (write && g_fsWritesSuspended && g_fsMaintenanceDepth == 0) {
+            giveFsMutex();
+            acquired_ = false;
+            return;
+        }
+        ++g_fsOperationDepth;
+    }
+
+    ~FsOperationScope() {
+        if (!acquired_) {
+            return;
+        }
+        if (g_fsOperationDepth > 0) {
+            --g_fsOperationDepth;
+        }
+        giveFsMutex();
+    }
+
+    explicit operator bool() const { return acquired_; }
+
+    FsOperationScope(const FsOperationScope&) = delete;
+    FsOperationScope& operator=(const FsOperationScope&) = delete;
+
+private:
+    bool acquired_;
+};
 
 bool validPath(const char* path) {
     return path && path[0] == '/';
@@ -166,7 +235,8 @@ void flushOpenFile(File& file) {
 }
 
 bool writeMode(const char* path, const uint8_t* data, size_t len, const char* mode) {
-    if (!g_fsReady || !validPath(path) || (!data && len > 0)) {
+    FsOperationScope operation(true);
+    if (!operation || !g_fsReady || !validPath(path) || (!data && len > 0)) {
         return false;
     }
     Esp32BaseLongOperation::LongOperationScope scope;
@@ -208,7 +278,50 @@ void listDirAdapterCallback(const Esp32BaseFs::EntryInfo& entry, void* user) {
 }
 }
 
+bool esp32base_internal::fsBeginExclusiveMaintenance() {
+    if (!takeFsMutex()) {
+        return false;
+    }
+    ++g_fsMaintenanceDepth;
+    return true;
+}
+
+void esp32base_internal::fsEndExclusiveMaintenance() {
+    if (g_fsMaintenanceDepth == 0) {
+        return;
+    }
+    --g_fsMaintenanceDepth;
+    giveFsMutex();
+}
+
+bool esp32base_internal::fsSetWritesSuspended(bool suspended) {
+    if (!takeFsMutex()) {
+        return false;
+    }
+    g_fsWritesSuspended = suspended;
+    giveFsMutex();
+    return true;
+}
+
+bool esp32base_internal::fsWritesSuspended() {
+    FsOperationScope scope(false);
+    return scope ? g_fsWritesSuspended : true;
+}
+
+bool esp32base_internal::fsCurrentTaskInOperation() {
+#if defined(ARDUINO_ARCH_ESP32)
+    if (!g_fsMutex || xSemaphoreGetMutexHolder(g_fsMutex) != xTaskGetCurrentTaskHandle()) {
+        return false;
+    }
+#endif
+    return g_fsOperationDepth != 0;
+}
+
 bool Esp32BaseFs::begin() {
+    FsOperationScope operation(true);
+    if (!operation || !ensureFsMutex()) {
+        return false;
+    }
     g_fsReady = LittleFS.begin(false);
     if (!g_fsReady) {
         ESP32BASE_LOG_W("fs", "LittleFS mount failed");
@@ -223,10 +336,15 @@ bool Esp32BaseFs::begin() {
 }
 
 bool Esp32BaseFs::isReady() {
-    return g_fsReady;
+    FsOperationScope operation(false);
+    return operation && g_fsReady;
 }
 
 bool Esp32BaseFs::format() {
+    FsOperationScope operation(true);
+    if (!operation) {
+        return false;
+    }
     Esp32BaseLongOperation::LongOperationScope scope;
     Esp32BaseLongOperation::service();
     LittleFS.end();
@@ -260,10 +378,11 @@ bool Esp32BaseFs::writeBytes(const char* path, const uint8_t* data, size_t len) 
 }
 
 bool Esp32BaseFs::readBytes(const char* path, uint8_t* out, size_t maxLen, size_t* readLen) {
+    FsOperationScope operation(false);
     if (readLen) {
         *readLen = 0;
     }
-    if (!g_fsReady || !validPath(path) || !out) {
+    if (!operation || !g_fsReady || !validPath(path) || !out) {
         return false;
     }
     Esp32BaseLongOperation::LongOperationScope scope;
@@ -281,7 +400,8 @@ bool Esp32BaseFs::appendBytes(const char* path, const uint8_t* data, size_t len)
 }
 
 bool Esp32BaseFs::createFixedFile(const char* path, uint32_t size, uint8_t fillByte) {
-    if (!g_fsReady || !validPath(path)) {
+    FsOperationScope operation(true);
+    if (!operation || !g_fsReady || !validPath(path)) {
         return false;
     }
 
@@ -331,10 +451,11 @@ bool Esp32BaseFs::createFixedFile(const char* path, uint32_t size, uint8_t fillB
 }
 
 bool Esp32BaseFs::readBytesAt(const char* path, uint32_t offset, uint8_t* out, size_t maxLen, size_t* readLen) {
+    FsOperationScope operation(false);
     if (readLen) {
         *readLen = 0;
     }
-    if (!g_fsReady || !validPath(path) || !out) {
+    if (!operation || !g_fsReady || !validPath(path) || !out) {
         return false;
     }
     Esp32BaseLongOperation::LongOperationScope scope;
@@ -353,7 +474,8 @@ bool Esp32BaseFs::readBytesAt(const char* path, uint32_t offset, uint8_t* out, s
 }
 
 bool Esp32BaseFs::writeBytesAt(const char* path, uint32_t offset, const uint8_t* data, size_t len) {
-    if (!g_fsReady || !validPath(path) || (!data && len > 0)) {
+    FsOperationScope operation(true);
+    if (!operation || !g_fsReady || !validPath(path) || (!data && len > 0)) {
         return false;
     }
     Esp32BaseLongOperation::LongOperationScope scope;
@@ -384,7 +506,8 @@ bool esp32base_internal::fsWriteSegmentsAt(const char* path,
                                            uint32_t offset,
                                            const FsWriteSegment* segments,
                                            size_t segmentCount) {
-    if (!g_fsReady || !validPath(path) || (!segments && segmentCount > 0)) {
+    FsOperationScope operation(true);
+    if (!operation || !g_fsReady || !validPath(path) || (!segments && segmentCount > 0)) {
         return false;
     }
     uint64_t total = 0;
@@ -428,7 +551,8 @@ bool writeSegmentSequence(const char* path,
                           size_t segmentCount,
                           const char* mode,
                           bool requireMissing) {
-    if (!g_fsReady || !validPath(path) || (!segments && segmentCount > 0) ||
+    FsOperationScope operation(true);
+    if (!operation || !g_fsReady || !validPath(path) || (!segments && segmentCount > 0) ||
         (requireMissing && LittleFS.exists(path))) {
         return false;
     }
@@ -482,7 +606,8 @@ bool esp32base_internal::fsVisitBytesAt(const char* path,
                                         uint32_t length,
                                         FsReadVisitor visitor,
                                         void* user) {
-    if (!g_fsReady || !validPath(path) || !visitor) {
+    FsOperationScope operation(false);
+    if (!operation || !g_fsReady || !validPath(path) || !visitor) {
         return false;
     }
     Esp32BaseLongOperation::LongOperationScope scope;
@@ -522,7 +647,8 @@ bool esp32base_internal::fsVisitFixedSlots(const char* path,
                                            bool descending,
                                            FsFixedSlotVisitor visitor,
                                            void* user) {
-    if (!g_fsReady || !validPath(path) || slotSize == 0 || capacity == 0 ||
+    FsOperationScope operation(false);
+    if (!operation || !g_fsReady || !validPath(path) || slotSize == 0 || capacity == 0 ||
         firstSlot >= capacity || slotCount > capacity || !visitor) {
         return false;
     }
@@ -574,7 +700,8 @@ bool esp32base_internal::fsVisitFixedSlots(const char* path,
 }
 
 Esp32BaseFs::RemoveFileResult Esp32BaseFs::removeFileWithRecovery(const char* path) {
-    if (!g_fsReady || !validPath(path) || !LittleFS.exists(path)) {
+    FsOperationScope operation(true);
+    if (!operation || !g_fsReady || !validPath(path) || !LittleFS.exists(path)) {
         return REMOVE_FILE_FAILED;
     }
     Esp32BaseLongOperation::LongOperationScope scope;
@@ -606,7 +733,8 @@ bool Esp32BaseFs::removeFile(const char* path) {
 }
 
 bool Esp32BaseFs::rename(const char* from, const char* to) {
-    if (!g_fsReady || !validPath(from) || !validPath(to)) {
+    FsOperationScope operation(true);
+    if (!operation || !g_fsReady || !validPath(from) || !validPath(to)) {
         return false;
     }
     Esp32BaseLongOperation::LongOperationScope scope;
@@ -617,11 +745,13 @@ bool Esp32BaseFs::rename(const char* from, const char* to) {
 }
 
 bool Esp32BaseFs::exists(const char* path) {
-    return g_fsReady && validPath(path) && LittleFS.exists(path);
+    FsOperationScope operation(false);
+    return operation && g_fsReady && validPath(path) && LittleFS.exists(path);
 }
 
 int64_t Esp32BaseFs::fileSize(const char* path) {
-    if (!g_fsReady || !validPath(path)) {
+    FsOperationScope operation(false);
+    if (!operation || !g_fsReady || !validPath(path)) {
         return -1;
     }
     Esp32BaseLongOperation::LongOperationScope scope;
@@ -640,7 +770,8 @@ bool Esp32BaseFs::listDir(const char* path, ListCallback cb, void* user) {
 }
 
 bool Esp32BaseFs::listDirInfo(const char* path, ListInfoCallback cb, void* user) {
-    if (!g_fsReady || !validPath(path) || !cb) {
+    FsOperationScope operation(false);
+    if (!operation || !g_fsReady || !validPath(path) || !cb) {
         return false;
     }
     Esp32BaseLongOperation::LongOperationScope scope;
@@ -671,7 +802,8 @@ bool Esp32BaseFs::listDirInfo(const char* path, ListInfoCallback cb, void* user)
 }
 
 bool Esp32BaseFs::mkdir(const char* path) {
-    if (!g_fsReady || !validPath(path)) {
+    FsOperationScope operation(true);
+    if (!operation || !g_fsReady || !validPath(path)) {
         return false;
     }
     Esp32BaseLongOperation::LongOperationScope scope;
@@ -682,7 +814,8 @@ bool Esp32BaseFs::mkdir(const char* path) {
 }
 
 bool Esp32BaseFs::rmdir(const char* path) {
-    if (!g_fsReady || !validPath(path)) {
+    FsOperationScope operation(true);
+    if (!operation || !g_fsReady || !validPath(path)) {
         return false;
     }
     Esp32BaseLongOperation::LongOperationScope scope;
@@ -714,9 +847,10 @@ size_t Esp32BaseFs::freeBytes() {
 }
 
 bool Esp32BaseFs::storageInfo(size_t& total, size_t& used) {
+    FsOperationScope operation(false);
     total = 0;
     used = 0;
-    if (!g_fsReady) {
+    if (!operation || !g_fsReady) {
         return false;
     }
     return esp_littlefs_info("spiffs", &total, &used) == ESP_OK;

@@ -1,237 +1,121 @@
-# Record Store 设计、接入与实机基准
+# Record Store 与统一存储协调
 
-本文是 `Esp32BaseRecordStore` 和 `Esp32BaseAppEvents` 的存储契约、容量规划依据与实机性能基线。API 签名见 [API 契约](03_api.md)，已知限制见 [已知限制](10_known_limitations.md)。
+本文定义 `Esp32BaseStorage`、`Esp32BaseRecordStore` 和 `Esp32BaseConditions` 的职责、容量与接入规则。API签名见 [API契约](03_api.md)，已知限制见 [已知限制](10_known_limitations.md)。
 
-## 1. 能力边界
+## 1. 分层
 
-Record Store 是固定长度、仅追加、按段淘汰的业务历史容器，不是数据库。基础库负责：
+持久化分为三层：
 
-- 32 位单 Store 自增 ID，从 1 开始；淘汰和清空不复用 ID，到 `UINT32_MAX` 停止写入。
-- 动作完成时间、boot ID、完成 uptime、持续时长和 CRC32。
-- 同一 Store 内固定长度记录的可靠追加、损坏识别、断电尾部恢复、最新优先分页和按 ID 读取。
-- 在业务给定的逻辑字节预算内按完整段淘汰最早记录。
-- 状态、容量、记录数、损坏数、空间使用、故障和错误原因。
-- 取得用户明确确认后的逻辑清空原语。
+1. `Esp32BaseStorage`：协调LittleFS访问、容量、受管路径、格式化恢复和OTA写暂停；不理解业务Schema。
+2. 多个独立 `Esp32BaseRecordStore`：每种主要业务事实一个固定payload Store；互不混存、互不建立全局索引。
+3. `Esp32BaseConditions`：用NVS位图保存最多32个持续异常的当前活动状态；不保存历史。
 
-业务项目负责：
+`Esp32BaseFileLog` 仍是独立技术日志引擎。它不进入业务Store、不作为业务记录上传，也不由Conditions替代。
 
-- 字段、定宽小端编码、解码、业务校验、版本含义、代码到文字的映射。
-- 列表、详情、筛选，以及确有需要时的业务CSV导出。
-- 根据分区和保留需求一次性确定每个 Store 的 `maximumStoreBytes`。
-- 串行调用同一Store；通常把实时任务产生的记录投递给loop/system task保存。
-- 启用Web时登记当前Store，由基础库System页统一提供清空确认和执行入口。
+## 2. RecordStore 数据模型
 
-一个 Store 只接受一种固定 payload 长度。浇水记录和喂食记录的字段或长度不同，就创建两个独立实例，各有自己的类型名、版本、预算、ID 序列和目录。六个区域的浇水详情应在 payload 中按区域 1 到区域 6 的固定位置连续编码；未启用区域写约定的空值，不需要嵌套对象格式、字段名或可变长度编码。
+应用定义：
 
-不要直接持久化含指针、`String`、编译器 padding 或平台相关布局的 C++ 对象。紧凑并不等于依赖内存布局，而是显式规定每个字节偏移和整数宽度。
+- `recordTypeName`：稳定的小写ASCII类型名；
+- `storeVersion`：当前格式版本；
+- `payloadSizeBytes`：固定业务payload长度；
+- `maximumStoreBytes`：该Store的逻辑预算；
+- 可选 `minimumFileSystemFreeBytes`。
 
-## 2. 为什么采用 FCB 式分段
+每条记录由20字节公共元数据、固定payload和4字节CRC32组成，因此槽位大小为 `payloadSizeBytes + 24`。公共元数据保存32位记录ID、完成时间、boot ID、uptime和持续时间。应用不得直接保存含指针、`String`、编译器padding或平台相关布局的对象。
 
-早期单个定长大文件的固定槽覆盖虽然简单，但 LittleFS 对大文件执行同步覆盖和 flush 时，经典 ESP32 的 100 KiB 文件实测约需 1.1 秒；预算扩展到 500 KiB 或 1 MiB 后，延迟和扫描抖动也会随单文件放大。
-
-最终方案采用与 [Zephyr FCB](https://docs.zephyrproject.org/latest/services/storage/fcb/fcb.html) 和 [Apache Mynewt FCB](https://mynewt.apache.org/latest/os/modules/fcb/fcb.html) 相同的核心原则：顺序追加、完整段轮换、只擦除/删除最老段。没有直接引入这两个库，因为它们面向原始 flash area/sector 和各自 RTOS API，不能直接作为 Arduino LittleFS 的可裁剪依赖；Esp32Base 复用的是成熟数据组织方法，而不是复制其平台层。
-
-相比单文件环形覆盖，分段方案带来：
-
-- 普通追加只增长当前小段，不随总预算扩大而重写或同步一个大文件。
-- 达到预算时删除最老完整段，文件不搬移，淘汰成本有界。
-- 断电留下的不完整尾部会封存；候选 ID 保留为空洞，新记录从新段继续，不把残缺数据当成有效记录。
-- 启动只扫描有限数量的小段；预算扩大时由段大小自适应，目标不超过 33 段。
-
-代价是淘汰粒度从单条变成一段。基础库选择较小且有界的段，避免为保留最后几条记录引入索引、事务、垃圾整理或后台 compaction。
-
-## 3. 目录与磁盘格式
-
-每个类型和版本使用独立目录：
+每个版本目录为：
 
 ```text
 /esp32base/records/<record-type>.v<store-version>/
-  control.bin
-  00000001.seg
-  00000056.seg
 ```
 
-`control.bin` 固定 128 字节，包含两个带 CRC 的 64 字节控制头。它保存定义、逻辑可见起点、下一 ID 提示和提交序号；普通追加不更新控制头，逻辑清空时只提交另一个副本，然后尽力删除旧段。
+控制文件使用128字节双头；段头32字节。记录顺序追加，重要记录在API返回成功前完成flush/close和写后验证。断电留下的尾部不完整槽位不会返回，其ID也不会重用。
 
-每个段有 32 字节带 CRC 的段头，文件名是该段首个记录 ID 的 8 位小写十六进制。创建新段时先写 `.tmp`、flush、读回验证，再原子重命名为 `.seg`。启动删除遗留 `.tmp`，但不会把它当成有效记录。
+## 3. 分段和轮转
 
-每条记录的公共开销固定 24 字节：
+Store按预算和槽位大小从8、16、32、64 KiB级别中选择段上限，使常见32～512 KiB预算通常维持不超过16个完整/尾段文件；很小的测试预算仍使用最小可容纳段。段文件只追加；容量满时删除最老完整段，不逐条搬移、不后台compaction、不因ACK改写记录。
 
-| 偏移 | 字段 | 字节 | 责任 |
-| ---: | --- | ---: | --- |
-| 0 | `recordId` | 4 | 基础库自增 ID |
-| 4 | `completedEpochSec` | 4 | 有可信时间时的完成 epoch，否则 0 |
-| 8 | `completedBootId` | 4 | 完成时 boot ID |
-| 12 | `completedUptimeSec` | 4 | 完成时 uptime |
-| 16 | `durationSec` | 4 | 动作持续时间；瞬时记录为 0 |
-| 20 | payload | N | 业务固定长度、不透明内容 |
-| 20 + N | CRC32 | 4 | 覆盖公共元数据和 payload |
+常见规划结果：
 
-因此 `slotSizeBytes = payloadSizeBytes + 24`。业务不应在 payload 中再重复保存基础库 ID、完成时间或 CRC。
+| Store预算 | 常见段上限 | 说明 |
+| --- | ---: | --- |
+| 64 KiB | 约8 KiB | 小型审计或低频事实 |
+| 128 KiB | 约16 KiB | Small档单个子Store |
+| 256 KiB | 约32 KiB | Small档全部业务预算 |
+| 384 KiB | 约32 KiB | 大型主Store，通常约13段 |
+| 512 KiB | 约64 KiB | Large档单Store，通常约9段 |
 
-## 4. 时间语义
+具体容量必须读取 `StoreStatus.capacity`，不能只用预算除以槽位；控制文件、段头和最后尾段会影响结果。例：728字节业务payload对应752字节槽位，384 KiB预算至少可容纳约516条，512 KiB预算至少约688条。
 
-瞬时事实使用 `appendInstant()`。有过程的动作在真正开始时调用 `captureStartTime()`，正常或异常结束、结果已经确定后调用 `appendCompleted()`。例如计划 08:00 开门、08:00:30 完成，应保存实际完成快照和 30 秒持续时长；计划时间只有在业务确实需要对比计划与实际时才进入 payload。
+## 4. 整机容量
 
-动作过程中断电且尚未调用 `appendCompleted()`，不会伪造一条“已完成”记录。需要恢复“进行中”状态的项目应另行保存最小运行状态，这不是历史记录事务。
-
-## 5. 容量与段大小
-
-`maximumStoreBytes` 是该 Store 的最大逻辑占用预算，不是预分配文件大小。当前占用包括 128 字节控制文件、各段的 32 字节段头和记录槽。初始化日志和 `StoreStatus` 会报告最大预算、估算容量、当前占用、段数和所选段上限。
-
-基础库根据预算自动选择 4/8/16/32/64… KiB 对应的 LittleFS CTZ 有效文件上限，使预计段数不超过 33。有效上限不是整 KiB 边界：
-
-| 目标 flash 块数 | 名义大小 | CTZ 有效文件上限 |
-| ---: | ---: | ---: |
-| 1 | 4 KiB | 4096 B |
-| 2 | 8 KiB | 8188 B |
-| 4 | 16 KiB | 16368 B |
-| 6（仅实验） | 24 KiB | 24544 B |
-| 8 | 32 KiB | 32724 B |
-| 16 | 64 KiB | 65432 B |
-
-这是因为 LittleFS 的 CTZ skip-list 会在文件数据中占用指针字节。若把文件上限直接设成 8192、16384 等整边界，最后几个字节会触发额外 4 KiB 物理块，明显浪费空间。实现使用 CTZ 有效上限，避免该边界。
-
-业务规划步骤：先设计最紧凑的固定 payload，再用 `payload + 24` 得到单条槽位，按希望保留的记录数估算数据量，加上每段 32 字节和控制文件 128 字节，最后结合 FileLog、App Events、其他业务 Store、OTA 后临时需求和 LittleFS 安全余量确定预算。它是设计阶段的人为决策，不是运行时“按条数申请”的 API。
-
-### 5.1 Web项目的最小接入
-
-希望使用基础库System页统一管理业务记录时，每个当前版本Store只需要完成初始化和登记：
-
-- 构建时启用 `ESP32BASE_ENABLE_RECORD_STORE=1` 和Web能力。
-- 无Web的项目不调用登记API；它仍可使用RecordStore，但调用 `clear()` 前要由自己的维护流程取得用户明确确认。
-- App Events由基础库单独管理，历史版本不登记。
+默认：
 
 ```cpp
-Esp32BaseRecordStore wateringRecords;  // 全局、static或应用长期成员均可
-
-void beginWateringRecords() {
-    const bool ready = wateringRecords.begin(wateringRecordDefinition);
-    const bool registered =
-        Esp32BaseWeb::registerBusinessRecordStore(wateringRecords);
-
-    if (!ready) {
-        ESP32BASE_LOG_E("watering", "record_store_begin_failed error=%s",
-                        wateringRecords.lastErrorReason());
-    }
-    if (!registered) {
-        ESP32BASE_LOG_E("watering", "record_store_web_registration_failed");
-    }
-}
+#define ESP32BASE_RECORD_STORE_TOTAL_MAX_BYTES (512UL * 1024UL)
+#define ESP32BASE_FS_MINIMUM_SAFETY_RESERVE_BYTES (128UL * 1024UL)
 ```
 
-调用顺序只有三个要求：先成功初始化 `Esp32Base`，再调用Store的 `begin()`，最后登记该Store。首次启动流程登记一次即可；同一对象重复登记不会增加条目。登记保存的是对象指针且当前没有反登记API，所以对象在登记后必须持续有效到设备重启，但不要求一定写成全局变量。
+`Esp32BaseStorage` 校验：
 
-有多种业务记录时分别初始化和登记，例如浇水记录、喂食记录各使用一个Store；它们可以具有不同payload长度、版本和预算。System页会把所有已登记的当前Store列在同一个危险操作框中，最多登记8个。
+- 最多登记8个Store；
+- 所有已登记Store的 `maximumStoreBytes` 合计不超过512 KiB；
+- FileLog预算 + Store合计预算 + `max(128 KiB, LittleFS总量/4)` 不超过分区；
+- 非受管文件可写容量要再扣除各Store尚未使用的保留预算。
 
-接入规则一览：
+推荐产品档位：
 
-| 事项 | 实际要求 |
-| --- | --- |
-| Store对象 | 登记成功后持续有效到设备重启；可以是全局、static或应用长期成员 |
-| 调用任务 | 不限定具体任务，但同一Store的操作不能并发；推荐集中到loop/system task |
-| 登记次数 | 首次 `begin()` 后一次即可；重复登记同一对象幂等 |
-| 多种记录 | 每种固定payload使用独立Store，分别设置版本和预算并逐个登记 |
-| 清空入口 | Web项目使用System页统一入口，不再由业务重复实现 |
-| FS格式化 | 基础库自动reload已登记Store；业务只同步自己的派生状态 |
-| App Events和历史版本 | 不登记；它们不属于当前业务Store统一清空范围 |
-| 下载或CSV | 基础库不提供；仅在产品确有需求时由业务按自身字段实现 |
+- Small：所有业务Store合计256 KiB；例如两个128 KiB Store。
+- Large：所有业务Store合计512 KiB；例如384 KiB主记录 + 128 KiB紧凑审计，或单个512 KiB主Store。
 
-System页只管理已登记对象：显示状态和记录数，统一提供 `Clear Business Records`，并在System页格式化LittleFS后自动 `reload()`。因此业务页面不再建立平行的清空按钮或路由，也不需要在after-format回调里再次初始化Store；回调只用于同步业务自己的统计、缓存或派生索引。
+对896 KiB LittleFS，典型规划是FileLog 128 KiB、业务Store最多512 KiB，其余约256 KiB用于安全余量、元数据和临时维护。容量不是运行时动态数据库配额；应用应在设计阶段确定少量固定Store。
 
-只登记当前实际使用的版本。基础库不扫描目录，所以不会把App Events或未登记历史版本误纳入。基础库也不提供业务记录CSV或通用下载，因为它不理解不透明payload的字段、单位和版本语义；业务确实需要可读导出时自行实现。
+## 5. 登记与生命周期
 
-统一清空先预检全部已登记Store。任一Store未初始化或结构故障时不修改任何Store；执行过程中发生I/O失败时停止后续清空并报告部分完成。不同Store是独立文件，基础库不为这项维护操作增加跨文件事务。成功清空沿用 `clear()` 的控制头提交语义，原对象立即反映0条记录并保留递增ID，可继续追加，不需要重新 `begin()`。删除旧段失败时历史记录仍不可见，但状态会保留 `CleanupFailed/Degraded` 供System页和业务诊断。
+```cpp
+Esp32BaseRecordStore wateringStore;
+Esp32BaseRecordStore::StoreDefinition definition;
+definition.recordTypeName = "watering";
+definition.storeVersion = 1;
+definition.payloadSizeBytes = sizeof(WateringPayloadV1);
+definition.maximumStoreBytes = 384UL * 1024UL;
 
-App Events 默认先创建，预算固定为 `ESP32BASE_APP_EVENT_STORE_MAX_BYTES = 100 KiB`，不提供单独的最小剩余空间宏。业务应在它之后规划其他 Store。100 KiB 预算、24 字节事件 payload、48 字节槽位时，估算容量为 2113 条；实际保留量会在 2029～2113 条之间波动，因为轮换时淘汰一个约 4 KiB 的完整最老段。
+const bool ready = wateringStore.begin(definition);
+const bool registered = Esp32BaseStorage::registerRecordStore(wateringStore);
+```
 
-App Events v2仍使用24字节payload和48字节槽位，只把末尾4字节定义为 `flags/level/eventKind/conditionId` 四个1字节字段。条件观察不改写现有记录：确认生效或恢复时各追加一条普通v2记录，再把全部活动条件保存为 `eb_app_events.active_id_bits` 一个 `uint32_t` NVS整数。状态不变、未知观察和确认等待不写任何持久存储；NVS整数不是Blob，只占一个NVS entry且不随条件数量扩大。位图位置本身就是持久格式，因此保留该NVS namespace的固件升级必须保持conditionId含义稳定，改变映射前应由应用执行明确的状态清理或迁移。
+登记对象必须持续有效到重启。重复登记同一对象幂等；重复路径、无效Store、超过数量或预算都会拒绝。只登记当前版本；协调层不扫描目录、不自动处理历史版本。
 
-## 6. 失败与恢复
+统一清空先预检所有Store。预检失败时零修改；执行中I/O失败时停止并返回已完成数量。多个Store之间不提供事务原子性。逻辑清空提交新的可见边界并保持ID继续递增，不保证物理安全擦除。
 
-- 单条 CRC、预期 ID 或时间元数据不合法：该记录计入损坏数且不返回，Store 为 `Degraded`，其他记录仍可读写。
-- 尾部不足一条：把候选 ID 作为损坏空洞，封存该段并从下一 ID 新建段。
-- 段头损坏：整段不返回，按文件可见范围保留 ID，Store 为 `Degraded`；后续从新段继续。
-- 段范围重叠、控制双头都无效、目录出现未知成员或定义不匹配：`StructuralFault`，不猜测、不覆盖。
-- append/flush/读回验证失败：`WriteFault`；已有完整记录仍可读，排除原因后显式 `reload()`。
-- 淘汰删除失败：停止需要空间的新写入并报告 `CleanupFailed`，不改写其他文件。
-- 清空：先用双控制头提交新的可见 ID 边界，再删除旧段。即使删除失败，旧记录也不会重新可见；它不是安全擦除。
+格式化通过 `Esp32BaseStorage::formatAndReload()` 在独占维护区间完成：flush FileLog、format、mount、FileLog begin、逐个Store reload。Web System页使用同一流程；应用的after-format回调只负责自己的派生缓存或非受管文件。
 
-Record Store只操作自己的版本目录，不删除或改写FileLog、其他Record Store、App Events、业务配置或NVS。业务应检查可能影响后续处理的返回值；启动、保存或读取失败时再读取 `StoreStatus` 和错误原因用于诊断。存储失败表示历史记录没有可靠提交，不应被自动解释成浇水、开关门或喂食动作本身失败，反过来也一样。
+## 6. 路径所有权与并发
 
-## 7. 经典 ESP32 实机基准（2026-07-14）
+`/esp32base/**` 是基础库受管根。Web文件管理不得上传、覆盖或删除它，也不得修改FileLog轮转文件或已登记Store路径。普通业务文件应位于 `/app/**`、`/data/**` 或项目目录，并以 `unmanagedWritableBytes()` 为上传/创建上限。
 
-### 7.1 条件和指标
+所有LittleFS调用通过 `Esp32BaseFs` 的递归串行化保护。格式化等多步维护持有独占维护状态；OTA期间暂停新的FS写入，结束、失败或中止后恢复。锁只解决底层并发，不改变Store对象的调用契约：同一Store的append/read/reload/clear仍应集中在同一loop/system task。ISR、timer和实时控制任务只投递轻量消息，不直接执行Flash操作。
 
-- 芯片：classic ESP32 D0WD-V3。
-- Arduino ESP32 Core：2.0.16。
-- 基准测试专用 LittleFS 分区：2.75 MiB；该容量不代表业务项目默认分区。
-- 模拟槽位：48 字节；各方案写满至目标逻辑总量。
-- reopen：每次 append 都 open/append/flush/close；30 次采样。
-- keep-open：保持文件句柄 append/flush；30 次采样，仅用于判断句柄策略。
-- page：最新页读取；rotate：删除最老段并创建新段。
-- 时间单位均为 ms；结果是该开发板与该 Core 的工程基线，不是所有芯片的时限保证。
+## 7. Conditions 与审计历史
 
-### 7.2 第一轮：直接使用整 KiB 文件上限
+`Esp32BaseConditions` 只保存 `eb_conditions.active_bits` 当前活动位图。应用长期持有一个 `ConditionTracker`，通过激活/恢复确认过滤瞬态；Unknown取消未完成确认。只有NVS提交成功才返回 `Activated` 或 `Recovered`。
 
-该轮证明整 KiB 边界会触发 CTZ 额外块。`physical` 是填充后 LittleFS 实际使用量。
+如果产品需要追溯异常发生/恢复，应用在收到成功转换结果后，把紧凑事实写入独立审计Store。这样当前状态和历史事实职责清楚：
 
-| 总预算/段 | 段数 | 建段头 | 全扫描 | reopen 平均/P50/P95/最大 | keep 平均 | physical B |
-| --- | ---: | ---: | ---: | --- | ---: | ---: |
-| 500K/8K | 63 | 1568 | 1658 | 199/61/874/2812 | 47 | 774144 |
-| 500K/16K | 32 | 854 | 987 | 115/48/733/735 | 46 | 630784 |
-| 500K/32K | 16 | 286 | 445 | 73/49/428/444 | 38 | 548864 |
-| 800K/8K | 100 | 1991 | 2135 | 122/69/799/980 | 73 | 1241088 |
-| 800K/16K | 50 | 797 | 1012 | 148/54/1016/1017 | 61 | 1011712 |
-| 800K/24K | 34 | 791 | 1040 | 102/52/770/890 | 73 | 937984 |
-| 800K/32K | 25 | 441 | 697 | 86/51/605/613 | 44 | 892928 |
-| 1024K/16K | 64 | 2204 | 2480 | 201/62/896/2791 | 49 | 1306624 |
-| 1024K/24K | 43 | 665 | 985 | 124/53/1152/1154 | 82 | 1204224 |
-| 1024K/32K | 32 | 842 | 1171 | 126/53/740/848 | 49 | 1150976 |
-| 1024K/64K | 16 | 232 | 597 | 75/49/444/488 | 38 | 1052672 |
+- NVS位图负责重启后立即知道哪些条件仍活动；
+- 审计Store负责可选历史；
+- 主业务Store负责完整业务结果；
+- FileLog负责技术原因。
 
-### 7.3 第二轮：使用 CTZ 有效文件上限
+基础库不再提供通用应用事件Store、事件Web页、事件JSON/CSV或隐式事件Schema。
 
-`create` 是生成并填满全部测试段，`used` 是 LittleFS 实际使用量。该轮数据直接形成当前自适应规则。
+## 8. 失败边界
 
-| 总预算/段 | 段数 | create | 建段头 | 全扫描 | reopen 平均/P50/P95/最大 | keep 平均/P50/P95/最大 | page | rotate | used B |
-| --- | ---: | ---: | ---: | ---: | --- | --- | ---: | ---: | ---: |
-| 100K/4K | 25 | 2077 | 215 | 215 | 87/52/611/615 | 45/21/53/571 | 23 | 41 | 110592 |
-| 100K/8K | 13 | 1150 | 394 | 410 | 71/53/291/424 | 37/20/52/358 | 33 | 363 | 106496 |
-| 100K/16K | 7 | 1005 | 95 | 120 | 64/51/265/275 | 33/20/55/220 | 14 | 24 | 98304 |
-| 500K/8K | 63 | 10118 | 1600 | 1680 | 202/62/881/2819 | 46/20/52/683 | 26 | 38 | 524288 |
-| 500K/16K | 32 | 5221 | 874 | 1004 | 120/54/738/739 | 43/20/48/696 | 19 | 40 | 507904 |
-| 500K/32K | 16 | 4540 | 278 | 443 | 79/54/436/451 | 34/21/24/405 | 20 | 38 | 491520 |
-| 800K/16K | 51 | 10705 | 838 | 1046 | 175/47/1346/1349 | 64/33/37/1004 | 25 | 50 | 815104 |
-| 800K/24K | 34 | 7421 | 1169 | 1410 | 128/53/776/864 | 46/22/26/733 | 23 | 44 | 806912 |
-| 800K/32K | 26 | 7102 | 780 | 1045 | 85/46/624/675 | 72/35/603/609 | 12 | 29 | 798720 |
-| 1024K/24K | 43 | 10355 | 1527 | 1836 | 150/53/1144/1164 | 81/25/874/880 | 14 | 37 | 1036288 |
-| 1024K/32K | 33 | 9294 | 1007 | 1347 | 115/48/749/751 | 55/35/38/731 | 22 | 42 | 1032192 |
-| 1024K/64K | 17 | 8722 | 449 | 845 | 75/48/464/470 | 44/35/56/440 | 29 | 49 | 999424 |
+- 单槽CRC错误：Store进入 `Degraded`，跳过损坏槽，其他有效记录仍可读。
+- 写入或写后验证失败：进入 `WriteFault`；排除原因后显式 `reload()`。
+- 控制头、定义、段范围或目录结构故障：进入 `StructuralFault`，不自动清空。
+- Conditions NVS写失败：返回 `StateWriteFailed`，RAM活动位图不改变；应用不得把它当成成功转换写审计历史。
+- Storage预算或维护冲突：通过 `StorageError` 明确返回，不绕过协调层直接操作LittleFS。
 
-### 7.4 结论
-
-- 单文件 100 KiB 同步覆盖约 1.08～1.11 秒；分段后普通 reopen append 的典型 P50 约 46～54 ms，且总预算从 100 KiB 扩大到 1 MiB 时典型延迟没有同比放大。
-- 长持有句柄可把部分平均值再降低，但没有消除 flash/flush 尾延迟，还增加格式化、reload、Web FS 维护和异常恢复的生命周期耦合，因此正式实现坚持每次 open/flush/close。
-- 100 KiB 选择 4 KiB 段，优先减少 App Events 淘汰粒度；500 KiB 选择 16 KiB；800 KiB 和 1 MiB 选择 32 KiB。更大预算继续按 2 的幂扩大段，使预计段数不超过 33。
-- 1 MiB 选择 32 KiB 而不是更快的 64 KiB，是用可接受的扫描与尾延迟换取约一半的单次淘汰损失。
-- P95/最大值仍可能达到数百毫秒，个别场景超过 1 秒，因此 append 仍不得进入 ISR、timer callback 或实时控制闭环。
-
-## 8. App Events 是一种预定义业务记录
-
-App Events 使用同一个 Record Store，只是基础库预先规定了 24 字节紧凑 payload：`eventCode`、`reasonCode`、`objectId` 各 4 字节，`value1`、`value2` 各 4 字节，`flags`、`level` 各 2 字节。它保存低频、用户可解释的业务决策和影响，例如开门受阻、喂食因缺料跳过、浇水因缺水停止。
-
-事件不保存说明文本、字段名、`plan:xxx` 之类标签或字段存在元数据。业务根据 `eventCode` 解释固定位置，未使用值写 0，显示时再映射文字。系统 boot、WiFi、NTP、OTA、FS 等技术诊断继续属于 System Logs；完整业务事实进入对应业务 Record Store。
-
-## 9. 接入检查表
-
-1. 为每类业务事实分别定义类型名、版本、固定 payload 字节布局和预算。
-2. 明确所有偏移、宽度、单位、空值、枚举和 flags；只用定宽整数和字节数组。
-3. 不重复存 ID、完成时间、持续时间或 CRC。
-4. `Esp32Base::begin()` 后，按 App Events、再业务 Store 的顺序初始化；检查 `begin()` 和状态。
-5. 瞬时记录调用 `appendInstant()`；过程记录开始时捕获、结束时追加完整结果。
-6. 用 `readLatest()` 构建最新优先分页，用 `readById()` 构建详情；业务负责解码和展示。
-7. Web项目在 `begin()` 后登记每个当前版本Store，由System页统一清空；业务不再建立平行清空入口。
-8. System页格式化FS后会自动reload已登记Store；after-format callback只同步业务派生状态。
-9. 保证同一Store的操作串行；推荐由同一loop/system task执行，实时任务只投递消息。
-10. 在目标分区和目标芯片上验证容量日志、启动扫描、轮换、掉电重启和 Web/OTA 并行边界。
+存储失败只表示历史事实未可靠提交，不应自动解释成泵阀、接触器或业务动作本身失败；反之业务动作失败也不代表存储一定失败。应用必须分别建模和报告。

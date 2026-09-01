@@ -190,37 +190,37 @@ void test_internal_uint32_state_distinguishes_missing_and_preserves_all_bits() {
     resetConfigHarness();
     uint32_t value = 123;
     TEST_ASSERT_EQUAL(esp32base_internal::ConfigUInt32ReadResult::NotFound,
-                      esp32base_internal::readConfigUInt32("eb_app_events", "active_id_bits", value));
+                      esp32base_internal::readConfigUInt32("eb_conditions", "active_bits", value));
     TEST_ASSERT_EQUAL_UINT32(0, value);
     TEST_ASSERT_TRUE(esp32base_internal::writeConfigUInt32(
-        "eb_app_events", "active_id_bits", 0x80000001UL));
+        "eb_conditions", "active_bits", 0x80000001UL));
     TEST_ASSERT_EQUAL_UINT(1, native_nvs::writeCount());
     TEST_ASSERT_TRUE(esp32base_internal::writeConfigUInt32(
-        "eb_app_events", "active_id_bits", 0x80000001UL));
+        "eb_conditions", "active_bits", 0x80000001UL));
     TEST_ASSERT_EQUAL_UINT(1, native_nvs::writeCount());
     TEST_ASSERT_EQUAL(esp32base_internal::ConfigUInt32ReadResult::Found,
-                      esp32base_internal::readConfigUInt32("eb_app_events", "active_id_bits", value));
+                      esp32base_internal::readConfigUInt32("eb_conditions", "active_bits", value));
     TEST_ASSERT_EQUAL_HEX32(0x80000001UL, value);
 }
 
 void test_internal_uint32_state_rejects_wrong_nvs_type() {
     resetConfigHarness();
-    TEST_ASSERT_TRUE(Esp32BaseConfig::setInt("eb_app_events", "active_id_bits", 1));
+    TEST_ASSERT_TRUE(Esp32BaseConfig::setInt("eb_conditions", "active_bits", 1));
     uint32_t value = 0;
     TEST_ASSERT_EQUAL(esp32base_internal::ConfigUInt32ReadResult::Error,
-                      esp32base_internal::readConfigUInt32("eb_app_events", "active_id_bits", value));
+                      esp32base_internal::readConfigUInt32("eb_conditions", "active_bits", value));
 }
 
 void test_internal_uint32_write_repairs_wrong_nvs_type() {
     resetConfigHarness();
-    TEST_ASSERT_TRUE(Esp32BaseConfig::setInt("eb_app_events", "active_id_bits", 1));
+    TEST_ASSERT_TRUE(Esp32BaseConfig::setInt("eb_conditions", "active_bits", 1));
     const unsigned writesBefore = native_nvs::writeCount();
     TEST_ASSERT_TRUE(esp32base_internal::writeConfigUInt32(
-        "eb_app_events", "active_id_bits", 1));
+        "eb_conditions", "active_bits", 1));
     TEST_ASSERT_EQUAL_UINT(writesBefore + 1U, native_nvs::writeCount());
     uint32_t value = 0;
     TEST_ASSERT_EQUAL(esp32base_internal::ConfigUInt32ReadResult::Found,
-                      esp32base_internal::readConfigUInt32("eb_app_events", "active_id_bits", value));
+                      esp32base_internal::readConfigUInt32("eb_conditions", "active_bits", value));
     TEST_ASSERT_EQUAL_UINT32(1, value);
 }
 
@@ -268,32 +268,32 @@ void test_internal_remove_config_key_reports_lookup_failure_without_clearing_pen
     TEST_ASSERT_EQUAL_UINT8(0, Esp32BaseConfig::pendingCount());
 }
 
-void test_factory_reset_clears_app_event_condition_state() {
+void test_factory_reset_clears_condition_state() {
     resetConfigHarness();
     const uint8_t recoveryConfig[] = {1, 1, 0, 0x10, 0x27, 0, 0};
     TEST_ASSERT_TRUE(Esp32BaseConfig::setBlob(
         "eb_wifi_rcv", "button", recoveryConfig, sizeof(recoveryConfig)));
     TEST_ASSERT_TRUE(esp32base_internal::writeConfigUInt32(
-        "eb_app_events", "active_id_bits", 1));
+        "eb_conditions", "active_bits", 1));
     TEST_ASSERT_TRUE(Esp32BaseConfig::factoryReset());
     uint8_t recovered[sizeof(recoveryConfig)] = {};
     TEST_ASSERT_FALSE(Esp32BaseConfig::getBlob(
         "eb_wifi_rcv", "button", recovered, sizeof(recovered)));
     uint32_t value = 123;
     TEST_ASSERT_EQUAL(esp32base_internal::ConfigUInt32ReadResult::NotFound,
-                      esp32base_internal::readConfigUInt32("eb_app_events", "active_id_bits", value));
+                      esp32base_internal::readConfigUInt32("eb_conditions", "active_bits", value));
 }
 
 void test_factory_reset_reports_condition_namespace_open_failure() {
     resetConfigHarness();
     TEST_ASSERT_TRUE(esp32base_internal::writeConfigUInt32(
-        "eb_app_events", "active_id_bits", 1));
-    native_nvs::openFailureNamespace() = "eb_app_events";
+        "eb_conditions", "active_bits", 1));
+    native_nvs::openFailureNamespace() = "eb_conditions";
     TEST_ASSERT_FALSE(Esp32BaseConfig::factoryReset());
     native_nvs::openFailureNamespace().clear();
     uint32_t value = 0;
     TEST_ASSERT_EQUAL(esp32base_internal::ConfigUInt32ReadResult::Found,
-                      esp32base_internal::readConfigUInt32("eb_app_events", "active_id_bits", value));
+                      esp32base_internal::readConfigUInt32("eb_conditions", "active_bits", value));
     TEST_ASSERT_EQUAL_UINT32(1, value);
 }
 
@@ -332,7 +332,7 @@ int main(int, char**) {
     RUN_TEST(test_internal_remove_config_key_preserves_sibling_keys);
     RUN_TEST(test_internal_remove_config_key_cancels_pending_write);
     RUN_TEST(test_internal_remove_config_key_reports_lookup_failure_without_clearing_pending);
-    RUN_TEST(test_factory_reset_clears_app_event_condition_state);
+    RUN_TEST(test_factory_reset_clears_condition_state);
     RUN_TEST(test_factory_reset_reports_condition_namespace_open_failure);
     RUN_TEST(test_factory_reset_reports_wifi_recovery_namespace_open_failure);
     return UNITY_END();

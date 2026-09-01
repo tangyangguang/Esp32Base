@@ -73,31 +73,28 @@ Web/Auth 不再内置启用 admin/admin。启用 Web 的业务必须在 `Esp32Ba
 
 启用 FS 的 profile 会默认启用系统诊断日志。实现/API 名称仍是 `Esp32BaseFileLog`，默认写入 `/esp32base/logs/system.log`，Web 入口为 `/esp32base/logs`，显示名为 `System Logs`。它面向开发、维护和运维排障，默认容量 `4 × 32KB`、模式 ERROR；运行时可切换 OFF、ERROR、WARN、INFO。Status 页按 Network、Runtime、Persistence、Firmware & OTA、Platform & Security 汇总运行态，并直接显示当前固件大小、网络参数、NVS 摘要和运行 ELF SHA；完整文件树仍位于 `/esp32base/fs`。页面不创建后台采样任务或自动刷新，所有状态只在页面请求时读取，关闭后没有持续运行负担。FS 不可用或写入失败时会显示 `unavailable`、`disabled` 或 `write fault` 等运行态。
 
-需要长期保存浇水、开关门、喂食等固定结构业务历史时，可启用 `ESP32BASE_ENABLE_RECORD_STORE=1`，为每种固定负载创建独立的 `Esp32BaseRecordStore`。应用负责用定宽整数、代码、位标志和固定位置把业务对象编码为固定字节负载；基础库统一添加32位自增ID、完成时间、启动标识、运行时间、持续时间和CRC32，并负责按段追加、容量轮换、断电恢复、最新优先分页、按ID读取、状态和逻辑清空。启用Web的项目在Store完成 `begin()` 后登记当前版本对象，System页便统一提供状态、`Clear Business Records` 和格式化后的Store恢复，业务不再自建清空入口。登记只要求对象随后持续有效，不限定必须采用全局变量；同一Store的操作需要串行，推荐集中在loop/system task。每个版本使用 `/esp32base/records/<record-type>.v<version>/` 独立目录，未登记历史版本不属于该操作，最大逻辑存储预算由业务按LittleFS分区和保留需求确定。示例见 `examples/record_store_demo`。
+需要长期保存浇水、开关周期、接触器运行区间等固定结构业务事实时，可启用 `ESP32BASE_ENABLE_RECORD_STORE=1`，为每种主要记录类型创建一个独立的 `Esp32BaseRecordStore`。应用负责定宽payload及其业务Schema；基础库统一添加ID、时间、持续时间和CRC，并负责顺序追加、分段轮转、掉电尾部恢复、分页读取和逻辑清空。每个版本使用 `/esp32base/records/<record-type>.v<version>/` 独立目录。
 
-需要记录业务可解释事件时，可显式启用 App Events。它默认关闭，不随任何 Profile 自动开启；启用后复用 Record Store，并在业务 Store 前优先创建 `/esp32base/records/app-events.v2/`。默认最大逻辑预算为100 KiB，24字节事件负载加24字节通用元数据后每条48字节，估算容量2113条；按约4 KiB完整段轮换时实际保留约2029～2113条。App Events用于解释近期业务决策和影响；完整浇水、开关门、喂食历史仍应使用业务自己的RecordStore。事件保存 `eventCode/reasonCode/objectId/value1/value2/flags/level/eventKind/conditionId` 定宽数值字段，显示文字由业务代码映射。
+所有Store在 `begin()` 成功后通过 `Esp32BaseStorage::registerRecordStore()` 登记。`Esp32BaseStorage` 是LittleFS协调层：最多登记8个Store，默认限制所有业务Store合计逻辑预算为512 KiB，校验FileLog预算和至少 `max(128 KiB, 分区容量/4)` 的安全余量，统一提供受管路径保护、非受管文件可写容量、Store清空、格式化/重新挂载/组件恢复以及OTA期间写暂停。它只协调访问、容量和生命周期，不理解或混合FileLog、RecordStore及业务文件的数据格式。System页和FS上传均使用该协调结果；业务不再向Web模块登记Store。
+
+持续异常的当前状态使用独立的 `Esp32BaseConditions`，不再建立通用应用事件数据库：
 
 ```ini
 build_flags =
-  -D ESP32BASE_PROFILE=ESP32BASE_PROFILE_LOCAL
-  -D ESP32BASE_ENABLE_APP_EVENTS=1
+  -D ESP32BASE_ENABLE_RECORD_STORE=1
+  -D ESP32BASE_ENABLE_CONDITIONS=1
 ```
 
-条件跟踪默认随 App Events 开启。离散动作调用 `appendDiscreteEvent()`，每次调用都独立保存；周期检测到的持续故障使用应用长期持有的 `ConditionStateTracker` 调用 `observeConditionState()`，只在确认生效和确认恢复时写事件及一个 `eb_app_events.active_id_bits` NVS整数。确认时间只判断应用连续上报的状态，不负责轮询硬件。条件ID范围固定为1～32，并且是跨重启、跨保留NVS固件升级的持久化schema；同一ID不能在未清理旧状态时改成另一种业务含义。如项目只需离散事件，可显式设置 `ESP32BASE_ENABLE_APP_EVENT_CONDITIONS=0`，不会链接条件跟踪的NVS和状态机代码。
+应用长期持有 `ConditionTracker(conditionId, activationMs, recoveryMs)`，周期调用 `observe()`。`conditionId` 固定为1～32并持久化在 `eb_conditions.active_bits` 单个NVS位图中；Unknown会取消尚未确认的转换。只有NVS提交成功才返回 `Activated` 或 `Recovered`，应用可在收到这两个结果后自行决定是否向紧凑审计Store追加业务记录。Conditions只保存当前活动集合，没有LittleFS历史、内置历史页面或隐式业务Schema。
 
-内置入口为 `/esp32base/app-events`，JSON API 为 `/esp32base/api/app-events?offset=0&limit=50`，CSV 导出为 `/esp32base/app-events.csv`，清空入口位于 System 页危险操作区。页面/API/CSV 支持等级、时间类型、事件码和原因码筛选；损坏记录不会返回，只在状态中报告。该能力独立于 `/esp32base/logs` 的系统诊断日志。样例见 `examples/app_events_demo`。
+| 能力 | 职责 |
+| --- | --- |
+| `Esp32BaseFileLog` | 基础库和设备技术诊断，独立轮转，不作为业务历史上传 |
+| `Esp32BaseRecordStore` | 每种主要业务事实的独立定长Store |
+| `Esp32BaseConditions` | 少量持续异常的当前活动状态和确认状态机 |
+| `Esp32BaseStorage` | 统一LittleFS访问、容量、受管路径和维护生命周期 |
 
-App Events 适合记录开门受阻、喂食因缺料跳过、浇水因缺水停止等低频关键业务事件。不适合记录长期统计、报表数据、累计值、传感器采样序列、大 payload、高频明细或必须长期分页读取的完整业务历史；这些应使用业务自己的 RecordStore 或其他明确的数据模型。
-
-判定规则：System Diagnostic Logs（系统诊断日志，`Esp32BaseFileLog`）记录设备和基础库“内部发生了什么、技术原因是什么、排障链路在哪里”；App Events（应用业务事件，`Esp32BaseAppEvents`）记录“对业务产生了什么影响、系统做出了什么业务决策、用户需要理解什么结果”；RecordStore保存可长期分页读取的完整业务历史事实。
-
-| 能力 | 面向对象 | 应记录 | 不应记录 |
-| --- | --- | --- | --- |
-| System Logs / 系统诊断日志（`Esp32BaseFileLog`） | 开发、维护、运维排障 | boot/reset、WiFi、NTP、OTA、LittleFS、FileLog fault、基础库健康状态、内部错误链路 | 业务枚举、业务文案、业务报表或用户可解释的业务历史 |
-| App Events / 应用业务事件（`Esp32BaseAppEvents`） | 业务页面、现场用户、业务排查 | 业务决策、保护动作、跳过原因、业务告警、用户维护结果、外部决策结果 | 纯系统诊断、调试日志、高频采样、完整浇水/开关门/喂食历史 |
-| Business Records（`Esp32BaseRecordStore`） | 业务历史页、详情和导出 | 固定结构的完整浇水、开关门、喂食等历史事实 | 系统诊断文本、字段查询、事务或对象映射 |
-
-应用项目不要把 Esp32Base 系统事件写入 App Events，例如 boot/reset/restart reason、WiFi、NTP、OTA、LittleFS mount/write fault、FileLog fault、基础库健康状态等。同一个底层故障可以同时留下系统诊断日志和应用业务事件，但这是因为它跨越了两个语义层，而不是为了复制一条日志：系统诊断日志写技术事实和内部错误链路，应用业务事件写业务影响、保护动作、跳过原因、用户维护结果或外部决策结果。硬件或存储异常只有在导致业务保护、跳过、停机、业务告警或用户维护动作时，才以业务事件写入 App Events。
+同一Store的操作需要串行，推荐实时任务只投递轻量消息，由loop/system task完成持久化。关键业务事实应逐条完成追加、flush/close和读回验证；不要用批量缓存扩大掉电丢失窗口。示例见 `examples/record_store_demo`。
 
 需要业务持久化参数配置页时，可启用 App Config。业务显式声明容量并在 `Esp32Base::begin()` 前注册分组和字段，基础库会在 System 页首位提供 `App Config` 入口：
 
@@ -169,7 +166,7 @@ python3 scripts/pio_arduino.py 3 run -d examples/basic -e esp32_local_arduino3
 | `ESP32BASE_PROFILE_LOCAL` | OFFLINE、WiFi、配网、NTP、mDNS、认证Web、Web OTA | 可本地维护和升级的普通设备 |
 | `ESP32BASE_PROFILE_IOT` | LOCAL、MQTT/MQTTS | 本地维护面加公网MQTT的智能终端 |
 
-业务项目通常只需在 `LOCAL` 和 `IOT` 中选择。Bus、Sleep、RTC、RS485、Record Store、App Events和App Config保持正交并按实际需求显式开启；特殊组合继续使用 `ESP32BASE_ENABLE_*` 精细覆盖，不新增排列组合Profile。完整契约见 [Profile 与裁剪](docs/02_profiles.md)。
+业务项目通常只需在 `LOCAL` 和 `IOT` 中选择。Bus、Sleep、RTC、RS485、Record Store、Conditions和App Config保持正交并按实际需求显式开启；特殊组合继续使用 `ESP32BASE_ENABLE_*` 精细覆盖，不新增排列组合Profile。完整契约见 [Profile 与裁剪](docs/02_profiles.md)。
 
 仓库示例默认面向 ESP32 4MB Flash，并使用 `partitions/esp32-4mb-ota-balanced.csv`。应用项目强烈推荐直接选择 `partitions/` 中已有分区表，不要在业务项目里重新设计分区布局；除非硬件容量、OTA 策略或持久化容量确实不匹配，才自定义分区表，并必须同步验证串口烧录、OTA、NVS、LittleFS 和数据保留边界。ESP32 / ESP32-C3 4MB 推荐分区表保留两个 1.5MB OTA app slot，剩余空间作为 LittleFS 数据分区。
 
@@ -183,7 +180,7 @@ python3 scripts/pio_arduino.py 3 run -d examples/basic -e esp32_local_arduino3
 
 `Esp32BaseFs` 对业务暴露文本、二进制、追加、定长文件、目录、容量和按偏移读写 API，业务不需要直接 include `LittleFS.h` 或 Arduino `File`。容量读取优先使用 `storageInfo(total, used)`；固定容量文件先用 `createFixedFile()`，再用 `writeBytesAt()` 覆盖槽位；`appendBytes()` 适合低频追加。LittleFS mount failed 时不会自动格式化，需要清空或重建时只能通过明确维护动作调用 `Esp32BaseFs::format()` 或 Web System 页格式化入口。Web 格式化只清 LittleFS，不清 WiFi、Web Auth、业务 namespace 或 NVS 配置；业务如需同步清理，应使用 after-format callback 或事件自行处理。`/esp32base/fs?manage=1` 提供受限上传，上传保留本地文件名，只能选择已有目录；覆盖上传应避免中断时先清空旧文件。
 
-LittleFS 中的 `/esp32base/**` 是基础库管理命名空间。系统诊断日志默认在 `/esp32base/logs/system.log`，App Events store 默认在 `/esp32base/records/app-events.v2/`；业务项目自己的 RecordStore 也由基础库放到 `/esp32base/records/**`，其他业务文件应放到 `/app/**`、`/data/**` 或项目自定义目录，避免和基础库维护动作混用。
+LittleFS 中的 `/esp32base/**` 是基础库受管命名空间。系统诊断日志默认在 `/esp32base/logs/system.log`，已登记RecordStore位于 `/esp32base/records/**`；Web文件管理不允许上传、覆盖或删除受管路径。其他业务文件应放到 `/app/**`、`/data/**` 或项目自定义目录，并受 `Esp32BaseStorage::unmanagedWritableBytes()` 的容量保留约束。
 
 `LOCAL` 和 `IOT` 统一使用HTTP Web OTA，不提供ArduinoOTA/espota或独立3232监听端口。浏览器使用multipart上传；命令行使用Esp32Base内置的高速 `webota` target。它复用现有 HTTP Web OTA 接口和 Web Auth。`custom_esp32base_webota_host` 同时接受设备 IP、普通 DNS hostname 和 mDNS `<hostname>.local`；DHCP 地址可能变化的本地开发设备推荐使用当前 Esp32Base hostname 对应的 `.local` 地址：
 

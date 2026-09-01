@@ -10,7 +10,7 @@ This minimal demo does not enable Web. In a Web-enabled business application, re
 
 ```cpp
 const bool ready = doorOpeningRecords.begin(definition);
-const bool registered = Esp32BaseWeb::registerBusinessRecordStore(doorOpeningRecords);
+const bool registered = Esp32BaseStorage::registerRecordStore(doorOpeningRecords);
 ```
 
 Check both results. Registration stores a pointer, so keep the Store object alive after successful registration; a global, static, or application-owned long-lived member is sufficient. Register only the current active version and do not build a second business clear endpoint. The built-in System page clears registered Stores and automatically reloads them after a System-page LittleFS format.
