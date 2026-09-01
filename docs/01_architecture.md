@@ -104,7 +104,7 @@ Runtime 只依赖 Core。
 - Captive Portal DNS。
 - NTP。
 - mDNS。
-- 单 Broker MQTT 3.1.1 TCP/TLS Client、固定邮箱、退避重连和协议诊断。
+- 单 Broker、单设备级连接的 MQTT 3.1.1 TCP/TLS Client、固定邮箱、退避重连和协议诊断；同一连接可承载多个由应用层调度的逻辑业务流。
 
 Network 可使用 Bus，但不强依赖 Bus。
 

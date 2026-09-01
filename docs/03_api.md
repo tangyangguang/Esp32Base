@@ -770,6 +770,8 @@ build_flags =
 
 第一版固定为单 Broker、单 Client、MQTT 3.1.1、Clean Session、QoS 0/1。底层使用 Arduino ESP32 Core 内置 ESP-MQTT；不公开 ESP-IDF 类型。
 
+这里的单 Client 指一条设备级 TCP/TLS MQTT 连接，不限制应用在同一连接上传输多个逻辑业务流。`publish()`、ESP-MQTT outbox和QoS 1 in-flight由本模块统一约束；业务仍应在一个顶层协议适配器中串行化发送意图、关联packet id并决定优先级和公平性。多RecordStore、业务sequence、累计业务ACK和离线补发策略不属于MQTT传输层，不应为每个业务流建立独立MQTT连接。
+
 主要 API：
 
 ```cpp
