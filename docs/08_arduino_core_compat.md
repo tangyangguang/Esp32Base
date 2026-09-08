@@ -31,6 +31,10 @@ CONFIG_IDF_TARGET_ESP32C3
 
 不得依赖未检查的版本行为。
 
+WebServer 请求头存储也存在差异：已核对的 Core 2.0.16 使用数组，Core 3.3.8 使用链表。内部请求解析按实际 SDK 类型选择清理方式，不以 IDF 主版本猜测数据布局；只清空值，保留收集的头名称和节点。响应头也按实际布局释放，避免链表累积。该路径必须同时验证两种布局，单纯构建通过不能证明不会越界。
+
+Web 客户端超时统一以秒表达：旧 WiFiClient 的 `setTimeout` 同时设置 socket 与 Stream；新 NetworkClient 需要分别调用 `setConnectionTimeout` 和 `setTimeout`，二者单位均为毫秒。内部按方法是否存在选择对应调用，不能把旧版的秒值直接传给新版 Stream，也不能只设置 Stream 而遗漏 socket。
+
 ## 3. Watchdog 差异
 
 Arduino Core 2.x：

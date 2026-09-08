@@ -4,6 +4,8 @@
 
 #include "WebInternal.h"
 #include "WebRequestPreflight.h"
+#include "WebHeaderReset.h"
+#include "WebClientTimeout.h"
 
 #include <esp_idf_version.h>
 #include <limits.h>
@@ -159,7 +161,7 @@ void Esp32BaseWebServer::handleClient() {
             return;
         }
 
-        _currentClient.setTimeout(ESP32BASE_WEB_REQUEST_READ_TIMEOUT_SEC);
+        setWebClientTimeoutSeconds(_currentClient, ESP32BASE_WEB_REQUEST_READ_TIMEOUT_SEC, 0);
         _currentStatus = HC_WAIT_READ;
         _statusChange = millis();
     }
@@ -173,9 +175,9 @@ void Esp32BaseWebServer::handleClient() {
             break;
         case HC_WAIT_READ:
             if (_currentClient.available()) {
-                _currentClient.setTimeout(ESP32BASE_WEB_REQUEST_READ_TIMEOUT_SEC);
+                setWebClientTimeoutSeconds(_currentClient, ESP32BASE_WEB_REQUEST_READ_TIMEOUT_SEC, 0);
                 if (parseRequest(_currentClient)) {
-                    _currentClient.setTimeout(HTTP_MAX_SEND_WAIT / 1000);
+                    setWebClientTimeoutSeconds(_currentClient, HTTP_MAX_SEND_WAIT / 1000, 0);
                     _contentLength = CONTENT_LENGTH_NOT_SET;
                     _handleRequest();
                 }
@@ -195,6 +197,7 @@ void Esp32BaseWebServer::handleClient() {
     }
 
     if (!keepCurrentClient) {
+        releaseResponseHeaders(_responseHeaders);
         _currentClient = WiFiClient();
         _currentStatus = HC_NONE;
         _currentUpload.reset();
@@ -415,9 +418,7 @@ bool Esp32BaseWebServer::parseRequest(WiFiClient& client) {
                                      : "Request Timeout"));
         return false;
     }
-    for (int i = 0; i < _headerKeysCount; ++i) {
-        _currentHeaders[i].value = String();
-    }
+    resetCollectedHeaderValues(_currentHeaders, _headerKeysCount, 0);
 
     int addrStart = req.indexOf(' ');
     int addrEnd = req.indexOf(' ', addrStart + 1);
