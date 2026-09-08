@@ -1715,3 +1715,5 @@ Health tick 日志策略：
 - `loopPeriodMaxMs()` 仍返回启动以来最大 loop 间隔，不随 tick 窗口清零。
 
 `Esp32BaseConfig::clearSystemConfig()` 仅清除 `eb_sys/hostname`，保留启动计数等同 namespace 的其他字段。只有持久删除成功或确认键不存在后才取消对应 deferred 写；NVS 查询、打开或删除失败返回 false，保留原待写值供后续重试，不将失败清理当作成功。
+
+`Esp32BaseMdns::begin()` 首次立即尝试；SDK初始化失败后至少间隔5秒再尝试，等待期间返回false且不重复初始化或输出失败日志。成功后的重复调用不再初始化，`stop()` 清除重试等待。facade仅在begin成功后注册HTTP服务；这不保证SDK单次初始化调用的执行时长。

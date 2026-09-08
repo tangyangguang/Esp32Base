@@ -359,8 +359,9 @@ void Esp32Base::handle() {
             ESP32BASE_LOG_D("base", "deferred_start module=mdns reason=wifi_connected");
             g_mdnsStartDebugLogged = true;
         }
-        Esp32BaseMdns::begin();
-        Esp32BaseMdns::addHttpService(80);
+        if (Esp32BaseMdns::begin()) {
+            Esp32BaseMdns::addHttpService(80);
+        }
     } else if (!Esp32BaseWiFi::isConnected() && Esp32BaseMdns::isRunning()) {
         ESP32BASE_LOG_D("base", "deferred_stop module=mdns reason=wifi_disconnected");
         g_mdnsStartDebugLogged = false;

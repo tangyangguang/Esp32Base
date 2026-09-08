@@ -52,25 +52,7 @@ esp_task_wdt_init(&config);
 
 STA 连接前会在 `WiFi.mode(WIFI_STA)` 后、`WiFi.begin()` 前调用 `WiFi.setHostname(Esp32Base::hostname())`，确保 Core 2.x / 3.x 下 DHCP client hostname 使用当前 Esp32Base hostname。
 
-Core 2.x 使用：
-
-- `SYSTEM_EVENT_*`
-
-Core 3.x 使用：
-
-- `ARDUINO_EVENT_*`
-
-WiFi event callback 中只允许：
-
-- 更新轻量状态。
-- 入固定队列。
-
-不允许：
-
-- publish Bus。
-- 写 NVS。
-- 启动 Web。
-- 做重操作。
+当前基础库通过 `Esp32BaseWiFi::handle()` 轮询 `WiFi.status()` 推进连接、DHCP等待和退避状态，不注册 Arduino WiFi event callback，也不依赖 `SYSTEM_EVENT_*` / `ARDUINO_EVENT_*` 名称分支。不能把旧的事件名对照当作本库当前实现。应用自行订阅 SDK 事件时，应按其固定 Core 的真实头文件核对 API；事件任务只更新轻量状态或入队，业务、NVS、Web 等操作回到应用的 system/loop task。
 
 ## 5. Sleep 差异
 

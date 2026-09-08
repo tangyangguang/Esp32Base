@@ -218,3 +218,5 @@ ESP32-C3 4MB 要控制 Web/OTA/Fs 组合的体积。
 发送/LWT 上限 `ESP32BASE_MQTT_MAX_PAYLOAD_BYTES` 和接收上限 `ESP32BASE_MQTT_MAX_INCOMING_PAYLOAD_BYTES` 独立，默认各 512B；接收槽默认 2 个。对于 4096B 上报、512B 命令的组合，接收 payload 常驻空间为 1024B，而不是随发送上限增至 8192B。此处 7168B 是 payload 数组的静态布局差值，不是 TLS 握手峰值或总堆节省实测。outbox 仍需另行容纳报文头与 topic，4KiB 发布可用 8KiB outbox。任务栈、网络缓冲、接收槽数和重连保护默认值未缩减。
 
 RecordStore 保留机制不新增记录副本、任务或常驻payload缓冲；控制文件仍128B，每槽仍payload+24B。单Store对象增加24B（存储世代、策略及RAM/持久释放水位；主机布局核对），实际芯片占用以示例最终链接为准。释放不写Flash，显式检查点或轮转才更新控制头；因此写放大随检查点策略与段轮转发生，不随MQTT ACK频率发生。
+
+mDNS失败重试使用1个32位时刻和1个布尔标记，不新增任务或缓冲；本次ESP32/Core2 LOCAL+RecordStore组合静态RAM增加8B（含链接布局影响）。这是用于避免每轮失败重试的有界状态，不缩减网络或存储保护。

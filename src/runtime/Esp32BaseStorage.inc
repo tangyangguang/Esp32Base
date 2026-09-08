@@ -95,6 +95,23 @@ uint64_t remainingRecordReservation() {
 }
 #endif
 
+size_t unmanagedWritableFromSnapshot(size_t total, size_t used) {
+    if (used >= total) return 0;
+    uint64_t required = storageSafetyReserve(total);
+#if ESP32BASE_ENABLE_RECORD_STORE
+    required += remainingRecordReservation();
+#endif
+#if ESP32BASE_ENABLE_FILELOG
+    const uint32_t budget = configuredFileLogBudget();
+    const uint32_t current = currentFileLogBytes();
+    if (budget > current) {
+        required += budget - current;
+    }
+#endif
+    const uint64_t freeBytes = total - used;
+    return freeBytes > required ? static_cast<size_t>(freeBytes - required) : 0;
+}
+
 } // namespace
 
 bool Esp32BaseStorage::begin() {
@@ -375,19 +392,7 @@ size_t Esp32BaseStorage::unmanagedWritableBytes() {
     if (!Esp32BaseFs::storageInfo(total, used) || used >= total) {
         return 0;
     }
-    uint64_t required = storageSafetyReserve(total);
-#if ESP32BASE_ENABLE_RECORD_STORE
-    required += remainingRecordReservation();
-#endif
-#if ESP32BASE_ENABLE_FILELOG
-    const uint32_t budget = configuredFileLogBudget();
-    const uint32_t current = currentFileLogBytes();
-    if (budget > current) {
-        required += budget - current;
-    }
-#endif
-    const uint64_t freeBytes = total - used;
-    return freeBytes > required ? static_cast<size_t>(freeBytes - required) : 0;
+    return unmanagedWritableFromSnapshot(total, used);
 }
 
 bool Esp32BaseStorage::readStatus(StorageStatus& status) {
@@ -396,12 +401,16 @@ bool Esp32BaseStorage::readStatus(StorageStatus& status) {
     status.error = g_storageError;
     status.ready = g_storageState == StorageState::Ready;
     status.writesSuspended = esp32base_internal::fsWritesSuspended();
-    Esp32BaseFs::storageInfo(status.fileSystemTotalBytes, status.fileSystemUsedBytes);
+    if (!Esp32BaseFs::storageInfo(status.fileSystemTotalBytes, status.fileSystemUsedBytes)) {
+        status.fileSystemTotalBytes = 0;
+        status.fileSystemUsedBytes = 0;
+    }
     status.fileSystemFreeBytes = status.fileSystemTotalBytes > status.fileSystemUsedBytes
                                      ? status.fileSystemTotalBytes - status.fileSystemUsedBytes
                                      : 0;
     status.minimumSafetyReserveBytes = storageSafetyReserve(status.fileSystemTotalBytes);
-    status.unmanagedWritableBytes = unmanagedWritableBytes();
+    status.unmanagedWritableBytes = unmanagedWritableFromSnapshot(
+        status.fileSystemTotalBytes, status.fileSystemUsedBytes);
 #if ESP32BASE_ENABLE_RECORD_STORE
     status.registeredRecordBudgetBytes = g_recordStoreBudgetBytes;
     status.recordStoreCount = g_recordStoreCount;

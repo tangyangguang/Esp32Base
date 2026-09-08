@@ -11,6 +11,9 @@
 namespace {
 bool g_mdnsRunning = false;
 bool g_mdnsAdvertising = false;
+bool g_mdnsRetryPending = false;
+uint32_t g_mdnsRetryStartedMs = 0;
+constexpr uint32_t kMdnsRetryIntervalMs = 5000;
 }
 
 bool Esp32BaseMdns::begin() {
@@ -18,8 +21,13 @@ bool Esp32BaseMdns::begin() {
         g_mdnsAdvertising = true;
         return true;
     }
+    if (g_mdnsRetryPending && millis() - g_mdnsRetryStartedMs < kMdnsRetryIntervalMs) {
+        return false;
+    }
     g_mdnsRunning = MDNS.begin(Esp32Base::hostname());
     g_mdnsAdvertising = g_mdnsRunning;
+    g_mdnsRetryPending = !g_mdnsRunning;
+    if (g_mdnsRetryPending) g_mdnsRetryStartedMs = millis();
     if (g_mdnsRunning) {
         ESP32BASE_LOG_I("mdns", "mdns_started host=%s.local", Esp32Base::hostname());
     } else {
@@ -29,6 +37,7 @@ bool Esp32BaseMdns::begin() {
 }
 
 void Esp32BaseMdns::stop() {
+    g_mdnsRetryPending = false;
     g_mdnsAdvertising = false;
     MDNS.end();
     g_mdnsRunning = false;

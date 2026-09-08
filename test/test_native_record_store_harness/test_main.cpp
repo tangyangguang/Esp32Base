@@ -861,7 +861,19 @@ void test_storage_coordinates_multiple_stores_capacity_paths_maintenance_and_for
 
     TEST_ASSERT_TRUE(Esp32BaseStorage::setOtaWriteSuspended(true));
     Esp32BaseStorage::StorageStatus storageStatus;
+    const uint32_t capacityCalls = g_storageInfoCalls;
     TEST_ASSERT_TRUE(Esp32BaseStorage::readStatus(storageStatus));
+    // One fresh FS snapshot plus each registered Store's status query.
+    TEST_ASSERT_EQUAL_UINT32(capacityCalls + 3, g_storageInfoCalls);
+    TEST_ASSERT_TRUE(storageStatus.unmanagedWritableBytes <= storageStatus.fileSystemFreeBytes);
+    g_storageInfoFails = true;
+    const uint32_t failureCalls = g_storageInfoCalls;
+    TEST_ASSERT_TRUE(Esp32BaseStorage::readStatus(storageStatus));
+    TEST_ASSERT_EQUAL_UINT32(failureCalls + 1, g_storageInfoCalls);
+    TEST_ASSERT_EQUAL_UINT32(0, storageStatus.fileSystemTotalBytes);
+    TEST_ASSERT_EQUAL_UINT32(0, storageStatus.fileSystemUsedBytes);
+    TEST_ASSERT_EQUAL_UINT32(0, storageStatus.unmanagedWritableBytes);
+    g_storageInfoFails = false;
     TEST_ASSERT_EQUAL(Esp32BaseStorage::StorageState::OtaWriteSuspended, storageStatus.state);
     TEST_ASSERT_TRUE(storageStatus.writesSuspended);
     TEST_ASSERT_TRUE(Esp32BaseStorage::setOtaWriteSuspended(false));
