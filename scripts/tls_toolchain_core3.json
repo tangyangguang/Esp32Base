@@ -1,0 +1,50 @@
+{
+  "arduino_core": "3.3.8",
+  "framework_libraries": "5.5.4+sha.735507283d",
+  "sources": {
+    "builder": {
+      "url": "https://github.com/espressif/esp32-arduino-lib-builder.git",
+      "commit": "14a0af99059169a14049e4f72a0785586b2f85be"
+    },
+    "esp-idf": {
+      "url": "https://github.com/espressif/esp-idf.git",
+      "commit": "735507283d5b2f9fb363a1901172dbd9e847945d"
+    },
+    "builder/components/arduino": {
+      "url": "https://github.com/espressif/arduino-esp32.git",
+      "commit": "c6428be92c5eccb279511adf88c60f27cb2c338d"
+    },
+    "builder/components/arduino_tinyusb/tinyusb": {
+      "url": "https://github.com/hathach/tinyusb.git",
+      "commit": "eae25b531dff32636aecb21ca4a8a3ac8e391fc3"
+    }
+  },
+  "baseline_sha256": {
+    "esp32": {
+      "sdkconfig": "3394dd1cf63cc013d5ed5eb45f3da5f528b526369ca2cf7daa2e1e3ce11620be",
+      "dependencies.lock": "4b065754554c613aea795c1ede63aa97c87c15c860d0d37d51821d14832cbcd3",
+      "versions.txt": "1b15adcda374a653a9794512315b554d4f78682341888a8ac9155b7f569e5cd9"
+    },
+    "esp32s3": {
+      "sdkconfig": "586165cee4ffbbda5c9b5e1436c34e83d02ff9205c0fa7c850a2b90ca449effa",
+      "dependencies.lock": "ce0fb039bd7fcf98564ed46e71c3550ff301e838e05205dc173cc398c413fea5",
+      "versions.txt": "110a7110f7bd3d11283eaa78f8a404b9795ac5435ede3345a35d0247a897368b"
+    },
+    "esp32c3": {
+      "sdkconfig": "bcabc5900fd8b94c4e77d368034d00248f2349ab209911ab6545d3b2e6957392",
+      "dependencies.lock": "d081d5a74f00981cedbd2cf35de8798a6b4f5f3fb571c4ed367c8aa83512f12b",
+      "versions.txt": "2eaa77ffaf07e37b6431ffe768b54c11de4566489d62881677265235fe092de1"
+    }
+  },
+  "config_changes": {
+    "CONFIG_MBEDTLS_HAVE_TIME_DATE": "y"
+  },
+  "ccache_darwin": {
+    "url": "https://github.com/ccache/ccache/releases/download/v4.12.1/ccache-4.12.1-darwin.tar.gz",
+    "sha256": "4cc7353ecfb53102512c1affc09fd52600421c66b8abaeb071a3babd3bf8f530",
+    "binary_sha256": "ecdb01fcb5e0ac2f4c39587e75c956bc43c0e8d62b064338c810216316bd713e"
+  },
+  "build_graph_adjustments": [
+    "ESP32 mem-variant depends on __idf_spi_flash instead of the application ELF; upstream export list and command are unchanged. Other targets retain the upstream dependency."
+  ]
+}

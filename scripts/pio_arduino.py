@@ -45,13 +45,19 @@ def project_dir(arguments: list[str]) -> Path:
 def main() -> int:
     if len(sys.argv) < 3 or sys.argv[1] not in ("2", "3"):
         print(
-            "usage: python3 scripts/pio_arduino.py <2|3> <pio arguments...>",
+            "usage: python3 scripts/pio_arduino.py <2|3> [--tls-toolchain] <pio arguments...>",
             file=sys.stderr,
         )
         return 2
 
     major = sys.argv[1]
     arguments = sys.argv[2:]
+    tls_toolchain = bool(arguments and arguments[0] == "--tls-toolchain")
+    if tls_toolchain:
+        arguments = arguments[1:]
+        if major != "3" or not arguments:
+            print("--tls-toolchain requires Core 3 and a PlatformIO command", file=sys.stderr)
+            return 2
     selected = selected_environments(arguments)
     mismatched = [
         name
@@ -71,10 +77,11 @@ def main() -> int:
         print("PlatformIO executable 'pio' was not found in PATH", file=sys.stderr)
         return 1
 
-    core_dir = ROOT / ".piohome" / f"arduino{major}"
+    home_name = f"arduino{major}" + ("-tls" if tls_toolchain else "")
+    core_dir = ROOT / ".piohome" / home_name
     project = project_dir(arguments)
-    build_dir = project / ".pio" / "build" / f"arduino{major}"
-    libdeps_dir = project / ".pio" / "libdeps" / f"arduino{major}"
+    build_dir = project / ".pio" / "build" / home_name
+    libdeps_dir = project / ".pio" / "libdeps" / home_name
     core_dir.mkdir(parents=True, exist_ok=True)
     environment = os.environ.copy()
     environment["PLATFORMIO_CORE_DIR"] = str(core_dir)
