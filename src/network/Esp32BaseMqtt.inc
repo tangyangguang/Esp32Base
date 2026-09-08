@@ -2,6 +2,7 @@
 #include <esp_system.h>
 #include <esp_tls_errors.h>
 #include <mqtt_client.h>
+#include "internal/Esp32BaseMqttLifecycle.h"
 
 #include <errno.h>
 #include <string.h>
@@ -60,7 +61,7 @@ struct IncomingSlot {
     Esp32BaseMqtt::QualityOfService qos = Esp32BaseMqtt::QOS_0;
     bool retain = false;
     bool duplicate = false;
-    uint8_t payload[ESP32BASE_MQTT_MAX_PAYLOAD_BYTES] = {};
+    uint8_t payload[ESP32BASE_MQTT_MAX_INCOMING_PAYLOAD_BYTES] = {};
 };
 
 struct SubscriptionEntry {
@@ -388,7 +389,7 @@ void handleIncomingData(const esp_mqtt_event_t* event) {
         if (!event->topic || event->topic_len <= 0 ||
             event->topic_len > ESP32BASE_MQTT_MAX_TOPIC_BYTES ||
             memchr(event->topic, '\0', static_cast<size_t>(event->topic_len)) != nullptr ||
-            event->total_data_len > ESP32BASE_MQTT_MAX_PAYLOAD_BYTES) {
+            event->total_data_len > ESP32BASE_MQTT_MAX_INCOMING_PAYLOAD_BYTES) {
             portENTER_CRITICAL(&g_mqttMux);
             ++g_mqttDiagnostics.incomingOversizeDropped;
             portEXIT_CRITICAL(&g_mqttMux);
@@ -514,6 +515,18 @@ void mqttEventHandler(void*, esp_event_base_t, int32_t eventId, void* eventData)
             break;
         }
         case MQTT_EVENT_DISCONNECTED:
+            // Do not deliver commands buffered in a previous connection.
+            // An application callback already running owns its slot until return.
+            portENTER_CRITICAL(&g_mqttMux);
+            for (auto& slot : g_mqttIncoming) {
+                if (slot.state == INCOMING_READY || slot.state == INCOMING_ASSEMBLING) {
+                    slot.state = INCOMING_EMPTY;
+                    ++g_mqttDiagnostics.incomingMailboxDropped;
+                }
+            }
+            g_mqttAssemblySlot = -1;
+            g_mqttDroppingPacketId = -1;
+            portEXIT_CRITICAL(&g_mqttMux);
             raw.type = RAW_DISCONNECTED;
             pushRawEvent(raw);
             break;
@@ -1283,21 +1296,32 @@ bool Esp32BaseMqtt::begin() {
     return true;
 }
 
+void esp32base_internal::suspendMqttForOta() {
+    if (!g_mqttConfigured && !g_mqttConfigurationAttempted) {
+        return;
+    }
+    if (!g_mqttOtaSuspended) {
+        g_mqttOtaSuspended = true;
+        g_mqttForceReconnectAfterDisconnect = false;
+        requestNativeDisconnect();
+        setState(Esp32BaseMqtt::SUSPENDED_FOR_OTA);
+        ESP32BASE_LOG_I("mqtt", "suspended reason=ota_upload");
+    }
+}
+
 void Esp32BaseMqtt::handle(bool otaUploading) {
     if (!g_mqttConfigured && !g_mqttConfigurationAttempted) {
         return;
     }
 
-    if (otaUploading && !g_mqttOtaSuspended) {
-        g_mqttOtaSuspended = true;
-        g_mqttForceReconnectAfterDisconnect = false;
-        requestNativeDisconnect();
-        setState(SUSPENDED_FOR_OTA);
-        ESP32BASE_LOG_I("mqtt", "suspended reason=ota_upload");
+    if (otaUploading) {
+        esp32base_internal::suspendMqttForOta();
     }
 
     handleRawEvents();
-    dispatchIncomingMessages();
+    if (!g_mqttOtaSuspended) {
+        dispatchIncomingMessages();
+    }
     dispatchMailboxOverflowIfNeeded();
     dispatchIncomingDropIfNeeded();
 

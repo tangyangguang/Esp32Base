@@ -1,6 +1,12 @@
 #include "Esp32Base.h"
 
 #include "core/Esp32BaseUtil.h"
+#if ESP32BASE_ENABLE_OTA
+#include "update/internal/Esp32BaseOtaLifecycle.h"
+#if ESP32BASE_ENABLE_MQTT
+#include "network/internal/Esp32BaseMqttLifecycle.h"
+#endif
+#endif
 
 #include <Arduino.h>
 #include <string.h>
@@ -22,9 +28,6 @@ char g_hostname[33] = "esp32base";
 char g_lastError[96] = "";
 Esp32Base::BeforeNetworkStopCallback g_beforeNetworkStopCallback = nullptr;
 void* g_beforeNetworkStopContext = nullptr;
-#if ESP32BASE_ENABLE_MQTT && ESP32BASE_ENABLE_OTA
-bool g_otaNetworkStopNotified = false;
-#endif
 constexpr uint16_t kMaximumNetworkStopGraceMs = 1000U;
 
 bool hostnameValid(const char* hostname) {
@@ -172,6 +175,15 @@ bool Esp32Base::begin() {
     esp32base_internal::registerPreSleepHook(prepareForLifecycleStop);
     ESP32BASE_LOG_D("base", "module_ready name=system");
 #if ESP32BASE_ENABLE_OTA
+    esp32base_internal::registerPreOtaUploadHook([]() {
+        const uint16_t graceMs = notifyBeforeNetworkStop();
+        if (graceMs > 0U) {
+            delay(graceMs);
+        }
+#if ESP32BASE_ENABLE_MQTT
+        esp32base_internal::suspendMqttForOta();
+#endif
+    });
     // Keep ESP32BASE_OTA_REQUIRE_MARK_VALID rollback timing independent from WiFi/Web readiness.
     ESP32BASE_LOG_D("base", "module_begin name=ota_boot");
     if (!Esp32BaseOta::begin()) {
@@ -330,17 +342,7 @@ void Esp32Base::handle() {
 #endif
 #if ESP32BASE_ENABLE_MQTT
 #if ESP32BASE_ENABLE_OTA
-    const bool otaUploading = Esp32BaseOta::isUploading();
-    if (otaUploading && !g_otaNetworkStopNotified) {
-        const uint16_t graceMs = notifyBeforeNetworkStop();
-        if (graceMs > 0U) {
-            delay(graceMs);
-        }
-        g_otaNetworkStopNotified = true;
-    } else if (!otaUploading) {
-        g_otaNetworkStopNotified = false;
-    }
-    Esp32BaseMqtt::handle(otaUploading);
+    Esp32BaseMqtt::handle(Esp32BaseOta::isUploading());
 #else
     Esp32BaseMqtt::handle(false);
 #endif

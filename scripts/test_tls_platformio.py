@@ -49,7 +49,6 @@ def main():
     if config.count(original_url) != 1 or config.count(guard) != 1:
         raise RuntimeError("Example configuration changed; review the TLS probe")
     config = config.replace("[platformio]\n", f"[platformio]\nsrc_dir = {probe / 'src'}\n")
-    config = config.replace("lib_extra_dirs = ../..", f"lib_extra_dirs = {ROOT}")
     config = config.replace("symlink://../..", f"symlink://{ROOT}")
     config = config.replace("../../scripts/", str(ROOT / "scripts") + "/")
     config = config.replace("../../partitions/", str(ROOT / "partitions") + "/")

@@ -116,6 +116,30 @@ void test_resolve_current_boot_event_uses_active_mapping() {
     TEST_ASSERT_EQUAL_UINT32(1700000007UL, resolved);
 }
 
+void test_system_clock_corrections_do_not_change_uptime() {
+    resetTimeHarness();
+    g_nativeEspTimerUs = 10LL * 1000000LL;
+    TEST_ASSERT_TRUE(esp32base_internal::timeAcceptNtpEpoch(1700000110UL));
+    g_nativeEspTimerUs = 20LL * 1000000LL;
+    TEST_ASSERT_EQUAL_UINT32(1700000120UL, Esp32BaseTime::snapshot().epochSec);
+    // Simulate SDK SNTP correction without another Base acceptance callback.
+    timeSetSystemEpoch(1700000320UL);
+    auto snap = Esp32BaseTime::snapshot();
+    TEST_ASSERT_EQUAL_UINT32(20, snap.uptimeSec);
+    TEST_ASSERT_EQUAL_UINT32(1700000320UL, snap.epochSec);
+    TEST_ASSERT_EQUAL_UINT32(1700000300UL, snap.bootStartEpochSec);
+    timeSetSystemEpoch(1700000220UL);
+    TEST_ASSERT_EQUAL_UINT32(1700000220UL, Esp32BaseTime::snapshot().epochSec);
+    TEST_ASSERT_EQUAL_UINT32(20, Esp32BaseTime::snapshot().uptimeSec);
+    uint32_t resolved = 99;
+    TEST_ASSERT_FALSE(Esp32BaseTime::resolveCurrentBootEvent(snap.bootId, UINT32_MAX, &resolved));
+    TEST_ASSERT_EQUAL_UINT32(0, resolved);
+    timeSetSystemEpoch(0);
+    TEST_ASSERT_FALSE(Esp32BaseTime::isRealTime());
+    TEST_ASSERT_EQUAL_UINT32(0, Esp32BaseTime::snapshot().epochSec);
+    TEST_ASSERT_EQUAL_UINT32(20, Esp32BaseTime::snapshot().uptimeSec);
+}
+
 void test_rtc_defaults_to_selected_driver_address_when_configured_address_zero() {
     resetTimeHarness();
     Wire.devices.clear();
@@ -252,6 +276,7 @@ void test_rtc_set_epoch_round_trips_selected_driver() {
 
 int main(int, char**) {
     UNITY_BEGIN();
+    RUN_TEST(test_system_clock_corrections_do_not_change_uptime);
     RUN_TEST(test_time_defaults_to_uptime_without_real_time);
     RUN_TEST(test_rtc_time_establishes_boot_mapping);
     RUN_TEST(test_time_format_uses_configured_offset);

@@ -51,6 +51,13 @@ for path, text in (
     if path != ".gitignore" and "local_secrets.h" not in text:
         errors.append(f"{path}: release/export filters must exclude MQTT local secrets")
 
+for ini in sorted((ROOT / "examples").glob("*/platformio.ini")):
+    content = ini.read_text(encoding="utf-8")
+    if "lib_extra_dirs" in content:
+        errors.append(f"{ini.relative_to(ROOT)}: examples must use an explicit Base dependency, not repository-wide library scanning")
+    if "symlink://../.." not in content:
+        errors.append(f"{ini.relative_to(ROOT)}: missing explicit Base dependency")
+
 mqtt_ini = read("examples/mqtt_tls/platformio.ini")
 for dependency in (
     "Preferences",
@@ -69,6 +76,8 @@ for dependency in (
         errors.append(
             f"examples/mqtt_tls/platformio.ini: external IOT build must declare built-in {dependency}"
         )
+if "-D ESP32BASE_MQTT_ALLOW_UNCHECKED_CERTIFICATE_DATES=1" in mqtt_ini:
+    errors.append("examples/mqtt_tls/platformio.ini: secure example must not bypass certificate date checks")
 if "lib_ldf_mode = deep+" in mqtt_ini:
     errors.append("examples/mqtt_tls/platformio.ini: external build must work with default chain LDF")
 

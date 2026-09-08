@@ -336,3 +336,9 @@ build_flags =
 - Watchdog 启用时 OTA 不触发误复位。
 - Brownout during OTA 不变砖。
 - 上传页进度显示百分比、已上传容量和总容量；页面只显示 KB/MB/B 人性化值，状态/API JSON 保留 raw `bytes` 字段。
+
+## 上传期间的资源协作
+
+上传参数和目标分区通过校验、存储及看门狗长操作准备成功后，库在 `Update.begin()` 前通知 facade 暂停 MQTT；同步 multipart/raw 上传也走同一顺序。LOCAL 不需要 MQTT 或平台 SDK。暂停仅请求异步断开，不承诺 TLS 内存已释放或最后一条消息已获 PUBACK。
+
+开始、写入、校验失败和 abort 都恢复存储写入、配置延期刷写、WiFi 省电及已取得的看门狗长操作状态；拒绝正在进行的上传同样释放资源。应用逐块调用上传 API 时，超过 15 秒没有非空数据进展，下一次 `Esp32BaseOta::handle()` 会中止上传；WebServer 同步处理期间仍依赖其自身读超时与中止回调，这个检查不抢占正在阻塞的网络调用。上传失败后继续调用 facade `handle()`，MQTT 会恢复正常连接条件检查。

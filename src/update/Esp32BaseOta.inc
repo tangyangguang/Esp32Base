@@ -3,7 +3,8 @@
 #if ESP32BASE_ENABLE_OTA
 
 #include "Esp32BaseOta.h"
-#include "../Esp32Base.h"
+#include "internal/Esp32BaseOtaLifecycle.h"
+#include "../runtime/Esp32BaseStorage.h"
 #include "../core/Esp32BaseConfig.h"
 #include "../core/Esp32BaseLog.h"
 #include "../core/Esp32BaseSystem.h"
@@ -35,7 +36,9 @@
 #include <string.h>
 
 namespace {
+esp32base_internal::PreOtaUploadHook g_otaPreUploadHook = nullptr;
 bool g_otaReady = false;
+uint32_t g_otaLastProgressMs = 0;
 Esp32BaseOta::Status g_otaStatus = Esp32BaseOta::IDLE;
 size_t g_otaTotal = 0;
 size_t g_otaProcessed = 0;
@@ -47,6 +50,9 @@ mbedtls_sha256_context g_otaSha;
 bool g_otaShaActive = false;
 bool g_otaPrevPowerSave = true;
 bool g_otaLongOpsActive = false;
+#if ESP32BASE_ENABLE_WATCHDOG
+bool g_otaWatchdogEntered = false;
+#endif
 bool g_otaStorageWritesSuspended = false;
 uint32_t g_otaTransferStartedMs = 0;
 uint32_t g_otaTransferFinishedMs = 0;
@@ -251,7 +257,10 @@ void cleanupLongOps() {
         return;
     }
 #if ESP32BASE_ENABLE_WATCHDOG
-    Esp32BaseWatchdog::exitLongOperation();
+    if (g_otaWatchdogEntered) {
+        Esp32BaseWatchdog::exitLongOperation();
+        g_otaWatchdogEntered = false;
+    }
 #endif
 #if ESP32BASE_ENABLE_WIFI
     Esp32BaseWiFi::setPowerSave(g_otaPrevPowerSave);
@@ -274,12 +283,18 @@ bool prepareLongOps() {
     g_otaStorageWritesSuspended = true;
 #endif
     g_otaLongOpsActive = true;
-    Esp32BaseConfig::pauseDeferredFlush();
-#if ESP32BASE_ENABLE_WATCHDOG
-    Esp32BaseWatchdog::enterLongOperation();
-#endif
 #if ESP32BASE_ENABLE_WIFI
     g_otaPrevPowerSave = Esp32BaseWiFi::powerSave();
+#endif
+    Esp32BaseConfig::pauseDeferredFlush();
+#if ESP32BASE_ENABLE_WATCHDOG
+    g_otaWatchdogEntered = Esp32BaseWatchdog::enterLongOperation();
+    if (!g_otaWatchdogEntered) {
+        cleanupLongOps();
+        return false;
+    }
+#endif
+#if ESP32BASE_ENABLE_WIFI
     Esp32BaseWiFi::setPowerSave(false);
 #endif
     return true;
@@ -527,6 +542,13 @@ bool Esp32BaseOta::begin() {
 
 void Esp32BaseOta::handle() {
     checkMarkValidTimeout();
+    if (g_otaStatus == UPLOADING && millis() - g_otaLastProgressMs >= 15000U) {
+        abortUpload("ota upload stalled");
+    }
+}
+
+void esp32base_internal::registerPreOtaUploadHook(PreOtaUploadHook hook) {
+    g_otaPreUploadHook = hook;
 }
 
 bool Esp32BaseOta::isReady() {
@@ -597,10 +619,14 @@ bool Esp32BaseOta::startUpload(size_t totalSize, const char* expectedSha256Hex) 
     }
 
     if (!prepareLongOps()) {
-        setError("storage unavailable for ota");
+        setError("unable to prepare ota resources");
         logOtaTransferSummary("upload_failed");
         g_otaStatus = FAILED;
         return false;
+    }
+
+    if (g_otaPreUploadHook) {
+        g_otaPreUploadHook();
     }
 
     if (!Update.begin(totalSize)) {
@@ -616,6 +642,7 @@ bool Esp32BaseOta::startUpload(size_t totalSize, const char* expectedSha256Hex) 
     mbedtls_sha256_init(&g_otaSha);
     sha256Starts(&g_otaSha);
     g_otaShaActive = true;
+    g_otaLastProgressMs = millis();
     g_otaStatus = UPLOADING;
     char totalBuf[32];
     formatOtaBytes(g_otaTotal, totalBuf, sizeof(totalBuf));
@@ -647,6 +674,9 @@ bool Esp32BaseOta::writeChunk(const uint8_t* data, size_t len) {
         mbedtls_sha256_update(&g_otaSha, data, len);
     }
     g_otaProcessed += len;
+    if (len > 0) {
+        g_otaLastProgressMs = millis();
+    }
     logProgressIfDue();
     Esp32BaseLongOperation::service();
 #if ESP32BASE_ENABLE_BUS
@@ -766,6 +796,10 @@ void Esp32BaseOta::abortUpload(const char* reason) {
 }
 
 void Esp32BaseOta::rejectUpload(const char* reason) {
+    if (isUploading()) {
+        abortUpload(reason ? reason : "ota upload rejected");
+        return;
+    }
     g_otaTotal = 0;
     g_otaProcessed = 0;
     g_otaExpected[0] = '\0';

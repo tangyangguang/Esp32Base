@@ -215,3 +215,7 @@ custom_esp32base_webota_password = <current-web-auth-password>
 - IOT 项目额外验证 MQTTS 时间门禁、CA、重连、QoS、LWT、heap 峰值和长稳。
 
 基础库自身的完整发布矩阵见 `docs/09_release_checklist.md`。业务项目必须在自己的 README 中记录实际命令、资源结果和尚未完成的实机验证，不能把基础库构建成功等同于产品验收完成。
+
+## 示例依赖定位
+
+本库示例通过 `lib_deps` 中的 `symlink://../..` 明确引用仓库根目录，并按 Profile 列出 Arduino 内置依赖。不要同时把整个仓库加入 `lib_extra_dirs`，否则 `.cache`、裸 `src` 等子目录可能成为额外候选库。LOCAL/IOT 需列出 Preferences、FS、WiFi、DNSServer、ESPmDNS、LittleFS、WebServer、Update 等实际依赖；Core 3 网络示例还显式列出 Networking、Hash。以对应示例当前 `platformio.ini` 为准，不把全部网络依赖带入 MINIMAL/OFFLINE。

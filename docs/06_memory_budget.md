@@ -212,3 +212,7 @@ ESP32-C3 4MB 要控制 Web/OTA/Fs 组合的体积。
 - 启用 MQTT 时，是否记录 MQTT task stack、TLS 握手峰值、稳定连接 heap、outbox/inbox 高水位和连续重连后的 min heap。
 
 如果某次发布无法完成实机容量验证，应在发布记录中说明缺口，不应把空表或过期数值留在项目文档里。
+
+## MQTT 收发容量
+
+发送/LWT 上限 `ESP32BASE_MQTT_MAX_PAYLOAD_BYTES` 和接收上限 `ESP32BASE_MQTT_MAX_INCOMING_PAYLOAD_BYTES` 独立，默认各 512B；接收槽默认 2 个。对于 4096B 上报、512B 命令的组合，接收 payload 常驻空间为 1024B，而不是随发送上限增至 8192B。此处 7168B 是 payload 数组的静态布局差值，不是 TLS 握手峰值或总堆节省实测。outbox 仍需另行容纳报文头与 topic，4KiB 发布可用 8KiB outbox。任务栈、网络缓冲、接收槽数和重连保护默认值未缩减。

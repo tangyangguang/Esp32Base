@@ -430,6 +430,59 @@ void test_qos1_publish_ack_and_outbox_limit() {
                       g_reentrantPublishCode);
 }
 
+void test_disconnect_discards_queued_and_partial_incoming_messages() {
+    Esp32BaseMqtt::setMessageCallback(onMessage);
+    startAndConnect();
+    char topic[] = "device/command";
+    char data[] = "abc";
+    esp_mqtt_event_t incoming = {};
+    incoming.client = &g_fakeClient;
+    incoming.event_id = MQTT_EVENT_DATA;
+    incoming.topic = topic;
+    incoming.topic_len = strlen(topic);
+    incoming.data = data;
+    incoming.data_len = 3;
+    incoming.total_data_len = 3;
+    incoming.msg_id = 1;
+    handleIncomingData(&incoming);
+    incoming.msg_id = 2;
+    incoming.total_data_len = 6;
+    handleIncomingData(&incoming);
+    TEST_ASSERT_EQUAL(2, incomingUsedLocked());
+    emitEvent(MQTT_EVENT_DISCONNECTED);
+    TEST_ASSERT_EQUAL(0, incomingUsedLocked());
+    Esp32BaseMqtt::handle(false);
+    TEST_ASSERT_EQUAL(0, g_messageCount);
+    TEST_ASSERT_EQUAL_UINT32(2, Esp32BaseMqtt::diagnostics().incomingMailboxDropped);
+}
+
+void test_ota_preparation_does_not_dispatch_application_callbacks() {
+    startAndConnect();
+    const int before = g_applicationEventCount;
+    emitEvent(MQTT_EVENT_PUBLISHED, 42);
+    esp32base_internal::suspendMqttForOta();
+    TEST_ASSERT_EQUAL(before, g_applicationEventCount);
+    TEST_ASSERT_EQUAL(Esp32BaseMqtt::SUSPENDED_FOR_OTA, Esp32BaseMqtt::state());
+    emitEvent(MQTT_EVENT_DISCONNECTED);
+    Esp32BaseMqtt::handle(true);
+    TEST_ASSERT_EQUAL(Esp32BaseMqtt::SUSPENDED_FOR_OTA, Esp32BaseMqtt::state());
+    Esp32BaseMqtt::handle(false);
+    TEST_ASSERT_NOT_EQUAL(Esp32BaseMqtt::SUSPENDED_FOR_OTA, Esp32BaseMqtt::state());
+}
+
+void test_publish_capacity_does_not_expand_incoming_slots() {
+    TEST_ASSERT_EQUAL_UINT32(ESP32BASE_MQTT_MAX_INCOMING_PAYLOAD_BYTES,
+                             sizeof(g_mqttIncoming[0].payload));
+    startAndConnect();
+    static uint8_t payload[ESP32BASE_MQTT_MAX_PAYLOAD_BYTES] = {};
+    Esp32BaseMqtt::PublishRequest request;
+    request.topic = "device/state";
+    request.payload = payload;
+    request.payloadLength = sizeof(payload);
+    request.qos = Esp32BaseMqtt::QOS_1;
+    TEST_ASSERT_TRUE(Esp32BaseMqtt::publish(request).accepted());
+}
+
 void test_fragment_assembly_and_oversize_drop() {
     Esp32BaseMqtt::setMessageCallback(onMessage);
     startAndConnect();
@@ -463,7 +516,7 @@ void test_fragment_assembly_and_oversize_drop() {
     event.msg_id = 56;
     event.topic = topic;
     event.topic_len = strlen(topic);
-    event.total_data_len = ESP32BASE_MQTT_MAX_PAYLOAD_BYTES + 1;
+    event.total_data_len = ESP32BASE_MQTT_MAX_INCOMING_PAYLOAD_BYTES + 1;
     event.current_data_offset = 0;
     g_fakeEventHandler(nullptr, nullptr, MQTT_EVENT_DATA, &event);
     Esp32BaseMqtt::handle(false);
@@ -769,6 +822,9 @@ int main(int, char**) {
     RUN_TEST(test_begin_never_starts_network_and_waits_for_prerequisites);
     RUN_TEST(test_callbacks_are_deferred_until_handle_and_subscriptions_repeat);
     RUN_TEST(test_qos1_publish_ack_and_outbox_limit);
+    RUN_TEST(test_disconnect_discards_queued_and_partial_incoming_messages);
+    RUN_TEST(test_ota_preparation_does_not_dispatch_application_callbacks);
+    RUN_TEST(test_publish_capacity_does_not_expand_incoming_slots);
     RUN_TEST(test_fragment_assembly_and_oversize_drop);
     RUN_TEST(test_terminal_auth_rejection_requires_explicit_retry);
     RUN_TEST(test_lwt_is_mapped_and_ota_suspends_without_direct_callback);

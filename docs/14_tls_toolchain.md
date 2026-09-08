@@ -75,3 +75,5 @@ Core 3.3.8 / ESP32 的完整配置对比仅有 `CONFIG_MBEDTLS_HAVE_TIME_DATE: n
 尚未验证：设备上的正常/过期/未生效证书握手、错误时钟和恢复、断网重连、Web/OTA 并发资源边界及长时间稳定性。没有烧录、OTA、操作真实设备或发布工具链产物。S3、C3 和 Core 2.x 仍需独立闭环。
 
 上游资料：[Library Builder](https://docs.espressif.com/projects/arduino-esp32/en/latest/lib_builder.html)、[ESP-IDF mbedTLS 配置源码](https://github.com/espressif/esp-idf/blob/735507283d5b2f9fb363a1901172dbd9e847945d/components/mbedtls/Kconfig)。
+
+MQTT 示例不再默认开启 `ESP32BASE_MQTT_ALLOW_UNCHECKED_CERTIFICATE_DATES`。使用官方缺少日期验证的预编译 SDK 时，示例可编译但 TLS 配置会明确拒绝；实际安全握手需要上文受控包。不要把编译成功等同于 TLS 可用，也不要为跑通示例关闭有效期校验。

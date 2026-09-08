@@ -649,3 +649,7 @@ Arduino `WebServer` 是同步模型。
 - `addStaticAsset()` 适合注册固件内小型 CSS/JS/图片；应用传入的数据和 content type 字符串必须在固件生命周期内有效。
 - WiFi modem sleep 默认关闭，避免按 DTIM 周期唤醒；电池业务可调用 `Esp32BaseWiFi::setPowerSave(true)` 显式恢复 modem sleep。
 - 内置基础 CSS 不再包含 App Config 专用样式；启用 `ESP32BASE_ENABLE_APP_CONFIG` 时 App Config 页会按需注入额外 `<style>`，其他页面不下发这部分字节。
+
+## 流式响应时间预算
+
+同一响应的全部正文块及结束块共用 `ESP32BASE_WEB_RESPONSE_TIMEOUT_MS`（默认 30 秒，范围 1..300 秒）。即使客户端持续缓慢接收也不会重新计时；失败或到期后关闭当前连接。大文件导出可按产品实际大小调整预算。此预算在每次底层写入前后检查，无法中断 SDK 内部的单次 write 或业务 handler 的计算；它不替代业务循环时延和实机弱网验证。

@@ -30,6 +30,11 @@ for forbidden in ("../web/", "Esp32BaseWeb", "../update/", "Esp32BaseOta", "Esp3
     if forbidden in mqtt:
         errors.append(f"src/network/Esp32BaseMqtt.inc: Network MQTT must not depend on higher layer {forbidden}")
 
+ota = read("src/update/Esp32BaseOta.inc")
+for forbidden in ('#include "../Esp32Base.h"', 'Esp32BaseMqtt::'):
+    if forbidden in ota:
+        errors.append(f"src/update/Esp32BaseOta.inc: lifecycle orchestration belongs in facade ({forbidden})")
+
 if errors:
     for error in errors:
         print(error)

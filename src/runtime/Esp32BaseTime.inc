@@ -8,6 +8,7 @@
 #include "../core/Esp32BaseSystem.h"
 
 #include <esp_timer.h>
+#include <limits.h>
 #include <stdio.h>
 #include <sys/time.h>
 #include <time.h>
@@ -29,11 +30,13 @@ bool timeTrustedEpoch(uint32_t epochSec) {
 
 #if defined(ESP32BASE_TIME_NATIVE_TEST)
 uint32_t g_lastSystemEpoch = 0;
+uint32_t g_systemEpochSetAtUptime = 0;
 #endif
 
 void timeSetSystemEpoch(uint32_t epochSec) {
 #if defined(ESP32BASE_TIME_NATIVE_TEST)
     g_lastSystemEpoch = epochSec;
+    g_systemEpochSetAtUptime = timeCurrentUptimeSec();
 #else
     struct timeval tv = {};
     tv.tv_sec = static_cast<time_t>(epochSec);
@@ -88,9 +91,20 @@ Esp32BaseTime::Snapshot Esp32BaseTime::snapshot() {
     value.source = g_source;
     value.uptimeSec = timeCurrentUptimeSec();
     value.bootId = g_bootId ? g_bootId : 1;
-    value.bootStartEpochSec = g_bootStartEpochSec;
-    value.synced = g_source != SOURCE_UPTIME && g_bootStartEpochSec != 0;
-    value.epochSec = value.synced ? g_bootStartEpochSec + value.uptimeSec : 0;
+    // UTC follows the system clock, including subsequent SNTP corrections.
+    // Uptime remains monotonic and is never derived from wall-clock time.
+#if defined(ESP32BASE_TIME_NATIVE_TEST)
+    const uint64_t now = static_cast<uint64_t>(g_lastSystemEpoch) +
+                         value.uptimeSec - g_systemEpochSetAtUptime;
+#else
+    const time_t now = time(nullptr);
+#endif
+    value.synced = g_source != SOURCE_UPTIME &&
+                   now >= ESP32BASE_TIME_SYNC_MIN_EPOCH &&
+                   static_cast<uint64_t>(now) <= UINT32_MAX &&
+                   static_cast<uint64_t>(now) > value.uptimeSec;
+    value.epochSec = value.synced ? static_cast<uint32_t>(now) : 0;
+    value.bootStartEpochSec = value.synced ? value.epochSec - value.uptimeSec : 0;
     return value;
 }
 
@@ -144,6 +158,9 @@ bool Esp32BaseTime::resolveCurrentBootEvent(uint32_t bootId, uint32_t uptimeSec,
     if (!s.synced || bootId == 0 || bootId != s.bootId || s.bootStartEpochSec == 0) {
         return false;
     }
+    if (uptimeSec > UINT32_MAX - s.bootStartEpochSec) {
+        return false;
+    }
     *epochSec = s.bootStartEpochSec + uptimeSec;
     return timeTrustedEpoch(*epochSec);
 }
@@ -193,6 +210,7 @@ void timeNativeReset() {
     g_source = Esp32BaseTime::SOURCE_UPTIME;
     g_callback = nullptr;
     g_lastSystemEpoch = 0;
+    g_systemEpochSetAtUptime = 0;
 }
 #endif
 }

@@ -3,8 +3,13 @@
 #if ESP32BASE_ENABLE_WEB
 
 #include "WebInternal.h"
+#include "WebWrite.h"
 
 namespace esp32base_web {
+namespace {
+uint32_t g_responseStartedMs = 0;
+}
+
 
 bool sendResponseHeader(const char* name, const char* value) {
     if (!g_requestContextActive) {
@@ -51,6 +56,7 @@ bool beginResponse(int code, const char* contentType, const char* filename) {
         g_server.sendHeader("Content-Disposition", disposition);
     }
     g_chunkUsed = 0;
+    g_responseStartedMs = millis();
     g_responseActive = true;
     g_responseBroken = false;
     g_server.setContentLength(CONTENT_LENGTH_UNKNOWN);
@@ -70,27 +76,8 @@ void feedWatchdogDuringSend() {
 }
 
 bool writeClientBytes(WiFiClient& client, const char* data, size_t len) {
-    if (len == 0) {
-        return true;
-    }
-    size_t offset = 0;
-    uint8_t zeroProgress = 0;
-    while (offset < len) {
-        feedWatchdogDuringSend();
-        const size_t written = client.write(reinterpret_cast<const uint8_t*>(data + offset), len - offset);
-        feedWatchdogDuringSend();
-        if (written == 0) {
-            if (!client.connected() || ++zeroProgress >= 3) {
-                return false;
-            }
-            delay(1);
-            continue;
-        }
-        offset += written;
-        zeroProgress = 0;
-        yield();
-    }
-    return true;
+    return writeResponseBytes(client, data, len, g_responseStartedMs,
+                              ESP32BASE_WEB_RESPONSE_TIMEOUT_MS, feedWatchdogDuringSend);
 }
 
 bool sendRawChunkedContent(const char* data, size_t len) {
@@ -111,6 +98,7 @@ bool sendRawChunkedContent(const char* data, size_t len) {
 void markResponseClientDisconnected() {
     if (!g_responseBroken) {
         g_responseBroken = true;
+        g_server.client().stop();
         ESP32BASE_LOG_I("web", "response_client_disconnected uri=%s", g_activeUri[0] ? g_activeUri : "-");
     }
 }
@@ -196,7 +184,7 @@ void endResponse() {
     }
     flushChunkBuffer();
     if (!g_responseBroken) {
-        g_server.sendContent("");
+        sendResponseContent(nullptr, 0);
         yield();
     }
     g_responseActive = false;

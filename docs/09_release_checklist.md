@@ -337,3 +337,5 @@
 - OTA开始前必须flush FileLog并暂停FS写入，成功、失败和中止路径都必须恢复。
 - Conditions必须覆盖激活/恢复确认、Unknown取消、millis回绕、重启恢复、重复ID、NVS读写失败及forget；它不得隐式建立LittleFS历史。
 - RecordStore必须覆盖多Store登记、预算边界、受管路径、统一清空、格式化恢复、尾部损坏和常见64/128/256/384/512 KiB分段。
+
+本轮网络/LOCAL 协作改动的定向验证入口：`python3 scripts/test_ota_lifecycle.py`、`python3 scripts/test_web_write.py`、`python3 scripts/test_watchdog.py`；时间使用 `native_time_harness`，MQTT 使用 `native_mqtt_harness`、`native_mqtt_secure_default_harness` 和 `native_mqtt_large_tx_harness`。这些测试使用假的 SDK/网络/时钟验证生产代码边界，不代替真实握手、OTA 或卡死复位。

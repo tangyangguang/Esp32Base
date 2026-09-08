@@ -843,6 +843,8 @@ request.retain = true;
 const auto result = Esp32BaseMqtt::publish(request);
 ```
 
+MQTT 容量分别配置：`ESP32BASE_MQTT_MAX_PAYLOAD_BYTES` 限制发布和 LWT（默认 512），`ESP32BASE_MQTT_MAX_INCOMING_PAYLOAD_BYTES` 限制单条接收消息及每个接收槽（默认 512），范围均为 64..4096。扩大上报载荷不会自动扩大接收缓冲；设备需要接收大命令时必须显式增大接收上限。发布容量还受 `ESP32BASE_MQTT_MAX_OUTBOX_BYTES` 约束，须为 topic 和报文头预留空间；4096 字节发布可以配合 8192 字节 outbox，不能假设 4096 字节 outbox 能放下同尺寸 payload。
+
 `publish()` 只能从 `Esp32Base::handle()` 所在 loop/system task 调用，只在 `CONNECTED` 时接受。它使用非阻塞 `esp_mqtt_client_enqueue()`，返回前底层已复制成功或明确拒绝，因此返回 `PUBLISH_ACCEPTED` 后调用方可释放 topic/payload；它不调用可能阻塞数秒的 `esp_mqtt_client_publish()`。
 
 `PUBLISH_ACCEPTED` 只表示进入有限发送流程：
@@ -862,7 +864,7 @@ const auto result = Esp32BaseMqtt::publish(request);
 typedef void (*MessageCallback)(const MessageView& message, void* context);
 ```
 
-`MessageView` 给出 topic/payload 指针和精确长度、QoS、retain、duplicate。ESP-MQTT task 将分片按 offset 复制到固定槽，完整且未超限后才由 `Esp32Base::handle()` 调用业务 callback；不截断。指针只在 callback 期间有效，需要异步保留时由业务自行复制。底层 MQTT/WiFi/LWIP/FreeRTOS callback 不直接进入业务代码。
+`MessageView` 给出 topic/payload 指针和精确长度、QoS、retain、duplicate。ESP-MQTT task 将分片按 offset 复制到固定槽，完整且未超限后才由 `Esp32Base::handle()` 调用业务 callback；不截断。指针只在 callback 期间有效，需要异步保留时由业务自行复制。底层 MQTT/WiFi/LWIP/FreeRTOS callback 不直接进入业务代码。断连时清理尚未交付的完整消息与未完成分片，并计入接收邮箱丢弃诊断，避免旧连接的命令在重连后才交付；已经进入业务 callback 的消息不撤销。OTA 暂停期间不派发接收消息。
 
 状态：
 
@@ -883,7 +885,7 @@ typedef void (*MessageCallback)(const MessageView& message, void* context);
 
 `Status` 提供当前状态、稳定错误、TLS/credential-set、证书日期校验能力、Broker host/port/clientId 和最近连接的 uptime/epoch。`Diagnostics` 提供连接尝试、连接周期配置失败、成功、重连、断开、接收、publish accepted、PUBACK、订阅 ACK、送达状态不确定、超限/邮箱丢弃、enqueue 失败、outbox/inbox/control high-water、当前 QoS 1 in-flight 及 native ESP/TLS/socket/certificate flags。QoS 0 没有可观察的 Broker ACK，因此不伪造“已发送”计数；native code 只用于诊断，不作为跨 Core 稳定业务枚举。
 
-OTA 上传开始时 facade 先调用已注册的 `BeforeNetworkStopCallback`，再异步请求 MQTT DISCONNECT 并拒绝新 publish；上传失败且设备继续运行时重新进入前置条件和连接流程。运行期不调用可能无限等待的 `esp_mqtt_client_stop()`；MQTT task 保留到重启，避免阻塞 loop/watchdog。restart/deep sleep 同样先调用该应用回调，再尽力异步请求 DISCONNECT；基础库不等待 task 停止，也不承诺应用最后 publish、DISCONNECT、在途 publish 或 PUBACK 已抵达。异常掉电的 LWT 行为由 Broker 和 MQTT 契约决定。WiFi safe boot/AP 配网时不连接 Broker；modem sleep 下 Keepalive 和重连需要产品实机验证。
+OTA 校验参数并取得存储/长操作资源后，在 `Update.begin()` 前通过内部 hook 调用 facade 已注册的 `BeforeNetworkStopCallback`，再异步请求 MQTT DISCONNECT 并拒绝新 publish。该 hook 不派发积压的 MQTT 业务 callback，不依赖外层 `handle()` 再次观察到上传状态；LOCAL 未启用 MQTT 时仍可独立上传。上传失败且设备继续运行时，下次 facade `handle()` 恢复 MQTT 前置条件和连接流程。运行期不调用可能无限等待的 `esp_mqtt_client_stop()`；MQTT task 保留到重启，避免阻塞 loop/watchdog。restart/deep sleep 同样先调用该应用回调，再尽力异步请求 DISCONNECT；基础库不等待 task 停止，也不承诺应用最后 publish、DISCONNECT、在途 publish 或 PUBACK 已抵达。异常掉电的 LWT 行为由 Broker 和 MQTT 契约决定。WiFi safe boot/AP 配网时不连接 Broker；modem sleep 下 Keepalive 和重连需要产品实机验证。
 
 容量宏及默认值见 [内存与容量预算](06_memory_budget.md)。最小安全接入见 `examples/mqtt_tls`。Topic 版本、命令去重/过期/授权、JSON、设备影子、业务状态同步和离线业务数据属于应用层。
 
@@ -1036,7 +1038,7 @@ NTP 默认使用 UTC+8，即 `ESP32BASE_NTP_GMT_OFFSET_SEC=(8L * 3600L)`、`ESP3
 - `synced=true` 表示当前时间已通过 Esp32Base 可信判定，和 `/esp32base/status` Status 页 Time 行使用同一语义。
 - `epochSec` 仅在 `synced=true` 时有效；未同步时为 `0`，业务不应伪造日期。
 - `uptimeSec` 和 `bootId` 在未同步时也可用，用于记录“本次开机 +N 秒”的业务事件；`uptimeSec` 来自 ESP-IDF 64-bit 运行时间计数源，不受 Arduino `millis()` 约 49.7 天回卷影响。
-- `bootStartEpochSec` 仅在本次 boot 已同步后有效，值为 `epochSec - uptimeSec`。
+- `bootStartEpochSec` 仅在本次 boot 已同步后有效，值为 `epochSec - uptimeSec`。`epochSec` 读取当前系统 UTC，后续 SNTP 的前调、回调和渐进校正会反映在快照中，不再固定使用首次对时结果；`uptimeSec` 不受这些校正影响。开机时刻是按当前 UTC 估计的映射，会随校时调整，不能当作单调时钟或精确的历史校时轨迹。当前系统 UTC 失去可信性时，`synced=false`，epoch 与映射归零。
 
 `Esp32Base::begin()` 会在系统模块初始化后调用 `Esp32BaseTime::initBootSession()`，`bootId` 复用 `Esp32BaseSystem::bootCount()`，不为时间模块额外写启动期 NVS。`bootId=0` 保留为未知；正常非 sleep 重启使用非零 boot count，deep sleep 唤醒沿用上一次非 sleep 重启计数。业务项目不需要手动调用 `initBootSession()`，除非绕过 `Esp32Base::begin()` 直接使用时间模块。
 
@@ -1046,7 +1048,7 @@ NTP 默认使用 UTC+8，即 `ESP32BASE_NTP_GMT_OFFSET_SEC=(8L * 3600L)`、`ESP3
 
 - `isCurrentBootEvent(bootId)` 只判断事件是否属于本次 boot。
 - `canResolveCurrentBootEvent(bootId)` 要求事件属于本次 boot 且已有 `bootStartEpochSec`。
-- `resolveCurrentBootEvent(bootId, uptimeSec, &epochSec)` 只转换本次 boot 的相对时间；历史 boot、未知 `bootId`、未同步状态都会返回 `false`，避免把历史未知时间误修正。
+- `resolveCurrentBootEvent(bootId, uptimeSec, &epochSec)` 只转换本次 boot 的相对时间；历史 boot、未知 `bootId`、未同步状态或转换溢出都会返回 `false`，避免把历史未知时间误修正。
 
 NTP 日志策略：
 
@@ -1391,7 +1393,7 @@ Route 缓冲机制：
 - `beginResponse(code, contentType, filename)` 开始通用 chunked 响应，后续使用 `sendChunk()` 输出文本或 `sendBytes()` 输出二进制块，最后必须调用 `endResponse()`。
 - `beginText(code)` 等价于 `text/plain; charset=utf-8` chunked 响应；`beginCsv(code, filename)` 等价于 `text/csv; charset=utf-8`，filename 非空时发送 `Content-Disposition: attachment`。`writeCsvEscaped()` 除了 CSV 引号转义，还会对 `= + - @` 等 spreadsheet formula 前缀加 `'`，降低运维人员用 Excel/Sheets 打开导出文件时的公式执行风险。
 - `beginResponse()` / `beginText()` / `beginCsv()` 只能在 handler 请求上下文中成功；handler 外、contentType 为空或超过 63 字节、filename 含不安全字符时返回 false 并记录 WARN。
-- 长响应的文本、PROGMEM head、二进制块和结束块发送过程中会主动让出调度；正文 data chunk 由基础库无堆分配 writer 输出并在发送前后喂 watchdog。客户端在发送前已经断开时后续 `sendChunk()` / `sendBytes()` 会停止继续输出。`endResponse()` 会在响应未标记为断开时发送最终 0-length chunk，保证 chunked 响应可被 HTTP 客户端正常判定结束。
+- 长响应的文本、PROGMEM head、二进制块和结束块发送过程中会主动让出调度；正文 data chunk 由基础库无堆分配 writer 输出并在发送前后喂 watchdog。客户端在发送前已经断开时后续 `sendChunk()` / `sendBytes()` 会停止继续输出。`endResponse()` 会在响应未标记为断开时发送最终 0-length chunk，保证 chunked 响应可被 HTTP 客户端正常判定结束。包括结束块在内的整个流式响应共用 `ESP32BASE_WEB_RESPONSE_TIMEOUT_MS` 时间预算（默认 30000ms，允许 1000..300000ms）；持续少量进展不会重置预算，超时或写失败会关闭该客户端连接。检查发生在底层 write 前后，不能抢占 SDK 单次阻塞 write，也不能抢占应用在 handler 中的计算；因此这是协作式限时，不是整个请求的硬实时上限。
 - 已经完整生成的小 JSON 优先使用 `sendJson(code, json)`；该路径发送固定 `Content-Length`，不进入 chunked 响应状态机。
 - CSV 字段必须用 `writeCsvEscaped()` 输出，避免逗号、换行或双引号破坏导出格式。
 - `redirectSeeOther(location)` 发送 `303 See Other`，用于 POST 成功后跳转到 GET 页面，避免浏览器刷新重复提交。
