@@ -28,6 +28,7 @@
 ## 3. 网络边界
 
 - MQTT 3.1.1 Client 是显式可选能力，只支持单 Broker、单 Client、Clean Session、QoS 0/1、TCP/TLS；不支持 MQTT 5、QoS 2、持久会话恢复、多 Broker、WebSocket、云厂商 SDK、设备影子或远程 MQTT OTA。
+- MQTT 入队发送由 SDK task 执行，但 publish 的 enqueue/outbox 查询仍可能等待 SDK 内部锁；异步传输不保证 loop 或 API 调用的固定响应上限，实时业务需遵守下文的任务边界。
 - MQTTS 必须由应用提供有效 CA，并等待统一 Time 来源升级为 NTP；RTC 不单独放行 TLS。不提供跳过 CA/hostname 或校验失败后回落明文。系统 CA bundle 当前不公开。
 - MQTT 用户名、密码、CA、客户端证书、私钥、LWT、订阅 Topic 按借用内存处理，必须保持到设备重启或进入 deep sleep；每次 CONNECT 前 callback 只能刷新这些既有借用缓冲和 `LastWill` 字段，不能替换基础连接配置。基础库不持久化、不提供 Web 配置页，也不提供安全擦除保证。
 - MQTT publish 不构成业务离线队列。仅已连接时接受；QoS 1 断线未 ACK 报文报告 `EVENT_PUBLISH_DELIVERY_UNCERTAIN`，其后仍可能被 ESP-MQTT 的有界协议 outbox 重传，不能据此断言“确定未送达”。业务需要幂等，并在重连后重新发布当前状态。

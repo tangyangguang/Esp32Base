@@ -810,7 +810,7 @@ static const char* errorName(Error error);
 Esp32Base::setBeforeNetworkStopCallback(callback, context);
 ```
 
-callback 在 restart/deep sleep 生命周期进入 MQTT 异步 DISCONNECT 前调用；启用 Web OTA 时，也会在每次上传开始、MQTT 首次进入 `SUSPENDED_FOR_OTA` 前调用一次，上传失败并恢复后允许下次再次调用。后注册会替换前一个 callback。它只适合在当前 loop/system task 中执行固定时间、非阻塞的最后 publish 或运行态标记，不得自行等待 PUBACK、sleep、访问慢外设或启动长流程。返回值是应用请求的有界网络发送宽限毫秒数：`0` 表示不等待，基础库将大于 `1000` 的值限制为 `1000`；restart/deep sleep 会在 callback 返回后、请求 MQTT DISCONNECT 前等待一次，并在请求后再等待一次，Web OTA 只在暂停 MQTT 前等待一次。该宽限仅给 ESP-MQTT task 发送已 enqueue 报文和处理断开机会，不轮询 PUBACK，也不把 `PUBLISH_ACCEPTED` 提升为 Broker 已收到；应用协议必须保留 LWT 作为异常或正常离线消息未送达时的兜底。未配置 MQTT、当前不在线、上传前已经断线或底层 enqueue 拒绝时，业务应返回 `0` 并接受本次正常离线证据无法发布，不能阻止安全重启、休眠或 OTA。
+callback 在 restart/deep sleep 生命周期进入 MQTT 异步 DISCONNECT 前调用；启用 Web OTA 时，也会在每次上传开始、MQTT 首次进入 `SUSPENDED_FOR_OTA` 前调用一次，上传失败并恢复后允许下次再次调用。后注册会替换前一个 callback。它只适合在当前 loop/system task 中发起一次最后 publish 或更新运行态标记；publish 仍有下文说明的 SDK 锁等待边界，不得自行等待 PUBACK、sleep、访问慢外设或启动长流程。返回值是应用请求的有界网络发送宽限毫秒数：`0` 表示不等待，基础库将大于 `1000` 的值限制为 `1000`；restart/deep sleep 会在 callback 返回后、请求 MQTT DISCONNECT 前等待一次，并在请求后再等待一次，Web OTA 只在暂停 MQTT 前等待一次。该宽限仅给 ESP-MQTT task 发送已 enqueue 报文和处理断开机会，不轮询 PUBACK，也不把 `PUBLISH_ACCEPTED` 提升为 Broker 已收到；应用协议必须保留 LWT 作为异常或正常离线消息未送达时的兜底。未配置 MQTT、当前不在线、上传前已经断线或底层 enqueue 拒绝时，业务应返回 `0` 并接受本次正常离线证据无法发布，不能阻止安全重启、休眠或 OTA。
 
 `ConnectionConfig`：
 
@@ -857,7 +857,7 @@ const auto result = Esp32BaseMqtt::publish(request);
 
 MQTT 容量分别配置：`ESP32BASE_MQTT_MAX_PAYLOAD_BYTES` 限制发布和 LWT（默认 512），`ESP32BASE_MQTT_MAX_INCOMING_PAYLOAD_BYTES` 限制单条接收消息及每个接收槽（默认 512），范围均为 64..4096。扩大上报载荷不会自动扩大接收缓冲；设备需要接收大命令时必须显式增大接收上限。发布容量还受 `ESP32BASE_MQTT_MAX_OUTBOX_BYTES` 约束，须为 topic 和报文头预留空间；4096 字节发布可以配合 8192 字节 outbox，不能假设 4096 字节 outbox 能放下同尺寸 payload。
 
-`publish()` 只能从 `Esp32Base::handle()` 所在 loop/system task 调用，只在 `CONNECTED` 时接受。它使用非阻塞 `esp_mqtt_client_enqueue()`，返回前底层已复制成功或明确拒绝，因此返回 `PUBLISH_ACCEPTED` 后调用方可释放 topic/payload；它不调用可能阻塞数秒的 `esp_mqtt_client_publish()`。
+`publish()` 只能从 `Esp32Base::handle()` 所在 loop/system task 调用，只在 `CONNECTED` 时接受。它通过 `esp_mqtt_client_enqueue()` 入队，实际网络发送由 ESP-MQTT task 执行；返回前底层已复制成功或明确拒绝，因此返回 `PUBLISH_ACCEPTED` 后调用方可释放 topic/payload。它不调用在调用方执行网络发送的 `esp_mqtt_client_publish()`，但入队和 outbox 查询仍使用 SDK 内部互斥锁，可能等待 MQTT task 释放锁；异步发送不等于严格非阻塞或调用耗时有固定上限。不要从实时业务任务直接调用，也不要用降低调用方等待预算的假设替代实际调度测量。
 
 `PUBLISH_ACCEPTED` 只表示进入有限发送流程：
 
