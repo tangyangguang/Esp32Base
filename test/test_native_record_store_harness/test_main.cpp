@@ -33,6 +33,8 @@ bool g_conditionStateReadFails = false;
 bool g_conditionStateWriteFails = false;
 bool g_fileSystemWriteFails = false;
 bool g_segmentCreateFails = false;
+bool g_renameFails = false;
+int g_createCutBytes = -1;
 bool g_fsMaintenance = false;
 bool g_fsWritesSuspended = false;
 
@@ -55,6 +57,8 @@ void resetHarness() {
     g_conditionStateWriteFails = false;
     g_fileSystemWriteFails = false;
     g_segmentCreateFails = false;
+    g_renameFails = false;
+    g_createCutBytes = -1;
     g_fsMaintenance = false;
     g_fsWritesSuspended = false;
     nativeMillisValue() = 0;
@@ -131,6 +135,7 @@ Esp32BaseFs::RemoveFileResult Esp32BaseFs::removeFileWithRecovery(const char* pa
 }
 bool Esp32BaseFs::removeFile(const char* path) { return g_files.erase(path ? path : "") != 0; }
 bool Esp32BaseFs::rename(const char* from, const char* to) {
+    if (g_renameFails) return false;
     auto found = g_files.find(from ? from : "");
     if (found == g_files.end() || g_files.count(to ? to : "")) return false;
     g_files[to] = found->second;
@@ -216,6 +221,11 @@ bool esp32base_internal::fsCreateWithSegments(const char* path,
     std::vector<uint8_t> bytes;
     for (size_t i = 0; i < segmentCount; ++i) {
         bytes.insert(bytes.end(), segments[i].data, segments[i].data + segments[i].length);
+    }
+    if (g_createCutBytes >= 0 && static_cast<size_t>(g_createCutBytes) < bytes.size()) {
+        bytes.resize(static_cast<size_t>(g_createCutBytes));
+        g_files[path ? path : ""] = bytes;
+        return false;
     }
     g_files[path ? path : ""] = bytes;
     return true;
@@ -1070,6 +1080,108 @@ void test_rotation_failure_does_not_reuse_ids_and_checkpoint_tail_can_recover() 
     TEST_ASSERT_EQUAL_UINT32(1, status.recordCount);
 }
 
+void test_protected_rotation_keeps_last_fact_until_replacement_commits() {
+    Esp32BaseRecordStore store;
+    auto d = definition();
+    d.retentionPolicy = Esp32BaseRecordStore::RetentionPolicy::PreserveUnreleased;
+    TEST_ASSERT_TRUE(store.begin(d));
+    uint8_t bytes[8];
+    payload(bytes, 1);
+    TEST_ASSERT_TRUE(store.appendInstant(bytes, sizeof(bytes)));
+    TEST_ASSERT_TRUE(store.appendInstant(bytes, sizeof(bytes)));
+    TEST_ASSERT_TRUE(store.releaseThrough(2));
+    for (unsigned failure = 0; failure < 3; ++failure) {
+        g_segmentCreateFails = failure == 0;
+        g_renameFails = failure == 1;
+        g_totalBytes = failure == 2 ? 224 : 1024 * 1024;
+        TEST_ASSERT_FALSE(store.appendInstant(bytes, sizeof(bytes)));
+        g_segmentCreateFails = g_renameFails = false;
+        g_totalBytes = 1024 * 1024;
+        TEST_ASSERT_TRUE(store.reload());
+        Esp32BaseRecordStore::StoreStatus status;
+        TEST_ASSERT_TRUE(store.readStatus(status));
+        TEST_ASSERT_EQUAL_UINT32(2, status.recordCount);
+        TEST_ASSERT_EQUAL_UINT32(3, status.nextRecordId);
+    }
+    const auto oldSegment = segmentPath(store);
+    g_removeFailurePaths.insert(oldSegment);
+    TEST_ASSERT_FALSE(store.appendInstant(bytes, sizeof(bytes)));
+    TEST_ASSERT_EQUAL_INT((int)Esp32BaseRecordStore::StoreError::CleanupFailed,
+                          (int)store.lastError());
+    // This disk image also represents power loss after rename, before reclamation.
+    g_removeFailurePaths.clear();
+    TEST_ASSERT_TRUE(store.reload());
+    Esp32BaseRecordStore::StoreStatus status;
+    TEST_ASSERT_TRUE(store.readStatus(status));
+    TEST_ASSERT_EQUAL_UINT32(1, status.recordCount);
+    TEST_ASSERT_EQUAL_UINT32(4, status.nextRecordId);
+    for (uint32_t id = 4; id <= 50; ++id) {
+        TEST_ASSERT_TRUE(store.releaseThrough(id - 1));
+        TEST_ASSERT_TRUE(store.appendInstant(bytes, sizeof(bytes)));
+        TEST_ASSERT_TRUE(store.reload());
+        TEST_ASSERT_TRUE(store.readStatus(status));
+        TEST_ASSERT_TRUE(status.recordCount > 0);
+        TEST_ASSERT_TRUE(status.currentStoreBytes <= d.maximumStoreBytes);
+        TEST_ASSERT_EQUAL_UINT32(id + 1, status.nextRecordId);
+    }
+}
+
+void test_protected_minimum_store_recovers_every_replacement_write_cut() {
+    Esp32BaseRecordStore store;
+    auto d = definition("minimum", 1, 192);
+    d.retentionPolicy = Esp32BaseRecordStore::RetentionPolicy::PreserveUnreleased;
+    TEST_ASSERT_TRUE(store.begin(d));
+    uint8_t bytes[8];
+    payload(bytes, 7);
+    TEST_ASSERT_TRUE(store.appendInstant(bytes, sizeof(bytes)));
+    TEST_ASSERT_TRUE(store.releaseThrough(1));
+    for (int cut = 0; cut < 64; ++cut) {
+        g_createCutBytes = cut;
+        TEST_ASSERT_FALSE(store.appendInstant(bytes, sizeof(bytes)));
+        g_createCutBytes = -1;
+        TEST_ASSERT_TRUE(store.reload());
+        Esp32BaseRecordStore::StoreStatus status;
+        TEST_ASSERT_TRUE(store.readStatus(status));
+        TEST_ASSERT_EQUAL_UINT32(1, status.recordCount);
+        TEST_ASSERT_EQUAL_UINT32(2, status.nextRecordId);
+    }
+    TEST_ASSERT_TRUE(store.appendInstant(bytes, sizeof(bytes)));
+    TEST_ASSERT_TRUE(store.releaseThrough(2));
+    TEST_ASSERT_TRUE(store.clear()); // Explicit clear is outside tail preservation.
+    TEST_ASSERT_TRUE(store.reload());
+    Esp32BaseRecordStore::StoreStatus status;
+    TEST_ASSERT_TRUE(store.readStatus(status));
+    TEST_ASSERT_EQUAL_UINT32(0, status.recordCount);
+}
+
+void test_protected_last_fact_survives_segment_limit_and_budget_shrink() {
+    Esp32BaseRecordStore store;
+    auto d = definition("bounded", 1, 4096);
+    d.retentionPolicy = Esp32BaseRecordStore::RetentionPolicy::PreserveUnreleased;
+    TEST_ASSERT_TRUE(store.begin(d));
+    uint8_t bytes[8];
+    payload(bytes, 9);
+    TEST_ASSERT_TRUE(store.appendInstant(bytes, sizeof(bytes)));
+    // Fault debris fills the existing metadata capacity; do not allocate slot 41.
+    for (uint32_t id = 2; id <= 40; ++id) g_files[segmentPath(store, id)] = {0};
+    TEST_ASSERT_TRUE(store.reload());
+    TEST_ASSERT_TRUE(store.releaseThrough(40));
+    TEST_ASSERT_TRUE(store.checkpointRelease());
+    const auto files = g_files;
+    TEST_ASSERT_FALSE(store.appendInstant(bytes, sizeof(bytes)));
+    TEST_ASSERT_EQUAL_INT((int)Esp32BaseRecordStore::StoreError::TooManySegments,
+                          (int)store.lastError());
+    TEST_ASSERT_TRUE(files == g_files);
+    d.maximumStoreBytes = 192;
+    TEST_ASSERT_TRUE(store.begin(d));
+    TEST_ASSERT_EQUAL_INT((int)Esp32BaseRecordStore::StoreError::RecordsProtected,
+                          (int)store.lastError());
+    TEST_ASSERT_TRUE(files == g_files);
+    Esp32BaseRecordStore::StoreStatus status;
+    TEST_ASSERT_TRUE(store.readStatus(status));
+    TEST_ASSERT_EQUAL_UINT32(1, status.recordCount);
+}
+
 void test_previous_container_is_rejected_without_rewriting_files() {
     Esp32BaseRecordStore store;
     TEST_ASSERT_TRUE(store.begin(definition()));
@@ -1088,6 +1200,9 @@ void test_previous_container_is_rejected_without_rewriting_files() {
 
 int main(int argc, char** argv) {
     UNITY_BEGIN();
+    RUN_TEST(test_protected_last_fact_survives_segment_limit_and_budget_shrink);
+    RUN_TEST(test_protected_minimum_store_recovers_every_replacement_write_cut);
+    RUN_TEST(test_protected_rotation_keeps_last_fact_until_replacement_commits);
     RUN_TEST(test_previous_container_is_rejected_without_rewriting_files);
     RUN_TEST(test_rotation_failure_does_not_reuse_ids_and_checkpoint_tail_can_recover);
     RUN_TEST(test_store_status_reads_one_fresh_capacity_snapshot_and_handles_failure);

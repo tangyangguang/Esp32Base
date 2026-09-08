@@ -123,7 +123,7 @@ const bool registered = Esp32BaseStorage::registerRecordStore(wateringStore);
 
 ## 9. 可靠消费与普通历史共用同一Store
 
-`PreserveUnreleased` 从创建时启用；累计 `releaseThrough(id)` 仅改变RAM，既不删除记录，也不逐确认写Flash。消费者应批量或低频调用 `checkpointRelease()`；记录轮转会在删除前保存必要检查点和下一个ID。写失败不删除；容量被未释放记录占满时明确拒绝追加，不扩大队列或静默换世代。共享同一段的记录必须全部释放才允许淘汰。
+`PreserveUnreleased` 从创建时启用；累计 `releaseThrough(id)` 仅改变RAM，既不删除记录，也不逐确认写Flash。消费者应批量或低频调用 `checkpointRelease()`；记录轮转会在删除前保存必要检查点和下一个ID。检查点失败不删除；容量被未释放记录占满时明确拒绝追加，不扩大队列或静默换世代。共享同一段的记录必须全部释放才允许淘汰。
 
 `storageGeneration` 是128位UUIDv4布局的存储世代，和记录ID一起标识不可变事实，普通重启、OTA、轮转和逻辑clear保持不变。明确格式化/重建会产生新世代，必须作为破坏性维护单独授权。较早检查点恢复可能要求重复消费；消费者负责幂等、缺号/损坏处理、确认合法性与低频检查点时机。平台主题、JSON、record-ack和补发调度均不进入本库。
 
@@ -140,3 +140,11 @@ const bool registered = Esp32BaseStorage::registerRecordStore(wateringStore);
 `examples/record_store_demo` 使用保护模式，以 Serial 输出演示本地消费，每32条消费一次检查点；重启可能重复输出。它逐条读取并在缺号/损坏时停止，不把 MQTT 入队、PUBACK 或打印行为描述为平台提交确认。已有旧示例 Store 使用默认轮转策略时会因定义不匹配被拒绝，需按升级规则明确处理旧数据，不能自动清空。
 
 状态读取的总量、已用量和剩余空间取自一次 FS 容量查询，不重复查询或引入常驻缓存；查询失败时这三个容量字段均为0，不影响独立的 Store 状态/错误信息。
+
+### 保护模式轮转的最后完整事实
+
+普通追加/轮转会保留最后完整记录所在段，直到替代记录完成写入、CRC读回校验并将临时段rename提交；随后才清理旧段。小容量Store也按此顺序继续轮转。显式clear/格式化不属于这一保留保证，可靠同步应用不得用clear释放已确认历史。RotateOldest行为保持不变。
+
+轮转过程中逻辑占用可短暂超过maximumStoreBytes，需要额外容纳一个32字节段头和一个记录槽；文件系统仍须满足minimumFileSystemFreeBytes，并另行规划LittleFS块分配/写时复制余量。空间不足时拒绝写入并保留旧事实，不降低安全余量。若异常段已占满40段运行时上限，拒绝新增段并报告TooManySegments，不扩展常驻元数据，也不牺牲最后事实。缩小预算时同样不会自动删除最后完整事实，可能保持超预算并报告RecordsProtected。
+
+新段提交之后清理或检查点仍可能失败，此时append返回false和CleanupFailed/WriteFault，但新记录可能已持久化。调用方必须reload并读取实际尾记录判断结果，不能盲目重试同一外部序号。重载可识别已提交的新段并在释放检查点允许时完成清理；临时段不视为已提交记录。此保证依赖文件系统既有rename及掉电恢复语义，不代表真实断电或介质故障已通过验收。

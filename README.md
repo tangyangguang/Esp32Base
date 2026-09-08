@@ -241,3 +241,5 @@ python path/to/Esp32Base/scripts/esp32base_serial_recover_ota.py \
 当前代码、示例构建、资源数据与未验证边界见 [基础能力验证结果](docs/15_validation_results.md)。
 
 RecordStore 的普通历史轮转与可靠消费保留机制、当前容器格式及升级边界，见 [记录存储 API](docs/03_api.md#35-esp32baserecordstore)。
+
+保护模式轮转保留最后完整事实，替代段提交后才回收旧段；所需临时Flash余量及失败后重载规则见 [Record Store](docs/12_record_store.md#保护模式轮转的最后完整事实)。

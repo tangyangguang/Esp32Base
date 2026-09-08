@@ -121,6 +121,8 @@ public:
     bool begin(const StoreDefinition& definition);
     bool reload();
     bool captureStartTime(RecordStartTime& startTime) const;
+    // A failed append may have committed before cleanup failed; reload and inspect
+    // the tail before retrying. Protected rotation preserves the last complete fact.
     bool appendInstant(const uint8_t* payload, size_t payloadSizeBytes);
     bool appendCompleted(const RecordStartTime& startTime,
                          const uint8_t* payload,

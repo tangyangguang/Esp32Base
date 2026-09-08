@@ -1002,7 +1002,9 @@ bool Esp32BaseRecordStore::removeOldestSegment() {
         const SegmentRuntime& oldest = segments_[0];
         const uint32_t slots = oldest.candidateSlots ? oldest.candidateSlots : 1U;
         if (oldest.firstRecordId > UINT32_MAX - (slots - 1U) ||
-            oldest.firstRecordId + slots - 1U > releasedThroughRecordId_) {
+            oldest.firstRecordId + slots - 1U > releasedThroughRecordId_ ||
+            (recordCount_ > 0 && oldest.validCount == recordCount_ &&
+             oldest.newestValidId >= firstVisibleId_)) {
             error_ = StoreError::RecordsProtected;
             return false;
         }
@@ -1041,6 +1043,26 @@ bool Esp32BaseRecordStore::ensureBudgetForAppend(bool& appendExisting) {
     while ((static_cast<uint64_t>(currentStoreBytes_) + required > maximumStoreBytes_) ||
            (!appendExisting && segmentCount_ >= MAX_RUNTIME_SEGMENTS)) {
         if (segmentCount_ == 0) return false;
+        const SegmentRuntime& oldest = segments_[0];
+        if (retentionPolicy_ == RetentionPolicy::PreserveUnreleased &&
+            recordCount_ > 0 && oldest.validCount == recordCount_) {
+            // Keep the last complete fact until a replacement segment is committed.
+            // Never extend this segment: cleanup must be able to remove it whole.
+            const uint32_t slots = oldest.candidateSlots ? oldest.candidateSlots : 1U;
+            if (oldest.firstRecordId > UINT32_MAX - (slots - 1U) ||
+                oldest.firstRecordId + slots - 1U > releasedThroughRecordId_) {
+                error_ = StoreError::RecordsProtected;
+                return false;
+            }
+            if (segmentCount_ >= MAX_RUNTIME_SEGMENTS) {
+                error_ = StoreError::TooManySegments;
+                return false;
+            }
+            // Persist release before commit so reboot can reclaim the old segment.
+            if (!checkpointRelease()) return false;
+            appendExisting = false;
+            return true;
+        }
         const bool removingActive = appendExisting && segmentCount_ == 1;
         if (!removeOldestSegment()) return false;
         if (removingActive) appendExisting = false;
@@ -1159,7 +1181,9 @@ bool Esp32BaseRecordStore::appendWithDuration(uint32_t durationSec,
     }
     bool appendExisting = false;
     if (!ensureBudgetForAppend(appendExisting)) {
-        if (error_ != StoreError::RecordsProtected) {
+        if (error_ == StoreError::TooManySegments) {
+            setError(error_, StoreState::WriteFault);
+        } else if (error_ != StoreError::RecordsProtected) {
             setError(StoreError::CleanupFailed, StoreState::WriteFault);
         }
         return false;
@@ -1191,6 +1215,14 @@ bool Esp32BaseRecordStore::appendWithDuration(uint32_t durationSec,
     if (oldestRecordId_ == 0) oldestRecordId_ = recordId;
     newestRecordId_ = recordId;
     nextRecordId_ = recordId == UINT32_MAX ? 0 : recordId + 1U;
+    // A committed replacement may temporarily exceed the logical store budget.
+    // On cleanup failure the append outcome is uncertain; reload discovers it.
+    while (currentStoreBytes_ > maximumStoreBytes_) {
+        if (!removeOldestSegment()) {
+            setError(StoreError::CleanupFailed, StoreState::WriteFault);
+            return false;
+        }
+    }
     bool invalidSegmentHeader = false;
     for (uint8_t i = 0; i < segmentCount_; ++i) {
         invalidSegmentHeader = invalidSegmentHeader || !segments_[i].headerValid;
