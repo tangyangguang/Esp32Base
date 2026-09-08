@@ -1,6 +1,9 @@
 #include "Esp32Base.h"
 
 #include "core/Esp32BaseUtil.h"
+#if ESP32BASE_ENABLE_RECORD_STORE
+#include "runtime/internal/Esp32BaseFsInternal.h"
+#endif
 #if ESP32BASE_ENABLE_OTA
 #include "update/internal/Esp32BaseOtaLifecycle.h"
 #if ESP32BASE_ENABLE_MQTT
@@ -138,6 +141,9 @@ void Esp32Base::prepareForLifecycleStop() {
     if (graceMs > 0U) {
         delay(graceMs);
     }
+#endif
+#if ESP32BASE_ENABLE_RECORD_STORE
+    esp32base_internal::checkpointRecordStoresForMaintenance();
 #endif
 #if ESP32BASE_ENABLE_FILELOG
     Esp32BaseFileLog::flush();

@@ -28,6 +28,11 @@ bool fsSetWritesSuspended(bool suspended);
 bool fsWritesSuspended();
 bool fsCurrentTaskInOperation();
 
+// System-task maintenance only, before FS writes are suspended. Best effort:
+// checkpoint failures remain visible on each Store and never veto recovery.
+// Defined only when Record Store is enabled.
+void checkpointRecordStoresForMaintenance();
+
 bool fsWriteSegmentsAt(const char* path,
                        uint32_t offset,
                        const FsWriteSegment* segments,

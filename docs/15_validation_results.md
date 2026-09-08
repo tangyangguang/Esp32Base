@@ -29,7 +29,7 @@ Core 2 为 2.0.16，Core 3 为 3.3.8；均通过仓库隔离的 PlatformIO home�
 | basic / ESP32 / Core 3 | LOCAL | 59,172 | 1,180,653 |
 | mqtt_tls 受控包探针 / ESP32 / Core 3 | IOT | 62,024 | 1,295,388 |
 | full_demo / ESP32 / Core 2 | LOCAL | 58,508 | 1,014,149 |
-| record_store_demo / ESP32 / Core 2 | MINIMAL + FS/Record Store | 25,648 | 336,077 |
+| record_store_demo / ESP32 / Core 2 | MINIMAL + FS/Record Store | 25,648 | 337,065 |
 | record_store_demo / ESP32-S3 / Core 2 | MINIMAL + FS/Record Store | 22,604 | 330,433 |
 | record_store_demo / ESP32-C3 / Core 2 | MINIMAL + FS/Record Store | 17,936 | 315,292 |
 | record_store_demo / ESP32 / Core 3 | MINIMAL + FS/Record Store | 25,996 | 346,272 |
@@ -49,3 +49,7 @@ Core 2 为 2.0.16，Core 3 为 3.3.8；均通过仓库隔离的 PlatformIO home�
 Record Store 控制文件仍为 128B，记录槽位仍为 payload + 24B；本机 `sizeof(Store)` 从 1,992B 到 2,016B（+24B，不等同芯片运行峰值）。没有增加持久 MQTT 队列或后台任务。容器格式 2 的升级影响见 [接入与升级](13_integration_and_upgrade.md)。
 
 验证顺序以 ESP32 为主：普通能力使用当前默认 Core 2.0.16，需要完整 TLS 校验时使用已验证的受控 Core 3.3.8。S3/C3 的受控 TLS 构建与其他未覆盖组合统一后置到兼容性验收；现有通过结果复用，不能据此宣称所有组合均已通过。
+
+维护检查点使用现有登记表，不新增常驻缓冲或任务。原生 Storage 测试覆盖 OTA 写暂停前检查点成功、失败仍允许暂停/恢复、失败后旧水位恢复，以及无变化不重复写。正常重启/deep sleep 由 facade 调用同一内部入口；未声称真实掉电或板端维护验证完成。
+
+维护检查点收尾另构建 `full_demo` 的 ESP32/Core 2 LOCAL + Record Store 组合，RAM 58,508B / Flash 1,021,917B；记录示例上述 ESP32/Core 2 数字已更新。S3/C3、Core 3 的记录示例数字保留前一批构建证据，本次未重新测量；不能作为修改后示例的精确体积。架构、安全、发布hygiene检查通过。由当前Git管理文件构造干净打包输入，包180项且源码/示例一致，不包含本地经验碎片、构建缓存或工具链产物；临时包已删除。

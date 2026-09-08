@@ -115,7 +115,7 @@ bool Esp32BaseFs::readBytesAt(const char* path, uint32_t offset, uint8_t* out, s
 }
 bool Esp32BaseFs::writeBytesAt(const char* path, uint32_t offset, const uint8_t* data, size_t length) {
     if (path && std::string(path).find("/control.bin") != std::string::npos) ++g_controlWriteAttempts;
-    if (g_fileSystemWriteFails) return false;
+    if (g_fileSystemWriteFails || g_fsWritesSuspended) return false;
     auto found = g_files.find(path ? path : "");
     if (found == g_files.end() || (!data && length > 0) || offset > found->second.size() || length > found->second.size() - offset) return false;
     std::copy(data, data + length, found->second.begin() + offset);
@@ -216,7 +216,7 @@ bool esp32base_internal::fsAppendSegments(const char* path,
                                            const FsWriteSegment* segments,
                                            size_t segmentCount) {
     ++g_eventStoreWriteAttempts;
-    if (g_fileSystemWriteFails) return false;
+    if (g_fileSystemWriteFails || g_fsWritesSuspended) return false;
     auto found = g_files.find(path ? path : "");
     if (found == g_files.end()) return false;
     for (size_t i = 0; i < segmentCount; ++i) {
@@ -868,6 +868,26 @@ void test_storage_coordinates_multiple_stores_capacity_paths_maintenance_and_for
     TEST_ASSERT_EQUAL_INT((int)Esp32BaseStorage::StorageError::RecordsProtected, (int)Esp32BaseStorage::lastError());
     TEST_ASSERT_TRUE(g_files == beforeClear);
     TEST_ASSERT_TRUE(auditStore.releaseThrough(1));
+    const auto beforeCheckpoint = g_files;
+    g_fileSystemWriteFails = true;
+    TEST_ASSERT_TRUE(Esp32BaseStorage::setOtaWriteSuspended(true));
+    TEST_ASSERT_TRUE(g_fsWritesSuspended); // Failed checkpoint cannot veto recovery OTA.
+    TEST_ASSERT_TRUE(g_files == beforeCheckpoint);
+    TEST_ASSERT_EQUAL(Esp32BaseRecordStore::StoreState::WriteFault, auditStore.state());
+    TEST_ASSERT_TRUE(Esp32BaseStorage::setOtaWriteSuspended(false));
+    g_fileSystemWriteFails = false;
+    TEST_ASSERT_TRUE(auditStore.reload());
+    Esp32BaseRecordStore::StoreStatus auditStatus;
+    TEST_ASSERT_TRUE(auditStore.readStatus(auditStatus));
+    TEST_ASSERT_EQUAL_UINT32(0, auditStatus.releasedThroughRecordId);
+    TEST_ASSERT_TRUE(auditStore.releaseThrough(1));
+    TEST_ASSERT_TRUE(Esp32BaseStorage::setOtaWriteSuspended(true));
+    TEST_ASSERT_TRUE(auditStore.readStatus(auditStatus));
+    TEST_ASSERT_EQUAL_UINT32(1, auditStatus.checkpointedReleaseRecordId);
+    TEST_ASSERT_TRUE(Esp32BaseStorage::setOtaWriteSuspended(false));
+    const uint32_t checkpointWrites = g_controlWriteAttempts;
+    esp32base_internal::checkpointRecordStoresForMaintenance();
+    TEST_ASSERT_EQUAL_UINT32(checkpointWrites, g_controlWriteAttempts);
     TEST_ASSERT_TRUE(Esp32BaseStorage::clearRecordStores(clearResult));
     TEST_ASSERT_TRUE(clearResult.allCleared);
     TEST_ASSERT_EQUAL_UINT8(2, clearResult.recordStoreClearedCount);

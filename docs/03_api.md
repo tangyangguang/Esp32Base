@@ -266,7 +266,7 @@ slotSizeBytes = payloadSizeBytes + 24
 
 - `StoreDefinition.retentionPolicy` 默认为 `RetentionPolicy::RotateOldest`，适合普通 LOCAL 最近历史。需要可靠消费/补发时选 `PreserveUnreleased`；不绑定任何平台。
 - `releaseThrough(id)` 只在 RAM 推进调用方已完成消费的累计边界，不删除历史、不写 Flash。重复相同水位幂等，倒退或超出已分配 ID 返回 `InvalidRelease`；仅保护模式可调用。调用方负责确认记录已被正确消费，包括损坏/缺号处理，不能把 MQTT PUBACK 当作业务落库。
-- `checkpointRelease()` 显式保存释放水位和下一个 ID，完全未变化时不写；调用方按批量、较长时间间隔或受控维护需要调用，不能逐 ACK 调用。轮转在删除前也会提交必要检查点。检查点写入/验证失败不允许本次删除，返回写故障；排除原因后 `reload()`。普通重启可从较早检查点恢复，消费方必须支持幂等重放。
+- `checkpointRelease()` 显式保存释放水位和下一个 ID，完全未变化时不写；调用方按批量、较长时间间隔或受控维护需要调用，不能逐 ACK 调用。轮转在删除前也会提交必要检查点。已登记保护模式 Store 还会在 OTA 写暂停之前及正常重启/deep sleep 前自动尝试保存已推进的释放检查点；失败记录错误但不阻断维护。检查点写入/验证失败不允许本次删除，返回写故障；排除原因后 `reload()`。普通重启可从较早检查点恢复，消费方必须支持幂等重放。
 - `PreserveUnreleased` 下，一段中还有任何未释放 ID，该段就不能淘汰。写满、缩小预算或 `clear()` 遇到受保护记录时返回 `RecordsProtected`（`records_protected`），不删除记录或换存储世代。完整旧段被释放后可重试追加；释放不会立即清理近期历史。
 - `StoreStatus` 提供 `releasedThroughRecordId`、`checkpointedReleaseRecordId`、`retentionPolicy` 和16字节 `storageGeneration`。存储世代采用 UUIDv4 字节布局，首次创建持久化；重启、轮转、OTA和 `clear()` 不改变它，明确重建存储才产生新世代。调用方可格式化为 UUID，但库不解释平台 `recordStreamId`。
 - 控制容器格式为2，仍为两个64字节控制头：偏移10为2字节保留策略，36为16字节存储世代，52为4字节释放检查点；其余既有ID、序号和CRC机制保留。段容器版本也为2，单条槽位仍为 `payloadSizeBytes + 24`。不读取格式1、不自动清空或迁移；设备升级前应明确保存历史或授权重建，不能只刷固件后假装旧存储已接入。保留策略是持久定义，直接切换同一路径的策略会报定义不匹配。

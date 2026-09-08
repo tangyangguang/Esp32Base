@@ -124,6 +124,22 @@ bool Esp32BaseStorage::begin() {
 }
 
 #if ESP32BASE_ENABLE_RECORD_STORE
+void esp32base_internal::checkpointRecordStoresForMaintenance() {
+    for (uint8_t i = 0; i < g_recordStoreCount; ++i) {
+        Esp32BaseRecordStore::StoreStatus status;
+        Esp32BaseRecordStore* store = g_recordStores[i];
+        if (!store || !store->readStatus(status) ||
+            status.retentionPolicy != Esp32BaseRecordStore::RetentionPolicy::PreserveUnreleased ||
+            status.releasedThroughRecordId == status.checkpointedReleaseRecordId) {
+            continue;
+        }
+        if (!store->checkpointRelease()) {
+            ESP32BASE_LOG_E("storage", "record_checkpoint_failed path=%s error=%s maintenance_continues=true",
+                            store->path(), store->lastErrorReason());
+        }
+    }
+}
+
 bool Esp32BaseStorage::registerRecordStore(Esp32BaseRecordStore& store) {
     Esp32BaseRecordStore::StoreStatus status;
     if (!store.readStatus(status) || !status.path || !status.path[0]) {
@@ -289,6 +305,9 @@ bool Esp32BaseStorage::setOtaWriteSuspended(bool suspended) {
             setStorageError(StorageError::MaintenanceBusy);
             return false;
         }
+#if ESP32BASE_ENABLE_RECORD_STORE
+        esp32base_internal::checkpointRecordStoresForMaintenance();
+#endif
 #if ESP32BASE_ENABLE_FILELOG
         if (g_storageState == StorageState::Ready) {
             Esp32BaseFileLog::flush();

@@ -221,3 +221,5 @@ Record Store 容器现为格式 2，增加持久存储世代、保留策略和�
 ## 示例依赖定位
 
 本库示例通过 `lib_deps` 中的 `symlink://../..` 明确引用仓库根目录，并按 Profile 列出 Arduino 内置依赖。不要同时把整个仓库加入 `lib_extra_dirs`，否则 `.cache`、裸 `src` 等子目录可能成为额外候选库。LOCAL/IOT 需列出 Preferences、FS、WiFi、DNSServer、ESPmDNS、LittleFS、WebServer、Update 等实际依赖；Core 3 网络示例还显式列出 Networking、Hash。以对应示例当前 `platformio.ini` 为准，不把全部网络依赖带入 MINIMAL/OFFLINE。
+
+登记到 Storage 的保护模式 Store 现在在受控 OTA、正常重启/deep sleep 前自动尝试提交已推进的释放检查点；失败保留错误但允许维护继续。应用仍需按批量执行普通检查点并支持幂等重放，不应在网络停止通知中执行 Flash 写入。记录示例现使用保护策略，旧默认轮转示例存储会报定义不匹配，按本页已有数据处理规则执行。
