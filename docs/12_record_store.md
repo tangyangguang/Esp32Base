@@ -128,3 +128,7 @@ const bool registered = Esp32BaseStorage::registerRecordStore(wateringStore);
 `storageGeneration` 是128位UUIDv4布局的存储世代，和记录ID一起标识不可变事实，普通重启、OTA、轮转和逻辑clear保持不变。明确格式化/重建会产生新世代，必须作为破坏性维护单独授权。较早检查点恢复可能要求重复消费；消费者负责幂等、缺号/损坏处理、确认合法性与低频检查点时机。平台主题、JSON、record-ack和补发调度均不进入本库。
 
 详细API、二进制字段及状态见 [RecordStore契约](03_api.md#35-esp32baserecordstore)。
+
+可靠同步接入必须区分本地存储 ID 与外部连续序号：本库在不完整写入后保留 ID 空洞，不能把 `recordId` 无条件直接映射为要求无缺号的服务端累计确认序号。不得对 `Corrupt`/缺号伪造成功确认或静默切换存储世代。接入层必须先明确同一份持久记录中的序号编码、确认到本地释放水位的映射及损坏停机策略，再声明可可靠补发。
+
+`checkpointRelease()` 是显式存储写入，不能放入仅用于非阻塞网络通知的 `setBeforeNetworkStopCallback()`：当前 OTA 在调用该通知前已暂停 FS 写入。维护前检查点需在写暂停之前安排；当前库尚不自动为所有登记 Store 提交该检查点。

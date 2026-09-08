@@ -70,10 +70,16 @@ platform_packages =
 
 Core 3.3.8 / ESP32 的完整配置对比仅有 `CONFIG_MBEDTLS_HAVE_TIME_DATE: n -> y`，组件锁不变；QIO/DIO 两套配置头及编译后的日期路径通过审计。五个主机证书用例通过；使用该产物的公开 MQTT 示例在隔离 PlatformIO 环境编译、链接成功，最终 ELF 保留证书链验证、UTC 转换和日期比较函数。
 
-该示例构建静态占用：RAM **63,392 字节**，Flash **1,323,188 字节**。这不是与原版的资源差值，也不包含实机握手峰值、业务缓冲和长期运行资源变化。
+该示例当前构建静态占用见 [统一验证结果](15_validation_results.md)，不在此重复维护体积数字。这不是与原版的资源差值，也不包含实机握手峰值、业务缓冲和长期运行资源变化。
 
 尚未验证：设备上的正常/过期/未生效证书握手、错误时钟和恢复、断网重连、Web/OTA 并发资源边界及长时间稳定性。没有烧录、OTA、操作真实设备或发布工具链产物。S3、C3 和 Core 2.x 仍需独立闭环。
 
 上游资料：[Library Builder](https://docs.espressif.com/projects/arduino-esp32/en/latest/lib_builder.html)、[ESP-IDF mbedTLS 配置源码](https://github.com/espressif/esp-idf/blob/735507283d5b2f9fb363a1901172dbd9e847945d/components/mbedtls/Kconfig)。
 
 MQTT 示例不再默认开启 `ESP32BASE_MQTT_ALLOW_UNCHECKED_CERTIFICATE_DATES`。使用官方缺少日期验证的预编译 SDK 时，示例可编译但 TLS 配置会明确拒绝；实际安全握手需要上文受控包。不要把编译成功等同于 TLS 可用，也不要为跑通示例关闭有效期校验。
+
+## 本机固定交付位置
+
+已将验证过的 ESP32 / Core 3.3.8 产物复制到独立于构建缓存的 `local_private/toolchains/esp32-core-3.3.8-tls-6da95a99041ac119/`。目录后缀是构建凭据文件 SHA256 的前16位；复制前后逐项核对凭据中的全部文件哈希、源码锁和构建脚本哈希，未重建 SDK。应用可将上文 `file://` 路径指向此固定目录。该目录不纳入源码 Git 或基础库发布包；清理构建缓存时不得连带清理它。
+
+这是本机可复用的固定产物，不是远端发布地址；迁移机器时连同 `esp32base-build.json` 完整保存并重新核对哈希。团队或公开分发仍需确定保存位置与发布授权。
