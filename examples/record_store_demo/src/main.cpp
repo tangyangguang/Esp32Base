@@ -49,6 +49,9 @@ void setup() {
     Esp32Base::begin();
 
     Esp32BaseRecordStore::StoreDefinition definition;
+    // Default: local recent history. For reliable consumption select
+    // RetentionPolicy::PreserveUnreleased, release only consumed IDs, and
+    // checkpoint in batches. Never release merely because MQTT accepted a publish.
     definition.recordTypeName = "door-opening";
     definition.storeVersion = 1;
     definition.payloadSizeBytes = 8;

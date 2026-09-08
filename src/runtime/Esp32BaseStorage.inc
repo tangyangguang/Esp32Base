@@ -193,6 +193,12 @@ bool Esp32BaseStorage::clearRecordStores(ClearResult& result) {
         if (!g_recordStores[i] || !g_recordStores[i]->readStatus(status) || !status.ready) {
             return false;
         }
+        const uint32_t lastAssigned = status.nextRecordId ? status.nextRecordId - 1U : UINT32_MAX;
+        if (status.retentionPolicy == Esp32BaseRecordStore::RetentionPolicy::PreserveUnreleased &&
+            status.releasedThroughRecordId < lastAssigned) {
+            setStorageError(StorageError::RecordsProtected);
+            return false;
+        }
     }
     for (uint8_t i = 0; i < g_recordStoreCount; ++i) {
         Esp32BaseRecordStore* store = g_recordStores[i];
@@ -208,6 +214,7 @@ bool Esp32BaseStorage::clearRecordStores(ClearResult& result) {
         }
     }
     result.allCleared = result.recordStoreClearedCount == result.recordStoreCount;
+    if (result.allCleared) setStorageError(StorageError::None);
     return result.allCleared;
 }
 #endif
@@ -403,6 +410,7 @@ const char* Esp32BaseStorage::storageStateName(StorageState value) {
 const char* Esp32BaseStorage::storageErrorName(StorageError value) {
     switch (value) {
         case StorageError::None: return "none";
+        case StorageError::RecordsProtected: return "records_protected";
         case StorageError::FileSystemUnavailable: return "filesystem_unavailable";
         case StorageError::InvalidRecordStore: return "invalid_record_store";
         case StorageError::DuplicateRecordStore: return "duplicate_record_store";

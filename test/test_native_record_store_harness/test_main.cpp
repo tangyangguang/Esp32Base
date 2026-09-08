@@ -23,12 +23,14 @@ size_t g_totalBytes = 1024 * 1024;
 Esp32BaseTime::Snapshot g_time = {false, Esp32BaseTime::SOURCE_UPTIME, 0, 10, 1, 0};
 uint32_t g_fixedSlotVisitCalls = 0;
 uint32_t g_eventStoreWriteAttempts = 0;
+uint32_t g_controlWriteAttempts = 0;
 uint32_t g_persistedActiveConditionIdBits = 0;
 uint32_t g_conditionStateWriteCount = 0;
 bool g_conditionStateExists = false;
 bool g_conditionStateReadFails = false;
 bool g_conditionStateWriteFails = false;
 bool g_fileSystemWriteFails = false;
+bool g_segmentCreateFails = false;
 bool g_fsMaintenance = false;
 bool g_fsWritesSuspended = false;
 
@@ -41,12 +43,14 @@ void resetHarness() {
     g_time = {false, Esp32BaseTime::SOURCE_UPTIME, 0, 10, 1, 0};
     g_fixedSlotVisitCalls = 0;
     g_eventStoreWriteAttempts = 0;
+    g_controlWriteAttempts = 0;
     g_persistedActiveConditionIdBits = 0;
     g_conditionStateWriteCount = 0;
     g_conditionStateExists = false;
     g_conditionStateReadFails = false;
     g_conditionStateWriteFails = false;
     g_fileSystemWriteFails = false;
+    g_segmentCreateFails = false;
     g_fsMaintenance = false;
     g_fsWritesSuspended = false;
     nativeMillisValue() = 0;
@@ -110,6 +114,7 @@ bool Esp32BaseFs::readBytesAt(const char* path, uint32_t offset, uint8_t* out, s
     return true;
 }
 bool Esp32BaseFs::writeBytesAt(const char* path, uint32_t offset, const uint8_t* data, size_t length) {
+    if (path && std::string(path).find("/control.bin") != std::string::npos) ++g_controlWriteAttempts;
     if (g_fileSystemWriteFails) return false;
     auto found = g_files.find(path ? path : "");
     if (found == g_files.end() || (!data && length > 0) || offset > found->second.size() || length > found->second.size() - offset) return false;
@@ -198,7 +203,7 @@ bool esp32base_internal::fsCreateWithSegments(const char* path,
                                                const FsWriteSegment* segments,
                                                size_t segmentCount) {
     ++g_eventStoreWriteAttempts;
-    if (g_fileSystemWriteFails || Esp32BaseFs::exists(path)) return false;
+    if (g_fileSystemWriteFails || g_segmentCreateFails || Esp32BaseFs::exists(path)) return false;
     std::vector<uint8_t> bytes;
     for (size_t i = 0; i < segmentCount; ++i) {
         bytes.insert(bytes.end(), segments[i].data, segments[i].data + segments[i].length);
@@ -820,6 +825,7 @@ void test_storage_coordinates_multiple_stores_capacity_paths_maintenance_and_for
         "watering-coordinated", 1, 384UL * 1024UL);
     Esp32BaseRecordStore::StoreDefinition auditDefinition = definition(
         "audit-coordinated", 1, 128UL * 1024UL);
+    auditDefinition.retentionPolicy = Esp32BaseRecordStore::RetentionPolicy::PreserveUnreleased;
     Esp32BaseRecordStore wateringStore;
     Esp32BaseRecordStore auditStore;
     TEST_ASSERT_TRUE(wateringStore.begin(wateringDefinition));
@@ -856,6 +862,12 @@ void test_storage_coordinates_multiple_stores_capacity_paths_maintenance_and_for
     TEST_ASSERT_TRUE(wateringStore.appendInstant(bytes, sizeof(bytes)));
     TEST_ASSERT_TRUE(auditStore.appendInstant(bytes, sizeof(bytes)));
     Esp32BaseStorage::ClearResult clearResult;
+    const auto beforeClear = g_files;
+    TEST_ASSERT_FALSE(Esp32BaseStorage::clearRecordStores(clearResult));
+    TEST_ASSERT_EQUAL_UINT8(0, clearResult.recordStoreClearedCount);
+    TEST_ASSERT_EQUAL_INT((int)Esp32BaseStorage::StorageError::RecordsProtected, (int)Esp32BaseStorage::lastError());
+    TEST_ASSERT_TRUE(g_files == beforeClear);
+    TEST_ASSERT_TRUE(auditStore.releaseThrough(1));
     TEST_ASSERT_TRUE(Esp32BaseStorage::clearRecordStores(clearResult));
     TEST_ASSERT_TRUE(clearResult.allCleared);
     TEST_ASSERT_EQUAL_UINT8(2, clearResult.recordStoreClearedCount);
@@ -867,8 +879,156 @@ void test_storage_coordinates_multiple_stores_capacity_paths_maintenance_and_for
     TEST_ASSERT_EQUAL_UINT8(2, formatResult.recordStoreReloadedCount);
 }
 
+void test_protected_records_survive_full_clear_reload_and_smaller_budget() {
+    auto d = definition("protected", 1, 224);
+    d.retentionPolicy = Esp32BaseRecordStore::RetentionPolicy::PreserveUnreleased;
+    Esp32BaseRecordStore store;
+    TEST_ASSERT_TRUE(store.begin(d));
+    uint8_t bytes[8] = {};
+    TEST_ASSERT_TRUE(store.appendInstant(bytes, sizeof(bytes)));
+    TEST_ASSERT_TRUE(store.appendInstant(bytes, sizeof(bytes)));
+    const auto files = g_files;
+    TEST_ASSERT_FALSE(store.appendInstant(bytes, sizeof(bytes)));
+    TEST_ASSERT_EQUAL_INT((int)Esp32BaseRecordStore::StoreError::RecordsProtected, (int)store.lastError());
+    TEST_ASSERT_FALSE(store.isWritable());
+    TEST_ASSERT_FALSE(store.clear());
+    TEST_ASSERT_TRUE(g_files == files);
+    TEST_ASSERT_TRUE(store.reload());
+    d.maximumStoreBytes = 192;
+    Esp32BaseRecordStore smaller;
+    TEST_ASSERT_TRUE(smaller.begin(d));
+    TEST_ASSERT_TRUE(g_files == files);
+    TEST_ASSERT_EQUAL_INT((int)Esp32BaseRecordStore::StoreError::RecordsProtected, (int)smaller.lastError());
+}
+
+void test_release_is_ram_only_and_rotation_checkpoints_before_delete() {
+    auto d = definition("protected", 1, 224);
+    d.retentionPolicy = Esp32BaseRecordStore::RetentionPolicy::PreserveUnreleased;
+    Esp32BaseRecordStore store;
+    TEST_ASSERT_TRUE(store.begin(d));
+    uint8_t bytes[8] = {};
+    TEST_ASSERT_TRUE(store.appendInstant(bytes, sizeof(bytes)));
+    TEST_ASSERT_TRUE(store.appendInstant(bytes, sizeof(bytes)));
+    const auto files = g_files;
+    const uint32_t beforeReleaseWrites = g_controlWriteAttempts;
+    TEST_ASSERT_FALSE(store.releaseThrough(3));
+    TEST_ASSERT_TRUE(store.releaseThrough(1));
+    TEST_ASSERT_FALSE(store.releaseThrough(0));
+    TEST_ASSERT_EQUAL_UINT32(beforeReleaseWrites, g_controlWriteAttempts);
+    TEST_ASSERT_TRUE(g_files == files);
+    TEST_ASSERT_FALSE(store.appendInstant(bytes, sizeof(bytes))); // Same segment still contains record 2.
+    TEST_ASSERT_TRUE(store.reload());
+    Esp32BaseRecordStore::StoreStatus before;
+    TEST_ASSERT_TRUE(store.readStatus(before));
+    TEST_ASSERT_EQUAL_UINT32(0, before.releasedThroughRecordId);
+    TEST_ASSERT_TRUE(store.releaseThrough(2));
+    g_fileSystemWriteFails = true;
+    TEST_ASSERT_FALSE(store.appendInstant(bytes, sizeof(bytes)));
+    TEST_ASSERT_TRUE(g_files == files); // Failed checkpoint cannot permit pruning.
+    g_fileSystemWriteFails = false;
+    TEST_ASSERT_TRUE(store.reload());
+    TEST_ASSERT_TRUE(store.releaseThrough(2));
+    TEST_ASSERT_TRUE(store.appendInstant(bytes, sizeof(bytes)));
+    TEST_ASSERT_TRUE(store.reload());
+    Esp32BaseRecordStore::StoreStatus after;
+    TEST_ASSERT_TRUE(store.readStatus(after));
+    TEST_ASSERT_EQUAL_UINT32(2, after.checkpointedReleaseRecordId);
+    TEST_ASSERT_EQUAL_UINT32(3, after.oldestRecordId);
+    TEST_ASSERT_EQUAL_UINT32(4, after.nextRecordId);
+    TEST_ASSERT_EQUAL_MEMORY(before.storageGeneration, after.storageGeneration, 16);
+    TEST_ASSERT_TRUE(store.releaseThrough(3));
+    TEST_ASSERT_TRUE(store.checkpointRelease());
+    TEST_ASSERT_TRUE(store.reload());
+    TEST_ASSERT_TRUE(store.readStatus(after));
+    TEST_ASSERT_EQUAL_UINT32(3, after.releasedThroughRecordId);
+    TEST_ASSERT_TRUE(store.clear());
+    TEST_ASSERT_TRUE(store.reload());
+    TEST_ASSERT_TRUE(store.readStatus(after));
+    TEST_ASSERT_EQUAL_UINT32(4, after.nextRecordId);
+    TEST_ASSERT_EQUAL_MEMORY(before.storageGeneration, after.storageGeneration, 16);
+    const auto clearedFiles = g_files;
+    const uint32_t checkpointWrites = g_controlWriteAttempts;
+    TEST_ASSERT_TRUE(store.checkpointRelease());
+    TEST_ASSERT_EQUAL_UINT32(checkpointWrites, g_controlWriteAttempts);
+    TEST_ASSERT_TRUE(g_files == clearedFiles);
+}
+
+void test_store_generation_and_retention_definition_are_persistent() {
+    Esp32BaseRecordStore store;
+    auto d = definition();
+    TEST_ASSERT_TRUE(store.begin(d));
+    Esp32BaseRecordStore::StoreStatus first;
+    TEST_ASSERT_TRUE(store.readStatus(first));
+    TEST_ASSERT_EQUAL_UINT8(0x40, first.storageGeneration[6] & 0xf0);
+    TEST_ASSERT_EQUAL_UINT8(0x80, first.storageGeneration[8] & 0xc0);
+    TEST_ASSERT_TRUE(store.reload());
+    Esp32BaseRecordStore::StoreStatus second;
+    TEST_ASSERT_TRUE(store.readStatus(second));
+    TEST_ASSERT_EQUAL_MEMORY(first.storageGeneration, second.storageGeneration, 16);
+    const auto files = g_files;
+    d.retentionPolicy = Esp32BaseRecordStore::RetentionPolicy::PreserveUnreleased;
+    TEST_ASSERT_FALSE(store.begin(d));
+    TEST_ASSERT_TRUE(g_files == files);
+    Esp32BaseRecordStore other;
+    TEST_ASSERT_TRUE(other.begin(definition("second")));
+    TEST_ASSERT_TRUE(other.readStatus(second));
+    TEST_ASSERT_TRUE(memcmp(first.storageGeneration, second.storageGeneration, 16) != 0);
+}
+
+void test_rotation_failure_does_not_reuse_ids_and_checkpoint_tail_can_recover() {
+    Esp32BaseRecordStore store;
+    TEST_ASSERT_TRUE(store.begin(definition()));
+    uint8_t bytes[8] = {};
+    TEST_ASSERT_TRUE(store.appendInstant(bytes, sizeof(bytes)));
+    TEST_ASSERT_TRUE(store.appendInstant(bytes, sizeof(bytes)));
+    g_segmentCreateFails = true;
+    TEST_ASSERT_FALSE(store.appendInstant(bytes, sizeof(bytes)));
+    g_segmentCreateFails = false;
+    TEST_ASSERT_TRUE(store.reload());
+    Esp32BaseRecordStore::StoreStatus status;
+    TEST_ASSERT_TRUE(store.readStatus(status));
+    TEST_ASSERT_EQUAL_UINT32(3, status.nextRecordId);
+    TEST_ASSERT_TRUE(store.appendInstant(bytes, sizeof(bytes)));
+
+    Esp32BaseRecordStore protectedStore;
+    auto d = definition("protected");
+    d.retentionPolicy = Esp32BaseRecordStore::RetentionPolicy::PreserveUnreleased;
+    TEST_ASSERT_TRUE(protectedStore.begin(d));
+    TEST_ASSERT_TRUE(protectedStore.appendInstant(bytes, sizeof(bytes)));
+    TEST_ASSERT_TRUE(protectedStore.releaseThrough(1));
+    TEST_ASSERT_TRUE(protectedStore.checkpointRelease());
+    auto& control = g_files[std::string(protectedStore.path()) + "/control.bin"];
+    control[64 + 52] ^= 0x80; // Torn newest checkpoint, previous header is still valid.
+    TEST_ASSERT_TRUE(protectedStore.reload());
+    TEST_ASSERT_TRUE(protectedStore.readStatus(status));
+    TEST_ASSERT_EQUAL_UINT32(0, status.releasedThroughRecordId);
+    TEST_ASSERT_EQUAL_UINT32(2, status.nextRecordId);
+    TEST_ASSERT_EQUAL_UINT32(1, status.recordCount);
+}
+
+void test_previous_container_is_rejected_without_rewriting_files() {
+    Esp32BaseRecordStore store;
+    TEST_ASSERT_TRUE(store.begin(definition()));
+    auto& control = g_files[std::string(store.path()) + "/control.bin"];
+    for (size_t offset : {size_t(0), size_t(64)}) {
+        recordStoreWriteU16(control.data() + offset + 4, 1);
+        recordStoreWriteU32(control.data() + offset + 32, 0);
+        recordStoreWriteU32(control.data() + offset + 32, recordStoreCrc(control.data() + offset, 64));
+    }
+    const auto files = g_files;
+    TEST_ASSERT_FALSE(store.reload());
+    TEST_ASSERT_FALSE(store.releaseThrough(1));
+    TEST_ASSERT_EQUAL_INT((int)Esp32BaseRecordStore::StoreError::HeaderInvalid, (int)store.lastError());
+    TEST_ASSERT_TRUE(g_files == files);
+}
+
 int main(int argc, char** argv) {
     UNITY_BEGIN();
+    RUN_TEST(test_previous_container_is_rejected_without_rewriting_files);
+    RUN_TEST(test_rotation_failure_does_not_reuse_ids_and_checkpoint_tail_can_recover);
+    RUN_TEST(test_protected_records_survive_full_clear_reload_and_smaller_budget);
+    RUN_TEST(test_release_is_ram_only_and_rotation_checkpoints_before_delete);
+    RUN_TEST(test_store_generation_and_retention_definition_are_persistent);
     RUN_TEST(test_create_calculates_capacity_and_store_budget);
     RUN_TEST(test_segment_rotation_reads_latest_first);
     RUN_TEST(test_smaller_budget_removes_oversized_old_segment_and_resets_visible_range);

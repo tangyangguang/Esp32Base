@@ -31,7 +31,8 @@ public:
         MaintenanceBusy,
         FormatFailed,
         MountFailed,
-        ComponentReloadFailed
+        ComponentReloadFailed,
+        RecordsProtected
     };
 
     struct StorageStatus {

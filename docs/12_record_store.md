@@ -20,7 +20,8 @@
 - `storeVersion`：当前格式版本；
 - `payloadSizeBytes`：固定业务payload长度；
 - `maximumStoreBytes`：该Store的逻辑预算；
-- 可选 `minimumFileSystemFreeBytes`。
+- 可选 `minimumFileSystemFreeBytes`；
+- `retentionPolicy`：普通历史默认 `RotateOldest`，可靠消费选 `PreserveUnreleased`。
 
 每条记录由20字节公共元数据、固定payload和4字节CRC32组成，因此槽位大小为 `payloadSizeBytes + 24`。公共元数据保存32位记录ID、完成时间、boot ID、uptime和持续时间。应用不得直接保存含指针、`String`、编译器padding或平台相关布局的对象。
 
@@ -30,11 +31,11 @@
 /esp32base/records/<record-type>.v<store-version>/
 ```
 
-控制文件使用128字节双头；段头32字节。记录顺序追加，重要记录在API返回成功前完成flush/close和写后验证。断电留下的尾部不完整槽位不会返回，其ID也不会重用。
+当前容器格式为2，控制文件使用128字节双头，持久保存16字节存储世代、保留策略和释放检查点；段头32字节。不自动读取/迁移格式1，不自动清空不匹配存储。记录顺序追加，重要记录在API返回成功前完成flush/close和写后验证。断电留下的尾部不完整槽位不会返回，其ID也不会重用。
 
 ## 3. 分段和轮转
 
-Store按预算和槽位大小从8、16、32、64 KiB级别中选择段上限，使常见32～512 KiB预算通常维持不超过16个完整/尾段文件；很小的测试预算仍使用最小可容纳段。段文件只追加；容量满时删除最老完整段，不逐条搬移、不后台compaction、不因ACK改写记录。
+Store按预算和槽位大小从8、16、32、64 KiB级别中选择段上限，使常见32～512 KiB预算通常维持不超过16个完整/尾段文件；很小的测试预算仍使用最小可容纳段。段文件只追加；容量满时按保留策略删除可淘汰的最老完整段，不逐条搬移、不后台compaction、不因ACK改写记录。
 
 常见规划结果：
 
@@ -87,7 +88,7 @@ const bool registered = Esp32BaseStorage::registerRecordStore(wateringStore);
 
 登记对象必须持续有效到重启。重复登记同一对象幂等；重复路径、无效Store、超过数量或预算都会拒绝。只登记当前版本；协调层不扫描目录、不自动处理历史版本。
 
-统一清空先预检所有Store。预检失败时零修改；执行中I/O失败时停止并返回已完成数量。多个Store之间不提供事务原子性。逻辑清空提交新的可见边界并保持ID继续递增，不保证物理安全擦除。
+统一清空先预检所有Store。预检失败时零修改；任何保护模式Store仍有未释放记录时返回 `RecordsProtected`，其他Store也不会先被清空；执行中I/O失败时停止并返回已完成数量。多个Store之间不提供事务原子性。逻辑清空提交新的可见边界并保持ID继续递增，不保证物理安全擦除。
 
 格式化通过 `Esp32BaseStorage::formatAndReload()` 在独占维护区间完成：flush FileLog、format、mount、FileLog begin、逐个Store reload。Web System页使用同一流程；应用的after-format回调只负责自己的派生缓存或非受管文件。
 
@@ -95,7 +96,7 @@ const bool registered = Esp32BaseStorage::registerRecordStore(wateringStore);
 
 `/esp32base/**` 是基础库受管根。Web文件管理不得上传、覆盖或删除它，也不得修改FileLog轮转文件或已登记Store路径。普通业务文件应位于 `/app/**`、`/data/**` 或项目目录，并以 `unmanagedWritableBytes()` 为上传/创建上限。
 
-所有LittleFS调用通过 `Esp32BaseFs` 的递归串行化保护。格式化等多步维护持有独占维护状态；OTA期间暂停新的FS写入，结束、失败或中止后恢复。锁只解决底层并发，不改变Store对象的调用契约：同一Store的append/read/reload/clear仍应集中在同一loop/system task。ISR、timer和实时控制任务只投递轻量消息，不直接执行Flash操作。
+所有LittleFS调用通过 `Esp32BaseFs` 的递归串行化保护。格式化等多步维护持有独占维护状态；OTA期间暂停新的FS写入，结束、失败或中止后恢复。锁只解决底层并发，不改变Store对象的调用契约：同一Store的append/read/reload/release/checkpoint/clear仍应集中在同一loop/system task。ISR、timer和实时控制任务只投递轻量消息，不直接执行Flash操作。
 
 ## 7. Conditions 与审计历史
 
@@ -119,3 +120,11 @@ const bool registered = Esp32BaseStorage::registerRecordStore(wateringStore);
 - Storage预算或维护冲突：通过 `StorageError` 明确返回，不绕过协调层直接操作LittleFS。
 
 存储失败只表示历史事实未可靠提交，不应自动解释成泵阀、接触器或业务动作本身失败；反之业务动作失败也不代表存储一定失败。应用必须分别建模和报告。
+
+## 9. 可靠消费与普通历史共用同一Store
+
+`PreserveUnreleased` 从创建时启用；累计 `releaseThrough(id)` 仅改变RAM，既不删除记录，也不逐确认写Flash。消费者应批量或低频调用 `checkpointRelease()`；记录轮转会在删除前保存必要检查点和下一个ID。写失败不删除；容量被未释放记录占满时明确拒绝追加，不扩大队列或静默换世代。共享同一段的记录必须全部释放才允许淘汰。
+
+`storageGeneration` 是128位UUIDv4布局的存储世代，和记录ID一起标识不可变事实，普通重启、OTA、轮转和逻辑clear保持不变。明确格式化/重建会产生新世代，必须作为破坏性维护单独授权。较早检查点恢复可能要求重复消费；消费者负责幂等、缺号/损坏处理、确认合法性与低频检查点时机。平台主题、JSON、record-ack和补发调度均不进入本库。
+
+详细API、二进制字段及状态见 [RecordStore契约](03_api.md#35-esp32baserecordstore)。

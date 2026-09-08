@@ -77,7 +77,7 @@ Core 不包含 Event Bus。Bus 是 Runtime 可选模块。
 - LittleFS网关及全局递归串行化。
 - 存储协调层（`Esp32BaseStorage`）：统一容量、受管路径、Store登记、格式化恢复和OTA写暂停，不理解各模块格式。
 - 系统诊断日志 sink（`Esp32BaseFileLog`），依赖Fs，通过Core Log的line sink接收日志。
-- 固定长度业务RecordStore，依赖Fs和Time，提供顺序追加、完整段淘汰、CRC恢复和分页读取，不解释payload业务语义。
+- 固定长度业务RecordStore，依赖Fs和Time，提供顺序追加、按保留策略的完整段淘汰、持久存储世代、显式释放检查点、CRC恢复和分页读取，不解释payload业务语义。
 - Conditions使用Core NVS保存固定32位当前活动集合和确认状态机，不建立LittleFS历史；应用可按需把成功转换写入独立审计Store。
 - 统一可信时间门面（`Esp32BaseTime`），整合 uptime、RTC 和 NTP。
 - 外部 RTC 时间源（`Esp32BaseRtc`），支持 DS3231 / PCF8563 构建期二选一。

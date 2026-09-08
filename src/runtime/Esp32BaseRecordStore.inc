@@ -9,6 +9,7 @@
 #include "internal/Esp32BaseFsInternal.h"
 #include "internal/Esp32BaseLongOperation.h"
 
+#include <esp_system.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -20,7 +21,7 @@ constexpr const char* kControlFileName = "control.bin";
 constexpr const char* kControlTempFileName = "control.tmp";
 constexpr uint32_t kControlMagic = 0x4C544352UL; // RCTL
 constexpr uint32_t kSegmentMagic = 0x47455352UL; // RSEG
-constexpr uint16_t kContainerVersion = 1;
+constexpr uint16_t kContainerVersion = 2;
 constexpr uint32_t kControlHeaderBytes = 64;
 constexpr uint32_t kControlHeaderCopies = 2;
 constexpr uint32_t kControlFileBytes = kControlHeaderBytes * kControlHeaderCopies;
@@ -180,17 +181,22 @@ void recordStoreBuildControlHeader(uint8_t* header,
                                    uint32_t slotSize,
                                    uint32_t firstVisibleId,
                                    uint32_t nextRecordIdHint,
-                                   uint32_t sequence) {
+                                   uint32_t sequence,
+                                   Esp32BaseRecordStore::RetentionPolicy retentionPolicy,
+                                   const uint8_t* generation, uint32_t releasedThrough) {
     memset(header, 0, kControlHeaderBytes);
     recordStoreWriteU32(header, kControlMagic);
     recordStoreWriteU16(header + 4, kContainerVersion);
     recordStoreWriteU16(header + 6, static_cast<uint16_t>(kControlHeaderBytes));
     recordStoreWriteU16(header + 8, storeVersion);
+    recordStoreWriteU16(header + 10, static_cast<uint16_t>(retentionPolicy));
     recordStoreWriteU32(header + 12, payloadSize);
     recordStoreWriteU32(header + 16, slotSize);
     recordStoreWriteU32(header + 20, firstVisibleId ? firstVisibleId : 1U);
     recordStoreWriteU32(header + 24, sequence);
     recordStoreWriteU32(header + 28, nextRecordIdHint);
+    memcpy(header + 36, generation, 16);
+    recordStoreWriteU32(header + 52, releasedThrough);
     recordStoreWriteU32(header + 32, 0);
     recordStoreWriteU32(header + 32, recordStoreCrc(header, kControlHeaderBytes));
 }
@@ -208,7 +214,7 @@ bool recordStoreControlHeaderValid(const uint8_t* header) {
     return recordStoreReadU32(header) == kControlMagic &&
            recordStoreReadU16(header + 4) == kContainerVersion &&
            recordStoreReadU16(header + 6) == kControlHeaderBytes &&
-           recordStoreReadU16(header + 10) == 0 &&
+           recordStoreReadU16(header + 10) <= 1 &&
            recordStoreReadU32(header + 20) != 0 &&
            recordStoreHeaderCrcValid(header, kControlHeaderBytes, 32);
 }
@@ -216,8 +222,10 @@ bool recordStoreControlHeaderValid(const uint8_t* header) {
 bool recordStoreControlHeaderMatches(const uint8_t* header,
                                      uint16_t storeVersion,
                                      uint32_t payloadSize,
-                                     uint32_t slotSize) {
+                                     uint32_t slotSize,
+                                     Esp32BaseRecordStore::RetentionPolicy retentionPolicy) {
     return recordStoreControlHeaderValid(header) &&
+           recordStoreReadU16(header + 10) == static_cast<uint16_t>(retentionPolicy) &&
            recordStoreReadU16(header + 8) == storeVersion &&
            recordStoreReadU32(header + 12) == payloadSize &&
            recordStoreReadU32(header + 16) == slotSize;
@@ -573,7 +581,9 @@ Esp32BaseRecordStore::Esp32BaseRecordStore()
     : storeVersion_(0), payloadSizeBytes_(0), maximumStoreBytes_(0),
       minimumFileSystemFreeBytes_(0), slotSizeBytes_(0), capacity_(0),
       segmentFileLimitBytes_(0), currentStoreBytes_(0), firstVisibleId_(1),
-      controlNextRecordId_(1), headerSequence_(0), activeHeader_(0), recordCount_(0),
+      controlNextRecordId_(1), headerSequence_(0), activeHeader_(0), storageGeneration_{},
+      retentionPolicy_(RetentionPolicy::RotateOldest), releasedThroughRecordId_(0),
+      checkpointedReleaseRecordId_(0), recordCount_(0),
       damagedRecordCount_(0), oldestRecordId_(0), newestRecordId_(0), nextRecordId_(1),
       segmentCount_(0), state_(StoreState::Uninitialized), error_(StoreError::None),
       definitionSet_(false) {
@@ -589,6 +599,9 @@ void Esp32BaseRecordStore::resetRuntime() {
     controlNextRecordId_ = 1;
     headerSequence_ = 0;
     activeHeader_ = 0;
+    memset(storageGeneration_, 0, sizeof(storageGeneration_));
+    releasedThroughRecordId_ = 0;
+    checkpointedReleaseRecordId_ = 0;
     recordCount_ = 0;
     damagedRecordCount_ = 0;
     oldestRecordId_ = 0;
@@ -611,7 +624,9 @@ bool Esp32BaseRecordStore::begin(const StoreDefinition& definition) {
     resetRuntime();
     definitionSet_ = false;
     if (!recordStoreTypeNameValid(definition.recordTypeName) || definition.storeVersion == 0 ||
-        definition.payloadSizeBytes == 0 || definition.payloadSizeBytes > UINT32_MAX - 24U) {
+        definition.payloadSizeBytes == 0 || definition.payloadSizeBytes > UINT32_MAX - 24U ||
+        (definition.retentionPolicy != RetentionPolicy::RotateOldest &&
+         definition.retentionPolicy != RetentionPolicy::PreserveUnreleased)) {
         setError(StoreError::InvalidDefinition, StoreState::StructuralFault);
         return false;
     }
@@ -640,6 +655,7 @@ bool Esp32BaseRecordStore::begin(const StoreDefinition& definition) {
     strncpy(recordTypeName_, definition.recordTypeName, sizeof(recordTypeName_) - 1U);
     recordTypeName_[sizeof(recordTypeName_) - 1U] = '\0';
     storeVersion_ = definition.storeVersion;
+    retentionPolicy_ = definition.retentionPolicy;
     payloadSizeBytes_ = definition.payloadSizeBytes;
     maximumStoreBytes_ = definition.maximumStoreBytes;
     minimumFileSystemFreeBytes_ = definition.minimumFileSystemFreeBytes;
@@ -686,10 +702,15 @@ bool Esp32BaseRecordStore::createNew() {
         return false;
     }
     Esp32BaseFs::removeFileWithRecovery(tempPath_);
+    esp_fill_random(storageGeneration_, sizeof(storageGeneration_));
+    storageGeneration_[6] = (storageGeneration_[6] & 0x0fU) | 0x40U;
+    storageGeneration_[8] = (storageGeneration_[8] & 0x3fU) | 0x80U;
     uint8_t file[kControlFileBytes];
-    recordStoreBuildControlHeader(file, storeVersion_, payloadSizeBytes_, slotSizeBytes_, 1, 1, 1);
+    recordStoreBuildControlHeader(file, storeVersion_, payloadSizeBytes_, slotSizeBytes_, 1, 1, 1,
+                                  retentionPolicy_, storageGeneration_, 0);
     recordStoreBuildControlHeader(file + kControlHeaderBytes, storeVersion_, payloadSizeBytes_,
-                                  slotSizeBytes_, 1, 1, 0);
+                                  slotSizeBytes_, 1, 1, 0,
+                                  retentionPolicy_, storageGeneration_, 0);
     if (!Esp32BaseFs::writeBytes(tempPath_, file, sizeof(file))) {
         Esp32BaseFs::removeFileWithRecovery(tempPath_);
         setError(StoreError::FileCreateFailed, StoreState::StructuralFault);
@@ -699,9 +720,9 @@ bool Esp32BaseRecordStore::createNew() {
     size_t readLength = 0;
     if (!Esp32BaseFs::readBytes(tempPath_, verify, sizeof(verify), &readLength) ||
         readLength != sizeof(verify) ||
-        !recordStoreControlHeaderMatches(verify, storeVersion_, payloadSizeBytes_, slotSizeBytes_) ||
+        !recordStoreControlHeaderMatches(verify, storeVersion_, payloadSizeBytes_, slotSizeBytes_, retentionPolicy_) ||
         !recordStoreControlHeaderMatches(verify + kControlHeaderBytes, storeVersion_,
-                                         payloadSizeBytes_, slotSizeBytes_)) {
+                                         payloadSizeBytes_, slotSizeBytes_, retentionPolicy_)) {
         Esp32BaseFs::removeFileWithRecovery(tempPath_);
         setError(StoreError::VerifyFailed, StoreState::StructuralFault);
         return false;
@@ -740,8 +761,8 @@ bool Esp32BaseRecordStore::loadExisting() {
         setError(StoreError::HeaderInvalid, StoreState::StructuralFault);
         return false;
     }
-    const bool validA = headerValidA && recordStoreControlHeaderMatches(a, storeVersion_, payloadSizeBytes_, slotSizeBytes_);
-    const bool validB = headerValidB && recordStoreControlHeaderMatches(b, storeVersion_, payloadSizeBytes_, slotSizeBytes_);
+    const bool validA = headerValidA && recordStoreControlHeaderMatches(a, storeVersion_, payloadSizeBytes_, slotSizeBytes_, retentionPolicy_);
+    const bool validB = headerValidB && recordStoreControlHeaderMatches(b, storeVersion_, payloadSizeBytes_, slotSizeBytes_, retentionPolicy_);
     if (!validA && !validB) {
         setError(StoreError::DefinitionMismatch, StoreState::StructuralFault);
         return false;
@@ -753,6 +774,13 @@ bool Esp32BaseRecordStore::loadExisting() {
     firstVisibleId_ = recordStoreReadU32(active + 20);
     headerSequence_ = recordStoreReadU32(active + 24);
     controlNextRecordId_ = recordStoreReadU32(active + 28);
+    memcpy(storageGeneration_, active + 36, sizeof(storageGeneration_));
+    releasedThroughRecordId_ = recordStoreReadU32(active + 52);
+    checkpointedReleaseRecordId_ = releasedThroughRecordId_;
+    if (controlNextRecordId_ != 0 && releasedThroughRecordId_ >= controlNextRecordId_) {
+        setError(StoreError::HeaderInvalid, StoreState::StructuralFault);
+        return false;
+    }
     if (!scanSegments()) return false;
     ESP32BASE_LOG_I("record_store",
                     "ready path=%s max_store_bytes=%lu current_store_bytes=%lu segment_limit=%lu segments=%u slot_bytes=%lu capacity=%lu count=%lu damaged=%lu free_bytes=%lu",
@@ -905,7 +933,9 @@ bool Esp32BaseRecordStore::scanSegments() {
     bool cleanupFailed = false;
     while (currentStoreBytes_ > maximumStoreBytes_ && segmentCount_ > 0) {
         if (!removeOldestSegment()) {
-            setError(StoreError::CleanupFailed, StoreState::WriteFault);
+            if (error_ != StoreError::RecordsProtected) {
+                setError(StoreError::CleanupFailed, StoreState::WriteFault);
+            }
             cleanupFailed = true;
             break;
         }
@@ -968,6 +998,17 @@ bool Esp32BaseRecordStore::appendCompleted(const RecordStartTime& startTime,
 
 bool Esp32BaseRecordStore::removeOldestSegment() {
     if (segmentCount_ == 0) return false;
+    if (retentionPolicy_ == RetentionPolicy::PreserveUnreleased) {
+        const SegmentRuntime& oldest = segments_[0];
+        const uint32_t slots = oldest.candidateSlots ? oldest.candidateSlots : 1U;
+        if (oldest.firstRecordId > UINT32_MAX - (slots - 1U) ||
+            oldest.firstRecordId + slots - 1U > releasedThroughRecordId_) {
+            error_ = StoreError::RecordsProtected;
+            return false;
+        }
+    }
+    // Preserve the next ID before deleting its only on-disk evidence.
+    if (!checkpointRelease()) return false;
     char segmentPath[MAX_STORE_PATH_LENGTH];
     if (!recordStoreFormatSegmentPath(path_, segments_[0].firstRecordId, ".seg",
                                       segmentPath, sizeof(segmentPath))) {
@@ -1118,7 +1159,9 @@ bool Esp32BaseRecordStore::appendWithDuration(uint32_t durationSec,
     }
     bool appendExisting = false;
     if (!ensureBudgetForAppend(appendExisting)) {
-        setError(StoreError::CleanupFailed, StoreState::WriteFault);
+        if (error_ != StoreError::RecordsProtected) {
+            setError(StoreError::CleanupFailed, StoreState::WriteFault);
+        }
         return false;
     }
     const uint32_t required = appendExisting ? slotSizeBytes_ : kSegmentHeaderBytes + slotSizeBytes_;
@@ -1229,7 +1272,8 @@ bool Esp32BaseRecordStore::writeControlHeader(uint8_t copyIndex,
                                                uint32_t sequence) {
     uint8_t header[kControlHeaderBytes];
     recordStoreBuildControlHeader(header, storeVersion_, payloadSizeBytes_, slotSizeBytes_,
-                                  firstVisibleId, nextRecordIdHint, sequence);
+                                  firstVisibleId, nextRecordIdHint, sequence,
+                                  retentionPolicy_, storageGeneration_, releasedThroughRecordId_);
     if (!Esp32BaseFs::writeBytesAt(controlPath_, copyIndex * kControlHeaderBytes,
                                    header, sizeof(header))) return false;
     uint8_t verify[kControlHeaderBytes];
@@ -1237,14 +1281,53 @@ bool Esp32BaseRecordStore::writeControlHeader(uint8_t copyIndex,
     return Esp32BaseFs::readBytesAt(controlPath_, copyIndex * kControlHeaderBytes,
                                     verify, sizeof(verify), &readLength) &&
            readLength == sizeof(verify) &&
-           recordStoreControlHeaderMatches(verify, storeVersion_, payloadSizeBytes_, slotSizeBytes_) &&
+           recordStoreControlHeaderMatches(verify, storeVersion_, payloadSizeBytes_, slotSizeBytes_, retentionPolicy_) &&
            recordStoreReadU32(verify + 20) == firstVisibleId &&
            recordStoreReadU32(verify + 24) == sequence &&
-           recordStoreReadU32(verify + 28) == nextRecordIdHint;
+           recordStoreReadU32(verify + 28) == nextRecordIdHint &&
+           memcmp(verify + 36, storageGeneration_, sizeof(storageGeneration_)) == 0 &&
+           recordStoreReadU32(verify + 52) == releasedThroughRecordId_;
+}
+
+bool Esp32BaseRecordStore::releaseThrough(uint32_t recordId) {
+    if (!isReady()) return false;
+    if (retentionPolicy_ != RetentionPolicy::PreserveUnreleased ||
+        recordId < releasedThroughRecordId_ ||
+        (nextRecordId_ != 0 && recordId >= nextRecordId_)) {
+        error_ = StoreError::InvalidRelease;
+        return false;
+    }
+    releasedThroughRecordId_ = recordId;
+    if (error_ == StoreError::RecordsProtected || error_ == StoreError::InvalidRelease) {
+        error_ = StoreError::None;
+    }
+    return true;
+}
+
+bool Esp32BaseRecordStore::checkpointRelease() {
+    if (!isReady()) return false;
+    if (releasedThroughRecordId_ == checkpointedReleaseRecordId_ &&
+        controlNextRecordId_ == nextRecordId_) return true;
+    const uint8_t nextHeader = activeHeader_ == 0 ? 1 : 0;
+    if (!writeControlHeader(nextHeader, firstVisibleId_, nextRecordId_, headerSequence_ + 1U)) {
+        setError(StoreError::WriteFailed, StoreState::WriteFault);
+        return false;
+    }
+    activeHeader_ = nextHeader;
+    ++headerSequence_;
+    controlNextRecordId_ = nextRecordId_;
+    checkpointedReleaseRecordId_ = releasedThroughRecordId_;
+    return true;
 }
 
 bool Esp32BaseRecordStore::clear() {
     if (!isReady()) return false;
+    const uint32_t lastAssigned = nextRecordId_ ? nextRecordId_ - 1U : UINT32_MAX;
+    if (retentionPolicy_ == RetentionPolicy::PreserveUnreleased &&
+        releasedThroughRecordId_ < lastAssigned) {
+        error_ = StoreError::RecordsProtected;
+        return false;
+    }
     const uint8_t nextHeader = activeHeader_ == 0 ? 1 : 0;
     const uint32_t clearBoundary = nextRecordId_ ? nextRecordId_ : UINT32_MAX;
     if (!writeControlHeader(nextHeader, clearBoundary, nextRecordId_, headerSequence_ + 1U)) {
@@ -1254,6 +1337,7 @@ bool Esp32BaseRecordStore::clear() {
     activeHeader_ = nextHeader;
     ++headerSequence_;
     firstVisibleId_ = clearBoundary;
+    checkpointedReleaseRecordId_ = releasedThroughRecordId_;
     controlNextRecordId_ = nextRecordId_;
     recordCount_ = 0;
     damagedRecordCount_ = 0;
@@ -1295,6 +1379,10 @@ bool Esp32BaseRecordStore::readStatus(StoreStatus& status) const {
     status.oldestRecordId = oldestRecordId_;
     status.newestRecordId = newestRecordId_;
     status.nextRecordId = nextRecordId_;
+    memcpy(status.storageGeneration, storageGeneration_, sizeof(storageGeneration_));
+    status.retentionPolicy = retentionPolicy_;
+    status.releasedThroughRecordId = releasedThroughRecordId_;
+    status.checkpointedReleaseRecordId = checkpointedReleaseRecordId_;
     status.slotSizeBytes = slotSizeBytes_;
     status.segmentCount = segmentCount_;
     status.segmentFileLimitBytes = segmentFileLimitBytes_;
@@ -1313,7 +1401,8 @@ bool Esp32BaseRecordStore::isReady() const {
 }
 
 bool Esp32BaseRecordStore::isWritable() const {
-    return state_ == StoreState::Ready || state_ == StoreState::Degraded;
+    return (state_ == StoreState::Ready || state_ == StoreState::Degraded) &&
+           error_ != StoreError::RecordsProtected;
 }
 
 Esp32BaseRecordStore::StoreState Esp32BaseRecordStore::state() const { return state_; }
@@ -1356,6 +1445,8 @@ const char* Esp32BaseRecordStore::storeStateName(StoreState state) {
 const char* Esp32BaseRecordStore::storeErrorName(StoreError error) {
     switch (error) {
         case StoreError::None: return "none";
+        case StoreError::RecordsProtected: return "records_protected";
+        case StoreError::InvalidRelease: return "invalid_release";
         case StoreError::FileSystemUnavailable: return "fs_unavailable";
         case StoreError::InvalidDefinition: return "invalid_definition";
         case StoreError::InsufficientFreeSpace: return "insufficient_free_space";

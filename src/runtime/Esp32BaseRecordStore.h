@@ -36,7 +36,9 @@ public:
         CleanupFailed,
         InvalidStartTime,
         InvalidPayload,
-        IdExhausted
+        IdExhausted,
+        RecordsProtected,
+        InvalidRelease
     };
 
     enum class RecordReadResult : uint8_t {
@@ -47,12 +49,18 @@ public:
         InvalidArgument
     };
 
+    enum class RetentionPolicy : uint8_t {
+        RotateOldest,
+        PreserveUnreleased
+    };
+
     struct StoreDefinition {
         const char* recordTypeName = nullptr;
         uint16_t storeVersion = 1;
         uint32_t payloadSizeBytes = 0;
         uint32_t maximumStoreBytes = 0;
         uint32_t minimumFileSystemFreeBytes = 0;
+        RetentionPolicy retentionPolicy = RetentionPolicy::RotateOldest;
     };
 
     struct RecordStartTime {
@@ -90,6 +98,10 @@ public:
         uint32_t oldestRecordId = 0;
         uint32_t newestRecordId = 0;
         uint32_t nextRecordId = 1;
+        uint8_t storageGeneration[16] = {};
+        RetentionPolicy retentionPolicy = RetentionPolicy::RotateOldest;
+        uint32_t releasedThroughRecordId = 0;
+        uint32_t checkpointedReleaseRecordId = 0;
         uint32_t slotSizeBytes = 0;
         uint32_t segmentCount = 0;
         uint32_t segmentFileLimitBytes = 0;
@@ -123,6 +135,10 @@ public:
                               uint8_t* payloadOut,
                               size_t payloadOutBytes,
                               RecordMetadata& recordOut);
+    // Release is RAM-only and never deletes history. Caller validates consumption.
+    bool releaseThrough(uint32_t recordId);
+    // Explicit low-frequency persistence; rotation checkpoints before deletion.
+    bool checkpointRelease();
     bool clear();
     bool readStatus(StoreStatus& status) const;
 
@@ -194,6 +210,10 @@ private:
     uint32_t controlNextRecordId_;
     uint32_t headerSequence_;
     uint8_t activeHeader_;
+    uint8_t storageGeneration_[16];
+    RetentionPolicy retentionPolicy_;
+    uint32_t releasedThroughRecordId_;
+    uint32_t checkpointedReleaseRecordId_;
     uint32_t recordCount_;
     uint32_t damagedRecordCount_;
     uint32_t oldestRecordId_;

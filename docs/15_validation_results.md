@@ -13,6 +13,8 @@
 
 生产代码定向测试：`scripts/test_watchdog.py`、`scripts/test_ota_lifecycle.py`、`scripts/test_web_write.py`；PlatformIO 原生测试：`native_time_harness`、`native_time_pcf8563_harness`、`native_mqtt_harness`、`native_mqtt_large_tx_harness`、`native_mqtt_secure_default_harness`、`native_web_harness`。这些使用假的 SDK、网络、存储或时钟；OTA 测试摘要桩只验证不匹配分支，不是密码算法验收。证书来源、构建和证书测试另见 [TLS 工具链](14_tls_toolchain.md)。
 
+Record Store 的 31 项原生测试通过：未释放数据在容量满、缩预算及清空时受保护；释放仅更新 RAM，显式检查点及轮转前落盘，无变化不重复写；控制写失败不先删除记录，新段创建失败后不复用 ID；持久世代在重载/清空后保持。双头损坏回退、旧格式拒绝及多 Store 清空预检也有定向覆盖。原生文件系统是测试桩，不替代真实掉电试验。
+
 ## 实际构建与静态体积
 
 Core 2 为 2.0.16，Core 3 为 3.3.8；均通过仓库隔离的 PlatformIO home。以下是最终 ELF 的静态 RAM 和固件 Flash 字节数，不是运行堆、任务栈峰值或 TLS 握手峰值。
@@ -26,7 +28,11 @@ Core 2 为 2.0.16，Core 3 为 3.3.8；均通过仓库隔离的 PlatformIO home�
 | basic / ESP32-C3 / Core 2 | LOCAL | 49,796 | 991,034 |
 | basic / ESP32 / Core 3 | LOCAL | 59,172 | 1,180,653 |
 | mqtt_tls 受控包探针 / ESP32 / Core 3 | IOT | 62,024 | 1,295,388 |
-| full_demo / ESP32 / Core 2 | LOCAL | 58,508 | 1,014,137 |
+| full_demo / ESP32 / Core 2 | LOCAL | 58,508 | 1,014,149 |
+| record_store_demo / ESP32 / Core 2 | MINIMAL + FS/Record Store | 25,648 | 336,077 |
+| record_store_demo / ESP32-S3 / Core 2 | MINIMAL + FS/Record Store | 22,604 | 330,433 |
+| record_store_demo / ESP32-C3 / Core 2 | MINIMAL + FS/Record Store | 17,936 | 315,292 |
+| record_store_demo / ESP32 / Core 3 | MINIMAL + FS/Record Store | 25,996 | 346,272 |
 
 受控 IOT 示例此前同场景为 RAM 63,400B / Flash 1,323,372B；本次代码与明确依赖共同变更后分别减少 1,376B / 27,984B，不能把差值归因于某一个函数。4KiB 发送、512B 接收时，2 个接收 payload 数组比共用 4KiB 容量少 7,168B，属于可推导的静态布局差值，不是该默认示例的实测节省。
 
@@ -39,3 +45,7 @@ Core 2 为 2.0.16，Core 3 为 3.3.8；均通过仓库隔离的 PlatformIO home�
 - OTA 暂停是异步请求，尚未实测 TLS 内存释放时序；Web 写预算及 OTA 无进展检查不能抢占底层阻塞调用。真实慢网、异常断电、长时联网、存储写满/掉电、卡死复位和 OTA 恢复需真实设备验证。
 - Core 2 看门狗不再把系统默认 5 秒改为 8 秒，产品升级需核对最长同步操作。未授权烧录、OTA、复位或接触真实执行器，本轮均未执行。
 - 受控 TLS 包目前只验证 ESP32 / Core 3；没有把源码版本锁定外推成 ESP32-S3、ESP32-C3 或 Core 2 的安全 TLS 产物验证。跨版本和芯片的其余组合属于后续组合验收范围。
+
+Record Store 控制文件仍为 128B，记录槽位仍为 payload + 24B；本机 `sizeof(Store)` 从 1,992B 到 2,016B（+24B，不等同芯片运行峰值）。没有增加持久 MQTT 队列或后台任务。容器格式 2 的升级影响见 [接入与升级](13_integration_and_upgrade.md)。
+
+验证顺序以 ESP32 为主：普通能力使用当前默认 Core 2.0.16，需要完整 TLS 校验时使用已验证的受控 Core 3.3.8。S3/C3 的受控 TLS 构建与其他未覆盖组合统一后置到兼容性验收；现有通过结果复用，不能据此宣称所有组合均已通过。

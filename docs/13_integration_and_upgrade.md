@@ -195,7 +195,9 @@ custom_esp32base_webota_password = <current-web-auth-password>
 
 ### 配置与数据
 
-本次 Profile/HTTP OTA 定型没有改变 `Esp32BaseConfig`、WiFi、Web Auth、hostname、App Config、LittleFS 或 Record Store 的现有存储含义。只要业务自身配置结构和 key 未改变，重新编译、串口烧录或 OTA 后应继续保留已有有效配置，默认值不得覆盖用户值。
+本次重构没有改变 `Esp32BaseConfig`、WiFi、Web Auth、hostname 和 App Config 的现有存储含义。只要业务自身配置结构和 key 未改变，重新编译、串口烧录或 OTA 后应继续保留已有有效配置，默认值不得覆盖用户值。
+
+Record Store 容器现为格式 2，增加持久存储世代、保留策略和释放检查点；旧格式 1 会报告 `HeaderInvalid`，不会自动迁移、格式化或覆盖。已有记录需要保留时，升级前由应用安排导出；清理旧数据必须是明确确认的维护动作。`storeVersion` 仍是应用 payload 版本，不能靠修改它绕过容器格式检查。详见 [Record Store](12_record_store.md)。
 
 如果业务同时修改了自己的 blob、文件或 Record Store 结构，则按业务当前规则处理；基础库不会猜测或迁移不透明业务数据。结构不兼容时应保持执行器安全关闭，并明确提示重新配置或执行经确认的维护动作。
 

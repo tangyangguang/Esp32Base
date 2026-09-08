@@ -141,3 +141,7 @@ Conditions与多Store边界：
 - `INFO` 日志可输出 WiFi SSID、Web Auth 用户名、来源、结果和 `password_set` 状态；不得输出 WiFi 或 Web Auth 密码值。
 - 日志访问权限由应用和部署环境控制。
 - 用户 sink callback 同步执行，不得长时间阻塞。
+
+## RecordStore 当前格式与消费边界
+
+RecordStore 当前容器格式为2，不自动读取或迁移格式1，也不会因不匹配自动清空。普通LOCAL历史默认完整段轮转；可靠消费必须显式选择 `PreserveUnreleased`，按 [API契约](03_api.md#35-esp32baserecordstore) 管理累计释放和低频检查点。它不解析平台消息、不校验远端ACK、不自动重发，亦不保证损坏记录可恢复；稳定世代/ID、防覆盖和读取状态是上层同步机制的依据。手动格式化FS属于明确破坏性维护，仍会重建全部Store，不能当作积压处理。

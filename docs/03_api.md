@@ -260,7 +260,17 @@ slotSizeBytes = payloadSizeBytes + 24
 
 `maximumStoreBytes` 是包含128字节控制文件、32字节段头和所有槽位的最大逻辑预算，不预分配大文件。基础库按预算自动选择LittleFS CTZ有效段上限，使预计段数不超过33；初始化日志和 `StoreStatus.capacity` 给出该固定定义下的估算容量。容量轮换按完整最老段淘汰，因此实际记录数会在“估算容量减去一个段容量”到估算容量之间波动。
 
-`control.bin` 包含两个64字节带CRC的控制头，普通追加不更新它。段按首个记录ID命名，顺序追加到当前段；新段先完整创建和验证 `.tmp`，再重命名为 `.seg`。达到预算后删除最老完整段，不搬移或重写其他段。启动或 `reload()` 批量扫描有限段恢复运行态，最新分页按段倒序读取，不能按槽位反复打开文件。正式控制文件定义不匹配、段范围重叠或目录结构未知时进入结构故障，绝不自动重写。
+`control.bin` 包含两个64字节带CRC的控制头，普通追加不更新它。段按首个记录ID命名，顺序追加到当前段；新段先完整创建和验证 `.tmp`，再重命名为 `.seg`。达到预算后按保留策略删除可淘汰的最老完整段，不搬移或重写其他段；删除前提交下一个ID和必要的释放检查点，避免新段创建失败后重用历史ID。启动或 `reload()` 批量扫描有限段恢复运行态，最新分页按段倒序读取，不能按槽位反复打开文件。正式控制文件定义不匹配、段范围重叠或目录结构未知时进入结构故障，绝不自动重写。
+
+保留策略与可靠消费：
+
+- `StoreDefinition.retentionPolicy` 默认为 `RetentionPolicy::RotateOldest`，适合普通 LOCAL 最近历史。需要可靠消费/补发时选 `PreserveUnreleased`；不绑定任何平台。
+- `releaseThrough(id)` 只在 RAM 推进调用方已完成消费的累计边界，不删除历史、不写 Flash。重复相同水位幂等，倒退或超出已分配 ID 返回 `InvalidRelease`；仅保护模式可调用。调用方负责确认记录已被正确消费，包括损坏/缺号处理，不能把 MQTT PUBACK 当作业务落库。
+- `checkpointRelease()` 显式保存释放水位和下一个 ID，完全未变化时不写；调用方按批量、较长时间间隔或受控维护需要调用，不能逐 ACK 调用。轮转在删除前也会提交必要检查点。检查点写入/验证失败不允许本次删除，返回写故障；排除原因后 `reload()`。普通重启可从较早检查点恢复，消费方必须支持幂等重放。
+- `PreserveUnreleased` 下，一段中还有任何未释放 ID，该段就不能淘汰。写满、缩小预算或 `clear()` 遇到受保护记录时返回 `RecordsProtected`（`records_protected`），不删除记录或换存储世代。完整旧段被释放后可重试追加；释放不会立即清理近期历史。
+- `StoreStatus` 提供 `releasedThroughRecordId`、`checkpointedReleaseRecordId`、`retentionPolicy` 和16字节 `storageGeneration`。存储世代采用 UUIDv4 字节布局，首次创建持久化；重启、轮转、OTA和 `clear()` 不改变它，明确重建存储才产生新世代。调用方可格式化为 UUID，但库不解释平台 `recordStreamId`。
+- 控制容器格式为2，仍为两个64字节控制头：偏移10为2字节保留策略，36为16字节存储世代，52为4字节释放检查点；其余既有ID、序号和CRC机制保留。段容器版本也为2，单条槽位仍为 `payloadSizeBytes + 24`。不读取格式1、不自动清空或迁移；设备升级前应明确保存历史或授权重建，不能只刷固件后假装旧存储已接入。保留策略是持久定义，直接切换同一路径的策略会报定义不匹配。
+- 记录时间的原始元数据不可变。要求上传内容不可变时，应使用记录形成时保存的 `completedEpochSec`（0表示未知），不要在重传时通过当前校时重新构造发生时间。平台序列化和确认校验由上层承担。
 
 核心API：
 
@@ -289,6 +299,8 @@ public:
                               RecordMetadata& recordOut);
 
     bool readStatus(StoreStatus&) const;
+    bool releaseThrough(uint32_t recordId);
+    bool checkpointRelease();
     bool clear();
 };
 ```
@@ -307,7 +319,7 @@ ID和轮换：
 - 自动淘汰和逻辑清空都不重置ID；到达 `UINT32_MAX` 后停止追加，不回卷。
 - 如果断电时已经写入了可识别的下一ID但整条记录未完成，该ID会被保留为空洞而不重复使用；分页和按ID读取仍不会返回不完整记录。
 - 段文件名和段内固定偏移共同定位ID，不建立字段索引。
-- 容量满后删除最老完整段，不覆盖或搬移其他段；淘汰粒度是一段而不是一条。
+- 容量满后只删除策略允许的最老完整段，不覆盖或搬移其他段；淘汰粒度是一段而不是一条。
 - 不支持单条删除、更新、字段查询、事务或可变长度记录。
 
 失败和状态：
@@ -319,7 +331,7 @@ ID和轮换：
 - `StoreStatus` 返回状态、错误、记录数、估算容量、损坏数、最早/最新/下一个ID、槽位大小、段数、段上限、当前/最大逻辑存储字节以及LittleFS总量/使用量/剩余量。
 - `clear()` 先通过双控制头提交新的可见边界，再尽力删除旧段；删除失败也不会让旧记录重新可见。它不是安全擦除，调用方必须先取得用户明确确认。
 
-RecordStore构造函数不访问FS，也不会自动登记到Storage。业务在 `Esp32Base::begin()` 成功后调用各实例的 `begin()`；同一路径只能有一个活动实例。API不提供mutex，同一Store的begin/reload/append/read/clear必须由业务串行调用，最简单的做法是集中在同一loop/system task；业务也可以使用自己的等效串行化机制。读取回调中的payload只在本次回调期间有效，且不得在回调中重入同一Store。
+RecordStore构造函数不访问FS，也不会自动登记到Storage。业务在 `Esp32Base::begin()` 成功后调用各实例的 `begin()`；同一路径只能有一个活动实例。API不提供mutex，同一Store的begin/reload/append/read/release/checkpoint/clear必须由业务串行调用，最简单的做法是集中在同一loop/system task；业务也可以使用自己的等效串行化机制。读取回调中的payload只在本次回调期间有效，且不得在回调中重入同一Store。
 
 每个当前版本Store在首次 `begin()` 后通过存储协调层登记一次。重复登记同一对象幂等；不同对象使用相同路径、超过8个Store、所有Store合计预算超过 `ESP32BASE_RECORD_STORE_TOTAL_MAX_BYTES`，或FileLog + Store预算 + 安全余量超过LittleFS分区时会被拒绝。应用应分别检查初始化和登记结果：
 
