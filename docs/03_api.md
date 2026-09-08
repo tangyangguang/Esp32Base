@@ -893,7 +893,7 @@ typedef void (*MessageCallback)(const MessageView& message, void* context);
 
 普通 transport/TLS/Broker unavailable 错误使用 1、2、4、8、16、32、60 秒上限的指数退避，并在当前上限 50%..100% 使用系统随机抖动。协议、Client ID、用户名和授权拒绝进入 `CONNECTION_REJECTED`，避免持续错误认证；WiFi 断开再恢复不会绕过该终止状态，Broker/ACL 修复后应用可调用 `requestReconnect()`。所有 deadline 使用 32 位无符号差值，允许 `millis()` 回绕。
 
-证书校验失败进入 `CONNECTION_REJECTED`，不会因 WiFi 或时间源变化自动重试；修正 CA、hostname、Broker 证书或 Core 配置后，由应用调用 `requestReconnect()`。
+证书校验失败进入 `CONNECTION_REJECTED`，不会因 WiFi 或时间源变化自动重试；修正 CA、hostname、Broker 证书或 Core 配置后，由应用调用 `requestReconnect()`。SDK 的证书详细 flags 可能为 0；若原生 TLS 错误明确为 X.509 证书验证失败，仍按证书错误处理，不退化为普通 TLS 重试。flags 为 0 不等于证书验证通过，库也不推测缺失的具体日期/名称/信任链标志。
 
 `Status` 提供当前状态、稳定错误、TLS/credential-set、证书日期校验能力、Broker host/port/clientId 和最近连接的 uptime/epoch。`Diagnostics` 提供连接尝试、连接周期配置失败、成功、重连、断开、接收、publish accepted、PUBACK、订阅 ACK、送达状态不确定、超限/邮箱丢弃、enqueue 失败、outbox/inbox/control high-water、当前 QoS 1 in-flight 及 native ESP/TLS/socket/certificate flags。QoS 0 没有可观察的 Broker ACK，因此不伪造“已发送”计数；native code 只用于诊断，不作为跨 Core 稳定业务枚举。
 

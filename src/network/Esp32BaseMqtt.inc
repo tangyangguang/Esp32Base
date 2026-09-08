@@ -2,6 +2,7 @@
 #include <esp_system.h>
 #include <esp_tls_errors.h>
 #include <mqtt_client.h>
+#include <mbedtls/x509.h>
 #include "internal/Esp32BaseMqttLifecycle.h"
 
 #include <errno.h>
@@ -735,7 +736,12 @@ Esp32BaseMqtt::Error classifyError(const RawEvent& raw, bool& terminal) {
                 return Esp32BaseMqtt::ERROR_DNS_OR_TRANSPORT;
         }
     }
-    if (raw.certificateFlags != 0) {
+    // ESP-TLS may omit verification flags when the peer certificate is no
+    // longer retained. Its X.509 verification error still identifies a
+    // terminal certificate failure; keep both SDK error sign conventions.
+    if (raw.certificateFlags != 0 ||
+        raw.tlsError == MBEDTLS_ERR_X509_CERT_VERIFY_FAILED ||
+        raw.tlsError == -MBEDTLS_ERR_X509_CERT_VERIFY_FAILED) {
         terminal = true;
         return Esp32BaseMqtt::ERROR_TLS_CERTIFICATE;
     }

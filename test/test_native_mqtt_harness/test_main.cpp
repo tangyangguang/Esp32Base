@@ -763,6 +763,40 @@ void test_reports_platform_certificate_date_check_capability() {
             Esp32BaseMqtt::ERROR_TLS_CERTIFICATE_DATE_CHECK_UNAVAILABLE));
 }
 
+void test_certificate_error_without_flags_stops_automatic_retries() {
+    startAndConnect();
+    const int codes[] = {MBEDTLS_ERR_X509_CERT_VERIFY_FAILED,
+                         -MBEDTLS_ERR_X509_CERT_VERIFY_FAILED};
+    for (int code : codes) {
+        RawEvent raw;
+        raw.type = RAW_ERROR;
+        raw.tlsError = code;
+        bool terminal = false;
+        TEST_ASSERT_EQUAL(Esp32BaseMqtt::ERROR_TLS_CERTIFICATE,
+                          classifyError(raw, terminal));
+        TEST_ASSERT_TRUE(terminal);
+    }
+    esp_mqtt_error_codes_t error = {};
+    error.error_type = MQTT_ERROR_TYPE_TCP_TRANSPORT;
+    error.esp_tls_stack_err = -MBEDTLS_ERR_X509_CERT_VERIFY_FAILED;
+    emitEvent(MQTT_EVENT_ERROR, 0, &error);
+    emitEvent(MQTT_EVENT_DISCONNECTED);
+    Esp32BaseMqtt::handle(false);
+    TEST_ASSERT_EQUAL(Esp32BaseMqtt::ERROR_TLS_CERTIFICATE,
+                      Esp32BaseMqtt::status().lastError);
+    TEST_ASSERT_EQUAL(Esp32BaseMqtt::CONNECTION_REJECTED, Esp32BaseMqtt::state());
+    TEST_ASSERT_EQUAL(0, Esp32BaseMqtt::diagnostics().nativeCertificateFlags);
+    const uint32_t attempts = Esp32BaseMqtt::diagnostics().connectAttempts;
+    g_fakeMillis += 120000;
+    Esp32BaseMqtt::handle(false);
+    TEST_ASSERT_EQUAL(attempts, Esp32BaseMqtt::diagnostics().connectAttempts);
+    TEST_ASSERT_TRUE(Esp32BaseMqtt::requestReconnect());
+    Esp32BaseMqtt::handle(false);
+    TEST_ASSERT_EQUAL(Esp32BaseMqtt::BACKOFF, Esp32BaseMqtt::state());
+    Esp32BaseMqtt::handle(false);
+    TEST_ASSERT_GREATER_THAN(attempts, Esp32BaseMqtt::diagnostics().connectAttempts);
+}
+
 void test_secure_default_rejects_missing_certificate_date_check() {
     TEST_ASSERT_FALSE(Esp32BaseMqtt::configure(validConfig()));
     const Esp32BaseMqtt::Status status = Esp32BaseMqtt::status();
@@ -834,6 +868,7 @@ int main(int, char**) {
     RUN_TEST(test_incoming_mailbox_full_drops_whole_message);
     RUN_TEST(test_connection_event_survives_full_control_mailbox);
     RUN_TEST(test_dns_and_certificate_errors_are_distinguished);
+    RUN_TEST(test_certificate_error_without_flags_stops_automatic_retries);
     RUN_TEST(test_reports_platform_certificate_date_check_capability);
     RUN_TEST(test_terminal_rejection_survives_wifi_loss_and_recovery);
     RUN_TEST(test_backoff_deadline_is_millis_wrap_safe);
