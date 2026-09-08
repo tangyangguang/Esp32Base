@@ -234,7 +234,7 @@ bool Esp32Base::begin() {
 #if ESP32BASE_ENABLE_WATCHDOG
     ESP32BASE_LOG_D("base", "module_begin name=watchdog");
     {
-        const bool ok = Esp32BaseWatchdog::begin(8000);
+        const bool ok = Esp32BaseWatchdog::begin();
         if (!optionalOk(ok, "watchdog")) return false;
         if (ok) ESP32BASE_LOG_D("base", "module_ready name=watchdog");
     }

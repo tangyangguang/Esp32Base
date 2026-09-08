@@ -6,12 +6,15 @@
 #include "../core/Esp32BaseConfig.h"
 #include "../core/Esp32BaseLog.h"
 
+#include <sdkconfig.h>
 #include <esp_system.h>
 #include <esp_task_wdt.h>
 #include <freertos/task.h>
 
 namespace {
 bool g_enabled = false;
+TaskHandle_t g_watchdogTask = nullptr;
+bool g_resetCountLoaded = false;
 TaskHandle_t g_longOperationTask = nullptr;
 uint8_t g_longOperationDepth = 0;
 
@@ -26,42 +29,59 @@ uint32_t loadLifetimeResetCount() {
 uint32_t g_lifetimeResetCount = 0;
 }
 
-bool Esp32BaseWatchdog::begin(uint32_t timeoutMs) {
-    if (timeoutMs < 1000U) {
-        ESP32BASE_LOG_W("watchdog", "invalid timeout_ms=%lu min=1000", static_cast<unsigned long>(timeoutMs));
-        return false;
+bool Esp32BaseWatchdog::begin() {
+    const TaskHandle_t current = xTaskGetCurrentTaskHandle();
+    if (g_enabled) {
+        return current == g_watchdogTask && esp_task_wdt_status(nullptr) == ESP_OK;
     }
-    if (wasWatchdogReset()) {
-        g_lifetimeResetCount = loadLifetimeResetCount() + 1U;
-        const bool ok = Esp32BaseConfig::setInt("eb_sys", "wdt_cnt", static_cast<int32_t>(g_lifetimeResetCount));
-        ESP32BASE_LOG_W("watchdog", "boot after watchdog reset count=%lu persist=%s",
-                        static_cast<unsigned long>(g_lifetimeResetCount),
-                        ok ? "success" : "failed");
-    } else {
+    if (!g_resetCountLoaded) {
+        g_resetCountLoaded = true;
         g_lifetimeResetCount = loadLifetimeResetCount();
+        if (wasWatchdogReset()) {
+            ++g_lifetimeResetCount;
+            const bool ok = Esp32BaseConfig::setInt("eb_sys", "wdt_cnt", static_cast<int32_t>(g_lifetimeResetCount));
+            ESP32BASE_LOG_W("watchdog", "boot after watchdog reset count=%lu persist=%s",
+                            static_cast<unsigned long>(g_lifetimeResetCount), ok ? "success" : "failed");
+        }
     }
+    esp_err_t status = esp_task_wdt_status(nullptr);
+    if (status == ESP_ERR_INVALID_STATE) {
+        // Configure only an absent system watchdog. Never reconfigure existing
+        // subscribers, idle-task protection, timeout or panic policy.
 #if ESP_ARDUINO_VERSION_MAJOR >= 3
-    esp_task_wdt_config_t config = {};
-    config.timeout_ms = timeoutMs;
-    config.idle_core_mask = 0;
-    config.trigger_panic = true;
-    if (esp_task_wdt_init(&config) != ESP_OK) {
-        return false;
-    }
-#else
-    if (esp_task_wdt_init(timeoutMs / 1000U, true) != ESP_OK) {
-        return false;
-    }
+        esp_task_wdt_config_t config = {};
+        config.timeout_ms = CONFIG_ESP_TASK_WDT_TIMEOUT_S * 1000U;
+#if defined(CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0) && CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0
+        config.idle_core_mask |= 1U;
 #endif
-    if (esp_task_wdt_add(nullptr) != ESP_OK) {
+#if defined(CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU1) && CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU1
+        config.idle_core_mask |= 2U;
+#endif
+        config.trigger_panic = true;
+        status = esp_task_wdt_init(&config);
+#else
+        status = esp_task_wdt_init(CONFIG_ESP_TASK_WDT_TIMEOUT_S, true);
+#endif
+        if (status != ESP_OK) {
+            ESP32BASE_LOG_E("watchdog", "init failed error=%d", static_cast<int>(status));
+            return false;
+        }
+        status = esp_task_wdt_status(nullptr);
+    }
+    if (status == ESP_ERR_NOT_FOUND) {
+        status = esp_task_wdt_add(nullptr);
+    }
+    if (status != ESP_OK) {
+        ESP32BASE_LOG_E("watchdog", "subscribe failed error=%d", static_cast<int>(status));
         return false;
     }
+    g_watchdogTask = current;
     g_enabled = true;
     return true;
 }
 
 void Esp32BaseWatchdog::feed() {
-    if (!g_enabled) {
+    if (!g_enabled || xTaskGetCurrentTaskHandle() != g_watchdogTask) {
         return;
     }
     esp_task_wdt_reset();
@@ -72,6 +92,9 @@ bool Esp32BaseWatchdog::enterLongOperation() {
         return true;
     }
     TaskHandle_t current = xTaskGetCurrentTaskHandle();
+    if (current != g_watchdogTask) {
+        return false;
+    }
     if (g_longOperationTask == current) {
         if (g_longOperationDepth < UINT8_MAX) {
             ++g_longOperationDepth;
@@ -92,6 +115,9 @@ bool Esp32BaseWatchdog::exitLongOperation() {
         return true;
     }
     TaskHandle_t current = xTaskGetCurrentTaskHandle();
+    if (current != g_watchdogTask) {
+        return false;
+    }
     if (!g_longOperationTask) {
         return true;
     }

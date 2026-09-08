@@ -123,6 +123,7 @@ Conditions与多Store边界：
 
 - 支持 Arduino ESP32 Core 2.0.14+ 和 3.0.4+。
 - Watchdog、WiFi event和mDNS必须使用版本条件编译隔离；brownout只读取reset reason，不修改detector寄存器。
+- Watchdog 使用系统全局超时，不能为单个任务提供独立超时。已初始化的系统策略保持不变；应用如果关闭 panic，基础库不会擅自覆盖。当前官方 ESP32 配置为 5 秒；此前 Core 2 facade 会将全局超时改为 8 秒，产品升级时需核对最长同步操作。原生测试覆盖 Core 2/3 初始化、订阅失败、重复调用和任务归属；真实卡死复位、Flash/OTA 长操作时序及 S3/C3 实机仍需单独验证。
 - mDNS `stop()` 对外语义是停止广告，不承诺释放底层 mDNS 全部资源。
 - ESP32-C3 不支持的 wake source 返回 false 并输出 warn。
 

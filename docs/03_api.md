@@ -1565,7 +1565,7 @@ Web OTA 上传页面不要求额外认证；它只复用 Web 层 Basic Auth。�
 ```cpp
 class Esp32BaseWatchdog {
 public:
-    static bool begin(uint32_t timeoutMs);
+    static bool begin();
     static void feed();
     static bool enterLongOperation();
     static bool exitLongOperation();
@@ -1585,7 +1585,9 @@ public:
 };
 ```
 
-`Esp32BaseWatchdog::begin(timeoutMs)` 要求 `timeoutMs >= 1000`；更小值返回 false 并输出 WARN，避免 Arduino ESP32 2.x 下秒级 WDT 参数被截断为 0。
+`Esp32BaseWatchdog::begin()` 在调用任务（通常为 loop/system task）注册任务看门狗。系统已经初始化时只复用现有配置，不修改全局超时、panic 策略或其他任务/idle task 的订阅；系统尚未初始化时使用 SDK 的 `CONFIG_ESP_TASK_WDT_TIMEOUT_S` 初始化并启用 panic，Core 3 同时保留 SDK 配置的 idle task 保护。当前受支持的官方 Core 2/3 ESP32 构建默认超时为 5 秒；本库不再提供单独的超时参数。产品需要调整全局策略时，应在调用基础库前统一配置系统任务看门狗，不能在基础库启动后注销或重配置它而仍假设保护不变。
+
+初始化和注册失败返回 false 并记录错误，不标记为 enabled。同一任务重复调用不会重复注册或累计重启统计；已启用后从其他任务调用返回 false。`feed()` 只由注册任务执行，其他任务调用不会代喂；长操作入口也只允许注册任务使用。这些接口不是并发初始化接口，应由同一个 system task 串行调用。
 
 `enterLongOperation()` / `exitLongOperation()` 用于 OTA、FileLog 轮转等预期较长的 flash 操作；`currentTaskInLongOperation()` 可在嵌套长操作前检查当前任务是否已经处于基础库长操作范围。
 这些接口按当前 FreeRTOS task 和嵌套深度记录长操作状态，并不把当前 task 从 WDT 注销；只供基础库内部同步 Flash/FS/OTA 等长操作使用，不是业务关闭 Watchdog 的通用开关。

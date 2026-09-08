@@ -5,7 +5,9 @@
 
 class Esp32BaseWatchdog {
 public:
-    static bool begin(uint32_t timeoutMs);
+    // Register the calling system task; reuse existing SDK watchdog policy.
+    // Call serially from that task. See docs/03_api.md for global timeout ownership.
+    static bool begin();
     static void feed();
     static bool enterLongOperation();
     static bool exitLongOperation();

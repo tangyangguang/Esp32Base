@@ -17,7 +17,7 @@
 - WiFi、Web、OTA 等重能力全部非阻塞启动。
 - WiFi STA 启动带安全保护：连续 STA guarded brownout/panic/watchdog 复位后暂停已保存凭据并回退 AP 配网；后续正常上电会自动恢复一次，Web 也可直接重试已保存凭据，避免坏 STA 状态造成永久重启循环。
 - WiFi 初始化阶段连续复位时会先跳过所有 Arduino WiFi 初始化调用，让系统进入无 WiFi 诊断状态，并用中文日志提示疑似 WiFi/RF 启动瞬时电流导致供电跌落，建议检查电源、USB 线、稳压器、接线并考虑在板端 VIN/5V 与 GND 间增加低 ESR 储能电容。
-- OTA、NVS、Watchdog、LittleFS、Captive Portal 等关键路径按量产可靠性设计。
+- OTA、NVS、Watchdog、LittleFS、Captive Portal 等关键路径按量产可靠性设计。Watchdog 注册主循环并复用系统全局策略，不覆盖其他任务的保护；接口与超时约定见 [API 文档](docs/03_api.md#13-esp32basewatchdog--sleep--fs--health)。
 
 新业务项目接入和旧 Profile/OTA 项目的一次性代码适配，先阅读 [应用接入与版本适配](docs/13_integration_and_upgrade.md)。已知限制、明确不支持能力和风险边界详见 [已知限制](docs/10_known_limitations.md)。
 
