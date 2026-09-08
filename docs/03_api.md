@@ -1713,3 +1713,5 @@ Health tick 日志策略：
 - 默认慢循环阈值为 3000ms，避免普通 Web 请求造成健康日志刷屏，同时保留现场 INFO 诊断入口；业务项目可按控制实时性要求覆盖为 1000/2000/5000ms。
 - `ESP32BASE_HEALTH_DEBUG_LOG_INTERVAL_MS` 默认 1800000ms；设为 0 可关闭普通 DEBUG tick 日志，不影响 INFO 慢循环日志。
 - `loopPeriodMaxMs()` 仍返回启动以来最大 loop 间隔，不随 tick 窗口清零。
+
+`Esp32BaseConfig::clearSystemConfig()` 仅清除 `eb_sys/hostname`，保留启动计数等同 namespace 的其他字段。只有持久删除成功或确认键不存在后才取消对应 deferred 写；NVS 查询、打开或删除失败返回 false，保留原待写值供后续重试，不将失败清理当作成功。

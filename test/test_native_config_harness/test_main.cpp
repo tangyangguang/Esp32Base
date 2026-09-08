@@ -224,6 +224,28 @@ void test_internal_uint32_write_repairs_wrong_nvs_type() {
     TEST_ASSERT_EQUAL_UINT32(1, value);
 }
 
+void test_clear_system_config_preserves_pending_on_failure_and_sibling_keys() {
+    resetConfigHarness();
+    TEST_ASSERT_TRUE(Esp32BaseConfig::setStr("eb_sys", "hostname", "saved-host"));
+    TEST_ASSERT_TRUE(Esp32BaseConfig::setInt("eb_sys", "boot_cnt", 42));
+    TEST_ASSERT_TRUE(Esp32BaseConfig::setStrDeferred("eb_sys", "hostname", "pending-host", 1000));
+    native_nvs::openFailureNamespace() = "eb_sys";
+    TEST_ASSERT_FALSE(Esp32BaseConfig::clearSystemConfig());
+    TEST_ASSERT_EQUAL_UINT8(1, Esp32BaseConfig::pendingCount());
+    native_nvs::openFailureNamespace().clear();
+    TEST_ASSERT_TRUE(Esp32BaseConfig::flushAll());
+    char value[32];
+    TEST_ASSERT_TRUE(Esp32BaseConfig::getStr("eb_sys", "hostname", value, sizeof(value), ""));
+    TEST_ASSERT_EQUAL_STRING("pending-host", value);
+    TEST_ASSERT_TRUE(Esp32BaseConfig::setStrDeferred("eb_sys", "hostname", "next-host", 1000));
+    TEST_ASSERT_TRUE(Esp32BaseConfig::clearSystemConfig());
+    TEST_ASSERT_EQUAL_UINT8(0, Esp32BaseConfig::pendingCount());
+    TEST_ASSERT_EQUAL_INT(42, Esp32BaseConfig::getInt("eb_sys", "boot_cnt", 0));
+    TEST_ASSERT_FALSE(Esp32BaseConfig::getStr("eb_sys", "hostname", value, sizeof(value), "default"));
+    TEST_ASSERT_EQUAL_STRING("default", value);
+    TEST_ASSERT_TRUE(Esp32BaseConfig::clearSystemConfig());
+}
+
 void test_internal_remove_config_key_preserves_sibling_keys() {
     resetConfigHarness();
     TEST_ASSERT_TRUE(Esp32BaseConfig::setStr("app_cfg", "registered", "custom"));
@@ -329,6 +351,7 @@ int main(int, char**) {
     RUN_TEST(test_internal_uint32_state_distinguishes_missing_and_preserves_all_bits);
     RUN_TEST(test_internal_uint32_state_rejects_wrong_nvs_type);
     RUN_TEST(test_internal_uint32_write_repairs_wrong_nvs_type);
+    RUN_TEST(test_clear_system_config_preserves_pending_on_failure_and_sibling_keys);
     RUN_TEST(test_internal_remove_config_key_preserves_sibling_keys);
     RUN_TEST(test_internal_remove_config_key_cancels_pending_write);
     RUN_TEST(test_internal_remove_config_key_reports_lookup_failure_without_clearing_pending);

@@ -24,6 +24,8 @@ Esp32BaseTime::Snapshot g_time = {false, Esp32BaseTime::SOURCE_UPTIME, 0, 10, 1,
 uint32_t g_fixedSlotVisitCalls = 0;
 uint32_t g_eventStoreWriteAttempts = 0;
 uint32_t g_controlWriteAttempts = 0;
+uint32_t g_storageInfoCalls = 0;
+bool g_storageInfoFails = false;
 uint32_t g_persistedActiveConditionIdBits = 0;
 uint32_t g_conditionStateWriteCount = 0;
 bool g_conditionStateExists = false;
@@ -44,6 +46,8 @@ void resetHarness() {
     g_fixedSlotVisitCalls = 0;
     g_eventStoreWriteAttempts = 0;
     g_controlWriteAttempts = 0;
+    g_storageInfoCalls = 0;
+    g_storageInfoFails = false;
     g_persistedActiveConditionIdBits = 0;
     g_conditionStateWriteCount = 0;
     g_conditionStateExists = false;
@@ -177,14 +181,19 @@ bool Esp32BaseFs::listDir(const char* path, ListCallback callback, void* user) {
         frame->callback(entry.name, entry.size, entry.isDir, frame->user);
     }, &frame);
 }
-size_t Esp32BaseFs::totalBytes() { return g_totalBytes; }
-size_t Esp32BaseFs::usedBytes() {
-    size_t used = 0;
+bool Esp32BaseFs::storageInfo(size_t& total, size_t& used) {
+    ++g_storageInfoCalls;
+    total = g_totalBytes;
+    used = 0;
     for (const auto& entry : g_files) used += entry.second.size();
-    return used;
+    return !g_storageInfoFails;
 }
-size_t Esp32BaseFs::freeBytes() { return usedBytes() < g_totalBytes ? g_totalBytes - usedBytes() : 0; }
-bool Esp32BaseFs::storageInfo(size_t& total, size_t& used) { total = totalBytes(); used = usedBytes(); return true; }
+size_t Esp32BaseFs::totalBytes() { size_t total=0, used=0; return storageInfo(total,used) ? total : 0; }
+size_t Esp32BaseFs::usedBytes() { size_t total=0, used=0; return storageInfo(total,used) ? used : 0; }
+size_t Esp32BaseFs::freeBytes() {
+    size_t total=0, used=0;
+    return storageInfo(total,used) && total > used ? total-used : 0;
+}
 
 bool esp32base_internal::fsWriteSegmentsAt(const char* path,
                                            uint32_t offset,
@@ -899,6 +908,29 @@ void test_storage_coordinates_multiple_stores_capacity_paths_maintenance_and_for
     TEST_ASSERT_EQUAL_UINT8(2, formatResult.recordStoreReloadedCount);
 }
 
+void test_store_status_reads_one_fresh_capacity_snapshot_and_handles_failure() {
+    Esp32BaseRecordStore store;
+    TEST_ASSERT_TRUE(store.begin(definition()));
+    Esp32BaseRecordStore::StoreStatus status;
+    uint32_t calls = g_storageInfoCalls;
+    const uint32_t writes = g_controlWriteAttempts;
+    TEST_ASSERT_TRUE(store.readStatus(status));
+    TEST_ASSERT_EQUAL_UINT32(calls + 1, g_storageInfoCalls);
+    TEST_ASSERT_EQUAL_UINT32(g_totalBytes, status.fileSystemTotalBytes);
+    TEST_ASSERT_EQUAL_UINT32(status.fileSystemTotalBytes - status.fileSystemUsedBytes,
+                             status.fileSystemFreeBytes);
+    g_totalBytes = 1; // Fresh query, no stale cache; used may exceed reported total.
+    TEST_ASSERT_TRUE(store.readStatus(status));
+    TEST_ASSERT_EQUAL_UINT32(1, status.fileSystemTotalBytes);
+    TEST_ASSERT_EQUAL_UINT32(0, status.fileSystemFreeBytes);
+    g_storageInfoFails = true; // SDK may fill outputs and still report failure.
+    TEST_ASSERT_TRUE(store.readStatus(status));
+    TEST_ASSERT_EQUAL_UINT32(0, status.fileSystemTotalBytes);
+    TEST_ASSERT_EQUAL_UINT32(0, status.fileSystemUsedBytes);
+    TEST_ASSERT_EQUAL_UINT32(0, status.fileSystemFreeBytes);
+    TEST_ASSERT_EQUAL_UINT32(writes, g_controlWriteAttempts);
+}
+
 void test_protected_records_survive_full_clear_reload_and_smaller_budget() {
     auto d = definition("protected", 1, 224);
     d.retentionPolicy = Esp32BaseRecordStore::RetentionPolicy::PreserveUnreleased;
@@ -1046,6 +1078,7 @@ int main(int argc, char** argv) {
     UNITY_BEGIN();
     RUN_TEST(test_previous_container_is_rejected_without_rewriting_files);
     RUN_TEST(test_rotation_failure_does_not_reuse_ids_and_checkpoint_tail_can_recover);
+    RUN_TEST(test_store_status_reads_one_fresh_capacity_snapshot_and_handles_failure);
     RUN_TEST(test_protected_records_survive_full_clear_reload_and_smaller_budget);
     RUN_TEST(test_release_is_ram_only_and_rotation_checkpoints_before_delete);
     RUN_TEST(test_store_generation_and_retention_definition_are_persistent);

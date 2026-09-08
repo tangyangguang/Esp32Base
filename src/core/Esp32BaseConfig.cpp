@@ -1015,21 +1015,8 @@ bool Esp32BaseConfig::clearWebAuthConfig() {
 }
 
 bool Esp32BaseConfig::clearSystemConfig() {
-    clearPendingKey("eb_sys", "hostname");
-    const NamespaceLookupResult lookup = lookupNamespace("eb_sys");
-    if (lookup == NamespaceLookupResult::Error) {
-        return false;
-    }
-    if (lookup == NamespaceLookupResult::NotFound) {
-        return true;
-    }
-    Preferences prefs;
-    if (!prefs.begin("eb_sys", false)) {
-        return false;
-    }
-    const bool ok = !prefs.isKey("hostname") || prefs.remove("hostname");
-    prefs.end();
-    return ok;
+    return esp32base_internal::removeConfigKey("eb_sys", "hostname") !=
+           esp32base_internal::ConfigKeyRemoveResult::Error;
 }
 
 bool Esp32BaseConfig::clearLogConfig() {

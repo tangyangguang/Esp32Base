@@ -1388,9 +1388,13 @@ bool Esp32BaseRecordStore::readStatus(StoreStatus& status) const {
     status.segmentFileLimitBytes = segmentFileLimitBytes_;
     status.currentStoreBytes = currentStoreBytes_;
     status.maximumStoreBytes = maximumStoreBytes_;
-    status.fileSystemTotalBytes = Esp32BaseFs::totalBytes();
-    status.fileSystemUsedBytes = Esp32BaseFs::usedBytes();
-    status.fileSystemFreeBytes = Esp32BaseFs::freeBytes();
+    size_t total = 0;
+    size_t used = 0;
+    if (Esp32BaseFs::storageInfo(total, used)) {
+        status.fileSystemTotalBytes = total;
+        status.fileSystemUsedBytes = used;
+        status.fileSystemFreeBytes = total > used ? total - used : 0;
+    }
     status.path = path_;
     status.errorReason = storeErrorName(error_);
     return definitionSet_;

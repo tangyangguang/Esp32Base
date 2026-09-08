@@ -23,13 +23,13 @@ Core 2 为 2.0.16，Core 3 为 3.3.8；均通过仓库隔离的 PlatformIO home�
 | --- | --- | ---: | ---: |
 | basic / ESP32 / Core 2 | MINIMAL | 22,224 | 273,601 |
 | basic / ESP32 / Core 2 | OFFLINE | 23,560 | 325,053 |
-| basic / ESP32 / Core 2 | LOCAL | 57,052 | 983,813 |
+| basic / ESP32 / Core 2 | LOCAL | 57,052 | 983,817 |
 | basic / ESP32-S3 / Core 2 | LOCAL | 55,840 | 940,489 |
 | basic / ESP32-C3 / Core 2 | LOCAL | 49,796 | 991,034 |
 | basic / ESP32 / Core 3 | LOCAL | 59,172 | 1,180,653 |
 | mqtt_tls 受控包探针 / ESP32 / Core 3 | IOT | 62,024 | 1,295,388 |
 | full_demo / ESP32 / Core 2 | LOCAL | 58,508 | 1,014,149 |
-| record_store_demo / ESP32 / Core 2 | MINIMAL + FS/Record Store | 25,648 | 337,065 |
+| record_store_demo / ESP32 / Core 2 | MINIMAL + FS/Record Store | 25,648 | 337,049 |
 | record_store_demo / ESP32-S3 / Core 2 | MINIMAL + FS/Record Store | 22,604 | 330,433 |
 | record_store_demo / ESP32-C3 / Core 2 | MINIMAL + FS/Record Store | 17,936 | 315,292 |
 | record_store_demo / ESP32 / Core 3 | MINIMAL + FS/Record Store | 25,996 | 346,272 |
@@ -53,3 +53,5 @@ Record Store 控制文件仍为 128B，记录槽位仍为 payload + 24B；本机
 维护检查点使用现有登记表，不新增常驻缓冲或任务。原生 Storage 测试覆盖 OTA 写暂停前检查点成功、失败仍允许暂停/恢复、失败后旧水位恢复，以及无变化不重复写。正常重启/deep sleep 由 facade 调用同一内部入口；未声称真实掉电或板端维护验证完成。
 
 维护检查点收尾另构建 `full_demo` 的 ESP32/Core 2 LOCAL + Record Store 组合，RAM 58,508B / Flash 1,021,917B；记录示例上述 ESP32/Core 2 数字已更新。S3/C3、Core 3 的记录示例数字保留前一批构建证据，本次未重新测量；不能作为修改后示例的精确体积。架构、安全、发布hygiene检查通过。由当前Git管理文件构造干净打包输入，包180项且源码/示例一致，不包含本地经验碎片、构建缓存或工具链产物；临时包已删除。
+
+配置失败与状态读取收尾：`clearSystemConfig()` 复用既有按key删除机制，NVS失败不取消deferred hostname，同namespace其他字段保留。新增回归在修复前复现pending数量从1变0，修复后Config原生23项通过。RecordStore容量读取由3次FS查询合为1次新鲜快照，不新增缓存；正常值、已用超过总量、查询失败输出清零和只读无写入由32项记录原生测试覆盖。主用ESP32/Core2的basic LOCAL与记录示例增量构建通过，表中对应数字已更新；查询次数减少不是实测延迟降低或运行堆峰值证据。其他既有构建数字未重测。
