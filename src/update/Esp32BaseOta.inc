@@ -195,9 +195,11 @@ void armOtaBootGuard() {
             return;
         }
     }
-    g_otaBootGuardArmError = esp_timer_start_once(
-        g_otaBootGuardTimer,
-        static_cast<uint64_t>(ESP32BASE_OTA_MARK_VALID_TIMEOUT_MS) * 1000ULL);
+    // Retrying timer setup must not extend the original boot deadline.
+    const uint32_t elapsedMs = millis() - g_otaBootMs;
+    const uint64_t remainingUs = elapsedMs >= ESP32BASE_OTA_MARK_VALID_TIMEOUT_MS ? 1ULL :
+        static_cast<uint64_t>(ESP32BASE_OTA_MARK_VALID_TIMEOUT_MS - elapsedMs) * 1000ULL;
+    g_otaBootGuardArmError = esp_timer_start_once(g_otaBootGuardTimer, remainingUs);
     g_otaBootGuardArmed = g_otaBootGuardArmError == ESP_OK;
 }
 
@@ -428,7 +430,11 @@ void checkMarkValidTimeout() {
                         static_cast<unsigned long>(ESP32BASE_OTA_MARK_VALID_TIMEOUT_MS));
     }
 
-    if (millis() - g_otaBootMs >= ESP32BASE_OTA_MARK_VALID_TIMEOUT_MS) {
+    // A successfully started timer owns the deadline, even while its callback
+    // is running (and has cleared Armed). Two rollback calls can race on OTA
+    // metadata. The loop is only a fallback for timer creation/start failure.
+    if (g_otaBootGuardArmError != ESP_OK &&
+        millis() - g_otaBootMs >= ESP32BASE_OTA_MARK_VALID_TIMEOUT_MS) {
         g_otaMarkValidTimeoutHandled = true;
         ESP32BASE_LOG_E("ota",
                         "mark_valid_timeout partition=%s address=0x%lx state=%s elapsed_ms=%lu timeout_ms=%lu",

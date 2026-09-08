@@ -1564,7 +1564,7 @@ public:
 
 `runningOtaState()` 返回当前 running partition 的 OTA state 字符串：`valid`、`pending_verify`、`aborted`、`invalid`、`undefined`、`new`、`unknown` 或 `n/a`。`waitingForMarkValid()` 仅在启用 `ESP32BASE_OTA_REQUIRE_MARK_VALID=1` 且当前 running partition 为 `pending_verify` 时返回 `true`。业务自检通过后调用 `markCurrentValid()`；如果当前镜像不是 `pending_verify`，该函数会记录诊断并返回 `false`，不会误报确认成功。
 
-启用人工确认时，Esp32Base 覆盖 Arduino rollback hook，并在 Arduino `setup()` 前为 `pending_verify` 镜像启动一次性确认期限。该期限使用 ESP-IDF 系统计时器，不创建 Esp32Base 后台任务，也不依赖 `Esp32Base::begin()`、业务 loop 或 `Esp32Base::handle()`；`markCurrentValid()` 成功后取消计时器。期限届满会直接调用 ESP-IDF 标准 rollback-and-reboot API。`handle()` 中的同期限检查仅作为系统计时器创建失败时的降级路径。回滚后的旧镜像启动时会根据上一镜像的 `invalid` / `aborted` OTA state 输出 ERROR 诊断；业务自检的具体失败项仍应由业务在拒绝镜像前记录。
+启用人工确认时，Esp32Base 覆盖 Arduino rollback hook，并在 Arduino `setup()` 前为 `pending_verify` 镜像启动一次性确认期限。该期限使用 ESP-IDF 系统计时器，不创建 Esp32Base 后台任务，也不依赖 `Esp32Base::begin()`、业务 loop 或 `Esp32Base::handle()`；`markCurrentValid()` 成功后取消计时器。期限届满会直接调用 ESP-IDF 标准 rollback-and-reboot API。`handle()` 中的同期限检查仅作为系统计时器创建或启动失败时的降级路径；计时器成功启动后由它独自处理超时，避免同时写入OTA状态。重试计时器初始化不延长最初启动时建立的确认期限。回滚后的旧镜像启动时会根据上一镜像的 `invalid` / `aborted` OTA state 输出 ERROR 诊断；业务自检的具体失败项仍应由业务在拒绝镜像前记录。
 
 `Update.end(true)` 必须在 SHA256 校验通过、且实际接收字节数等于声明总大小之后调用。
 

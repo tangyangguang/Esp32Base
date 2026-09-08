@@ -124,7 +124,7 @@ MQTT 只负责连接机制。Topic 版本、命令授权、去重、过期、JSO
 
 Espressif 的 mbedTLS 配置只有在 `CONFIG_MBEDTLS_HAVE_TIME_DATE=y` 时才校验证书 `notBefore/notAfter`。本仓库实测支持的官方预编译 Arduino Core 2.0.16 和 3.3.8 均未启用它：CA 链和 hostname 仍会校验，但过期或尚未生效的证书不会仅因日期被拒绝。Esp32Base 默认拒绝在这种构建中配置 MQTTS，并报告 `ERROR_TLS_CERTIFICATE_DATE_CHECK_UNAVAILABLE`；如果产品评估后仍接受该上游限制，必须显式设置 `ESP32BASE_MQTT_ALLOW_UNCHECKED_CERTIFICATE_DATES=1`。`Status::certificateDateCheckEnabled` 暴露实际能力，不能把 NTP 就绪误解为底层已经执行日期校验。
 
-需要完整日期校验时，参见[受控 TLS 工具链](docs/14_tls_toolchain.md)。当前已完成 Core 3.3.8 / ESP32 的受控产物构建、主机证书行为和 MQTT 示例链接验证；不自动替换工程工具链，实机及其余芯片/Core 组合仍需独立验证。
+需要完整日期校验时，参见[受控 TLS 工具链](docs/14_tls_toolchain.md)。受控 ESP32 产物还通过 SDK 官方选项将 MQTT 放在 Core0，保留默认 Core1 给 loop；任务优先级、栈、缓冲和重连保护不变。需明确选择受控产物，不自动替换工程工具链；应用自建任务的核分配、并发内存峰值以及其他芯片/Core 组合须独立验收，当前证据见工具链文档和验证结果。
 
 WiFi 默认关闭 modem sleep，让 Web 首屏和 OTA 不被 Arduino ESP32 默认 `WIFI_PS_MIN_MODEM` 的 DTIM 唤醒抖动拖慢；电池设备可调用 `Esp32BaseWiFi::setPowerSave(true)` 恢复 modem sleep。
 

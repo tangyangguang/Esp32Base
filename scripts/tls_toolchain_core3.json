@@ -46,5 +46,12 @@
   },
   "build_graph_adjustments": [
     "ESP32 mem-variant depends on __idf_spi_flash instead of the application ELF; upstream export list and command are unchanged. Other targets retain the upstream dependency."
-  ]
+  ],
+  "target_config_changes": {
+    "esp32": {
+      "CONFIG_MQTT_TASK_CORE_SELECTION_ENABLED": "y",
+      "CONFIG_MQTT_USE_CORE_0": "y",
+      "CONFIG_MQTT_USE_CORE_1": "n"
+    }
+  }
 }

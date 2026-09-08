@@ -29,6 +29,20 @@ DATE_CONFIG = "\n# Esp32Base: validate certificate notBefore/notAfter.\nCONFIG_M
 CCACHE_BIN = CACHE / "ccache-tool/ccache-4.12.1-darwin/ccache"
 
 
+def config_changes(target: str) -> dict[str, str]:
+    return {**LOCK["config_changes"], **LOCK["target_config_changes"].get(target, {})}
+
+
+def target_config_addition(target: str) -> bytes:
+    changes = LOCK["target_config_changes"].get(target, {})
+    if not changes:
+        return b""
+    lines = ["", "# Esp32Base: isolate MQTT from the default application core."]
+    for key, value in changes.items():
+        lines.append(f"# {key} is not set" if value == "n" else f"{key}={value}")
+    return ("\n".join(lines) + "\n").encode()
+
+
 def capture(command: list[str], cwd: Path) -> str:
     return subprocess.check_output(command, cwd=cwd, text=True).strip()
 
@@ -77,7 +91,9 @@ def verify_source(relative: str, commit: str) -> None:
     # Build output is untracked. Tracked changes are forbidden except our exact
     # configuration addition; no reset/checkout may erase unexpected changes.
     changed = capture(["git", "diff", "HEAD", "--name-only", "--ignore-submodules=all"], path).splitlines()
-    allowed = ["configs/defconfig.common", "CMakeLists.txt"] if relative == "builder" else []
+    allowed = (["configs/defconfig.common", "CMakeLists.txt"] +
+               [f"configs/defconfig.{target}" for target in LOCK["target_config_changes"]]
+               if relative == "builder" else [])
     if any(name not in allowed for name in changed):
         raise RuntimeError(f"Unexpected source edits: {relative}: {changed}")
     if relative == "builder":
@@ -89,6 +105,11 @@ def verify_source(relative: str, commit: str) -> None:
         actual = (path / "configs/defconfig.common").read_bytes()
         if actual not in (original, original + DATE_CONFIG.encode()):
             raise RuntimeError("Unexpected builder configuration edits")
+        for target in LOCK["target_config_changes"]:
+            name = f"configs/defconfig.{target}"
+            original_target = subprocess.check_output(["git", "show", f"HEAD:{name}"], cwd=path)
+            if (path / name).read_bytes() not in (original_target, original_target + target_config_addition(target)):
+                raise RuntimeError(f"Unexpected builder target configuration edits: {target}")
         original_cmake = subprocess.check_output(["git", "show", "HEAD:CMakeLists.txt"], cwd=path)
         if (path / "CMakeLists.txt").read_bytes() not in (original_cmake, builder_cmake(original_cmake)):
             raise RuntimeError("Unexpected builder CMake edits")
@@ -136,7 +157,7 @@ def audit(target: str) -> None:
     after = configuration(output / "sdkconfig")
     delta = {key: [before.get(key), after.get(key)] for key in before.keys() | after.keys()
              if before.get(key) != after.get(key)}
-    expected = {key: [before.get(key), value] for key, value in LOCK["config_changes"].items()}
+    expected = {key: [before.get(key), value] for key, value in config_changes(target).items()}
     if delta != expected:
         raise RuntimeError("Unexpected sdkconfig changes: " + json.dumps(delta, sort_keys=True))
     # The upstream lock is also a contract: building today must not silently
@@ -170,8 +191,15 @@ def audit_binary(target: str) -> None:
     if not expected_headers or {path.relative_to(output) for path in headers} != expected_headers:
         raise RuntimeError("Memory variant headers do not match the original package")
     for header in headers:
-        if not re.search(r"^#define CONFIG_MBEDTLS_HAVE_TIME_DATE 1$", header.read_text(), re.MULTILINE):
-            raise RuntimeError(f"Certificate date checking missing in {header}")
+        text = header.read_text()
+        for key, value in config_changes(target).items():
+            definition = re.search(rf"^#define {re.escape(key)}(?: (.+))?$", text, re.MULTILINE)
+            if value == "n":
+                valid = definition is None
+            else:
+                valid = definition is not None and definition.group(1) == ("1" if value == "y" else value)
+            if not valid:
+                raise RuntimeError(f"Controlled configuration mismatch in {header}: {key}")
     print(f"Compiled date path and {len(headers)} variant headers passed; no device handshake was performed.")
 
 
@@ -185,7 +213,7 @@ def package(target: str) -> None:
     shutil.copyfile(BASELINE / "tools.json", destination / "tools.json")
     shutil.copyfile(output / "versions.txt", destination / "versions.txt")
     metadata = json.loads((BASELINE / "package.json").read_text())
-    metadata["version"] = LOCK["framework_libraries"] + ".esp32base.tls1"
+    metadata["version"] = LOCK["framework_libraries"] + ".esp32base.tls2"
     metadata["description"] = f"Esp32Base controlled Arduino {LOCK['arduino_core']} libraries; target {target}; certificate dates enabled"
     (destination / "package.json").write_text(json.dumps(metadata, indent=2) + "\n")
     provenance = {"target": target, "source_lock": LOCK,
@@ -242,6 +270,10 @@ def main() -> int:
             raise RuntimeError(f"Missing build prerequisite: {executable}")
     original = subprocess.check_output(["git", "show", "HEAD:configs/defconfig.common"], cwd=BUILDER)
     (BUILDER / "configs/defconfig.common").write_bytes(original + DATE_CONFIG.encode())
+    for target in LOCK["target_config_changes"]:
+        name = f"configs/defconfig.{target}"
+        original_target = subprocess.check_output(["git", "show", f"HEAD:{name}"], cwd=BUILDER)
+        (BUILDER / name).write_bytes(original_target + target_config_addition(target))
     original_cmake = subprocess.check_output(["git", "show", "HEAD:CMakeLists.txt"], cwd=BUILDER)
     (BUILDER / "CMakeLists.txt").write_bytes(builder_cmake(original_cmake))
     shutil.copyfile(BASELINE / args.target / "dependencies.lock", BUILDER / "dependencies.lock")

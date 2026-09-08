@@ -153,3 +153,75 @@ with tempfile.TemporaryDirectory(prefix='esp32base-ota-') as directory:
                     str(root/'test.cpp'),'-o',str(root/'test')],check=True)
     subprocess.run([str(root/'test')],check=True)
     print('Production OTA: preparation ordering, success, rejection/failure cleanup and stalled upload passed')
+
+# Exercise the boot guard and the cooperative fallback together, using the
+# production module. Timer callbacks are driven explicitly at the deadline.
+guard_headers = dict(HEADERS)
+guard_headers['esp_log.h'] = '#pragma once\n#define ESP_EARLY_LOGE(...) ((void)0)\n'
+guard_headers['esp_timer.h'] = '''#pragma once
+#include <stdint.h>
+using esp_timer_handle_t = void*;
+struct esp_timer_create_args_t { void (*callback)(void*); const char* name; };
+extern bool timerCreateAllowed, timerStartAllowed;
+extern uint64_t timerDelayUs;
+extern void (*timerCallback)(void*);
+inline int esp_timer_create(const esp_timer_create_args_t* a, esp_timer_handle_t* h) {
+    if (!timerCreateAllowed) return -2;
+    timerCallback=a->callback; *h=reinterpret_cast<void*>(1); return 0;
+}
+inline int esp_timer_start_once(esp_timer_handle_t, uint64_t us) {
+    timerDelayUs=us; return timerStartAllowed ? 0 : -2;
+}
+inline int esp_timer_stop(esp_timer_handle_t) { return 0; }
+'''
+guard_headers['esp_ota_ops.h'] = guard_headers['esp_ota_ops.h'].replace(
+    'extern esp_partition_t partition;',
+    'extern esp_partition_t partition;\nextern esp_ota_img_states_t fakeOtaState;\nextern int rollbackCalls;').replace(
+    '*s=ESP_OTA_IMG_VALID;', '*s=fakeOtaState;').replace(
+    'esp_ota_mark_app_valid_cancel_rollback() { return ESP_OK; }',
+    'esp_ota_mark_app_valid_cancel_rollback() { fakeOtaState=ESP_OTA_IMG_VALID; return ESP_OK; }').replace(
+    'esp_ota_mark_app_invalid_rollback_and_reboot() { return ESP_OK; }',
+    'esp_ota_mark_app_invalid_rollback_and_reboot() { ++rollbackCalls; return ESP_OK; }')
+guard_main = MAIN[:MAIN.index('int main()')] + r'''
+bool timerCreateAllowed=true, timerStartAllowed=true;
+uint64_t timerDelayUs=0;
+void (*timerCallback)(void*)=nullptr;
+esp_ota_img_states_t fakeOtaState=ESP_OTA_IMG_PENDING_VERIFY;
+int rollbackCalls=0;
+void resetGuard() {
+    clockMs=0; rollbackCalls=0; fakeOtaState=ESP_OTA_IMG_PENDING_VERIFY;
+    timerCreateAllowed=timerStartAllowed=true; timerDelayUs=0; timerCallback=nullptr;
+    g_otaReady=true; g_otaBootPartition=&partition; g_otaBootMs=0;
+    g_otaBootTimingStarted=true; g_otaMarkValidTimeoutHandled=false;
+    g_otaBootGuardTimer=nullptr; g_otaBootGuardArmed=false; g_otaBootGuardArmError=ESP_OK;
+}
+int main() {
+    resetGuard(); armOtaBootGuard(); assert(timerDelayUs==30000000);
+    clockMs=30000; Esp32BaseOta::handle(); assert(rollbackCalls==0);
+    timerCallback(nullptr); assert(rollbackCalls==1);
+    Esp32BaseOta::handle(); assert(rollbackCalls==1);
+    resetGuard(); timerCreateAllowed=false; armOtaBootGuard();
+    clockMs=30000; Esp32BaseOta::handle(); Esp32BaseOta::handle(); assert(rollbackCalls==1);
+    resetGuard(); timerStartAllowed=false; armOtaBootGuard();
+    clockMs=30000; Esp32BaseOta::handle(); Esp32BaseOta::handle(); assert(rollbackCalls==1);
+    resetGuard(); armOtaBootGuard(); clockMs=29999;
+    assert(Esp32BaseOta::markCurrentValid()); timerCallback(nullptr);
+    clockMs=30000; Esp32BaseOta::handle(); assert(rollbackCalls==0);
+    resetGuard(); timerCreateAllowed=false; armOtaBootGuard();
+    clockMs=20000; timerCreateAllowed=true; armOtaBootGuard(); assert(timerDelayUs==10000000);
+    resetGuard(); g_otaBootMs=UINT32_MAX-9999; clockMs=10000;
+    armOtaBootGuard(); assert(timerDelayUs==10000000);
+    resetGuard(); clockMs=30001; armOtaBootGuard(); assert(timerDelayUs==1);
+}
+'''
+with tempfile.TemporaryDirectory(prefix='esp32base-ota-guard-') as directory:
+    root=Path(directory)
+    for name,content in guard_headers.items():
+        p=root/name; p.parent.mkdir(parents=True, exist_ok=True); p.write_text(content)
+    (root/'test.cpp').write_text(guard_main)
+    subprocess.run(['c++','-std=c++11','-Wall','-Wextra','-I',str(root),'-I',str(ROOT),
+                    '-DESP32BASE_ENABLE_OTA=1','-DESP32BASE_ENABLE_WEB=1','-DESP32BASE_ENABLE_WIFI=1',
+                    '-DESP32BASE_ENABLE_WATCHDOG=1','-DESP32BASE_ENABLE_FS=1','-DESP32BASE_OTA_REQUIRE_MARK_VALID=1',
+                    str(root/'test.cpp'),'-o',str(root/'test')],check=True)
+    subprocess.run([str(root/'test')],check=True)
+    print('Production OTA boot guard: one timeout owner, failed timer fallback, confirmation and original deadline passed')

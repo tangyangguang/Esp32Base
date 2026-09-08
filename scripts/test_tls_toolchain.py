@@ -20,8 +20,8 @@ class ToolchainAuditTest(unittest.TestCase):
         self.output = root / "builder/out/tools/esp32-arduino-libs/esp32"
         self.baseline.mkdir(parents=True)
         self.output.mkdir(parents=True)
-        self.before = "CONFIG_BUFFER_SIZE=4096\n# CONFIG_MBEDTLS_HAVE_TIME_DATE is not set\n"
-        self.after = "CONFIG_BUFFER_SIZE=4096\nCONFIG_MBEDTLS_HAVE_TIME_DATE=y\n"
+        self.before = "CONFIG_BUFFER_SIZE=4096\n# CONFIG_MBEDTLS_HAVE_TIME_DATE is not set\n# CONFIG_MQTT_TASK_CORE_SELECTION_ENABLED is not set\n"
+        self.after = "CONFIG_BUFFER_SIZE=4096\nCONFIG_MBEDTLS_HAVE_TIME_DATE=y\nCONFIG_MQTT_TASK_CORE_SELECTION_ENABLED=y\nCONFIG_MQTT_USE_CORE_0=y\n# CONFIG_MQTT_USE_CORE_1 is not set\n"
         (self.baseline / "sdkconfig").write_text(self.before)
         (self.output / "sdkconfig").write_text(self.after)
         for directory in (self.baseline, self.output):
@@ -47,6 +47,21 @@ class ToolchainAuditTest(unittest.TestCase):
         (self.output / "sdkconfig").write_text(self.after.replace("4096", "1024"))
         with self.assertRaisesRegex(RuntimeError, "CONFIG_BUFFER_SIZE"):
             self.audit()
+
+    def test_rejects_wrong_mqtt_core(self):
+        (self.output / "sdkconfig").write_text(self.after.replace("CONFIG_MQTT_USE_CORE_0=y", "# CONFIG_MQTT_USE_CORE_0 is not set").replace("# CONFIG_MQTT_USE_CORE_1 is not set", "CONFIG_MQTT_USE_CORE_1=y"))
+        with self.assertRaisesRegex(RuntimeError, "CONFIG_MQTT_USE_CORE"):
+            self.audit()
+
+    def test_rejects_unpinned_mqtt(self):
+        (self.output / "sdkconfig").write_text(self.after.replace("CONFIG_MQTT_TASK_CORE_SELECTION_ENABLED=y", "# CONFIG_MQTT_TASK_CORE_SELECTION_ENABLED is not set"))
+        with self.assertRaisesRegex(RuntimeError, "sdkconfig"):
+            self.audit()
+
+    def test_affinity_change_is_scoped_to_esp32(self):
+        for target in ("esp32s3", "esp32c3"):
+            self.assertEqual(toolchain.config_changes(target), {"CONFIG_MBEDTLS_HAVE_TIME_DATE": "y"})
+            self.assertEqual(toolchain.target_config_addition(target), b"")
 
     def test_rejects_dependency_drift(self):
         (self.output / "dependencies.lock").write_text("dependency: latest\n")

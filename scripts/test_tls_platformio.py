@@ -59,7 +59,9 @@ def main():
     write_if_changed(probe / "platformio.ini", config.encode())
     write_if_changed(probe / "require_dates.h",
         b"#include <sdkconfig.h>\n#if !defined(CONFIG_MBEDTLS_HAVE_TIME_DATE) || !CONFIG_MBEDTLS_HAVE_TIME_DATE\n"
-        b"#error TLS probe requires actual SDK certificate date checks\n#endif\n")
+        b"#error TLS probe requires actual SDK certificate date checks\n#endif\n"
+        b"#if !CONFIG_MQTT_TASK_CORE_SELECTION_ENABLED || !CONFIG_MQTT_USE_CORE_0 || defined(CONFIG_MQTT_USE_CORE_1)\n"
+        b"#error TLS probe requires the controlled ESP32 MQTT core placement\n#endif\n")
     subprocess.run([sys.executable, str(ROOT / "scripts/pio_arduino.py"), "3", "--tls-toolchain",
                     "run", "-d", str(probe), "-e", "esp32_iot_arduino3"], check=True)
     elf = probe / ".pio/build/arduino3-tls/esp32_iot_arduino3/firmware.elf"
