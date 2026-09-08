@@ -2,6 +2,9 @@
 
 `Esp32Base` 是面向 ESP32 / ESP32-S3 / ESP32-C3、基于 Arduino ESP32 Core 的轻量基础库设计。
 
+> [!IMPORTANT]
+> 业务项目强烈建议始终引用唯一的 Esp32Base Git 工作区，不要把源码复制、内置或作为 `third_party` 副本维护。共用能力应先沉淀到本库，再由业务项目使用最新提交完成适配；需要复现历史构建时，根据项目记录的 Esp32Base Git 提交检出对应版本。接入要求见 [应用接入与版本适配](docs/13_integration_and_upgrade.md)，已知使用项目和适配进度见 [使用项目](CONSUMERS.md)。
+
 ## 定位
 
 `Esp32Base` 不是 Web 管理平台、云框架或大型组件系统，而是一套可裁剪的 ESP32 应用基础底座。
