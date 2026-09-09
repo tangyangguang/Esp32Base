@@ -1140,6 +1140,10 @@ bool Esp32BaseWeb::begin() {
     g_server.on("/ncsi.txt", HTTP_GET, handleCaptiveProbe);
     g_server.on("/favicon.ico", HTTP_GET, handleNoContent);
     g_server.on("/esp32base/ui.css", HTTP_GET, handleUiCss);
+    g_server.on("/esp32base/ui.js", HTTP_GET, handleUiScript);
+#if ESP32BASE_ENABLE_APP_CONFIG
+    g_server.on("/esp32base/app-config.css", HTTP_GET, handleAppConfigCss);
+#endif
 #if ESP32BASE_ENABLE_OTA
     g_server.on("/esp32base/ota", HTTP_GET, handleOtaPage);
     g_server.on("/esp32base/ota", HTTP_POST, handleOtaUploadDone, handleOtaUpload);

@@ -659,3 +659,5 @@ Arduino `WebServer` 是同步模型。
 ### 公共样式传输
 
 `/esp32base/ui.css` 使用构建前生成的 gzip，保留原有样式、缓存、路由和访问策略。客户端应接受 gzip（浏览器默认支持）；显式排除 gzip 时返回 406。样式正文不在设备解压，也不保留第二份明文资源。公共样式修改后运行 `python3 scripts/generate_web_css.py`，提交源与生成文件；`--check` 和发布卫生检查会拒绝过期产物。
+
+公共交互脚本 `/esp32base/ui.js` 与 App Config 页专用 `/esp32base/app-config.css` 使用构建时无损 gzip，原始资源分别位于 `src/web/internal/WebCommonScript.js`、`WebAppConfigStyle.css`，由 `python3 scripts/generate_web_page_assets.py` 生成。URL 携带内容摘要，浏览器缓存 24 小时；公共脚本保持同步加载顺序，配置样式只在对应页面引用。资源不含用户数据，不占用业务静态资源槽，App Config 关闭时不链接专属资源及路由。`scripts/test_web_gzip.py` 和发布卫生检查覆盖生成结果一致性。

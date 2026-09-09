@@ -4,6 +4,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 from generate_web_css import generated, TARGET
+from generate_web_page_assets import generated as page_assets, TARGET as PAGE_ASSETS
 ROOT = Path(__file__).resolve().parents[1]
 MAIN = r'''
 #include <cassert>
@@ -36,6 +37,7 @@ int main() {
 }
 '''
 assert TARGET.read_text() == generated(), 'Stale generated CSS'
+assert PAGE_ASSETS.read_text() == page_assets(), 'Stale generated page assets'
 with tempfile.TemporaryDirectory(prefix='esp32base-gzip-') as directory:
     root = Path(directory)
     (root / 'test.cpp').write_text(MAIN)

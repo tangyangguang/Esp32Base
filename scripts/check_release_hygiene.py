@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
 from generate_web_css import generated, TARGET
+from generate_web_page_assets import generated as page_assets, TARGET as PAGE_ASSETS
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -29,6 +30,8 @@ def parse_partition_csv(path: str):
 
 
 errors = []
+if not PAGE_ASSETS.exists() or PAGE_ASSETS.read_text() != page_assets():
+    errors.append("Generated page assets stale; run scripts/generate_web_page_assets.py")
 if not TARGET.exists() or TARGET.read_text() != generated():
     errors.append("Generated CSS gzip is stale; run scripts/generate_web_css.py")
 

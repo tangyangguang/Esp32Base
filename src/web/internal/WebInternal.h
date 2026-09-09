@@ -265,6 +265,10 @@ void handleRootRedirect();
 void handleStatusRedirect();
 void handleNoContent();
 void handleUiCss();
+void handleUiScript();
+#if ESP32BASE_ENABLE_APP_CONFIG
+void handleAppConfigCss();
+#endif
 void handleNotFound();
 #if ESP32BASE_ENABLE_OTA
 bool parseSizeHeader(const String& value, size_t& out, char* error, size_t errorLen);

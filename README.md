@@ -253,3 +253,5 @@ RecordStore 的普通历史轮转与可靠消费保留机制、当前容器格�
 `Esp32Base::setBeforeLifecycleStopCallback(void (*)(void*), context)` 在统一 restart/deep sleep 的网络等待、存储检查点前调用；应用先关闭执行输出，可随后收尾事实。此回调不能否决强制停止，不得再次请求重启/休眠。不适用于崩溃、掉电或直接绕过 Base 的底层 restart。回调自身不产生 Flash 写入，安全关闭不应依赖网络成功。
 
 当前 ESP32/Core 3 受控工具链按 Base 实际客户端用途裁剪 MQTT WebSocket 与 TLS 服务端角色，保留完整出站 TLS 校验及客户端认证；具体范围、固定产物及验证边界见[受控 TLS 工具链](docs/14_tls_toolchain.md)。
+
+公共交互脚本 `/esp32base/ui.js` 与 App Config 页专用 `/esp32base/app-config.css` 使用构建时无损 gzip，原始资源分别位于 `src/web/internal/WebCommonScript.js`、`WebAppConfigStyle.css`，由 `python3 scripts/generate_web_page_assets.py` 生成。URL 携带内容摘要，浏览器缓存 24 小时；公共脚本保持同步加载顺序，配置样式只在对应页面引用。资源不含用户数据，不占用业务静态资源槽，App Config 关闭时不链接专属资源及路由。`scripts/test_web_gzip.py` 和发布卫生检查覆盖生成结果一致性。

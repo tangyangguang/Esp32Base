@@ -261,3 +261,7 @@ native_mqtt_harness 21 项通过，新增定向覆盖 0/1/2、拒绝、空指针
 - `addStaticAsset` 支持调用者已生成的 gzip 字节，复用 Basic Auth、固定长度、private/public 缓存和有界写入；不引入设备端解压及业务路由。
 - `native_web_harness` 22/22；`test_web_gzip.py`、`test_web_write.py`、架构/安全边界及发布卫生检查通过。Native 验证认证、二进制与响应头，Accept-Encoding 拒绝由生产 helper 定向检查；未声称 native harness 模拟完整 HTTP 网络。
 - 受控 ESP32/Core 3 IOT probe 目标编译通过：RAM 62040 B、Flash 1264800 B。工具链固定产物未改变，未重建工具链或扩展芯片矩阵；未烧录或操作物理设备。
+
+## 2026-09-10 公共页面资源无损优化
+
+公共脚本与 App Config 样式改为独立 gzip 资源，保留原始字节和同步脚本执行顺序，内容摘要控制缓存失效。源资源逐字对照前一提交通过；生成一致性、gzip 协商/精确二进制长度/拒绝边界及 ASan/UBSan 检查通过；Native Web 22/22、架构、安全及发布卫生检查通过。灌溉实际 Core 3.3.8 TLS 消费端编译及链接完成，连同设备去重后 ELF Flash 从 1605707 B 降至 1601247 B，静态 RAM 100012 B 不变；这是组合收益，不归为 Base 单独收益。消费端原 4 MiB OTA 槽仍超 28383 B，容量门禁失败，不代表试运行固件已交付。未追加芯片矩阵、烧录或长时测试。
