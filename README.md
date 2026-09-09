@@ -68,6 +68,8 @@ Web/API 保存的 hostname 存储在 `eb_sys.hostname`，重启后覆盖构建�
 
 Web 应用路由默认容量统一为 24。该上限只覆盖业务 `addRoute()` / `addPage()` / `addApi()` 注册的静态路由表；内置 Web 路由不占用此表。route 较少且需要节省静态 RAM 的应用，可在完成 route 数量核算后通过构建参数显式调小 `ESP32BASE_WEB_MAX_ROUTES`。业务 CSS/JS/图片等固定内容应优先用 `Esp32BaseWeb::addStaticAsset()` 注册到基础库 WebServer；该能力不占用应用 route 表，默认带 Basic Auth、固定 `Content-Length`、`nosniff` 和可配置浏览器缓存，避免业务项目绕开 WebServer 或复制静态资源发送逻辑。
 
+固件静态资源可通过 `addStaticAsset(..., cacheMaxAgeSec, authRequired, true)` 声明已预压缩的 gzip 数据。Base 原样发送压缩字节和精确长度，不在设备解压；认证及 private/public 缓存策略保持一致，响应带 `Content-Encoding: gzip` 和 `Vary: Accept-Encoding`。客户端明确不接受 gzip 时返回 406，默认未声明 gzip 的资源行为不变。构建生成器必须验证 gzip 内容并在资源 URL 上使用内容摘要版本，防止升级后复用旧缓存；Base 不验证或重新压缩调用者的静态字节。
+
 应用项目需要在 native 单元测试中直接执行 Web handler 时，可启用 `ESP32BASE_WEB_NATIVE_TEST=1` 使用测试 harness 设置 method、path、参数、body、认证/同源结果，并捕获状态码、headers、重定向和响应体；该接口只在非 ESP32 native 测试构建可用，详见 [Web 与配网](docs/04_web.md) 和 [API 契约](docs/03_api.md)。
 
 Web/Auth 不再内置启用 admin/admin。启用 Web 的业务必须在 `Esp32Base::begin()` 前调用 `Esp32BaseWeb::setDefaultAuth(user, pass)`，或先通过已保存的 `eb_web` 认证启动；两者都不存在时 Web 服务 fail-closed，不注册 HTTP server。仅受控开发固件可显式打开 `ESP32BASE_WEB_ALLOW_INSECURE_DEFAULT_AUTH=1` 使用内置 `admin/admin` 兜底，并会输出 WARN 审计日志。示例中的固定账号仅用于本地 demo，业务项目不要照抄。WiFi 密码和 Web Auth 密码当前保存到普通 NVS；未启用平台级 flash encryption 时，不应把设备物理存储视为密文凭据库。日志、HTML、JSON 和 API 响应不输出密码值，只输出用户名、SSID、来源、结果或 `password_set` 这类状态。Web Auth 保存会读回校验；保存失败不会主动清空旧认证，保存成功后才切换当前运行态认证。

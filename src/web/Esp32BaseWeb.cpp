@@ -96,6 +96,7 @@ struct NativeTestStaticAsset {
     size_t len;
     uint32_t cacheMaxAgeSec;
     bool authRequired;
+    bool gzipEncoded;
 };
 
 struct NativeTestState {
@@ -518,11 +519,11 @@ bool Esp32BaseWeb::addApi(const char* path, Handler handler) {
 }
 
 bool Esp32BaseWeb::addStaticAsset(const char* path, const char* contentType, const uint8_t* data, size_t len,
-                                  uint32_t cacheMaxAgeSec, bool authRequired) {
+                                  uint32_t cacheMaxAgeSec, bool authRequired, bool gzipEncoded) {
     if (!validRoutePath(path) || !validContentType(contentType) || !data || len == 0 || findNativeStaticAsset(path)) {
         return false;
     }
-    nativeState().staticAssets.push_back({path, contentType, data, len, cacheMaxAgeSec, authRequired});
+    nativeState().staticAssets.push_back({path, contentType, data, len, cacheMaxAgeSec, authRequired, gzipEncoded});
     return true;
 }
 
@@ -984,6 +985,10 @@ bool Esp32BaseWeb::nativeTestDispatch(const char* path, Method method) {
         }
         setResponseHeader("Cache-Control", cacheControl);
         setResponseHeader("X-Content-Type-Options", "nosniff");
+        if (asset->gzipEncoded) {
+            setResponseHeader("Content-Encoding", "gzip");
+            setResponseHeader("Vary", "Accept-Encoding");
+        }
         setResponse(200, asset->contentType.c_str(), "", true);
         state.response.body.assign(reinterpret_cast<const char*>(asset->data), asset->len);
         return true;
@@ -1329,7 +1334,7 @@ bool Esp32BaseWeb::addApi(const char* path, Handler handler) {
 }
 
 bool Esp32BaseWeb::addStaticAsset(const char* path, const char* contentType, const uint8_t* data, size_t len,
-                                  uint32_t cacheMaxAgeSec, bool authRequired) {
+                                  uint32_t cacheMaxAgeSec, bool authRequired, bool gzipEncoded) {
     if (!path || path[0] != '/' || strlen(path) >= sizeof(g_staticAssets[0].path) ||
         !validHeaderValue(contentType, 63) || !data || len == 0 ||
         isBuiltinWebPath(path) || findStaticAsset(path) || findRoute(path, METHOD_GET) || findRoute(path, METHOD_ANY)) {
@@ -1343,6 +1348,7 @@ bool Esp32BaseWeb::addStaticAsset(const char* path, const char* contentType, con
             g_staticAssets[i].len = len;
             g_staticAssets[i].cacheMaxAgeSec = cacheMaxAgeSec;
             g_staticAssets[i].authRequired = authRequired;
+            g_staticAssets[i].gzipEncoded = gzipEncoded;
             g_staticAssets[i].registered = false;
             if (g_webReady) {
                 registerStaticAsset(g_staticAssets[i]);

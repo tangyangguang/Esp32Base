@@ -168,6 +168,7 @@ struct StaticAsset {
     size_t len;
     uint32_t cacheMaxAgeSec;
     bool authRequired;
+    bool gzipEncoded;
     bool registered;
 };
 

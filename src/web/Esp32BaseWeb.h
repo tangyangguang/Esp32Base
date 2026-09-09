@@ -153,7 +153,7 @@ public:
     static bool addPage(const char* path, const char* title, Handler handler);
     static bool addApi(const char* path, Handler handler);
     static bool addStaticAsset(const char* path, const char* contentType, const uint8_t* data, size_t len,
-                               uint32_t cacheMaxAgeSec = 86400, bool authRequired = true);
+                               uint32_t cacheMaxAgeSec = 86400, bool authRequired = true, bool gzipEncoded = false);
     static bool addNavItem(const char* path, const char* title);
 
     static bool setDeviceName(const char* name);

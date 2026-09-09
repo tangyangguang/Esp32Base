@@ -38,6 +38,9 @@ int main() {
     assert(esp32base_web::writeResponseBytes(c, data, 2, 0, 30, feed));
     assert(esp32base_web::writeResponseBytes(c, data, 2, 0, 30, feed));
     assert(!esp32base_web::writeResponseBytes(c, data, 2, 0, 30, feed));
+    c = {}; nowMs = 60000;
+    assert(esp32base_web::writeResponseBytes(c, data, 8, nowMs, 30, feed));
+    assert(c.calls == 4); // A new static response gets its own deadline after idle.
     c = {}; c.online = false; nowMs = 0;
     assert(!esp32base_web::writeResponseBytes(c, data, 8, 0, 30, feed));
     assert(c.calls == 0);

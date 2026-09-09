@@ -1283,7 +1283,7 @@ public:
     static bool addPage(const char* path, const char* title, Handler handler);
     static bool addApi(const char* path, Handler handler);
     static bool addStaticAsset(const char* path, const char* contentType, const uint8_t* data, size_t len,
-                               uint32_t cacheMaxAgeSec = 86400, bool authRequired = true);
+                               uint32_t cacheMaxAgeSec = 86400, bool authRequired = true, bool gzipEncoded = false);
     static bool addNavItem(const char* path, const char* title);
 
     static bool setDeviceName(const char* name);
@@ -1424,6 +1424,8 @@ Route 缓冲机制：
 - CSV 字段必须用 `writeCsvEscaped()` 输出，避免逗号、换行或双引号破坏导出格式。
 - `redirectSeeOther(location)` 发送 `303 See Other`，用于 POST 成功后跳转到 GET 页面，避免浏览器刷新重复提交。
 - `beginJson(code)` 的状态码必须在 `endJson()` 发送时保留。
+
+固件静态资源可通过 `addStaticAsset(..., cacheMaxAgeSec, authRequired, true)` 声明已预压缩的 gzip 数据。Base 原样发送压缩字节和精确长度，不在设备解压；认证及 private/public 缓存策略保持一致，响应带 `Content-Encoding: gzip` 和 `Vary: Accept-Encoding`。客户端明确不接受 gzip 时返回 406，默认未声明 gzip 的资源行为不变。构建生成器必须验证 gzip 内容并在资源 URL 上使用内容摘要版本，防止升级后复用旧缓存；Base 不验证或重新压缩调用者的静态字节。
 
 Native Web handler 测试：
 

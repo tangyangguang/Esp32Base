@@ -3,6 +3,8 @@
 #if ESP32BASE_ENABLE_WEB
 
 #include "WebInternal.h"
+#include "WebGzip.h"
+#include "WebWrite.h"
 
 namespace esp32base_web {
 
@@ -695,6 +697,17 @@ void dispatchStaticAsset(StaticAsset& asset) {
         g_currentMethod = Esp32BaseWeb::METHOD_UNKNOWN;
         return;
     }
+    if (asset.gzipEncoded) {
+        g_server.sendHeader("Vary", "Accept-Encoding");
+        const String encoding = g_server.header("Accept-Encoding");
+        if (!acceptsGzip(encoding.c_str(), g_server.hasHeader("Accept-Encoding"))) {
+            g_server.send(406, "text/plain", "gzip encoding required");
+            g_requestContextActive = false;
+            g_currentMethod = Esp32BaseWeb::METHOD_UNKNOWN;
+            return;
+        }
+        g_server.sendHeader("Content-Encoding", "gzip");
+    }
     char cacheControl[40];
     if (asset.cacheMaxAgeSec > 0) {
         snprintf(cacheControl, sizeof(cacheControl), "%s, max-age=%lu",
@@ -705,10 +718,14 @@ void dispatchStaticAsset(StaticAsset& asset) {
     }
     g_server.sendHeader("Cache-Control", cacheControl);
     g_server.sendHeader("X-Content-Type-Options", "nosniff");
+    const uint32_t responseStartedMs = millis();
     g_server.setContentLength(asset.len);
     g_server.send(200, asset.contentType, "");
     WiFiClient client = g_server.client();
-    writeClientBytes(client, reinterpret_cast<const char*>(asset.data), asset.len);
+    if (!writeResponseBytes(client, reinterpret_cast<const char*>(asset.data), asset.len,
+                            responseStartedMs, ESP32BASE_WEB_RESPONSE_TIMEOUT_MS, feedWatchdogDuringSend)) {
+        client.stop();
+    }
     g_requestContextActive = false;
     g_currentMethod = Esp32BaseWeb::METHOD_UNKNOWN;
 }

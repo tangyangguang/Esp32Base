@@ -112,6 +112,24 @@ void test_native_static_asset_respects_auth_when_required() {
     TEST_ASSERT_EQUAL(401, Esp32BaseWeb::nativeTestResponse().code);
 }
 
+void test_native_gzip_asset_preserves_binary_length_and_auth() {
+    Esp32BaseWeb::nativeTestReset();
+    static const uint8_t asset[] = {0x1f, 0x8b, 0x00, 0xff};
+    TEST_ASSERT_TRUE(Esp32BaseWeb::addStaticAsset("/assets/app.js", "application/javascript",
+                                               asset, sizeof(asset), 60, true, true));
+    TEST_ASSERT_TRUE(Esp32BaseWeb::nativeTestDispatch("/assets/app.js", Esp32BaseWeb::METHOD_GET));
+    const auto& response = Esp32BaseWeb::nativeTestResponse();
+    TEST_ASSERT_EQUAL(200, response.code);
+    TEST_ASSERT_EQUAL(sizeof(asset), response.body.size());
+    TEST_ASSERT_EQUAL_MEMORY(asset, response.body.data(), sizeof(asset));
+    TEST_ASSERT_EQUAL_STRING("gzip", Esp32BaseWeb::nativeTestResponseHeader("Content-Encoding"));
+    TEST_ASSERT_EQUAL_STRING("Accept-Encoding", Esp32BaseWeb::nativeTestResponseHeader("Vary"));
+    TEST_ASSERT_EQUAL_STRING("private, max-age=60", Esp32BaseWeb::nativeTestResponseHeader("Cache-Control"));
+    Esp32BaseWeb::nativeTestSetAuthenticated(false);
+    TEST_ASSERT_TRUE(Esp32BaseWeb::nativeTestDispatch("/assets/app.js", Esp32BaseWeb::METHOD_GET));
+    TEST_ASSERT_EQUAL(401, Esp32BaseWeb::nativeTestResponse().code);
+}
+
 void test_native_static_asset_rejects_invalid_registration() {
     Esp32BaseWeb::nativeTestReset();
     static const uint8_t asset[] = "x";
@@ -468,6 +486,7 @@ int main(int, char**) {
     RUN_TEST(test_other_builtin_page_routes_remain_available);
     RUN_TEST(test_native_static_asset_serves_cached_content);
     RUN_TEST(test_native_static_asset_respects_auth_when_required);
+    RUN_TEST(test_native_gzip_asset_preserves_binary_length_and_auth);
     RUN_TEST(test_native_static_asset_rejects_invalid_registration);
     RUN_TEST(test_native_after_format_callback_reports_tools_success_details);
     RUN_TEST(test_native_ota_preflight_accepts_size_within_target_partition);

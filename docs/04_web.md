@@ -364,6 +364,8 @@ void handleCsvApi() {
 - 当前仍使用 Arduino 同步 `WebServer`，单个大 HTML/JSON/CSV 响应发送期间会占用 `handleClient()`，新连接需等待当前 handler 返回；业务长任务采用“启动任务 -> 返回 task id -> 轮询状态”，大历史数据优先分页、缩短默认 range 或异步加载。
 - JSON 可继续使用 `sendJson()` 整体输出，或使用 `beginJson()` / `sendChunk()` / `writeJsonEscaped()` / `endJson()` 分块输出。
 
+固件静态资源可通过 `addStaticAsset(..., cacheMaxAgeSec, authRequired, true)` 声明已预压缩的 gzip 数据。Base 原样发送压缩字节和精确长度，不在设备解压；认证及 private/public 缓存策略保持一致，响应带 `Content-Encoding: gzip` 和 `Vary: Accept-Encoding`。客户端明确不接受 gzip 时返回 406，默认未声明 gzip 的资源行为不变。构建生成器必须验证 gzip 内容并在资源 URL 上使用内容摘要版本，防止升级后复用旧缓存；Base 不验证或重新压缩调用者的静态字节。
+
 native handler 测试：
 
 ```cpp
