@@ -26,13 +26,17 @@ Core 2 为 2.0.16，Core 3 为 3.3.8；均通过仓库隔离的 PlatformIO home�
 | basic / ESP32 / Core 2 | LOCAL | 57,060 | 983,917 |
 | basic / ESP32-S3 / Core 2 | LOCAL | 55,840 | 940,489 |
 | basic / ESP32-C3 / Core 2 | LOCAL | 49,796 | 991,034 |
-| basic / ESP32 / Core 3 | LOCAL | 59,172 | 1,180,653 |
+| basic / ESP32-S3 / Core 2 | IOT（仅编译） | 57,956 | 953,261 |
+| basic / ESP32-C3 / Core 2 | IOT（仅编译） | 51,908 | 1,005,670 |
+| basic / ESP32 / Core 3 | LOCAL | 59,180 | 1,180,941 |
 | mqtt_tls 受控 core0 包探针 / ESP32 / Core 3 | IOT | 62,032 | 1,295,536 |
 | full_demo / ESP32 / Core 2 | LOCAL | 58,508 | 1,014,149 |
 | record_store_demo / ESP32 / Core 2 | MINIMAL + FS/Record Store | 25,648 | 337,049 |
 | record_store_demo / ESP32-S3 / Core 2 | MINIMAL + FS/Record Store | 22,604 | 330,433 |
 | record_store_demo / ESP32-C3 / Core 2 | MINIMAL + FS/Record Store | 17,936 | 315,292 |
 | record_store_demo / ESP32 / Core 3 | MINIMAL + FS/Record Store | 25,996 | 346,272 |
+
+2026-09-09主任务D按当前d2155e0源码补验S3/C3 Core2 IOT及ESP32 Core3 LOCAL，上表对应三行已更新，使用本库隔离运行器，未烧录或重建TLS工具链。Core2默认包缺日期验证，IOT编译通过不代表安全TLS可用；S3/C3受控产物和实机仍未闭环。日志为本机`/tmp/base32-d-core2-iot.log`、`/tmp/base32-d-core3-local.log`。
 
 受控 IOT 示例此前同场景为 RAM 63,400B / Flash 1,323,372B；本次代码与明确依赖共同变更后分别减少 1,376B / 27,984B，不能把差值归因于某一个函数。4KiB 发送、512B 接收时，2 个接收 payload 数组比共用 4KiB 容量少 7,168B，属于可推导的静态布局差值，不是该默认示例的实测节省。
 
