@@ -70,7 +70,10 @@ def main():
     for name in ("mbedtls_x509_crt_verify_restartable", "mbedtls_x509_time_gmtime", "mbedtls_x509_time_cmp"):
         if not any(line.endswith(" T " + name) for line in symbols.splitlines()):
             raise RuntimeError(f"TLS verification path missing from firmware: {name}")
-    print("MQTT example links the date-aware certificate verifier. No hardware handshake was tested.")
+    for name in ("mbedtls_ssl_handshake_server_step", "esp_transport_ws_init"):
+        if any(line.endswith(" T " + name) for line in symbols.splitlines()):
+            raise RuntimeError(f"Unused transport/role remains linked: {name}")
+    print("MQTT example retains certificate verification and excludes unused WS/server roles. No hardware handshake was tested.")
 
 
 if __name__ == "__main__":

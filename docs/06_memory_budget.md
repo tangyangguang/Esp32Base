@@ -221,3 +221,11 @@ ESP32-C3 4MB 要控制 Web/OTA/Fs 组合的体积。
 RecordStore 保留机制不新增记录副本、任务或常驻payload缓冲；控制文件仍128B，每槽仍payload+24B。单Store对象增加24B（存储世代、策略及RAM/持久释放水位；主机布局核对），实际芯片占用以示例最终链接为准。释放不写Flash，显式检查点或轮转才更新控制头；因此写放大随检查点策略与段轮转发生，不随MQTT ACK频率发生。
 
 mDNS失败重试使用1个32位时刻和1个布尔标记，不新增任务或缓冲；本次ESP32/Core2 LOCAL+RecordStore组合静态RAM增加8B（含链接布局影响）。这是用于避免每轮失败重试的有界状态，不缩减网络或存储保护。
+
+### Web 静态内容与配置元数据
+
+公共 CSS 保留唯一可读源 `src/web/internal/WebCssSource.inc`，由 `scripts/generate_web_css.py` 按 FS/OTA/FileLog 实际宏生成 gzip 常量；每次编译只选择一份，不链接明文副本，也不在设备执行压缩/解压。完整组合原文 19255 B、gzip 4375 B，HTTP 传输量相应降低。接口发送明确 Content-Encoding、Content-Length、Vary 和 nosniff；明确不接受 gzip 的客户端得到 406，不发送无法解码的样式。浏览器承担解压，基础库不新增解压堆/栈或常驻工作区。WebServer 多收集一个有请求行长度限制的 Accept-Encoding 头；按实际请求长度暂存，不能把它描述成绝对零堆开销。
+
+App Config 字段仅保存一份公共元数据及类型专属联合体。字符串和选项依旧引用调用者的长期对象，字段定义对象可在注册返回后离开作用域；未改变验证、默认值、回调、NVS 或字段数量。ESP32 的单字段槽由 88 B 降至 56 B；25 字段静态节省 800 B。当前消费端结果见统一验证结果；不据此宣称 TLS 峰值或运行性能已实测。
+
+ESP32 受控 Core 3 客户端包关闭 Base 接口无法选择的 MQTT WebSocket 和 TLS 服务端角色；保持 TCP/MQTTS、双向客户端认证、日期/名称/CA 校验和既定 buffer/outbox/task 容量。上游 ESP-MQTT 按实际 scheme 创建 transport，因此不能把移除 WebSocket 代码宣称为每次 MQTTS 连接节省一组 WebSocket 堆缓冲。主要收益是 Flash 裁剪；最终资源及未覆盖边界统一见验证结果。

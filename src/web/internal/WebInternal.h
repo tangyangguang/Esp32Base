@@ -6,12 +6,7 @@
 
 namespace esp32base_web {
 
-#ifndef ESP32BASE_WEB_CSS_VERSION
-#define ESP32BASE_WEB_CSS_VERSION __TIME__
-#endif
-
 extern const char WEB_CSS_TYPE[] PROGMEM;
-extern const char WEB_CSS[] PROGMEM;
 extern const char WEB_HEAD[] PROGMEM;
 #if ESP32BASE_ENABLE_FS || ESP32BASE_ENABLE_OTA
 extern const char WEB_UPLOAD_HELPERS[] PROGMEM;
@@ -215,7 +210,7 @@ bool validFieldCommon(const char* groupId, const char* ns, const char* key, cons
 bool validOptionalHelp(const char* help);
 bool validOptionalUnit(const char* unit);
 void appConfigLogRegisterFailed(const char* type, const char* ns, const char* key);
-bool enumValueAllowed(const Esp32BaseAppConfig::EnumField& field, const char* value);
+bool enumValueAllowed(const Esp32BaseAppConfig::EnumOption* options, uint8_t optionCount, const char* value);
 bool validEnumOptions(const Esp32BaseAppConfig::EnumField& field);
 bool stepMatches(int32_t value, int32_t minValue, int32_t step);
 bool parseStrictInt32(const char* text, int32_t& out);

@@ -440,7 +440,7 @@ void handleHeadExtra() {
 - PRG 提交路径。
 - 可换肤变量。
 
-基础样式由 `/esp32base/ui.css` 输出，页面通过 `sendHeader()` 自动引用。业务页面不需要手动引用该 CSS，也不应该复制整段基础 CSS；浏览器会缓存该资源，避免每个页面重复下载同一份样式。
+基础样式由 `/esp32base/ui.css` 以 gzip 输出，页面通过 `sendHeader()` 自动引用。业务页面不需要手动引用该 CSS，也不应该复制整段基础 CSS；浏览器会缓存该资源，避免每个页面重复下载同一份样式。
 
 内置 Status、WiFi、System Logs、System、Auth、OTA、FS和App Config 页面已经按这套 baseline 收敛。跨页面共用的调整优先改 `/esp32base/ui.css` 的公共 class 或 helper 输出结构；单页特有问题可以在对应页面做局部处理。
 
@@ -513,3 +513,5 @@ POST -> 303 Redirect -> GET
 
 - `docs/04_web.md`：Web 层 API、路由、认证、POST、安全和输出机制。
 - `examples/web_ui_gallery`：页面状态、表单、操作、确认和空状态的可运行基线。
+
+公共样式源位于 `src/web/internal/WebCssSource.inc`；修改后运行 `python3 scripts/generate_web_css.py` 并提交生成结果，避免手改 `WebCssGzip.inc`。

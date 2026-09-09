@@ -123,12 +123,12 @@ const char* fieldCommonRegistrationError(const char* groupId, const char* ns,
     return nullptr;
 }
 
-bool enumValueAllowed(const Esp32BaseAppConfig::EnumField& field, const char* value) {
+bool enumValueAllowed(const Esp32BaseAppConfig::EnumOption* options, uint8_t optionCount, const char* value) {
     if (!value) {
         return false;
     }
-    for (uint8_t i = 0; i < field.optionCount; ++i) {
-        if (field.options[i].value && strcmp(field.options[i].value, value) == 0) {
+    for (uint8_t i = 0; i < optionCount; ++i) {
+        if (options[i].value && strcmp(options[i].value, value) == 0) {
             return true;
         }
     }
@@ -152,7 +152,7 @@ bool validEnumOptions(const Esp32BaseAppConfig::EnumField& field) {
             }
         }
     }
-    return enumValueAllowed(field, field.defaultValue);
+    return enumValueAllowed(field.options, field.optionCount, field.defaultValue);
 }
 
 bool stepMatches(int32_t value, int32_t minValue, int32_t step) {
@@ -514,7 +514,7 @@ bool validateSubmittedField(const AppConfigFieldSlot& field, const char* submitt
             strlcpy(normalized, boolOut ? "true" : "false", normalizedLen);
             break;
         case APP_CFG_ENUM:
-            if (!submitted || !enumValueAllowed(field.spec.enumField, submitted)) {
+            if (!submitted || !enumValueAllowed(field.spec.enumField.options, field.spec.enumField.optionCount, submitted)) {
                 snprintf(error, errorLen, "%s has an invalid option.", field.label);
                 return false;
             }
@@ -1099,7 +1099,7 @@ bool Esp32BaseAppConfig::addString(const StringField& field) {
     slot.help = field.help;
     slot.restartRequired = field.restartRequired;
     slot.validate = field.validate;
-    slot.spec.stringField = field;
+    slot.spec.stringField = {field.defaultValue, field.minLength, field.maxLength};
     return true;
 }
 
@@ -1130,7 +1130,7 @@ bool Esp32BaseAppConfig::addInt(const IntField& field) {
     slot.unit = field.unit;
     slot.restartRequired = field.restartRequired;
     slot.validate = field.validate;
-    slot.spec.intField = field;
+    slot.spec.intField = {field.defaultValue, field.minValue, field.maxValue, field.step};
     return true;
 }
 
@@ -1162,7 +1162,7 @@ bool Esp32BaseAppConfig::addDecimal(const DecimalField& field) {
     slot.unit = field.unit;
     slot.restartRequired = field.restartRequired;
     slot.validate = field.validate;
-    slot.spec.decimalField = field;
+    slot.spec.decimalField = {field.defaultRawValue, field.minRawValue, field.maxRawValue, field.stepRaw, field.scale};
     return true;
 }
 
@@ -1187,7 +1187,7 @@ bool Esp32BaseAppConfig::addBool(const BoolField& field) {
     slot.help = field.help;
     slot.restartRequired = field.restartRequired;
     slot.validate = field.validate;
-    slot.spec.boolField = field;
+    slot.spec.boolField = {field.defaultValue};
     return true;
 }
 
@@ -1213,7 +1213,7 @@ bool Esp32BaseAppConfig::addEnum(const EnumField& field) {
     slot.help = field.help;
     slot.restartRequired = field.restartRequired;
     slot.validate = field.validate;
-    slot.spec.enumField = field;
+    slot.spec.enumField = {field.defaultValue, field.options, field.optionCount};
     return true;
 }
 

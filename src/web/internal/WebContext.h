@@ -241,12 +241,13 @@ struct AppConfigFieldSlot {
     const char* unit;
     bool restartRequired;
     Esp32BaseAppConfig::FieldValidateCallback validate;
+    // Keep common metadata once; the union contains only type-specific values.
     union {
-        Esp32BaseAppConfig::StringField stringField;
-        Esp32BaseAppConfig::IntField intField;
-        Esp32BaseAppConfig::DecimalField decimalField;
-        Esp32BaseAppConfig::BoolField boolField;
-        Esp32BaseAppConfig::EnumField enumField;
+        struct { const char* defaultValue; uint16_t minLength; uint16_t maxLength; } stringField;
+        struct { int32_t defaultValue; int32_t minValue; int32_t maxValue; int32_t step; } intField;
+        struct { int32_t defaultRawValue; int32_t minRawValue; int32_t maxRawValue; int32_t stepRaw; uint8_t scale; } decimalField;
+        struct { bool defaultValue; } boolField;
+        struct { const char* defaultValue; const Esp32BaseAppConfig::EnumOption* options; uint8_t optionCount; } enumField;
     } spec;
 };
 
@@ -265,7 +266,7 @@ struct WebContext {
     Route routes[ESP32BASE_WEB_MAX_ROUTES];
     NavItem navItems[ESP32BASE_WEB_MAX_NAV_ITEMS];
     StaticAsset staticAssets[ESP32BASE_WEB_MAX_STATIC_ASSETS];
-    const char* headerKeys[7];
+    const char* headerKeys[8];
     bool webReady;
     bool startLocked;
     bool authEnabled;
@@ -331,7 +332,7 @@ extern WebServer& g_server;
 extern Route (&g_routes)[ESP32BASE_WEB_MAX_ROUTES];
 extern NavItem (&g_navItems)[ESP32BASE_WEB_MAX_NAV_ITEMS];
 extern StaticAsset (&g_staticAssets)[ESP32BASE_WEB_MAX_STATIC_ASSETS];
-extern const char* (&g_headerKeys)[7];
+extern const char* (&g_headerKeys)[8];
 extern bool& g_webReady;
 extern bool& g_startLocked;
 extern bool& g_authEnabled;

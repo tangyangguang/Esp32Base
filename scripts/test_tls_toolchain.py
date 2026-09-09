@@ -22,6 +22,24 @@ class ToolchainAuditTest(unittest.TestCase):
         self.output.mkdir(parents=True)
         self.before = "CONFIG_BUFFER_SIZE=4096\n# CONFIG_MBEDTLS_HAVE_TIME_DATE is not set\n# CONFIG_MQTT_TASK_CORE_SELECTION_ENABLED is not set\n"
         self.after = "CONFIG_BUFFER_SIZE=4096\nCONFIG_MBEDTLS_HAVE_TIME_DATE=y\nCONFIG_MQTT_TASK_CORE_SELECTION_ENABLED=y\nCONFIG_MQTT_USE_CORE_0=y\n# CONFIG_MQTT_USE_CORE_1 is not set\n"
+        self.before += """CONFIG_ESP_HTTPS_SERVER_ENABLE=y
+CONFIG_MBEDTLS_TLS_CLIENT=y
+CONFIG_MBEDTLS_TLS_SERVER_AND_CLIENT=y
+# CONFIG_MBEDTLS_TLS_CLIENT_ONLY is not set
+CONFIG_MBEDTLS_TLS_SERVER=y
+CONFIG_MBEDTLS_SERVER_SSL_SESSION_TICKETS=y
+CONFIG_MQTT_TRANSPORT_WEBSOCKET=y
+CONFIG_MQTT_TRANSPORT_WEBSOCKET_SECURE=y
+"""
+        self.after += """# CONFIG_ESP_HTTPS_SERVER_ENABLE is not set
+CONFIG_MBEDTLS_TLS_CLIENT=y
+# CONFIG_MBEDTLS_TLS_SERVER_AND_CLIENT is not set
+CONFIG_MBEDTLS_TLS_CLIENT_ONLY=y
+# CONFIG_MBEDTLS_TLS_SERVER is not set
+# CONFIG_MBEDTLS_SERVER_SSL_SESSION_TICKETS is not set
+# CONFIG_MQTT_TRANSPORT_WEBSOCKET is not set
+# CONFIG_MQTT_TRANSPORT_WEBSOCKET_SECURE is not set
+"""
         (self.baseline / "sdkconfig").write_text(self.before)
         (self.output / "sdkconfig").write_text(self.after)
         for directory in (self.baseline, self.output):
@@ -62,6 +80,20 @@ class ToolchainAuditTest(unittest.TestCase):
         for target in ("esp32s3", "esp32c3"):
             self.assertEqual(toolchain.config_changes(target), {"CONFIG_MBEDTLS_HAVE_TIME_DATE": "y"})
             self.assertEqual(toolchain.target_config_addition(target), b"")
+
+    def test_disabled_dependent_symbols_may_be_omitted(self):
+        (self.output / "sdkconfig").write_text(self.after.replace("# CONFIG_MBEDTLS_TLS_SERVER is not set\n", "").replace("# CONFIG_MQTT_TRANSPORT_WEBSOCKET_SECURE is not set\n", ""))
+        self.audit()
+
+    def test_rejects_client_tls_disabled(self):
+        (self.output / "sdkconfig").write_text(self.after.replace("CONFIG_MBEDTLS_TLS_CLIENT=y", "# CONFIG_MBEDTLS_TLS_CLIENT is not set"))
+        with self.assertRaisesRegex(RuntimeError, "CONFIG_MBEDTLS_TLS_CLIENT"):
+            self.audit()
+
+    def test_rejects_unrequested_websocket_transport(self):
+        (self.output / "sdkconfig").write_text(self.after.replace("# CONFIG_MQTT_TRANSPORT_WEBSOCKET is not set", "CONFIG_MQTT_TRANSPORT_WEBSOCKET=y"))
+        with self.assertRaisesRegex(RuntimeError, "CONFIG_MQTT_TRANSPORT_WEBSOCKET"):
+            self.audit()
 
     def test_rejects_dependency_drift(self):
         (self.output / "dependencies.lock").write_text("dependency: latest\n")

@@ -25,7 +25,7 @@
 
 Web 页面结构、样式基线、业务页面模式和换肤策略详见 [Web UI 页面结构与样式基线](docs/11_web_ui_baseline.md)。本项目采用 [MIT License](LICENSE)。
 业务项目接入前，建议先用 `examples/web_ui_gallery` 统一查看和验证状态、记录、配置、命令、分步操作、确认和空状态等页面样式；`examples/full_demo` 侧重完整功能集成。
-基础 Web CSS 由 `/esp32base/ui.css` 统一输出并允许浏览器缓存，业务页面通过 `sendHeader()` 自动引用，不需要复制样式；按钮按轻量设备控制台风格收敛，明确保存/执行动作和普通入口保持清楚层级；原生 `<dialog>` 可复用基础弹层、表单和按钮样式。
+基础 Web CSS 由 `/esp32base/ui.css` 以预生成 gzip 统一输出并允许浏览器缓存，业务页面通过 `sendHeader()` 自动引用，不需要复制样式；按钮按轻量设备控制台风格收敛，明确保存/执行动作和普通入口保持清楚层级；原生 `<dialog>` 可复用基础弹层、表单和按钮样式。
 
 ## 快速开始
 
@@ -249,3 +249,5 @@ RecordStore 的普通历史轮转与可靠消费保留机制、当前容器格�
 应用在开始运行前注册 `Esp32BaseOta::setUploadGuard(bool (*)(void*), context)` 和 `Esp32BaseStorage::setFormatGuard(bool (*)(void*), context)`，可在活动中拒绝 OTA 或格式化。拒绝发生在资源准备、Flash 写入、格式化和重载前；OTA 报 application rejected，Storage 报 `ApplicationBusy`，无自动重试或强制绕过。回调及 context 必须保持有效，同一 loop/task 串行调用，不得重入维护或执行长流程；传 nullptr 清除。未注册时保留原有行为。Base 不判断活动的业务含义。
 
 `Esp32Base::setBeforeLifecycleStopCallback(void (*)(void*), context)` 在统一 restart/deep sleep 的网络等待、存储检查点前调用；应用先关闭执行输出，可随后收尾事实。此回调不能否决强制停止，不得再次请求重启/休眠。不适用于崩溃、掉电或直接绕过 Base 的底层 restart。回调自身不产生 Flash 写入，安全关闭不应依赖网络成功。
+
+当前 ESP32/Core 3 受控工具链按 Base 实际客户端用途裁剪 MQTT WebSocket 与 TLS 服务端角色，保留完整出站 TLS 校验及客户端认证；具体范围、固定产物及验证边界见[受控 TLS 工具链](docs/14_tls_toolchain.md)。

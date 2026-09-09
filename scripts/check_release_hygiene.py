@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
+from generate_web_css import generated, TARGET
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -28,6 +29,8 @@ def parse_partition_csv(path: str):
 
 
 errors = []
+if not TARGET.exists() or TARGET.read_text() != generated():
+    errors.append("Generated CSS gzip is stale; run scripts/generate_web_css.py")
 
 license_path = ROOT / "LICENSE"
 if not license_path.exists() or "MIT License" not in license_path.read_text(encoding="utf-8"):

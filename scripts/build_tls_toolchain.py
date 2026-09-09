@@ -37,7 +37,7 @@ def target_config_addition(target: str) -> bytes:
     changes = LOCK["target_config_changes"].get(target, {})
     if not changes:
         return b""
-    lines = ["", "# Esp32Base: isolate MQTT from the default application core."]
+    lines = ["", "# Esp32Base: MQTT client resource scope and task placement."]
     for key, value in changes.items():
         lines.append(f"# {key} is not set" if value == "n" else f"{key}={value}")
     return ("\n".join(lines) + "\n").encode()
@@ -155,9 +155,12 @@ def audit(target: str) -> None:
     output = BUILDER / "out/tools/esp32-arduino-libs" / target
     before = configuration(BASELINE / target / "sdkconfig")
     after = configuration(output / "sdkconfig")
-    delta = {key: [before.get(key), after.get(key)] for key in before.keys() | after.keys()
-             if before.get(key) != after.get(key)}
-    expected = {key: [before.get(key), value] for key, value in config_changes(target).items()}
+    # Kconfig omits disabled dependent booleans when a parent role is removed.
+    # Absence and "not set" are both false; enabled/value changes remain exact.
+    delta = {key: [before.get(key, "n"), after.get(key, "n")] for key in before.keys() | after.keys()
+             if before.get(key, "n") != after.get(key, "n")}
+    expected = {key: [before.get(key, "n"), value] for key, value in config_changes(target).items()
+                if before.get(key, "n") != value}
     if delta != expected:
         raise RuntimeError("Unexpected sdkconfig changes: " + json.dumps(delta, sort_keys=True))
     # The upstream lock is also a contract: building today must not silently
@@ -185,6 +188,15 @@ def audit_binary(target: str) -> None:
     for name in ("mbedtls_x509_time_gmtime", "mbedtls_x509_time_cmp"):
         if not re.search(rf"x509_crt\.c\.(?:obj|o):[^\n]*\bU\s+{name}$", symbols, re.MULTILINE):
             raise RuntimeError(f"Certificate-chain verifier does not use {name}")
+    if target == "esp32":
+        tls_symbols = capture([str(candidates[0]), "-A", "-g", str(output / "lib/libmbedtls_2.a")], BUILDER)
+        if not re.search(r"\bT\s+mbedtls_ssl_handshake_client_step$", tls_symbols, re.MULTILINE):
+            raise RuntimeError("TLS client handshake was removed")
+        if re.search(r"\bT\s+mbedtls_ssl_handshake_server_step$", tls_symbols, re.MULTILINE):
+            raise RuntimeError("Unused TLS server role remains in the client package")
+        mqtt_symbols = capture([str(candidates[0]), "-A", "-g", str(output / "lib/libmqtt.a")], BUILDER)
+        if re.search(r"\bU\s+esp_transport_ws_", mqtt_symbols):
+            raise RuntimeError("MQTT still references unused WebSocket transport")
     headers = list(output.glob("*/include/sdkconfig.h"))
     expected_headers = {path.relative_to(BASELINE / target)
                         for path in (BASELINE / target).glob("*/include/sdkconfig.h")}
@@ -213,7 +225,7 @@ def package(target: str) -> None:
     shutil.copyfile(BASELINE / "tools.json", destination / "tools.json")
     shutil.copyfile(output / "versions.txt", destination / "versions.txt")
     metadata = json.loads((BASELINE / "package.json").read_text())
-    metadata["version"] = LOCK["framework_libraries"] + ".esp32base.tls2"
+    metadata["version"] = LOCK["framework_libraries"] + ".esp32base.tls3"
     metadata["description"] = f"Esp32Base controlled Arduino {LOCK['arduino_core']} libraries; target {target}; certificate dates enabled"
     (destination / "package.json").write_text(json.dumps(metadata, indent=2) + "\n")
     provenance = {"target": target, "source_lock": LOCK,
