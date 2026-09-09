@@ -148,6 +148,7 @@ static const char TEST_CA[] =
     "-----BEGIN CERTIFICATE-----\nTEST\n-----END CERTIFICATE-----\n";
 
 int g_applicationEventCount = 0;
+Esp32BaseMqtt::Event g_lastApplicationEvent;
 bool g_tryPublishOnUncertain = false;
 Esp32BaseMqtt::PublishCode g_reentrantPublishCode =
     Esp32BaseMqtt::PUBLISH_ACCEPTED;
@@ -177,6 +178,7 @@ void beforeConnect(void*) {
 
 void onEvent(const Esp32BaseMqtt::Event& event, void*) {
     ++g_applicationEventCount;
+    g_lastApplicationEvent = event;
     if (g_tryPublishOnUncertain &&
         event.type == Esp32BaseMqtt::EVENT_PUBLISH_DELIVERY_UNCERTAIN) {
         static const uint8_t payload[] = "new";
@@ -391,6 +393,45 @@ void test_callbacks_are_deferred_until_handle_and_subscriptions_repeat() {
     Esp32BaseMqtt::handle(false);
     TEST_ASSERT_EQUAL(2, g_fakeSubscribeCount);
     TEST_ASSERT_TRUE(g_applicationEventCount >= 4);
+}
+
+void test_subscription_grant_survives_deferred_dispatch() {
+    Esp32BaseMqtt::Subscription subscription;
+    subscription.topicFilter = "device/command";
+    subscription.qos = Esp32BaseMqtt::QOS_1;
+    TEST_ASSERT_TRUE(Esp32BaseMqtt::addSubscription(subscription));
+    Esp32BaseMqtt::setEventCallback(onEvent);
+    startAndConnect();
+    TEST_ASSERT_EQUAL_UINT8(0xFF, g_lastApplicationEvent.grantedQos);
+    const struct { int length; uint8_t code; bool missing; } cases[] = {
+        {1, 0, false}, {1, 1, false}, {1, 2, false},
+        {1, 0x80, false}, {0, 1, false}, {1, 1, true},
+        {2, 1, false}, {1, 3, false}, {-1, 1, false}
+    };
+    for (const auto& item : cases) {
+        char codes[] = {static_cast<char>(item.code), 1};
+        esp_mqtt_event_t event = {};
+        event.client = &g_fakeClient;
+        event.msg_id = 123;
+        event.data = item.missing ? nullptr : codes;
+        event.data_len = item.length;
+        g_mqttSubscriptions[0].pendingPacketId = 123;
+        const int before = g_applicationEventCount;
+        g_fakeEventHandler(nullptr, nullptr, MQTT_EVENT_SUBSCRIBED, &event);
+        TEST_ASSERT_EQUAL(before, g_applicationEventCount);
+        codes[0] = 42; // Native callback data must not be borrowed after return.
+        Esp32BaseMqtt::handle(false);
+        TEST_ASSERT_EQUAL(before + 1, g_applicationEventCount);
+        TEST_ASSERT_EQUAL_UINT8(0, g_lastApplicationEvent.subscriptionIndex);
+        TEST_ASSERT_EQUAL_UINT16(123, g_lastApplicationEvent.packetId);
+        TEST_ASSERT_EQUAL_UINT8(
+            item.length == 1 && !item.missing && item.code <= 2
+                ? item.code : 0xFF, g_lastApplicationEvent.grantedQos);
+        TEST_ASSERT_EQUAL(item.code == 0x80
+            ? Esp32BaseMqtt::EVENT_SUBSCRIPTION_REJECTED
+            : Esp32BaseMqtt::EVENT_SUBSCRIPTION_ACKNOWLEDGED,
+            g_lastApplicationEvent.type);
+    }
 }
 
 void test_qos1_publish_ack_and_outbox_limit() {
@@ -855,6 +896,7 @@ int main(int, char**) {
     RUN_TEST(test_configuration_requires_ca_and_rejects_plaintext_by_default);
     RUN_TEST(test_begin_never_starts_network_and_waits_for_prerequisites);
     RUN_TEST(test_callbacks_are_deferred_until_handle_and_subscriptions_repeat);
+    RUN_TEST(test_subscription_grant_survives_deferred_dispatch);
     RUN_TEST(test_qos1_publish_ack_and_outbox_limit);
     RUN_TEST(test_disconnect_discards_queued_and_partial_incoming_messages);
     RUN_TEST(test_ota_preparation_does_not_dispatch_application_callbacks);

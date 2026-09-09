@@ -144,6 +144,8 @@ public:
         Error error = ERROR_NONE;
         uint16_t packetId = 0;
         uint8_t subscriptionIndex = 0xFF;
+        // Broker grant 0/1/2; 0xFF when absent, malformed or rejected.
+        uint8_t grantedQos = 0xFF;
     };
 
     struct Status {

@@ -221,3 +221,10 @@ OTA中止测试先在已连接MQTT时直接startUpload并abort：开始前内部
 定向验证：隔离Core环境检查通过；native_record_store_harness最终35项全部通过（2.573秒），包含最小192B Store的64个替代段写入中断位置、创建/rename/空间不足、提交后清理失败再重载、47次后续追加重载、40段上限、缩小预算以及原有未释放保护/普通轮转测试。此处是生产代码主机故障注入，不是真实掉电证据。
 
 主用ESP32/Core 2.0.16的record_store_demo构建通过（3.227秒），RAM25648B、Flash337185B，构建日志无warning。未展开其他Core/S3/C3矩阵，没有刷板或操作其他设备；LittleFS物理掉电、介质故障及全FS分配/COW边界仍留阶段D。日志位于忽略目录.cache/refactoring/last-fact-{native,build}.log，不进入发布包。
+
+
+## 2026-09-09：实际订阅 QoS 传递
+
+公开 Event 增加 grantedQos，原生 SUBACK 数据在回调内复制到已有事件队列，再由 handle 投递；仅单个合法返回码报告 0/1/2，其余为 0xFF。未改变通用订阅降级策略、队列容量或 TLS 保护。字段分别使用 Event 和 RawEvent 原有对齐空间，不增加字段布局尺寸（当前 uint8/uint16/int32 布局为 6B/36B）。
+
+native_mqtt_harness 21 项通过，新增定向覆盖 0/1/2、拒绝、空指针、空/负/多字节及非法返回码，并检查回调数据被覆盖后仍正确投递。主用 ESP32/Core2 mqtt_tls 构建通过，RAM59908B、Flash1129029B，无 warning。未新增实机 Broker 降级或其他芯片/Core 证据；平台是否要求 QoS1 由上层判定。

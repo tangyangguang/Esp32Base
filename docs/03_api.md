@@ -843,7 +843,7 @@ subscription.qos = Esp32BaseMqtt::QOS_1;
 Esp32BaseMqtt::addSubscription(subscription);
 ```
 
-订阅表默认 8 项，构建期最大 16。Topic filter 最大字节数由 `ESP32BASE_MQTT_MAX_TOPIC_BYTES` 控制；`+` 和 `#` 必须位于合法 level。每次连接后全部重新提交。`EVENT_SUBSCRIPTION_ACKNOWLEDGED` 带 `subscriptionIndex` 和 MQTT packet id；底层立即拒绝时发布 `EVENT_SUBSCRIPTION_REJECTED`。
+订阅表默认 8 项，构建期最大 16。Topic filter 最大字节数由 `ESP32BASE_MQTT_MAX_TOPIC_BYTES` 控制；`+` 和 `#` 必须位于合法 level。每次连接后全部重新提交。`EVENT_SUBSCRIPTION_ACKNOWLEDGED` 带 `subscriptionIndex`、MQTT packet id 和 `grantedQos`；`grantedQos` 为 Broker 实际授予的 0/1/2，缺失、畸形或拒绝时为 `0xFF`。通用库不把 QoS 降级改为拒绝；需要 QoS1 的上层必须检查实际值为 1，不能只凭已确认事件判定就绪。其他事件该字段为 `0xFF`；底层立即拒绝时发布 `EVENT_SUBSCRIPTION_REJECTED`。
 
 发送：
 

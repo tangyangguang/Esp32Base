@@ -38,6 +38,7 @@ struct RawEvent {
     RawEventType type = RAW_DISCONNECTED;
     int32_t packetId = 0;
     bool subscriptionRejected = false;
+    uint8_t grantedQos = 0xFF;
     int32_t errorType = 0;
     int32_t connectReturnCode = 0;
     int32_t espError = 0;
@@ -318,7 +319,8 @@ bool popRawEvent(RawEvent& event) {
 void emitApplicationEvent(Esp32BaseMqtt::EventType type,
                           Esp32BaseMqtt::Error error = Esp32BaseMqtt::ERROR_NONE,
                           uint16_t packetId = 0,
-                          uint8_t subscriptionIndex = MQTT_NO_SLOT) {
+                          uint8_t subscriptionIndex = MQTT_NO_SLOT,
+                          uint8_t grantedQos = 0xFF) {
     if (!g_mqttEventCallback) {
         return;
     }
@@ -327,6 +329,7 @@ void emitApplicationEvent(Esp32BaseMqtt::EventType type,
     event.error = error;
     event.packetId = packetId;
     event.subscriptionIndex = subscriptionIndex;
+    event.grantedQos = grantedQos;
     g_mqttEventCallback(event, g_mqttEventContext);
 }
 
@@ -534,6 +537,10 @@ void mqttEventHandler(void*, esp_event_base_t, int32_t eventId, void* eventData)
         case MQTT_EVENT_SUBSCRIBED:
             raw.type = RAW_SUBSCRIBED;
             raw.packetId = event->msg_id;
+            if (event->data && event->data_len == 1 &&
+                static_cast<uint8_t>(event->data[0]) <= 2) {
+                raw.grantedQos = static_cast<uint8_t>(event->data[0]);
+            }
             for (int i = 0; event->data && i < event->data_len; ++i) {
                 if (static_cast<uint8_t>(event->data[i]) >= 0x80) {
                     raw.subscriptionRejected = true;
@@ -940,7 +947,8 @@ void handleRawEvents() {
                         ? Esp32BaseMqtt::ERROR_SUBSCRIBE_FAILED
                         : Esp32BaseMqtt::ERROR_NONE,
                     static_cast<uint16_t>(raw.packetId),
-                    index);
+                    index,
+                    raw.grantedQos);
                 break;
             }
             case RAW_PUBLISHED: {
