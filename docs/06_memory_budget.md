@@ -116,6 +116,7 @@ MQTT（仅 `ESP32BASE_ENABLE_MQTT=1`）：
 - 控制事件槽：默认 16，允许 4..16；默认值保证一次连接加 8 个订阅 ACK 不会必然溢出。
 - QoS 1 in-flight：默认 4，最大 8。
 - ESP-MQTT outbox 预算：默认 4096 字节，允许 1024..16384；Core 2.x 由 wrapper 在 enqueue 前约束，Core 3.x 同时设置底层 outbox limit。
+- 受控退出复用既有outbox与事件邮箱；新增标志/packetId/截止时间/结果/邮箱基线合计15B标量（链接对齐另计），不新增payload副本、任务、TLS缓冲或Flash状态。
 - MQTT task stack：默认 6144 字节，允许 4096..8192；不能把 PlatformIO 静态 RAM 报告当作 task stack 或 TLS heap。
 - CA PEM（含末尾 NUL）：默认上限 6144 字节，允许 1024..16384。
 - 单个客户端证书/私钥 PEM（含末尾 NUL）：默认上限各 4096 字节，允许 1024..8192；这些数据可能被底层 TLS/MQTT 配置复制，必须纳入初始化 heap 预算。

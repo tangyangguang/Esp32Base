@@ -631,8 +631,12 @@ bool Esp32BaseOta::startUpload(size_t totalSize, const char* expectedSha256Hex) 
         return false;
     }
 
-    if (g_otaPreUploadHook) {
-        g_otaPreUploadHook();
+    if (g_otaPreUploadHook && !g_otaPreUploadHook()) {
+        cleanupLongOps();
+        setError("network shutdown was not confirmed");
+        logOtaTransferSummary("upload_failed");
+        g_otaStatus = FAILED;
+        return false;
     }
 
     if (!Update.begin(totalSize)) {

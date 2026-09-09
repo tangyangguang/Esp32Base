@@ -228,3 +228,11 @@ OTA中止测试先在已连接MQTT时直接startUpload并abort：开始前内部
 公开 Event 增加 grantedQos，原生 SUBACK 数据在回调内复制到已有事件队列，再由 handle 投递；仅单个合法返回码报告 0/1/2，其余为 0xFF。未改变通用订阅降级策略、队列容量或 TLS 保护。字段分别使用 Event 和 RawEvent 原有对齐空间，不增加字段布局尺寸（当前 uint8/uint16/int32 布局为 6B/36B）。
 
 native_mqtt_harness 21 项通过，新增定向覆盖 0/1/2、拒绝、空指针、空/负/多字节及非法返回码，并检查回调数据被覆盖后仍正确投递。主用 ESP32/Core2 mqtt_tls 构建通过，RAM59908B、Flash1129029B，无 warning。未新增实机 Broker 降级或其他芯片/Core 证据；平台是否要求 QoS1 由上层判定。
+
+## 2026-09-09：通用受控退出与维护衔接
+
+为平台SDK补齐缺少的通用最终消息生命周期，不改变平台协议归属：`beginShutdown()`复用既有QoS1 outbox，匹配最终PUBACK后异步请求断开，断开事件到达才报告成功；失败保持明确结果和暂停，显式恢复打开新连接周期。PUBACK未确认的受控失败不发送正常DISCONNECT；维护中失败拒绝OTA并释放准备资源，安全重启/休眠不依赖网络成功。OTA成功等待重启期间不恢复MQTT。没有新增任务、payload副本、Flash状态或削减保护预算；新增15B标量、链接对齐另计。
+
+隔离Core2的native_mqtt_harness 25项和secure_default 1项通过；覆盖匹配/错误PUBACK、重复退出、发布/重连门控、毫秒回绕、PUBACK及断开超时、邮箱丢失、掉线、入队和断开请求失败、维护失败不抑制LWT及显式恢复。生产OTA主机脚本新增前置准备拒绝后不调用Update.begin且恢复资源，原有上传失败/回滚测试通过；两个既有桩裁剪warning仍存在，不影响固件构建。架构/安全边界检查通过。主用LOCAL增量构建RAM57060B、Flash984037B，最终ELF不含Esp32BaseMqtt/esp_mqtt_client_/mqtt_task符号，保持无MQTT独立能力。
+
+消费端SDK的ESP32/Core2示例构建通过：RAM64564B、Flash1159581B；这是包含SDK/只读示例的总静态占用，不是Base独占成本或TLS运行峰值。SDK原生测试直接使用本库生产MQTT实现及假的底层事件；ESP-MQTT网络、真实Broker最终消息/LWT顺序、OTA实机和其他Core/芯片仍待后续集中验证。MQTT3.1.1无DISCONNECT ACK，当前成功结果不证明Broker收到DISCONNECT，也不证明平台落库。日志在本机忽略的.cache/shutdown-*。

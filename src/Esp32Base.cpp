@@ -133,6 +133,11 @@ uint16_t Esp32Base::notifyBeforeNetworkStop() {
 
 void Esp32Base::prepareForLifecycleStop() {
     const uint16_t graceMs = notifyBeforeNetworkStop();
+#if ESP32BASE_ENABLE_MQTT
+    if (Esp32BaseMqtt::shutdownPaused()) {
+        Esp32BaseMqtt::settleShutdownForMaintenance(graceMs ? graceMs : kMaximumNetworkStopGraceMs);
+    } else
+#endif
     if (graceMs > 0U) {
         delay(graceMs);
     }
@@ -181,14 +186,23 @@ bool Esp32Base::begin() {
     esp32base_internal::registerPreSleepHook(prepareForLifecycleStop);
     ESP32BASE_LOG_D("base", "module_ready name=system");
 #if ESP32BASE_ENABLE_OTA
-    esp32base_internal::registerPreOtaUploadHook([]() {
+    esp32base_internal::registerPreOtaUploadHook([]() -> bool {
         const uint16_t graceMs = notifyBeforeNetworkStop();
+#if ESP32BASE_ENABLE_MQTT
+        if (Esp32BaseMqtt::shutdownPaused()) {
+            if (!Esp32BaseMqtt::settleShutdownForMaintenance(graceMs ? graceMs : kMaximumNetworkStopGraceMs)) {
+                Esp32BaseMqtt::resumeAfterShutdown();
+                return false;
+            }
+        } else
+#endif
         if (graceMs > 0U) {
             delay(graceMs);
         }
 #if ESP32BASE_ENABLE_MQTT
         esp32base_internal::suspendMqttForOta();
 #endif
+        return true;
     });
     // Keep ESP32BASE_OTA_REQUIRE_MARK_VALID rollback timing independent from WiFi/Web readiness.
     ESP32BASE_LOG_D("base", "module_begin name=ota_boot");
@@ -348,7 +362,8 @@ void Esp32Base::handle() {
 #endif
 #if ESP32BASE_ENABLE_MQTT
 #if ESP32BASE_ENABLE_OTA
-    Esp32BaseMqtt::handle(Esp32BaseOta::isUploading());
+    Esp32BaseMqtt::handle(Esp32BaseOta::isUploading() ||
+                         Esp32BaseOta::status() == Esp32BaseOta::SUCCESS);
 #else
     Esp32BaseMqtt::handle(false);
 #endif

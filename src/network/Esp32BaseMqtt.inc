@@ -99,6 +99,14 @@ bool g_mqttOtaSuspended = false;
 bool g_mqttReconnectRequested = false;
 bool g_mqttForceReconnectAfterDisconnect = false;
 bool g_mqttConnectionWanted = true;
+bool g_mqttNativeConnected = false; // MQTT task writes under g_mqttMux.
+bool g_mqttShutdownActive = false;
+bool g_mqttShutdownAcked = false;
+bool g_mqttMaintenanceDraining = false;
+uint16_t g_mqttShutdownPacket = 0;
+uint32_t g_mqttShutdownDeadline = 0;
+uint32_t g_mqttShutdownMailboxDrops = 0;
+Esp32BaseMqtt::ShutdownResult g_mqttShutdownResult = Esp32BaseMqtt::SHUTDOWN_NONE;
 esp_mqtt_client_handle_t g_mqttClient = nullptr;
 Esp32BaseMqtt::State g_mqttState = Esp32BaseMqtt::NOT_CONFIGURED;
 Esp32BaseMqtt::Error g_mqttLastError = Esp32BaseMqtt::ERROR_NONE;
@@ -321,7 +329,7 @@ void emitApplicationEvent(Esp32BaseMqtt::EventType type,
                           uint16_t packetId = 0,
                           uint8_t subscriptionIndex = MQTT_NO_SLOT,
                           uint8_t grantedQos = 0xFF) {
-    if (!g_mqttEventCallback) {
+    if (!g_mqttEventCallback || g_mqttMaintenanceDraining) {
         return;
     }
     Esp32BaseMqtt::Event event;
@@ -507,6 +515,7 @@ void mqttEventHandler(void*, esp_event_base_t, int32_t eventId, void* eventData)
         }
         case MQTT_EVENT_CONNECTED: {
             portENTER_CRITICAL(&g_mqttMux);
+            g_mqttNativeConnected = true;
             const bool connectionWanted = g_mqttConnectionWanted;
             portEXIT_CRITICAL(&g_mqttMux);
             if (!connectionWanted) {
@@ -522,6 +531,7 @@ void mqttEventHandler(void*, esp_event_base_t, int32_t eventId, void* eventData)
             // Do not deliver commands buffered in a previous connection.
             // An application callback already running owns its slot until return.
             portENTER_CRITICAL(&g_mqttMux);
+            g_mqttNativeConnected = false;
             for (auto& slot : g_mqttIncoming) {
                 if (slot.state == INCOMING_READY || slot.state == INCOMING_ASSEMBLING) {
                     slot.state = INCOMING_EMPTY;
@@ -675,15 +685,16 @@ void destroyUnstartedMqttClient() {
     g_mqttClient = nullptr;
 }
 
-void requestNativeDisconnect() {
+esp_err_t requestNativeDisconnect() {
     portENTER_CRITICAL(&g_mqttMux);
     g_mqttConnectionWanted = false;
     portEXIT_CRITICAL(&g_mqttMux);
     if (g_mqttClient) {
         // This only sets ESP-MQTT's disconnect bit and returns. Never call
         // esp_mqtt_client_stop() from handle(): that API may wait forever.
-        esp_mqtt_client_disconnect(g_mqttClient);
+        return esp_mqtt_client_disconnect(g_mqttClient);
     }
+    return ESP_FAIL;
 }
 
 bool isConnectionWanted() {
@@ -844,6 +855,10 @@ void handleRawEvents() {
                 g_mqttDiagnostics.nativeCertificateFlags = raw.certificateFlags;
                 portEXIT_CRITICAL(&g_mqttMux);
                 g_mqttTerminalRejection = terminal;
+                if (g_mqttShutdownActive &&
+                    g_mqttShutdownResult == Esp32BaseMqtt::SHUTDOWN_IN_PROGRESS) {
+                    g_mqttShutdownResult = Esp32BaseMqtt::SHUTDOWN_CONNECTION_LOST;
+                }
                 ESP32BASE_LOG_W("mqtt",
                                 "connection_error host=%s port=%u error=%s esp=%ld tls=%ld socket=%ld cert_flags=%lu credential_set=%s",
                                 g_mqttConfig.host,
@@ -890,7 +905,14 @@ void handleRawEvents() {
                 clearInflight(true);
                 emitApplicationEvent(Esp32BaseMqtt::EVENT_DISCONNECTED,
                                      disconnectError);
-                if (g_mqttForceReconnectAfterDisconnect) {
+                if (g_mqttShutdownActive) {
+                    if (g_mqttShutdownResult == Esp32BaseMqtt::SHUTDOWN_IN_PROGRESS) {
+                        g_mqttShutdownResult = g_mqttShutdownAcked
+                            ? Esp32BaseMqtt::SHUTDOWN_SUCCESS
+                            : Esp32BaseMqtt::SHUTDOWN_CONNECTION_LOST;
+                    }
+                    setState(Esp32BaseMqtt::STOPPING);
+                } else if (g_mqttForceReconnectAfterDisconnect) {
                     g_mqttForceReconnectAfterDisconnect = false;
                     portENTER_CRITICAL(&g_mqttMux);
                     g_mqttConnectionWanted = true;
@@ -965,6 +987,14 @@ void handleRawEvents() {
                 }
                 portEXIT_CRITICAL(&g_mqttMux);
                 if (found) {
+                    if (g_mqttShutdownActive &&
+                        g_mqttShutdownResult == Esp32BaseMqtt::SHUTDOWN_IN_PROGRESS &&
+                        raw.packetId == g_mqttShutdownPacket) {
+                        g_mqttShutdownAcked = true;
+                        if (requestNativeDisconnect() != ESP_OK) {
+                            g_mqttShutdownResult = Esp32BaseMqtt::SHUTDOWN_DISCONNECT_FAILED;
+                        }
+                    }
                     emitApplicationEvent(Esp32BaseMqtt::EVENT_PUBLISH_ACKNOWLEDGED,
                                          Esp32BaseMqtt::ERROR_NONE,
                                          static_cast<uint16_t>(raw.packetId));
@@ -977,6 +1007,7 @@ void handleRawEvents() {
 
 void dispatchIncomingMessages() {
     for (uint8_t i = 0; i < ESP32BASE_MQTT_INCOMING_SLOTS; ++i) {
+        if (g_mqttShutdownActive) return;
         bool ready = false;
         portENTER_CRITICAL(&g_mqttMux);
         if (g_mqttIncoming[i].state == INCOMING_READY) {
@@ -1181,7 +1212,7 @@ Esp32BaseMqtt::PublishResult Esp32BaseMqtt::publish(const PublishRequest& reques
         result.code = PUBLISH_NOT_CONFIGURED;
         return result;
     }
-    if (g_mqttState != CONNECTED || !g_mqttClient) {
+    if (g_mqttShutdownActive || g_mqttState != CONNECTED || !g_mqttClient) {
         result.code = PUBLISH_NOT_CONNECTED;
         setLastError(ERROR_NOT_CONNECTED);
         return result;
@@ -1274,8 +1305,55 @@ Esp32BaseMqtt::PublishResult Esp32BaseMqtt::publish(const PublishRequest& reques
     return result;
 }
 
+bool Esp32BaseMqtt::beginShutdown(const PublishRequest& message, uint32_t timeoutMs) {
+    if (g_mqttShutdownActive) return false;
+    if (!timeoutMs || timeoutMs > 0x7fffffffUL || message.qos != QOS_1 ||
+        !validPublishTopic(message.topic) || (message.payloadLength && !message.payload) ||
+        message.payloadLength > ESP32BASE_MQTT_MAX_PAYLOAD_BYTES) {
+        g_mqttShutdownResult = SHUTDOWN_INVALID_REQUEST;
+        return false;
+    }
+    if (!g_mqttBegun || !g_mqttConfigured || state() != CONNECTED) {
+        g_mqttShutdownResult = SHUTDOWN_NOT_CONNECTED;
+        return false;
+    }
+    const PublishResult queued = publish(message);
+    if (!queued.accepted()) {
+        g_mqttShutdownResult = SHUTDOWN_PUBLISH_FAILED;
+        return false;
+    }
+    g_mqttShutdownActive = true;
+    g_mqttShutdownAcked = false;
+    g_mqttShutdownPacket = queued.packetId;
+    g_mqttShutdownDeadline = millis() + timeoutMs;
+    g_mqttShutdownResult = SHUTDOWN_IN_PROGRESS;
+    portENTER_CRITICAL(&g_mqttMux);
+    g_mqttReconnectRequested = false;
+    g_mqttShutdownMailboxDrops = g_mqttDiagnostics.controlEventDropped;
+    portEXIT_CRITICAL(&g_mqttMux);
+    g_mqttForceReconnectAfterDisconnect = false;
+    setState(STOPPING);
+    return true;
+}
+
+Esp32BaseMqtt::ShutdownResult Esp32BaseMqtt::shutdownResult() { return g_mqttShutdownResult; }
+bool Esp32BaseMqtt::shutdownPaused() { return g_mqttShutdownActive; }
+
+void Esp32BaseMqtt::resumeAfterShutdown() {
+    if (!g_mqttShutdownActive) return;
+    g_mqttShutdownActive = false;
+    g_mqttShutdownPacket = 0;
+    // Resume always opens a new connection cycle, never reuses a retained
+    // shutdown session. Read transport truth even if a mailbox event was lost.
+    portENTER_CRITICAL(&g_mqttMux);
+    const bool connected = g_mqttNativeConnected;
+    portEXIT_CRITICAL(&g_mqttMux);
+    setState(connected ? CONNECTED : BACKOFF);
+    requestReconnect();
+}
+
 bool Esp32BaseMqtt::requestReconnect() {
-    if (!g_mqttBegun || !g_mqttConfigured) {
+    if (g_mqttShutdownActive || !g_mqttBegun || !g_mqttConfigured) {
         return false;
     }
     portENTER_CRITICAL(&g_mqttMux);
@@ -1314,6 +1392,7 @@ void esp32base_internal::suspendMqttForOta() {
     if (!g_mqttConfigured && !g_mqttConfigurationAttempted) {
         return;
     }
+    if (g_mqttShutdownActive && g_mqttShutdownResult != Esp32BaseMqtt::SHUTDOWN_SUCCESS) return;
     if (!g_mqttOtaSuspended) {
         g_mqttOtaSuspended = true;
         g_mqttForceReconnectAfterDisconnect = false;
@@ -1330,14 +1409,35 @@ void Esp32BaseMqtt::handle(bool otaUploading) {
 
     if (otaUploading) {
         esp32base_internal::suspendMqttForOta();
+    } else if (g_mqttOtaSuspended && g_mqttShutdownActive) {
+        g_mqttOtaSuspended = false;
+        resumeAfterShutdown();
     }
 
+    if (g_mqttShutdownActive && g_mqttShutdownResult == SHUTDOWN_IN_PROGRESS) {
+        portENTER_CRITICAL(&g_mqttMux);
+        const bool lostEvent = g_mqttDiagnostics.controlEventDropped != g_mqttShutdownMailboxDrops;
+        portEXIT_CRITICAL(&g_mqttMux);
+        if (lostEvent) g_mqttShutdownResult = SHUTDOWN_DELIVERY_UNCERTAIN;
+        else if (deadlineReached(millis(), g_mqttShutdownDeadline)) {
+            g_mqttShutdownResult = g_mqttShutdownAcked
+                ? SHUTDOWN_DISCONNECT_TIMEOUT : SHUTDOWN_PUBACK_TIMEOUT;
+        }
+    }
     handleRawEvents();
-    if (!g_mqttOtaSuspended) {
+    if (!g_mqttOtaSuspended && !g_mqttShutdownActive &&
+        !g_mqttReconnectRequested && isConnectionWanted()) {
         dispatchIncomingMessages();
     }
     dispatchMailboxOverflowIfNeeded();
     dispatchIncomingDropIfNeeded();
+
+    if (g_mqttShutdownActive) {
+        // No normal DISCONNECT before a proven final PUBACK: it would suppress
+        // LWT while leaving an obsolete retained online message at the Broker.
+        setState(STOPPING);
+        return;
+    }
 
     if (!g_mqttConfigured) {
         return;
@@ -1422,7 +1522,27 @@ void Esp32BaseMqtt::handle(bool otaUploading) {
     startMqttClient();
 }
 
+bool Esp32BaseMqtt::settleShutdownForMaintenance(uint16_t maximumWaitMs) {
+    if (!g_mqttShutdownActive) return true;
+    if (maximumWaitMs > 1000) maximumWaitMs = 1000;
+    g_mqttMaintenanceDraining = true;
+    for (uint16_t waited = 0; g_mqttShutdownResult == SHUTDOWN_IN_PROGRESS &&
+                              waited < maximumWaitMs; ++waited) {
+        handle(false);
+        if (g_mqttShutdownResult == SHUTDOWN_IN_PROGRESS) delay(1);
+    }
+    g_mqttMaintenanceDraining = false;
+    if (g_mqttShutdownResult == SHUTDOWN_IN_PROGRESS) {
+        g_mqttShutdownResult = g_mqttShutdownAcked
+            ? SHUTDOWN_DISCONNECT_TIMEOUT : SHUTDOWN_PUBACK_TIMEOUT;
+    }
+    return g_mqttShutdownResult == SHUTDOWN_SUCCESS;
+}
+
 void Esp32BaseMqtt::prepareForLifecycleStop() {
+    // Forced restart/sleep still proceeds, but must not suppress LWT after
+    // failed final delivery. Successful explicit shutdown is already closed.
+    if (g_mqttShutdownActive) return;
     if (!g_mqttBegun) {
         return;
     }

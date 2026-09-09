@@ -99,7 +99,7 @@ bool Esp32BaseWiFi::powerSave() { return fakePowerSave; }
 void Esp32BaseWiFi::setPowerSave(bool value) { fakePowerSave=value; }
 bool Esp32BaseSystem::appendRestartLog(const char*) { return true; }
 void Esp32BaseSystem::restart(const char*) { assert(false); }
-void prepare() { assert(!Update.active); ++preparations; }
+bool prepare() { assert(!Update.active); ++preparations; return true; }
 void assertRestored() { assert(!paused && !storagePaused && fakePowerSave && !Update.active && watchdogDepth==0); }
 void reset() {
     Update={}; preparations=0; clockMs=0; storageAvailable=true; watchdogAllowed=true;
@@ -114,6 +114,8 @@ int main() {
     assert(!Esp32BaseOta::startUpload(4)); assert(preparations==0); assertRestored();
     reset(); watchdogAllowed=false;
     assert(!Esp32BaseOta::startUpload(4)); assert(preparations==0); assertRestored();
+    reset(); esp32base_internal::registerPreOtaUploadHook([]() { return false; });
+    assert(!Esp32BaseOta::startUpload(4)); assert(Update.starts==0); assertRestored();
     reset(); Update.allowBegin=false;
     assert(!Esp32BaseOta::startUpload(4)); assert(preparations==1); assertRestored();
     reset(); assert(Esp32BaseOta::startUpload(4));

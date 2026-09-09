@@ -64,6 +64,7 @@ static int g_fakeSubscribeCount = 0;
 static int g_fakeEnqueueResult = 0;
 static int g_fakeStopCount = 0;
 static int g_fakeDisconnectCount = 0;
+static esp_err_t g_fakeDisconnectResult = ESP_OK;
 static int g_fakeSetConfigCount = 0;
 static esp_err_t g_fakeSetConfigResult = ESP_OK;
 static char g_lastWillPayload[96] = {};
@@ -93,7 +94,7 @@ esp_err_t esp_mqtt_client_stop(esp_mqtt_client_handle_t) {
 }
 esp_err_t esp_mqtt_client_disconnect(esp_mqtt_client_handle_t) {
     ++g_fakeDisconnectCount;
-    return ESP_OK;
+    return g_fakeDisconnectResult;
 }
 esp_err_t esp_mqtt_client_reconnect(esp_mqtt_client_handle_t) { return ESP_OK; }
 esp_err_t esp_mqtt_client_destroy(esp_mqtt_client_handle_t) { return ESP_OK; }
@@ -223,6 +224,12 @@ void resetModule() {
     g_mqttReconnectRequested = false;
     g_mqttForceReconnectAfterDisconnect = false;
     g_mqttConnectionWanted = true;
+    g_mqttNativeConnected = false;
+    g_mqttShutdownActive = g_mqttShutdownAcked = g_mqttMaintenanceDraining = false;
+    g_fakeDisconnectResult = ESP_OK;
+    g_mqttShutdownPacket = 0;
+    g_mqttShutdownDeadline = g_mqttShutdownMailboxDrops = 0;
+    g_mqttShutdownResult = Esp32BaseMqtt::SHUTDOWN_NONE;
     g_mqttClient = nullptr;
     g_mqttState = Esp32BaseMqtt::NOT_CONFIGURED;
     g_mqttLastError = Esp32BaseMqtt::ERROR_NONE;
@@ -875,6 +882,123 @@ void test_terminal_rejection_survives_wifi_loss_and_recovery() {
     TEST_ASSERT_EQUAL_UINT32(1, Esp32BaseMqtt::diagnostics().connectAttempts);
 }
 
+void test_shutdown_requires_matching_ack_and_disconnect_then_explicit_resume() {
+    startAndConnect();
+    Esp32BaseMqtt::PublishRequest finalMessage;
+    finalMessage.topic = "device/availability";
+    finalMessage.payload = reinterpret_cast<const uint8_t*>("offline");
+    finalMessage.payloadLength = 7;
+    finalMessage.qos = Esp32BaseMqtt::QOS_1;
+    finalMessage.retain = true;
+    TEST_ASSERT_TRUE(Esp32BaseMqtt::beginShutdown(finalMessage, 100));
+    const int finalId = g_fakePacketId;
+    TEST_ASSERT_FALSE(Esp32BaseMqtt::beginShutdown(finalMessage, 100));
+    TEST_ASSERT_FALSE(Esp32BaseMqtt::publish(finalMessage).accepted());
+    TEST_ASSERT_FALSE(Esp32BaseMqtt::requestReconnect());
+    emitEvent(MQTT_EVENT_PUBLISHED, finalId + 1);
+    Esp32BaseMqtt::handle(false);
+    TEST_ASSERT_EQUAL(0, g_fakeDisconnectCount);
+    emitEvent(MQTT_EVENT_PUBLISHED, finalId);
+    Esp32BaseMqtt::handle(false);
+    TEST_ASSERT_EQUAL(1, g_fakeDisconnectCount);
+    TEST_ASSERT_EQUAL(Esp32BaseMqtt::SHUTDOWN_IN_PROGRESS, Esp32BaseMqtt::shutdownResult());
+    emitEvent(MQTT_EVENT_DISCONNECTED);
+    Esp32BaseMqtt::handle(false);
+    TEST_ASSERT_EQUAL(Esp32BaseMqtt::SHUTDOWN_SUCCESS, Esp32BaseMqtt::shutdownResult());
+    g_fakeMillis += 10000;
+    Esp32BaseMqtt::handle(false);
+    TEST_ASSERT_EQUAL(Esp32BaseMqtt::STOPPING, Esp32BaseMqtt::state());
+    TEST_ASSERT_EQUAL(0, g_fakeStopCount);
+    Esp32BaseMqtt::resumeAfterShutdown();
+    TEST_ASSERT_FALSE(Esp32BaseMqtt::shutdownPaused());
+    Esp32BaseMqtt::handle(false);
+    TEST_ASSERT_EQUAL(Esp32BaseMqtt::BACKOFF, Esp32BaseMqtt::state());
+}
+
+void test_shutdown_timeout_preserves_lwt_and_failure_is_not_late_success() {
+    startAndConnect();
+    Esp32BaseMqtt::PublishRequest finalMessage;
+    finalMessage.topic = "device/availability";
+    finalMessage.qos = Esp32BaseMqtt::QOS_1;
+    g_fakeMillis = UINT32_MAX - 20;
+    TEST_ASSERT_TRUE(Esp32BaseMqtt::beginShutdown(finalMessage, 100));
+    const int finalId = g_fakePacketId;
+    g_fakeMillis += 99;
+    Esp32BaseMqtt::handle(false);
+    TEST_ASSERT_EQUAL(Esp32BaseMqtt::SHUTDOWN_IN_PROGRESS, Esp32BaseMqtt::shutdownResult());
+    ++g_fakeMillis;
+    Esp32BaseMqtt::handle(false);
+    TEST_ASSERT_EQUAL(Esp32BaseMqtt::SHUTDOWN_PUBACK_TIMEOUT, Esp32BaseMqtt::shutdownResult());
+    TEST_ASSERT_EQUAL(0, g_fakeDisconnectCount);
+    emitEvent(MQTT_EVENT_PUBLISHED, finalId);
+    Esp32BaseMqtt::handle(false);
+    TEST_ASSERT_EQUAL(0, g_fakeDisconnectCount);
+    emitEvent(MQTT_EVENT_DISCONNECTED);
+    Esp32BaseMqtt::handle(false);
+    TEST_ASSERT_EQUAL(Esp32BaseMqtt::SHUTDOWN_PUBACK_TIMEOUT, Esp32BaseMqtt::shutdownResult());
+}
+
+void test_shutdown_disconnect_timeout_and_mailbox_loss_are_not_success() {
+    for (int lost = 0; lost < 2; ++lost) {
+        resetModule();
+        startAndConnect();
+        Esp32BaseMqtt::PublishRequest finalMessage;
+        finalMessage.topic = "device/availability";
+        finalMessage.qos = Esp32BaseMqtt::QOS_1;
+        TEST_ASSERT_TRUE(Esp32BaseMqtt::beginShutdown(finalMessage, 100));
+        emitEvent(MQTT_EVENT_PUBLISHED, g_fakePacketId);
+        if (lost) {
+            ++g_mqttDiagnostics.controlEventDropped;
+            emitEvent(MQTT_EVENT_DISCONNECTED);
+        }
+        Esp32BaseMqtt::handle(false);
+        g_fakeMillis += 100;
+        Esp32BaseMqtt::handle(false);
+        TEST_ASSERT_EQUAL(lost ? Esp32BaseMqtt::SHUTDOWN_DELIVERY_UNCERTAIN
+                               : Esp32BaseMqtt::SHUTDOWN_DISCONNECT_TIMEOUT,
+                          Esp32BaseMqtt::shutdownResult());
+    }
+}
+
+void test_shutdown_rejections_transport_loss_and_maintenance_failure() {
+    Esp32BaseMqtt::PublishRequest finalMessage;
+    finalMessage.topic = "device/availability";
+    finalMessage.qos = Esp32BaseMqtt::QOS_1;
+    TEST_ASSERT_FALSE(Esp32BaseMqtt::beginShutdown(finalMessage, 100));
+    TEST_ASSERT_EQUAL(Esp32BaseMqtt::SHUTDOWN_NOT_CONNECTED, Esp32BaseMqtt::shutdownResult());
+    startAndConnect();
+    TEST_ASSERT_FALSE(Esp32BaseMqtt::beginShutdown(finalMessage, 0));
+    TEST_ASSERT_EQUAL(Esp32BaseMqtt::SHUTDOWN_INVALID_REQUEST, Esp32BaseMqtt::shutdownResult());
+    g_fakeEnqueueResult = -1;
+    TEST_ASSERT_FALSE(Esp32BaseMqtt::beginShutdown(finalMessage, 100));
+    TEST_ASSERT_EQUAL(Esp32BaseMqtt::SHUTDOWN_PUBLISH_FAILED, Esp32BaseMqtt::shutdownResult());
+    TEST_ASSERT_FALSE(Esp32BaseMqtt::shutdownPaused());
+    g_fakeEnqueueResult = 0;
+    TEST_ASSERT_TRUE(Esp32BaseMqtt::beginShutdown(finalMessage, 100));
+    emitEvent(MQTT_EVENT_DISCONNECTED);
+    Esp32BaseMqtt::handle(false);
+    TEST_ASSERT_EQUAL(Esp32BaseMqtt::SHUTDOWN_CONNECTION_LOST, Esp32BaseMqtt::shutdownResult());
+    TEST_ASSERT_FALSE(Esp32BaseMqtt::settleShutdownForMaintenance(10));
+    Esp32BaseMqtt::prepareForLifecycleStop();
+    TEST_ASSERT_EQUAL(0, g_fakeDisconnectCount);
+
+    resetModule(); startAndConnect();
+    TEST_ASSERT_TRUE(Esp32BaseMqtt::beginShutdown(finalMessage, 100));
+    g_fakeDisconnectResult = ESP_FAIL;
+    emitEvent(MQTT_EVENT_PUBLISHED, g_fakePacketId);
+    Esp32BaseMqtt::handle(false);
+    TEST_ASSERT_EQUAL(Esp32BaseMqtt::SHUTDOWN_DISCONNECT_FAILED, Esp32BaseMqtt::shutdownResult());
+
+    resetModule(); startAndConnect();
+    TEST_ASSERT_TRUE(Esp32BaseMqtt::beginShutdown(finalMessage, 5000));
+    TEST_ASSERT_FALSE(Esp32BaseMqtt::settleShutdownForMaintenance(10));
+    TEST_ASSERT_EQUAL(Esp32BaseMqtt::SHUTDOWN_PUBACK_TIMEOUT, Esp32BaseMqtt::shutdownResult());
+    esp32base_internal::suspendMqttForOta();
+    Esp32BaseMqtt::prepareForLifecycleStop();
+    TEST_ASSERT_EQUAL(0, g_fakeDisconnectCount);
+    TEST_ASSERT_EQUAL(0, g_fakeStopCount);
+}
+
 void test_backoff_deadline_is_millis_wrap_safe() {
     TEST_ASSERT_TRUE(deadlineReached(3u, UINT32_MAX - 2u));
     TEST_ASSERT_FALSE(deadlineReached(UINT32_MAX - 3u, 2u));
@@ -914,6 +1038,10 @@ int main(int, char**) {
     RUN_TEST(test_reports_platform_certificate_date_check_capability);
     RUN_TEST(test_terminal_rejection_survives_wifi_loss_and_recovery);
     RUN_TEST(test_backoff_deadline_is_millis_wrap_safe);
+    RUN_TEST(test_shutdown_requires_matching_ack_and_disconnect_then_explicit_resume);
+    RUN_TEST(test_shutdown_timeout_preserves_lwt_and_failure_is_not_late_success);
+    RUN_TEST(test_shutdown_disconnect_timeout_and_mailbox_loss_are_not_success);
+    RUN_TEST(test_shutdown_rejections_transport_loss_and_maintenance_failure);
 #endif
     return UNITY_END();
 }

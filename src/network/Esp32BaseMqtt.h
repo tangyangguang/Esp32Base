@@ -80,6 +80,16 @@ public:
         PUBLISH_NO_MEMORY
     };
 
+    // SUCCESS proves the final QoS1 PUBACK and a subsequent local disconnect
+    // event, not receipt of DISCONNECT by the Broker (MQTT 3.1.1 has no such ACK).
+    enum ShutdownResult : uint8_t {
+        SHUTDOWN_NONE, SHUTDOWN_IN_PROGRESS, SHUTDOWN_SUCCESS,
+        SHUTDOWN_NOT_CONNECTED, SHUTDOWN_INVALID_REQUEST, SHUTDOWN_PUBLISH_FAILED,
+        SHUTDOWN_CONNECTION_LOST, SHUTDOWN_PUBACK_TIMEOUT,
+        SHUTDOWN_DISCONNECT_FAILED, SHUTDOWN_DISCONNECT_TIMEOUT,
+        SHUTDOWN_DELIVERY_UNCERTAIN
+    };
+
     struct TlsCredentials {
         const char* caCertificatePem = nullptr;
         size_t caCertificateLength = 0;
@@ -201,6 +211,14 @@ public:
     static void setEventCallback(EventCallback callback, void* context = nullptr);
     static PublishResult publish(const PublishRequest& request);
     static bool requestReconnect();
+    // Same loop/system task as handle(). Copies a final QoS1 message into the
+    // existing outbox; retain/topic/payload semantics remain application-owned.
+    // true means queued, not completed. No new publish/input/reconnect until
+    // explicit resume. A timeout before PUBACK never sends a normal DISCONNECT.
+    static bool beginShutdown(const PublishRequest& finalMessage, uint32_t timeoutMs = 5000);
+    static ShutdownResult shutdownResult();
+    static bool shutdownPaused();
+    static void resumeAfterShutdown();
 
     static State state();
     static Status status();
@@ -212,5 +230,6 @@ private:
     friend class Esp32Base;
     static bool begin();
     static void handle(bool otaUploading);
+    static bool settleShutdownForMaintenance(uint16_t maximumWaitMs);
     static void prepareForLifecycleStop();
 };
