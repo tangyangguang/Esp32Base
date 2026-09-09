@@ -243,3 +243,9 @@ python path/to/Esp32Base/scripts/esp32base_serial_recover_ota.py \
 RecordStore 的普通历史轮转与可靠消费保留机制、当前容器格式及升级边界，见 [记录存储 API](docs/03_api.md#35-esp32baserecordstore)。
 
 保护模式轮转保留最后完整事实，替代段提交后才回收旧段；所需临时Flash余量及失败后重载规则见 [Record Store](docs/12_record_store.md#保护模式轮转的最后完整事实)。
+
+### 应用维护安全回调
+
+应用在开始运行前注册 `Esp32BaseOta::setUploadGuard(bool (*)(void*), context)` 和 `Esp32BaseStorage::setFormatGuard(bool (*)(void*), context)`，可在活动中拒绝 OTA 或格式化。拒绝发生在资源准备、Flash 写入、格式化和重载前；OTA 报 application rejected，Storage 报 `ApplicationBusy`，无自动重试或强制绕过。回调及 context 必须保持有效，同一 loop/task 串行调用，不得重入维护或执行长流程；传 nullptr 清除。未注册时保留原有行为。Base 不判断活动的业务含义。
+
+`Esp32Base::setBeforeLifecycleStopCallback(void (*)(void*), context)` 在统一 restart/deep sleep 的网络等待、存储检查点前调用；应用先关闭执行输出，可随后收尾事实。此回调不能否决强制停止，不得再次请求重启/休眠。不适用于崩溃、掉电或直接绕过 Base 的底层 restart。回调自身不产生 Flash 写入，安全关闭不应依赖网络成功。

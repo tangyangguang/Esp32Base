@@ -148,3 +148,5 @@ const bool registered = Esp32BaseStorage::registerRecordStore(wateringStore);
 轮转过程中逻辑占用可短暂超过maximumStoreBytes，需要额外容纳一个32字节段头和一个记录槽；文件系统仍须满足minimumFileSystemFreeBytes，并另行规划LittleFS块分配/写时复制余量。空间不足时拒绝写入并保留旧事实，不降低安全余量。若异常段已占满40段运行时上限，拒绝新增段并报告TooManySegments，不扩展常驻元数据，也不牺牲最后事实。缩小预算时同样不会自动删除最后完整事实，可能保持超预算并报告RecordsProtected。
 
 新段提交之后清理或检查点仍可能失败，此时append返回false和CleanupFailed/WriteFault，但新记录可能已持久化。调用方必须reload并读取实际尾记录判断结果，不能盲目重试同一外部序号。重载可识别已提交的新段并在释放检查点允许时完成清理；临时段不视为已提交记录。此保证依赖文件系统既有rename及掉电恢复语义，不代表真实断电或介质故障已通过验收。
+
+应用需要在活动期间拒绝维护时，使用 [API 中的应用维护安全回调](03_api.md#应用维护安全回调)。拒绝判断在实际写入或格式化前执行；Base 不判断业务状态。

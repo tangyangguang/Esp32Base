@@ -29,6 +29,7 @@ public:
         RecordBudgetExceeded,
         PartitionBudgetExceeded,
         MaintenanceBusy,
+        ApplicationBusy,
         FormatFailed,
         MountFailed,
         ComponentReloadFailed,
@@ -75,6 +76,10 @@ public:
     static Esp32BaseRecordStore* recordStoreAt(uint8_t index);
     static bool clearRecordStores(ClearResult& result);
 #endif
+    // Optional veto before format/flush/reload. Called on the same loop task;
+    // must not reenter storage maintenance. nullptr clears; context stays valid.
+    using FormatGuard = bool (*)(void* context);
+    static void setFormatGuard(FormatGuard guard, void* context = nullptr);
     static bool formatAndReload(FormatResult& result);
     static bool setOtaWriteSuspended(bool suspended);
     static bool isManagedPath(const char* path);

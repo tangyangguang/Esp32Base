@@ -74,6 +74,11 @@ class Esp32Base {
 public:
     typedef uint16_t (*BeforeNetworkStopCallback)(void* context);
 
+    // Same loop task, before network waits. Must close application outputs;
+    // cannot veto a restart/sleep and must not recursively request lifecycle stop.
+    using BeforeLifecycleStopCallback = void (*)(void* context);
+    static void setBeforeLifecycleStopCallback(BeforeLifecycleStopCallback callback,
+                                               void* context = nullptr);
     static bool begin();
     static void handle();
 

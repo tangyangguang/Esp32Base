@@ -26,6 +26,10 @@ public:
     static bool isUploading();
     static Status status();
 
+    // Optional application veto before any flash/network preparation. No reentry.
+    // Register before use; callback/context remain valid until replaced. nullptr clears.
+    using UploadGuard = bool (*)(void* context);
+    static void setUploadGuard(UploadGuard guard, void* context = nullptr);
     static bool startUpload(size_t totalSize, const char* expectedSha256Hex = nullptr);
     static bool writeChunk(const uint8_t* data, size_t len);
     static bool finishUpload();

@@ -16,6 +16,8 @@
 #include <string.h>
 
 namespace {
+Esp32BaseStorage::FormatGuard g_formatGuard = nullptr;
+void* g_formatGuardContext = nullptr;
 
 Esp32BaseStorage::StorageState g_storageState = Esp32BaseStorage::StorageState::Unavailable;
 Esp32BaseStorage::StorageError g_storageError = Esp32BaseStorage::StorageError::None;
@@ -252,8 +254,17 @@ bool Esp32BaseStorage::clearRecordStores(ClearResult& result) {
 }
 #endif
 
+void Esp32BaseStorage::setFormatGuard(FormatGuard guard, void* context) {
+    g_formatGuard = guard;
+    g_formatGuardContext = context;
+}
+
 bool Esp32BaseStorage::formatAndReload(FormatResult& result) {
     result = FormatResult();
+    if (g_formatGuard && !g_formatGuard(g_formatGuardContext)) {
+        setStorageError(StorageError::ApplicationBusy);
+        return false;
+    }
 #if ESP32BASE_ENABLE_RECORD_STORE
     result.recordStoreCount = g_recordStoreCount;
 #endif
@@ -447,6 +458,7 @@ const char* Esp32BaseStorage::storageErrorName(StorageError value) {
         case StorageError::RecordBudgetExceeded: return "record_budget_exceeded";
         case StorageError::PartitionBudgetExceeded: return "partition_budget_exceeded";
         case StorageError::MaintenanceBusy: return "maintenance_busy";
+        case StorageError::ApplicationBusy: return "application_busy";
         case StorageError::FormatFailed: return "format_failed";
         case StorageError::MountFailed: return "mount_failed";
         case StorageError::ComponentReloadFailed: return "component_reload_failed";

@@ -36,6 +36,8 @@
 #include <string.h>
 
 namespace {
+Esp32BaseOta::UploadGuard g_otaUploadGuard = nullptr;
+void* g_otaUploadGuardContext = nullptr;
 esp32base_internal::PreOtaUploadHook g_otaPreUploadHook = nullptr;
 bool g_otaReady = false;
 uint32_t g_otaLastProgressMs = 0;
@@ -569,9 +571,19 @@ Esp32BaseOta::Status Esp32BaseOta::status() {
     return g_otaStatus;
 }
 
+void Esp32BaseOta::setUploadGuard(UploadGuard guard, void* context) {
+    g_otaUploadGuard = guard;
+    g_otaUploadGuardContext = context;
+}
+
 bool Esp32BaseOta::startUpload(size_t totalSize, const char* expectedSha256Hex) {
     if (isUploading()) {
         setError("ota already in progress");
+        return false;
+    }
+    if (g_otaUploadGuard && !g_otaUploadGuard(g_otaUploadGuardContext)) {
+        setError("application rejected ota while busy");
+        g_otaStatus = FAILED;
         return false;
     }
     setOtaStage("begin");

@@ -240,3 +240,7 @@ native_mqtt_harness 21 项通过，新增定向覆盖 0/1/2、拒绝、空指针
 隔离Core2的native_mqtt_harness 25项和secure_default 1项通过；覆盖匹配/错误PUBACK、重复退出、发布/重连门控、毫秒回绕、PUBACK及断开超时、邮箱丢失、掉线、入队和断开请求失败、维护失败不抑制LWT及显式恢复。生产OTA主机脚本新增前置准备拒绝后不调用Update.begin且恢复资源，原有上传失败/回滚测试通过；两个既有桩裁剪warning仍存在，不影响固件构建。架构/安全边界检查通过。主用LOCAL增量构建RAM57060B、Flash984037B，最终ELF不含Esp32BaseMqtt/esp_mqtt_client_/mqtt_task符号，保持无MQTT独立能力。
 
 消费端SDK的ESP32/Core2示例构建通过：RAM64564B、Flash1159581B；这是包含SDK/只读示例的总静态占用，不是Base独占成本或TLS运行峰值。SDK原生测试直接使用本库生产MQTT实现及假的底层事件；ESP-MQTT网络、真实Broker最终消息/LWT顺序、OTA实机和其他Core/芯片仍待后续集中验证。MQTT3.1.1无DISCONNECT ACK，当前成功结果不证明Broker收到DISCONNECT，也不证明平台落库。日志在本机忽略的.cache/shutdown-*。
+
+### 应用维护安全回调（2026-09-10）
+
+新增 OTA 上传、格式化前置门禁和统一 restart/deep sleep 最先执行的应用关闭回调。原生 Record Store harness 36/36 通过，覆盖拒绝格式化时文件无修改、明确允许后正常格式化；架构及安全边界检查通过。ESP32/Core 3.3.8 受控 TLS 灌溉消费端完成编译和 ELF 链接，随后因应用固件超出其 1.5 MiB OTA 槽而被资源检查拒绝，不能作为应用构建通过。OTA 门禁和生命周期调用顺序已代码评审；未执行设备上传、格式化、重启或物理输出测试，不外推其他芯片/Core。

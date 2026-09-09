@@ -39,6 +39,7 @@ bool g_fsMaintenance = false;
 bool g_fsWritesSuspended = false;
 
 void resetHarness() {
+    Esp32BaseStorage::setFormatGuard(nullptr);
     g_files.clear();
     g_directories.clear();
     g_directories.insert("/");
@@ -1198,11 +1199,34 @@ void test_previous_container_is_rejected_without_rewriting_files() {
     TEST_ASSERT_TRUE(g_files == files);
 }
 
+void test_format_guard_rejects_before_storage_mutation() {
+    const auto previousState = g_storageState;
+    Esp32BaseRecordStore store;
+    TEST_ASSERT_TRUE(store.begin(definition("guard", 1, 4096)));
+    appendRecords(store, 1, 1);
+    const auto files = g_files;
+    bool idle = false;
+    Esp32BaseStorage::setFormatGuard([](void* p) { return *static_cast<bool*>(p); }, &idle);
+    Esp32BaseStorage::FormatResult result;
+    TEST_ASSERT_FALSE(Esp32BaseStorage::formatAndReload(result));
+    TEST_ASSERT_FALSE(result.formatSuccess);
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(Esp32BaseStorage::StorageError::ApplicationBusy),
+                          static_cast<int>(Esp32BaseStorage::lastError()));
+    TEST_ASSERT_TRUE(files == g_files);
+    idle = true;
+    TEST_ASSERT_TRUE(Esp32BaseStorage::formatAndReload(result));
+    TEST_ASSERT_TRUE(result.formatSuccess);
+    TEST_ASSERT_TRUE(files != g_files);
+    Esp32BaseStorage::setFormatGuard(nullptr);
+    g_storageState = previousState;
+}
+
 int main(int argc, char** argv) {
     UNITY_BEGIN();
     RUN_TEST(test_protected_last_fact_survives_segment_limit_and_budget_shrink);
     RUN_TEST(test_protected_minimum_store_recovers_every_replacement_write_cut);
     RUN_TEST(test_protected_rotation_keeps_last_fact_until_replacement_commits);
+    RUN_TEST(test_format_guard_rejects_before_storage_mutation);
     RUN_TEST(test_previous_container_is_rejected_without_rewriting_files);
     RUN_TEST(test_rotation_failure_does_not_reuse_ids_and_checkpoint_tail_can_recover);
     RUN_TEST(test_store_status_reads_one_fresh_capacity_snapshot_and_handles_failure);

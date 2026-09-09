@@ -1731,3 +1731,24 @@ Health tick 日志策略：
 `Esp32BaseConfig::clearSystemConfig()` 仅清除 `eb_sys/hostname`，保留启动计数等同 namespace 的其他字段。只有持久删除成功或确认键不存在后才取消对应 deferred 写；NVS 查询、打开或删除失败返回 false，保留原待写值供后续重试，不将失败清理当作成功。
 
 `Esp32BaseMdns::begin()` 首次立即尝试；SDK初始化失败后至少间隔5秒再尝试，等待期间返回false且不重复初始化或输出失败日志。成功后的重复调用不再初始化，`stop()` 清除重试等待。facade仅在begin成功后注册HTTP服务；这不保证SDK单次初始化调用的执行时长。
+
+### 应用维护安全回调
+
+应用在开始运行前注册 `Esp32BaseOta::setUploadGuard(bool (*)(void*), context)` 和 `Esp32BaseStorage::setFormatGuard(bool (*)(void*), context)`，可在活动中拒绝 OTA 或格式化。拒绝发生在资源准备、Flash 写入、格式化和重载前；OTA 报 application rejected，Storage 报 `ApplicationBusy`，无自动重试或强制绕过。回调及 context 必须保持有效，同一 loop/task 串行调用，不得重入维护或执行长流程；传 nullptr 清除。未注册时保留原有行为。Base 不判断活动的业务含义。
+
+`Esp32Base::setBeforeLifecycleStopCallback(void (*)(void*), context)` 在统一 restart/deep sleep 的网络等待、存储检查点前调用；应用先关闭执行输出，可随后收尾事实。此回调不能否决强制停止，不得再次请求重启/休眠。不适用于崩溃、掉电或直接绕过 Base 的底层 restart。回调自身不产生 Flash 写入，安全关闭不应依赖网络成功。
+
+```cpp
+// 在 Base::begin() 前注册；业务状态及输出操作由应用提供。
+Esp32BaseOta::setUploadGuard([](void* context) {
+    return !static_cast<MyApplication*>(context)->isActive();
+}, &application);
+Esp32BaseStorage::setFormatGuard([](void* context) {
+    return !static_cast<MyApplication*>(context)->isActive();
+}, &application);
+Esp32Base::setBeforeLifecycleStopCallback([](void* context) {
+    static_cast<MyApplication*>(context)->closeAllOutputs();
+}, &application);
+```
+
+应用同时阻止维护期间开始新工作；前置门禁不替应用提供业务互斥锁。上述示意类型 `MyApplication` 由设备实现，不属于 Base API。

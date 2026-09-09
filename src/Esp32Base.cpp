@@ -29,6 +29,8 @@ char g_firmwareBuild[33] = "";
 char g_defaultHostname[33] = "esp32base";
 char g_hostname[33] = "esp32base";
 char g_lastError[96] = "";
+Esp32Base::BeforeLifecycleStopCallback g_beforeLifecycleStopCallback = nullptr;
+void* g_beforeLifecycleStopContext = nullptr;
 Esp32Base::BeforeNetworkStopCallback g_beforeNetworkStopCallback = nullptr;
 void* g_beforeNetworkStopContext = nullptr;
 constexpr uint16_t kMaximumNetworkStopGraceMs = 1000U;
@@ -131,7 +133,14 @@ uint16_t Esp32Base::notifyBeforeNetworkStop() {
                : requested;
 }
 
+void Esp32Base::setBeforeLifecycleStopCallback(BeforeLifecycleStopCallback callback,
+                                                void* context) {
+    g_beforeLifecycleStopCallback = callback;
+    g_beforeLifecycleStopContext = context;
+}
+
 void Esp32Base::prepareForLifecycleStop() {
+    if (g_beforeLifecycleStopCallback) g_beforeLifecycleStopCallback(g_beforeLifecycleStopContext);
     const uint16_t graceMs = notifyBeforeNetworkStop();
 #if ESP32BASE_ENABLE_MQTT
     if (Esp32BaseMqtt::shutdownPaused()) {
