@@ -18,7 +18,14 @@ endif()
 list(REMOVE_ITEM lfs_sources "${lfs_original}")
 set_property(TARGET __idf_joltwallet__littlefs PROPERTY SOURCES "${lfs_sources}")
 target_sources(__idf_joltwallet__littlefs PRIVATE "${lfs_patched}")
-set_source_files_properties("${lfs_patched}" PROPERTIES COMPILE_FLAGS "-DLFS_CONFIG=lfs_config.h")
+get_source_file_property(lfs_compile_flags "${lfs_original}"
+    DIRECTORY "${lfs_component}" COMPILE_FLAGS)
+if(NOT lfs_compile_flags MATCHES "LFS_CONFIG=lfs_config.h")
+    message(FATAL_ERROR "LittleFS component configuration flags changed")
+endif()
+set_source_files_properties("${lfs_patched}"
+    TARGET_DIRECTORY __idf_joltwallet__littlefs
+    PROPERTIES COMPILE_FLAGS "${lfs_compile_flags}")
 target_include_directories(__idf_joltwallet__littlefs PRIVATE "${lfs_component}/src/littlefs")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_LIST_DIR}/patch_littlefs_mount.py" "${lfs_original}")

@@ -184,6 +184,11 @@ def audit(target: str) -> None:
 
 def audit_binary(target: str) -> None:
     output = BUILDER / "out/tools/esp32-arduino-libs" / target
+    commands = json.loads((BUILDER / "build/compile_commands.json").read_text())
+    mount_commands = [item["command"] for item in commands
+                      if item["file"].endswith("/esp32base-littlefs/lfs.c")]
+    if len(mount_commands) != 1 or "-DLFS_CONFIG=lfs_config.h" not in mount_commands[0]:
+        raise RuntimeError("LittleFS replacement lost the component config header")
     # The exported archive must originate from the checked generated source.
     # Debug source paths survive in the static archive before application linking.
     archive = output / "lib/libjoltwallet__littlefs.a"

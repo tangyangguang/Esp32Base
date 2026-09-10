@@ -84,7 +84,7 @@ MQTT 示例不再默认开启 `ESP32BASE_MQTT_ALLOW_UNCHECKED_CERTIFICATE_DATES`
 
 ## 本机固定交付位置
 
-当前含 LittleFS 挂载校验的产物固定在 `local_private/toolchains/esp32-core-3.3.8-tls-0e4b297afd7a090d/`。构建凭据 `esp32base-build.json` 的 SHA256 为 `0e4b297afd7a090d5d1ec073ac93a2e17d63733693dd798f7097fb663a7832a7`；复制前后核对来源锁、构建脚本哈希及全部 3,795 个文件哈希。应用可将 `file://` 路径指向该固定目录。目录不纳入源码 Git 或基础库发布包，清理缓存不得连带清理固定产物。
+当前含 LittleFS 挂载校验的产物固定在 `local_private/toolchains/esp32-core-3.3.8-tls-fd6058a00d6b06aa/`。构建凭据 `esp32base-build.json` 的 SHA256 为 `fd6058a00d6b06aa3cb4cf66edbdc9e211f1c982d1dc086d8181de4a1f864d78`；复制前后核对来源锁、构建脚本哈希及全部 3,795 个文件哈希。应用可将 `file://` 路径指向该固定目录。目录不纳入源码 Git 或基础库发布包，清理缓存不得连带清理固定产物。
 
 之前的 `9033b58a578a5b78` 产物已有日期校验和 MQTT core0，但没有本次角色/传输裁剪；更早 `6da95a99041ac119` 只有日期校验。旧固定产物仅用于复现对应历史提交，不代表当前推荐依赖，也不构成运行期兼容分支。
 
@@ -100,3 +100,5 @@ MQTT 示例不再默认开启 `ESP32BASE_MQTT_ALLOW_UNCHECKED_CERTIFICATE_DATES`
 定向检查：`python3 scripts/test_littlefs_mount.py`。该检查编译真实依赖源码，覆盖正常文件读写后重新挂载、全空白/全零分区、缺少超级块（自动及固定块数量）、超级块声明零/一个块，检查失败挂载无写入；并以未修复源码确认缺少超级块用例确实触发 UBSan 除零。测试使用合成内容，不提交设备分区或凭据。它不代表新产物已刷入设备，也不覆盖其他 Core/芯片或任意损坏形态。
 
 本次 ESP32 受控库构建、配置/组件锁/二进制审计和固定包 3,795 个文件哈希核对通过；原始故障分区在修复版主机测试中返回 `LFS_ERR_CORRUPT`，未再发生 UBSan 除零。当前设备未刷入此修复。
+
+CMake 定向用例另验证生成源码继承子目录组件的 `LFS_CONFIG=lfs_config.h`；产物审计核对真实编译命令，防止退回上游默认日志、分配器或断言配置。本次增量重新编译完整 LittleFS 组件，使用与导出包完全一致的 SDK 配置；未替换单个函数，最终包重新完成审计及哈希核对。
