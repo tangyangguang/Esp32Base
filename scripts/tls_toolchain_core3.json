@@ -60,5 +60,9 @@
       "CONFIG_MQTT_TRANSPORT_WEBSOCKET_SECURE": "n",
       "CONFIG_ESP_HTTPS_SERVER_ENABLE": "n"
     }
+  },
+  "source_patch_sha256": {
+    "scripts/patch_littlefs_mount.py": "9615f16331196420031fb2a3c989b43187651dfcde778c2bc674a2d6691d8db7",
+    "scripts/littlefs_mount_guard.cmake": "e9920b54a90bda2a9aae107c6314268c2d2ad4f003c68e574efe378de3683484"
   }
 }

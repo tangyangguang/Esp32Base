@@ -21,7 +21,7 @@ Arduino Core 3.3.8 的官方预编译库未开启证书有效期校验。受控�
 
 配置变化由来源锁明确列出：所有目标开启日期校验；ESP32 另外固定 MQTT task 在 Core 0，选择 `CONFIG_MBEDTLS_TLS_CLIENT_ONLY=y`，关闭 TLS 服务端及其 session tickets、原生 HTTPS 服务端，以及 MQTT WebSocket/WSS。Base 提供的出站 TCP/TLS、客户端双向认证和本地 HTTP Web/OTA 均保留；没有 TLS 服务端或 WebSocket 的 Base 公开接口。直接调用上游 HTTPS-server/WebSocket API 的其他应用不能使用此受控包来代替完整上游包。S3/C3 暂不添加这些目标配置。
 
-没有调整算法、CA/hostname/date 验证、TLS 协议、客户端 session tickets、网络缓冲、任务栈、优先级或重连；未列出的有效配置变化和组件锁漂移会使审计失败。Kconfig 关闭父功能时，部分从属布尔项会从 `not set` 变为省略；审计把两者同视为 false，任何启用或参数值变化仍精确比较。源码只允许工具明确生成的配置补充和下面的构建依赖调整。
+没有调整算法、CA/hostname/date 验证、TLS 协议、客户端 session tickets、网络缓冲、任务栈、优先级或重连；未列出的有效配置变化和组件锁漂移会使审计失败。Kconfig 关闭父功能时，部分从属布尔项会从 `not set` 变为省略；审计把两者同视为 false，任何启用或参数值变化仍精确比较。源码只允许工具明确生成的配置补充、下面的构建依赖调整及 LittleFS 挂载校验补丁。
 
 ESP32 的此项配置作用于使用该 SDK 的所有原生 MQTT task，保留优先级5与基础库默认栈预算；Arduino 默认 loop 位于 Core1，从而避免 TLS 握手因继承高优先级连续占用业务所在核。它不搬移调用方的 loop/system task：应用自建服务任务需要自行选择合适的核，不应再把服务任务集中到Core0后仍期待相同隔离效果。SDK锁等待、Web尾延迟和TLS/Web并发内存峰值仍存在，不提供硬实时保证；Core0上的其他计算负载需纳入产品验收。LOCAL不会因这一构建配置启动MQTT，基础库也未新增后台任务、任务名称拦截或平台依赖。单核C3没有另一个核可以隔离，不能外推该收益。
 
@@ -84,8 +84,19 @@ MQTT 示例不再默认开启 `ESP32BASE_MQTT_ALLOW_UNCHECKED_CERTIFICATE_DATES`
 
 ## 本机固定交付位置
 
-当前客户端资源优化产物固定在 `local_private/toolchains/esp32-core-3.3.8-tls-a33c13b24f5db543/`。构建凭据 `esp32base-build.json` 的 SHA256 为 `a33c13b24f5db5430246ddd5272c1385f537f71a0da6d0694d140591884d38b7`；复制前后核对来源锁、构建脚本哈希及全部 3,795 个文件哈希。应用可将 `file://` 路径指向该固定目录。目录不纳入源码 Git 或基础库发布包，清理缓存不得连带清理固定产物。
+当前含 LittleFS 挂载校验的产物固定在 `local_private/toolchains/esp32-core-3.3.8-tls-0e4b297afd7a090d/`。构建凭据 `esp32base-build.json` 的 SHA256 为 `0e4b297afd7a090d5d1ec073ac93a2e17d63733693dd798f7097fb663a7832a7`；复制前后核对来源锁、构建脚本哈希及全部 3,795 个文件哈希。应用可将 `file://` 路径指向该固定目录。目录不纳入源码 Git 或基础库发布包，清理缓存不得连带清理固定产物。
 
 之前的 `9033b58a578a5b78` 产物已有日期校验和 MQTT core0，但没有本次角色/传输裁剪；更早 `6da95a99041ac119` 只有日期校验。旧固定产物仅用于复现对应历史提交，不代表当前推荐依赖，也不构成运行期兼容分支。
 
 这是本机可复用的固定产物，不是远端发布地址；迁移机器时连同 `esp32base-build.json` 完整保存并重新核对哈希。团队或公开分发仍需确定保存位置与发布授权。
+
+
+## LittleFS 挂载校验补丁
+
+受控工具链的 `joltwallet/littlefs 1.20.4` 在自动检测块数量时，若目录扫描未找到有效超级块，会以零块数量进入分配器并除零。该故障已由灌溉实验板分区镜像及合成的 CRC 有效、缺少超级块目录在主机上复现；全空白分区会走正常损坏错误路径，并非所有未初始化分区都会触发崩溃。
+
+`scripts/patch_littlefs_mount.py` 按原始 `lfs.c` SHA256 生成源码副本，在挂载扫描完成后检查根目录与至少两个块，不满足即返回 `LFS_ERR_CORRUPT` 并释放挂载资源。不改变磁盘格式、不自动格式化、不写入失败分区。`scripts/littlefs_mount_guard.cmake` 让原组件使用该副本编译，保留原组件配置及其余源码，不改 managed components 或组件锁；来源锁同时记录补丁脚本和 CMake 文件哈希，未知版本拒绝应用。
+
+定向检查：`python3 scripts/test_littlefs_mount.py`。该检查编译真实依赖源码，覆盖正常文件读写后重新挂载、全空白/全零分区、缺少超级块（自动及固定块数量）、超级块声明零/一个块，检查失败挂载无写入；并以未修复源码确认缺少超级块用例确实触发 UBSan 除零。测试使用合成内容，不提交设备分区或凭据。它不代表新产物已刷入设备，也不覆盖其他 Core/芯片或任意损坏形态。
+
+本次 ESP32 受控库构建、配置/组件锁/二进制审计和固定包 3,795 个文件哈希核对通过；原始故障分区在修复版主机测试中返回 `LFS_ERR_CORRUPT`，未再发生 UBSan 除零。当前设备未刷入此修复。

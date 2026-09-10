@@ -74,6 +74,17 @@ def builder_cmake(original: bytes) -> bytes:
     return (head + tail.replace('\tDEPENDS ${elf}', '\tDEPENDS ${esp32base_mem_variant_dependency}', 1)).encode()
 
 
+def guarded_builder_cmake(original: bytes) -> bytes:
+    include = f'\ninclude("{ROOT / "scripts/littlefs_mount_guard.cmake"}")\n'
+    return builder_cmake(original) + include.encode()
+
+
+def verify_mount_patch() -> None:
+    for name, expected in LOCK["source_patch_sha256"].items():
+        if hashlib.sha256((ROOT / name).read_bytes()).hexdigest() != expected:
+            raise RuntimeError(f"Mount patch hash mismatch: {name}")
+
+
 def verify_baseline(target: str) -> None:
     package = json.loads((BASELINE / "package.json").read_text())
     if package["version"] != LOCK["framework_libraries"]:
@@ -111,7 +122,7 @@ def verify_source(relative: str, commit: str) -> None:
             if (path / name).read_bytes() not in (original_target, original_target + target_config_addition(target)):
                 raise RuntimeError(f"Unexpected builder target configuration edits: {target}")
         original_cmake = subprocess.check_output(["git", "show", "HEAD:CMakeLists.txt"], cwd=path)
-        if (path / "CMakeLists.txt").read_bytes() not in (original_cmake, builder_cmake(original_cmake)):
+        if (path / "CMakeLists.txt").read_bytes() not in (original_cmake, builder_cmake(original_cmake), guarded_builder_cmake(original_cmake)):
             raise RuntimeError("Unexpected builder CMake edits")
 
 
@@ -173,6 +184,11 @@ def audit(target: str) -> None:
 
 def audit_binary(target: str) -> None:
     output = BUILDER / "out/tools/esp32-arduino-libs" / target
+    # The exported archive must originate from the checked generated source.
+    # Debug source paths survive in the static archive before application linking.
+    archive = output / "lib/libjoltwallet__littlefs.a"
+    if b"esp32base-littlefs/lfs.c" not in archive.read_bytes():
+        raise RuntimeError("Exported LittleFS library lacks the checked mount source")
     nm_name = "riscv32-esp-elf-nm" if target == "esp32c3" else f"xtensa-{target}-elf-nm"
     candidates = list((CACHE / "idf-tools/tools").glob(f"*/*/*/bin/{nm_name}"))
     if len(candidates) != 1:
@@ -244,6 +260,7 @@ def main() -> int:
     parser.add_argument("action", choices=("prepare", "build", "audit", "package"))
     parser.add_argument("--target", choices=tuple(LOCK["baseline_sha256"]), default="esp32")
     args = parser.parse_args()
+    verify_mount_patch()
     verify_baseline(args.target)
     CACHE.mkdir(parents=True, exist_ok=True)
     # All targets share upstream build/out. A second invocation must not erase
@@ -287,7 +304,7 @@ def main() -> int:
         original_target = subprocess.check_output(["git", "show", f"HEAD:{name}"], cwd=BUILDER)
         (BUILDER / name).write_bytes(original_target + target_config_addition(target))
     original_cmake = subprocess.check_output(["git", "show", "HEAD:CMakeLists.txt"], cwd=BUILDER)
-    (BUILDER / "CMakeLists.txt").write_bytes(builder_cmake(original_cmake))
+    (BUILDER / "CMakeLists.txt").write_bytes(guarded_builder_cmake(original_cmake))
     shutil.copyfile(BASELINE / args.target / "dependencies.lock", BUILDER / "dependencies.lock")
     environment["ESP32BASE_TLS_TARGET"] = args.target
     # -s is essential: upstream's default installer pulls moving branches.
