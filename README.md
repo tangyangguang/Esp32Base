@@ -261,3 +261,5 @@ RecordStore 的普通历史轮转与可靠消费保留机制、当前容器格�
 WiFi 累计 STA 连接尝试可通过 `Esp32BaseWiFi::attemptCount()` 读取，仅统计本次启动实际发起的连接，成功后不清零；区别于连续失败周期的 `retryCount()`。
 
 维护退出等待修复（2026-09-10）：受控 MQTT 退出与 callback 宽限上限调整为 3000 ms，覆盖 ESP-MQTT 原生 1000 ms 接收轮询后的异步断开事件；不减少 PUBACK、断开事件或失败保护。`python3 scripts/pio_arduino.py 2 test -e native_mqtt_harness` 26 项通过，新增 1100 ms 断开延迟成功用例，并保留超时/邮箱丢失拒绝路径。灌溉 Core 3 完整 TLS 目标构建通过；修复版实际 OTA 尚待验证。
+
+App Config 可通过 `setApplyStatusCallback()` 提供只读的已应用/待应用/应用失败状态，参数页将其与 NVS 保存结果分别显示。它不提供跨 key 事务、不撤销成功写入，也不解释应用硬件；详见 API 文档。灌溉执行任务与服务任务分离遵守现有并发边界，Base 未增加公共任务或队列框架。

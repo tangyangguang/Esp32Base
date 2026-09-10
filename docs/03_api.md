@@ -1485,6 +1485,7 @@ ESP32BASE_APP_CONFIG_MAX_FIELDS
 - `PageValidateCallback`：页面级跨字段校验，也是整页保存前 veto hook；回调中可用 `submittedString()`、`submittedInt()`、`submittedDecimal()`、`submittedBool()`、`submittedEnum()` 读取本次 POST 值；string buffer 至少应为 `STRING_MAX_LENGTH + 1`，enum buffer 至少应为 `ENUM_VALUE_MAX_LENGTH + 1`，buffer 过小时会返回 false。
 - `ChangeCallback`：字段成功保存后调用，包含旧值和新值；其中 `text` 指针只在回调期间有效。
 - `SaveCallback`：整次保存结束后调用，提供 changed/saved/failed 统计和是否涉及重启后生效字段；`SaveCallback` 是保存后通知，不用于拒绝保存。
+- `setApplyStatusCallback(ApplyStatusCallback)`：可选的只读应用状态查询，返回 `ApplyStatus::Applied/Pending/Failed`。参数页 GET 在同一服务任务查询并独立显示应用状态，避免把 NVS 写成功当作设备已生效；回调不能阻塞或修改状态，不改变逐 key 保存/partial 语义，不回滚已保存值。回调保持固件生命周期有效，传 nullptr 清除。已有无回调应用行为不变。
 
 保存语义：
 

@@ -54,6 +54,10 @@ public:
     using PageValidateCallback = bool (*)(char* error, size_t errorLen);
     using ChangeCallback = void (*)(const Change& change);
     using SaveCallback = void (*)(const SaveSummary& summary);
+    enum class ApplyStatus : uint8_t { Applied, Pending, Failed };
+    // Read-only live application status, queried by the page after persistence.
+    // Does not veto or roll back NVS writes. Same service-task context as Web.
+    using ApplyStatusCallback = ApplyStatus (*)();
 
     // Registration strings and EnumOption arrays are referenced, not copied.
     // Keep every const char* passed to addGroup/add* alive for the firmware lifetime
@@ -140,6 +144,7 @@ public:
     static bool setPageValidateCallback(PageValidateCallback callback);
     static bool setChangeCallback(ChangeCallback callback);
     static bool setSaveCallback(SaveCallback callback);
+    static bool setApplyStatusCallback(ApplyStatusCallback callback);
 
     static bool addGroup(const Group& group);
     static bool addString(const StringField& field);

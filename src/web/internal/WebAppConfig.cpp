@@ -538,8 +538,16 @@ void sendAppConfigScript() {
     sendChunk(WEB_APPCFG_SCRIPT_TAG);
 }
 
+Esp32BaseAppConfig::ApplyStatusCallback appConfigApplyStatus = nullptr;
+
 void sendAppConfigTopMessage() {
-    if (g_server.hasArg("saved")) {
+    const auto application = appConfigApplyStatus ? appConfigApplyStatus() : Esp32BaseAppConfig::ApplyStatus::Applied;
+    if (application == Esp32BaseAppConfig::ApplyStatus::Failed) {
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_DANGER, "Saved values could not be applied", "Check device diagnostics. Saving values does not confirm hardware operation.");
+    } else if (application == Esp32BaseAppConfig::ApplyStatus::Pending) {
+        Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_WARN, "Saved values are pending", "The application has not applied the saved values yet. Refresh this page to check its status.");
+    }
+    if (g_server.hasArg("saved") && application == Esp32BaseAppConfig::ApplyStatus::Applied) {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_OK, "App Config saved");
     } else if (g_server.hasArg("partial")) {
         Esp32BaseWeb::sendNotice(Esp32BaseWeb::UI_DANGER, "Some App Config values were not saved");
@@ -1030,6 +1038,11 @@ bool Esp32BaseAppConfig::setPageValidateCallback(PageValidateCallback callback) 
 
 bool Esp32BaseAppConfig::setChangeCallback(ChangeCallback callback) {
     g_appConfigChangeCallback = callback;
+    return true;
+}
+
+bool Esp32BaseAppConfig::setApplyStatusCallback(ApplyStatusCallback callback) {
+    appConfigApplyStatus = callback;
     return true;
 }
 
