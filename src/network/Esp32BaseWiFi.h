@@ -48,6 +48,8 @@ public:
     static bool safeBootPaused();
     static uint8_t safeBootGuardedResetCount();
     static uint8_t retryCount();
+    // Actual STA begin attempts in this boot; saturates at UINT32_MAX.
+    static uint32_t attemptCount();
     static uint32_t retryRemainingMs();
     static bool ip(char* out, size_t len);
     static int32_t rssi();

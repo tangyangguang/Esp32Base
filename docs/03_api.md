@@ -731,6 +731,7 @@ public:
     static const char* ssid();
     static bool safeBootPaused();
     static uint8_t retryCount();
+    static uint32_t attemptCount();
     static uint32_t retryRemainingMs();
     static uint8_t safeBootGuardedResetCount();
     static bool ip(char* out, size_t len);
@@ -742,6 +743,8 @@ public:
 ```
 
 WiFi 凭证和重连策略：
+
+- `attemptCount()` 返回本次启动实际调用 STA `WiFi.begin()` 的累计次数，UINT32_MAX 饱和；无凭证、模式设置失败或单纯等待 DHCP 不增加，成功、重试或配置热点不清零。只读、无分配、无 NVS 写入；诊断字段不得用会清零的 retryCount 冒充累计次数。
 
 - `retryCount()` 返回当前连续重连周期已经执行的次数；连接成功、显式重新连接、清除凭证或进入配置热点时归零。`retryRemainingMs()` 只在 `RETRY_BACKOFF` 状态返回距离下一次尝试的剩余毫秒数，其他状态返回 `0`。两者均为已有状态的只读快照，不触发扫描或连接。
 - 无已保存凭证时，`begin()` 可进入 `CONFIG_PORTAL`。

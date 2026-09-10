@@ -46,6 +46,7 @@ char g_wifiSsid[33] = "";
 char g_wifiPassword[65] = "";
 char g_configPortalSsid[32] = "";
 uint32_t g_wifiAttemptStartMs = 0;
+uint32_t g_wifiAttemptCount = 0;
 uint32_t g_wifiDhcpWaitStartMs = 0;
 uint32_t g_wifiNextRetryMs = 0;
 uint8_t g_wifiRetryCount = 0;
@@ -562,6 +563,7 @@ bool beginSta() {
     if (!WiFi.setHostname(Esp32Base::hostname())) {
         ESP32BASE_LOG_W("wifi", "hostname_apply_failed value=%s", Esp32Base::hostname());
     }
+    if (g_wifiAttemptCount != UINT32_MAX) ++g_wifiAttemptCount;
     if (g_wifiPassword[0]) {
         WiFi.begin(g_wifiSsid, g_wifiPassword);
     } else {
@@ -943,6 +945,8 @@ bool Esp32BaseWiFi::safeBootPaused() {
 uint8_t Esp32BaseWiFi::safeBootGuardedResetCount() {
     return g_staGuardedResetCount;
 }
+
+uint32_t Esp32BaseWiFi::attemptCount() { return g_wifiAttemptCount; }
 
 uint8_t Esp32BaseWiFi::retryCount() {
     return g_wifiRetryCount;
