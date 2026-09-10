@@ -72,6 +72,8 @@ Web 应用路由默认容量统一为 24。该上限只覆盖业务 `addRoute()`
 
 应用项目需要在 native 单元测试中直接执行 Web handler 时，可启用 `ESP32BASE_WEB_NATIVE_TEST=1` 使用测试 harness 设置 method、path、参数、body、认证/同源结果，并捕获状态码、headers、重定向和响应体；该接口只在非 ESP32 native 测试构建可用，详见 [Web 与配网](docs/04_web.md) 和 [API 契约](docs/03_api.md)。
 
+App Config、OTA、文件上传的页面脚本分别按功能宏编入压缩静态资源，仅对应页面加载；源码位于 `src/web/internal/Web*Script.js`，使用 `python3 scripts/generate_web_page_assets.py` 更新。三个脚本共 6056 B 压缩为 2588 B，实际镜像收益仍以消费项目构建为准。脚本无损比对、语法与 gzip 协商检查通过，沿用既有缓存版本及响应机制。消费端 Esp32_Irrigation 的 classic ESP32 / Core 3.3.8 受控 TLS 构建通过；未刷机，未扩展多芯片/Core 矩阵。
+
 Web/Auth 不再内置启用 admin/admin。启用 Web 的业务必须在 `Esp32Base::begin()` 前调用 `Esp32BaseWeb::setDefaultAuth(user, pass)`，或先通过已保存的 `eb_web` 认证启动；两者都不存在时 Web 服务 fail-closed，不注册 HTTP server。仅受控开发固件可显式打开 `ESP32BASE_WEB_ALLOW_INSECURE_DEFAULT_AUTH=1` 使用内置 `admin/admin` 兜底，并会输出 WARN 审计日志。示例中的固定账号仅用于本地 demo，业务项目不要照抄。WiFi 密码和 Web Auth 密码当前保存到普通 NVS；未启用平台级 flash encryption 时，不应把设备物理存储视为密文凭据库。日志、HTML、JSON 和 API 响应不输出密码值，只输出用户名、SSID、来源、结果或 `password_set` 这类状态。Web Auth 保存会读回校验；保存失败不会主动清空旧认证，保存成功后才切换当前运行态认证。
 
 业务首页推荐注册为 `/index`。在 `HOME_APP` 或 `HOME_COMBINED` 下，如果没有显式 `setHomePath()` 且存在 `/index` 业务页，裸 `/` 会跳转到 `/index`；如果应用确实需要直接渲染裸根路径，可显式 `setHomePath("/")` 并注册 GET `/` 业务页。只有裸 `/` 受 `HomeMode` 和 `configuredHomePath()` 控制；`/esp32base/status` 是 Status 页规范地址，`/esp32base` 与 `/esp32base/` 只负责重定向到该地址。System 设置与维护页固定为 `/esp32base/system`。即使底部横条关闭，Status 页正文仍保留 System 入口。

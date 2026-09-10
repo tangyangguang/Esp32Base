@@ -265,6 +265,18 @@ void handleRootRedirect();
 void handleStatusRedirect();
 void handleNoContent();
 void handleUiCss();
+#if ESP32BASE_ENABLE_APP_CONFIG
+extern const char WEB_APPCFG_SCRIPT_TAG[] PROGMEM;
+void handleAppConfigScript();
+#endif
+#if ESP32BASE_ENABLE_OTA
+extern const char WEB_OTA_SCRIPT_TAG[] PROGMEM;
+void handleOtaScript();
+#endif
+#if ESP32BASE_ENABLE_FS
+extern const char WEB_FS_SCRIPT_TAG[] PROGMEM;
+void handleFsScript();
+#endif
 void handleUiScript();
 #if ESP32BASE_ENABLE_APP_CONFIG
 void handleAppConfigCss();

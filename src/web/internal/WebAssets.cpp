@@ -28,6 +28,39 @@ const char WEB_APPCFG_STYLE[] PROGMEM =
     "<link rel='stylesheet' href='/esp32base/app-config.css?v=" WEB_APPCFG_ASSET_VERSION "'>";
 #endif
 
+#if ESP32BASE_ENABLE_APP_CONFIG
+const char WEB_APPCFG_SCRIPT_TAG[] PROGMEM =
+    "<script src='/esp32base/app-config.js?v=" WEB_APPCFG_SCRIPT_ASSET_VERSION "'></script>";
+void handleAppConfigScript() {
+    markRequest();
+    const String encoding = g_server.header("Accept-Encoding");
+    sendGzipAsset(g_server, encoding.c_str(), g_server.hasHeader("Accept-Encoding"),
+                  "application/javascript; charset=utf-8", WEB_APPCFG_SCRIPT_GZIP, sizeof(WEB_APPCFG_SCRIPT_GZIP));
+}
+#endif
+
+#if ESP32BASE_ENABLE_OTA
+const char WEB_OTA_SCRIPT_TAG[] PROGMEM =
+    "<script src='/esp32base/ota.js?v=" WEB_OTA_SCRIPT_ASSET_VERSION "'></script>";
+void handleOtaScript() {
+    markRequest();
+    const String encoding = g_server.header("Accept-Encoding");
+    sendGzipAsset(g_server, encoding.c_str(), g_server.hasHeader("Accept-Encoding"),
+                  "application/javascript; charset=utf-8", WEB_OTA_SCRIPT_GZIP, sizeof(WEB_OTA_SCRIPT_GZIP));
+}
+#endif
+
+#if ESP32BASE_ENABLE_FS
+const char WEB_FS_SCRIPT_TAG[] PROGMEM =
+    "<script src='/esp32base/fs.js?v=" WEB_FS_SCRIPT_ASSET_VERSION "'></script>";
+void handleFsScript() {
+    markRequest();
+    const String encoding = g_server.header("Accept-Encoding");
+    sendGzipAsset(g_server, encoding.c_str(), g_server.hasHeader("Accept-Encoding"),
+                  "application/javascript; charset=utf-8", WEB_FS_SCRIPT_GZIP, sizeof(WEB_FS_SCRIPT_GZIP));
+}
+#endif
+
 void handleUiScript() {
     markRequest();
     const String encoding = g_server.header("Accept-Encoding");
