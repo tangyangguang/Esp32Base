@@ -5,7 +5,8 @@
 
 extern uint32_t g_fakeMillis;
 inline uint32_t millis() { return g_fakeMillis; }
-inline void delay(uint32_t) {}
+extern void (*g_fakeDelayHook)(uint32_t);
+inline void delay(uint32_t ms) { g_fakeMillis += ms; if (g_fakeDelayHook) g_fakeDelayHook(ms); }
 
 typedef int portMUX_TYPE;
 #define portMUX_INITIALIZER_UNLOCKED 0

@@ -826,7 +826,7 @@ callback 在 restart/deep sleep 生命周期进入 MQTT 异步 DISCONNECT 前调
 - 参数错误、未连接或入队失败返回false，分别记录 `SHUTDOWN_INVALID_REQUEST`、`SHUTDOWN_NOT_CONNECTED`、`SHUTDOWN_PUBLISH_FAILED`；未进入暂停，调用者不得继续当作退出成功。可排除原因后重试。
 - 入队后使用同一个总截止时间（默认5000ms，允许1..0x7fffffff，回绕安全）。掉线、PUBACK超时、断开请求失败、断开事件超时和控制邮箱丢失分别可查询；迟到事件不能把已失败结果改成成功。
 - 已接受的退出直到显式 `resumeAfterShutdown()` 都保持暂停。PUBACK未确认时不主动发送正常DISCONNECT，避免抑制LWT后仍留下旧的retained online；此时暂停不代表TCP/TLS已释放。恢复通过既有重连机制打开新连接周期，最后结果保留到下一次退出尝试。
-- 已有受控退出时，restart/deep sleep和Web OTA的维护衔接最多额外处理1000ms传输控制事件，不派发应用回调。OTA只有受控退出成功才进入 `Update.begin()`；失败释放已准备资源并恢复连接许可。安全重启/休眠仍继续，但失败退出不发送正常DISCONNECT。未发起受控退出的普通LOCAL/尽力发送路径保持原语义；需要保证的产品应先在loop发起并完成退出，而非在上传回调中赌一次入队。
+- 已有受控退出时，restart/deep sleep和Web OTA的维护衔接最多额外处理3000ms传输控制事件，不派发应用回调。OTA只有受控退出成功才进入 `Update.begin()`；失败释放已准备资源并恢复连接许可。安全重启/休眠仍继续，但失败退出不发送正常DISCONNECT。未发起受控退出的普通LOCAL/尽力发送路径保持原语义；需要保证的产品应先在loop发起并完成退出，而非在上传回调中赌一次入队。
 - OTA上传中及成功等待重启期间保持暂停；失败后恢复。SDK内部锁等待的既有限制仍适用，不把轮询截止时间声称为所有SDK调用的硬实时上限。
 
 `ConnectionConfig`：

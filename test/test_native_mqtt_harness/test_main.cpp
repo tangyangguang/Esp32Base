@@ -17,6 +17,7 @@
 bool g_fakeWifiConnected = false;
 bool g_fakeRealTime = false;
 uint32_t g_fakeMillis = 0;
+void (*g_fakeDelayHook)(uint32_t) = nullptr;
 uint32_t g_fakeRandom = 1;
 
 class Esp32BaseWiFi {
@@ -251,6 +252,7 @@ void resetModule() {
     g_fakeRealTime = false;
     Esp32BaseTime::g_source = Esp32BaseTime::SOURCE_NTP;
     g_fakeMillis = 0;
+    g_fakeDelayHook = nullptr;
     g_fakeRandom = 1;
     g_fakeEventHandler = nullptr;
     g_lastNativeConfig = {};
@@ -999,6 +1001,22 @@ void test_shutdown_rejections_transport_loss_and_maintenance_failure() {
     TEST_ASSERT_EQUAL(0, g_fakeStopCount);
 }
 
+void test_maintenance_wait_includes_native_disconnect_poll() {
+    resetModule(); startAndConnect();
+    Esp32BaseMqtt::PublishRequest finalMessage;
+    finalMessage.topic = "device/availability";
+    finalMessage.qos = Esp32BaseMqtt::QOS_1;
+    TEST_ASSERT_TRUE(Esp32BaseMqtt::beginShutdown(finalMessage, 3000));
+    emitEvent(MQTT_EVENT_PUBLISHED, g_fakePacketId);
+    g_fakeDelayHook = [](uint32_t) {
+        if (g_fakeMillis == 1100) emitEvent(MQTT_EVENT_DISCONNECTED);
+    };
+    TEST_ASSERT_TRUE(Esp32BaseMqtt::settleShutdownForMaintenance(3000));
+    TEST_ASSERT_EQUAL(Esp32BaseMqtt::SHUTDOWN_SUCCESS, Esp32BaseMqtt::shutdownResult());
+    TEST_ASSERT_EQUAL(1100, g_fakeMillis);
+    g_fakeDelayHook = nullptr;
+}
+
 void test_backoff_deadline_is_millis_wrap_safe() {
     TEST_ASSERT_TRUE(deadlineReached(3u, UINT32_MAX - 2u));
     TEST_ASSERT_FALSE(deadlineReached(UINT32_MAX - 3u, 2u));
@@ -1037,6 +1055,7 @@ int main(int, char**) {
     RUN_TEST(test_certificate_error_without_flags_stops_automatic_retries);
     RUN_TEST(test_reports_platform_certificate_date_check_capability);
     RUN_TEST(test_terminal_rejection_survives_wifi_loss_and_recovery);
+    RUN_TEST(test_maintenance_wait_includes_native_disconnect_poll);
     RUN_TEST(test_backoff_deadline_is_millis_wrap_safe);
     RUN_TEST(test_shutdown_requires_matching_ack_and_disconnect_then_explicit_resume);
     RUN_TEST(test_shutdown_timeout_preserves_lwt_and_failure_is_not_late_success);

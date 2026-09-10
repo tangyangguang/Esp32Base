@@ -1524,7 +1524,9 @@ void Esp32BaseMqtt::handle(bool otaUploading) {
 
 bool Esp32BaseMqtt::settleShutdownForMaintenance(uint16_t maximumWaitMs) {
     if (!g_mqttShutdownActive) return true;
-    if (maximumWaitMs > 1000) maximumWaitMs = 1000;
+    // ESP-MQTT may finish a 1000 ms transport poll after requesting DISCONNECT.
+    // Leave bounded room for both the final PUBACK and its disconnect event.
+    if (maximumWaitMs > 3000) maximumWaitMs = 3000;
     g_mqttMaintenanceDraining = true;
     for (uint16_t waited = 0; g_mqttShutdownResult == SHUTDOWN_IN_PROGRESS &&
                               waited < maximumWaitMs; ++waited) {

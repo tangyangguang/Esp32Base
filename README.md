@@ -208,7 +208,7 @@ pio run -t webota
 
 量产项目建议启用 `ESP32BASE_OTA_REQUIRE_MARK_VALID=1`，避免 Arduino core 在应用自检前过早把新 OTA 镜像标记为 valid。业务应把基础库启动、配置/API 注册、存储、传感器、执行器安全状态和核心任务纳入自检，通过后再调用 `Esp32BaseOta::markCurrentValid()`。确认期限在 Arduino `setup()` 前启动，不依赖业务进入 `Esp32Base::begin()`、loop 或持续调用 `Esp32Base::handle()`；期限届满会标记新镜像无效并重启回滚，`handle()` 只保留降级检查。最小配置和示例见 `docs/05_ota.md`。
 
-IOT 产品如果协议要求正常离线消息，可在 `Esp32Base::begin()` 前注册 `Esp32Base::setBeforeNetworkStopCallback()`，在 Web OTA 上传、统一 restart 或 deep sleep 异步断开 MQTT 前发起一次最后 publish；实际发送异步进行，但 enqueue 仍可能等待 SDK 内部锁，不能承诺固定调用时长。callback 可返回不超过 1000 ms 的有界网络发送宽限；基础库会在 restart/deep sleep 的异步断开前后应用该宽限，Web OTA 只在暂停 MQTT 前应用一次。普通宽限路径不轮询PUBACK，enqueue accepted不保证Broker已收到。需要确认的正常退出应先调用 `Esp32BaseMqtt::beginShutdown(finalMessage)`，继续handle并检查 `shutdownResult()`；匹配PUBACK后才请求断开，收到本地断开事件才报告成功。已接受的退出保持暂停，显式 `resumeAfterShutdown()` 才打开新连接周期。未确认PUBACK的失败退出不发送正常DISCONNECT，不能把暂停当作TLS已释放；维护中的受控退出失败会拒绝OTA并恢复连接，安全重启/休眠仍继续。没有发起受控退出的路径仍只尽力发送。完整结果、资源和证据边界见 `docs/03_api.md`。
+IOT 产品如果协议要求正常离线消息，可在 `Esp32Base::begin()` 前注册 `Esp32Base::setBeforeNetworkStopCallback()`，在 Web OTA 上传、统一 restart 或 deep sleep 异步断开 MQTT 前发起一次最后 publish；实际发送异步进行，但 enqueue 仍可能等待 SDK 内部锁，不能承诺固定调用时长。callback 可返回不超过 3000 ms 的有界网络发送宽限；基础库会在 restart/deep sleep 的异步断开前后应用该宽限，Web OTA 只在暂停 MQTT 前应用一次。普通宽限路径不轮询PUBACK，enqueue accepted不保证Broker已收到。需要确认的正常退出应先调用 `Esp32BaseMqtt::beginShutdown(finalMessage)`，继续handle并检查 `shutdownResult()`；匹配PUBACK后才请求断开，收到本地断开事件才报告成功。已接受的退出保持暂停，显式 `resumeAfterShutdown()` 才打开新连接周期。未确认PUBACK的失败退出不发送正常DISCONNECT，不能把暂停当作TLS已释放；维护中的受控退出失败会拒绝OTA并恢复连接，安全重启/休眠仍继续。没有发起受控退出的路径仍只尽力发送。完整结果、资源和证据边界见 `docs/03_api.md`。
 
 双 OTA 设备如果已经通过 Web OTA 切换到另一个槽位，串口 `pio run -t upload` 的行为取决于分区表和 PlatformIO/Arduino flash plan。仓库标准分区通常会把启动选择重新初始化到 `ota_0`；但自定义分区如果只覆盖固定 app 槽而不更新 OTA data，设备仍可能继续从旧槽启动。串口恢复优先使用基础库脚本，它会按分区表写入两个 OTA app 槽并清理启动选择：
 
@@ -257,3 +257,5 @@ RecordStore 的普通历史轮转与可靠消费保留机制、当前容器格�
 公共交互脚本 `/esp32base/ui.js` 与 App Config 页专用 `/esp32base/app-config.css` 使用构建时无损 gzip，原始资源分别位于 `src/web/internal/WebCommonScript.js`、`WebAppConfigStyle.css`，由 `python3 scripts/generate_web_page_assets.py` 生成。URL 携带内容摘要，浏览器缓存 24 小时；公共脚本保持同步加载顺序，配置样式只在对应页面引用。资源不含用户数据，不占用业务静态资源槽，App Config 关闭时不链接专属资源及路由。`scripts/test_web_gzip.py` 和发布卫生检查覆盖生成结果一致性。
 
 WiFi 累计 STA 连接尝试可通过 `Esp32BaseWiFi::attemptCount()` 读取，仅统计本次启动实际发起的连接，成功后不清零；区别于连续失败周期的 `retryCount()`。
+
+维护退出等待修复（2026-09-10）：受控 MQTT 退出与 callback 宽限上限调整为 3000 ms，覆盖 ESP-MQTT 原生 1000 ms 接收轮询后的异步断开事件；不减少 PUBACK、断开事件或失败保护。`python3 scripts/pio_arduino.py 2 test -e native_mqtt_harness` 26 项通过，新增 1100 ms 断开延迟成功用例，并保留超时/邮箱丢失拒绝路径。灌溉 Core 3 完整 TLS 目标构建通过；修复版实际 OTA 尚待验证。

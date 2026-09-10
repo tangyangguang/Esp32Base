@@ -33,7 +33,7 @@ Esp32Base::BeforeLifecycleStopCallback g_beforeLifecycleStopCallback = nullptr;
 void* g_beforeLifecycleStopContext = nullptr;
 Esp32Base::BeforeNetworkStopCallback g_beforeNetworkStopCallback = nullptr;
 void* g_beforeNetworkStopContext = nullptr;
-constexpr uint16_t kMaximumNetworkStopGraceMs = 1000U;
+constexpr uint16_t kMaximumNetworkStopGraceMs = 3000U;
 
 bool hostnameValid(const char* hostname) {
     if (!hostname || !hostname[0]) {
