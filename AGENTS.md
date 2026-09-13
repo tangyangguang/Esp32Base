@@ -87,8 +87,8 @@
   - Web：`python3 scripts/pio_arduino.py 2 test -e native_web_harness`
   - Config：`python3 scripts/pio_arduino.py 2 test -e native_config_harness`
   - Time/RTC：`python3 scripts/pio_arduino.py 2 test -e native_time_harness`；涉及 PCF8563 时再运行 `python3 scripts/pio_arduino.py 2 test -e native_time_pcf8563_harness`
-- Profile、依赖宏、LDF 或裁剪改动优先构建 `examples/basic` 的相关 env，并结合 map 文件和 `scripts/check_trim_symbols.py` 证明目标符号缺失；架构或安全边界改动同时运行相应的 `scripts/check_architecture_boundaries.py`、`scripts/check_security_boundaries.py`。
-- Web UI改动验证 `examples/web_ui_gallery`；App Config或完整集成验证 `examples/full_demo`；Record Store与Conditions验证原生harness及 `examples/record_store_demo`；OTA验证 `examples/web_logs_ota` 或LOCAL示例；RTC/RS485分别验证对应示例。
+- Profile、依赖宏、LDF 或裁剪改动优先构建 `examples/profile_baseline` 的相关 env，并结合 map 文件和 `scripts/check_trim_symbols.py` 证明目标符号缺失；架构或安全边界改动同时运行相应的 `scripts/check_architecture_boundaries.py`、`scripts/check_security_boundaries.py`。
+- Web UI改动验证 `examples/web_ui_gallery`；App Config或业务Web集成验证 `examples/local_web_app`；Record Store与Conditions验证原生harness及 `examples/record_store`；OTA验证 `examples/profile_baseline` 的 LOCAL/IOT env；MQTT验证 `examples/mqtt_client`；RTC/RS485分别验证 `examples/rtc`、`examples/rs485`。
 - 涉及公共头文件、Profile 或平台适配时，评估 ESP32 / ESP32-S3 / ESP32-C3 和 Arduino Core 2.x / 3.x 构建矩阵，至少选择能覆盖本次最高风险的组合；不能把单芯片单 Core 构建成功外推为全部兼容。首次验证先运行 `scripts/ensure_arduino_platformio.py`；所有Core 2.x/3.x命令分别通过 `scripts/pio_arduino.py 2 ...` 和 `scripts/pio_arduino.py 3 ...` 使用仓库隔离的 `.piohome/arduino2`、`.piohome/arduino3`，禁止发布验证依赖默认 `~/.platformio`。
 - 受控 TLS 产物的 Core 3 验证使用 `scripts/pio_arduino.py 3 --tls-toolchain ...`，隔离到 `.piohome/arduino3-tls`；该参数只隔离环境，不代表已选中或验证安全产物。必须按 `docs/14_tls_toolchain.md` 检查实际包来源、配置、二进制和验证覆盖，不覆盖常规 Core 构建环境，也不把单目标产物作为全芯片包使用。
 - 涉及 Web、OTA、WiFi、FileLog、Sleep、Watchdog、RTC、RS485、掉电恢复或资源边界时，优先选择能暴露本次明显问题的定向检查；确需短时实机检查时按目标授权执行。长期运行由用户验证，未覆盖场景如实说明，不阻塞无关开发。

@@ -119,7 +119,7 @@ def check_raw_socket_options(webota_module, errors: list[str]) -> None:
 def check_host_configuration_contract(webota_module, errors: list[str]) -> None:
     cases = {
         "192.168.2.112": "http://192.168.2.112:80/esp32base/ota/raw",
-        "esp32base-full.local": "http://esp32base-full.local:80/esp32base/ota/raw",
+        "esp32base-web-app.local": "http://esp32base-web-app.local:80/esp32base/ota/raw",
         "device.example.lan": "http://device.example.lan:80/esp32base/ota/raw",
     }
     for configured_host, expected_url in cases.items():
@@ -140,18 +140,18 @@ def check_host_configuration_contract(webota_module, errors: list[str]) -> None:
         (2, 1, 6, "", ("192.168.2.112", 80)),
         (2, 1, 6, "", ("192.168.2.112", 80)),
     ]
-    parsed = urlparse("http://esp32base-full.local/esp32base/ota/raw")
+    parsed = urlparse("http://esp32base-web-app.local/esp32base/ota/raw")
     with mock.patch.object(webota_module.socket, "getaddrinfo", return_value=addrinfo) as resolver:
         addresses = webota_module._resolve_target(parsed)
     if addresses != ["192.168.2.112"]:
         errors.append("scripts/esp32base_webota.py: target resolution must return unique resolved addresses")
-    resolver.assert_called_once_with("esp32base-full.local", 80, type=webota_module.socket.SOCK_STREAM)
+    resolver.assert_called_once_with("esp32base-web-app.local", 80, type=webota_module.socket.SOCK_STREAM)
 
     fake_socket = FakeRawSocket()
     connection = webota_module._open_connection(parsed, 1.0, False, addresses)
     with mock.patch.object(webota_module.socket, "create_connection", return_value=fake_socket) as connector:
         connected_socket = connection._create_connection((parsed.hostname, 80), 1.0, None)
-    if connected_socket is not fake_socket or connection.host != "esp32base-full.local":
+    if connected_socket is not fake_socket or connection.host != "esp32base-web-app.local":
         errors.append(
             "scripts/esp32base_webota.py: HTTP connections must reuse the resolved IP while preserving the hostname"
         )

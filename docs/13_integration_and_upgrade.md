@@ -70,7 +70,7 @@ lib_deps =
   Hash
 ```
 
-`MINIMAL`、`OFFLINE` 和特殊裁剪组合应参考 `examples/basic/platformio.ini` 显式列出实际 Arduino 内置依赖，避免 PlatformIO LDF 因示例源码或全局包状态意外带入 WiFi/Web。`Preferences` 是所有 Profile 的核心依赖；启用 FS 时增加 `LittleFS` 和 `FS`；启用 RTC 时增加 `Wire`。LOCAL/IOT 还需要上面模板中的网络、Web、OTA、AsyncUDP依赖，Core 3.x再增加`Networking`和`Hash`。不要在业务源码中为LDF添加无业务语义的framework占位include。
+`MINIMAL`、`OFFLINE` 和特殊裁剪组合应参考 `examples/profile_baseline/platformio.ini` 显式列出实际 Arduino 内置依赖，避免 PlatformIO LDF 因示例源码或全局包状态意外带入 WiFi/Web。`Preferences` 是所有 Profile 的核心依赖；启用 FS 时增加 `LittleFS` 和 `FS`；启用 RTC 时增加 `Wire`。LOCAL/IOT 还需要上面模板中的网络、Web、OTA、AsyncUDP依赖，Core 3.x再增加`Networking`和`Hash`。不要在业务源码中为LDF添加无业务语义的framework占位include。
 
 Esp32Base 的 `library.json` 只为库自身私有实现提供framework头文件搜索路径；应用的 `lib_deps` 仍负责让PlatformIO编译和链接对应内置库。ESP32-S3 与 ESP32-C3 应改用对应 board 和 `partitions/` 中对应分区表。
 

@@ -34,7 +34,7 @@ Esp32Base提供可复用的命令行Web OTA target。它复用现有 HTTP Web OT
 extra_scripts =
   post:path/to/Esp32Base/scripts/esp32base_webota.py
 
-custom_esp32base_webota_host = esp32base-full.local
+custom_esp32base_webota_host = esp32base-web-app.local
 custom_esp32base_webota_user = <current-web-auth-user>
 custom_esp32base_webota_password = <current-web-auth-password>
 ```

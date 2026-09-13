@@ -50,15 +50,15 @@
 - 发布包包含推荐分区表：`partitions/esp32-4mb-ota-balanced.csv`、`partitions/esp32-c3-4mb-ota-balanced.csv`、`partitions/esp32-s3-8mb-ota-balanced.csv`。
 - 推荐分区表的 `app0` 偏移必须和 PlatformIO / Arduino 上传地址一致；默认应为 `0x10000`。
 - classic ESP32 4MB 推荐分区表必须保持 `app0=0x10000`，不要求业务项目设置 `board_upload.offset_address`。
-- 发布包包含 `examples/basic` 的 profile 依赖裁剪验证源码。
-- 发布包包含独立 PIO 示例 `examples/full_demo`、`examples/web_ui_gallery`、`examples/web_logs_ota`、`examples/net_runtime`。
-- 发布包包含 `examples/mqtt_tls`，只提交虚构 Broker 和空凭据模板，不包含 `local_secrets.h`、真实 CA、密码或私钥。
+- 发布包包含 `examples/profile_baseline` 的 profile 依赖裁剪验证源码。
+- 发布包包含独立 PIO 示例：`examples/profile_baseline`、`examples/local_web_app`、`examples/mqtt_client`、`examples/network_only`、`examples/record_store`、`examples/rtc`、`examples/rs485`、`examples/web_ui_gallery`。
+- `examples/mqtt_client` 只提交虚构 Broker 和空凭据模板，不包含 `local_secrets.h`、真实 CA、密码或私钥。
 - 发布包不包含历史设计、评审、评估等本地非发布材料。
 - 发布包不包含 `.pio/`、`.piohome/`、`.cache/`、`idf_component.yml` 等构建生成物。
 
 ## 5. 裁剪检查
 
-- MINIMAL Profile不能因为Web多编译单元被 `srcFilter` 编译而链接WebServer、WiFi、Update、LittleFS等非目标符号；先构建 `examples/basic -e esp32_minimal -e esp32_offline -e esp32_local -e esp32_iot`，再跑 `scripts/check_trim_symbols.py`。
+- MINIMAL Profile不能因为Web多编译单元被 `srcFilter` 编译而链接WebServer、WiFi、Update、LittleFS等非目标符号；先构建 `examples/profile_baseline -e esp32_minimal -e esp32_offline -e esp32_local -e esp32_iot`，再跑 `scripts/check_trim_symbols.py`。
 
 必须证明：
 
@@ -73,7 +73,7 @@
 
 - MQTT只随IOT Profile默认开启；MINIMAL、OFFLINE、LOCAL及显式关闭构建中没有 `Esp32BaseMqtt`、`esp_mqtt_client_*` 和 `mqtt_task` 符号。
 - `python3 scripts/pio_arduino.py 2 test -e native_mqtt_harness`和`python3 scripts/pio_arduino.py 2 test -e native_mqtt_secure_default_harness`通过。
-- `examples/mqtt_tls` 完成 ESP32 / ESP32-S3 / ESP32-C3 Core 2.x 和代表性 Core 3.x 构建；该示例必须通过`symlink://`外部库引用和默认`chain` LDF验证，Core 2.x显式声明`ESP32 Async UDP`、`FS`等内置依赖，Core 3.x再声明`Networking`和`Hash`，不得用业务源码占位include或`deep+`掩盖依赖契约。
+- `examples/mqtt_client` 完成 ESP32 / ESP32-S3 / ESP32-C3 Core 2.x 和代表性 Core 3.x 构建；该示例必须通过`symlink://`外部库引用和默认`chain` LDF验证，Core 2.x显式声明`ESP32 Async UDP`、`FS`等内置依赖，Core 3.x再声明`Networking`和`Hash`，不得用业务源码占位include或`deep+`掩盖依赖契约。
 - 有可用测试 Broker 时，`python3 scripts/check_mqtt_cloud_integration.py` 通过；本机 INI、CA 和凭据保持 Git 忽略且不进入发布包。
 - MQTTS 缺少 CA、缺少 NTP 时间或证书校验失败时不得降级明文；RTC 不能单独放行 MQTTS。
 - Core 未启用 `CONFIG_MBEDTLS_HAVE_TIME_DATE` 时，默认以 `ERROR_TLS_CERTIFICATE_DATE_CHECK_UNAVAILABLE` 拒绝 TLS；只有显式 opt-in 才允许继续，且 Status 必须报告真实能力。
@@ -96,8 +96,8 @@
 
 - `python3 scripts/pio_arduino.py 2 test -e native_time_harness`。
 - `python3 scripts/pio_arduino.py 2 test -e native_time_pcf8563_harness`。
-- `python3 scripts/pio_arduino.py 2 run -d examples/rtc_time_source -e esp32_ds3231`。
-- `python3 scripts/pio_arduino.py 2 run -d examples/rtc_time_source -e esp32_pcf8563`。
+- `python3 scripts/pio_arduino.py 2 run -d examples/rtc -e esp32_ds3231`。
+- `python3 scripts/pio_arduino.py 2 run -d examples/rtc -e esp32_pcf8563`。
 - DS3231 示例构建的 map/ELF 裁剪检查必须禁止 `pcf8563` / `Pcf8563`。
 - PCF8563 示例构建的 map/ELF 裁剪检查必须禁止 `ds3231` / `Ds3231`。
 - RTC 未启用的现有 profile 行为不应要求业务初始化 `Wire`，也不应改变 NTP-only 项目的对时语义。
@@ -300,17 +300,17 @@
 
 必须通过：
 
-- `examples/basic` 继续覆盖 profile/芯片/Core 版本矩阵。
-- `examples/basic` 的 profile 依赖裁剪验证源码继续生效。
-- `examples/full_demo`可通过仓库根目录的Core 2 wrapper构建。
-- `examples/full_demo` 覆盖 App Config string/int/decimal/bool/enum、字段级校验、页面级校验、重启提示和回调。
-- `examples/web_ui_gallery`可通过仓库根目录的Core 2 wrapper构建。
+- `examples/profile_baseline` 继续覆盖 profile/芯片/Core 版本矩阵。
+- `examples/profile_baseline` 的 profile 依赖裁剪验证源码继续生效。
+- `examples/local_web_app` 完成 ESP32 / ESP32-S3 / ESP32-C3 Core 2.x 构建。
+- `examples/local_web_app` 覆盖 App Config string/int/decimal/bool/enum、字段级校验、页面级校验、重启提示和回调。
+- `examples/web_ui_gallery` 完成 ESP32 / ESP32-S3 / ESP32-C3 Core 2.x 构建。
 - `examples/web_ui_gallery` 覆盖 Web UI baseline 的状态、统计、分页记录、配置、命令、分步操作、维护、访问控制、确认、空状态和表单页面。
-- `examples/web_logs_ota`可通过仓库根目录的Core 2 wrapper构建。
-- `examples/net_runtime`可通过仓库根目录的Core 2 wrapper构建。
-- `examples/mqtt_tls` 可在自身目录完成三芯片和代表性 Core 3.x 构建，并展示重连后重发当前状态。
-- `examples/record_store_demo` 至少完成 ESP32 / ESP32-S3 / ESP32-C3 和 Arduino Core 3.x 构建，并演示固定payload编码、动作开始快照、完成记录和最新优先读取。
-- `examples/rtc_time_source` 可在自身目录分别构建 DS3231 和 PCF8563 env，并清楚演示构建期二选一、I2C 初始化所有权和业务使用 `Esp32BaseTime` 的接入方式。
+- `examples/network_only` 完成 ESP32 / ESP32-S3 / ESP32-C3 Core 2.x 构建。
+- `examples/mqtt_client` 可在自身目录完成三芯片和代表性 Core 3.x 构建，并展示重连后重发当前状态。
+- `examples/record_store` 至少完成 ESP32 / ESP32-S3 / ESP32-C3 和 Arduino Core 3.x 构建，并演示固定payload编码、动作开始快照、完成记录和最新优先读取。
+- `examples/rtc` 可在自身目录分别构建 DS3231 和 PCF8563 env，并清楚演示构建期二选一、I2C 初始化所有权和业务使用 `Esp32BaseTime` 的接入方式。
+- `examples/rs485` 可通过仓库根目录的 Core 2 wrapper 构建，只演示半双工方向控制和轮询收发，不包含 Modbus 协议。
 - 所有启用 FS 的示例不应通过构建参数覆盖系统诊断日志默认模式；默认保持 ERROR，现场排查时再显式切到 WARN/INFO。
 
 ## 16. Soak 检查

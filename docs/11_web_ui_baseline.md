@@ -476,7 +476,7 @@ POST -> 303 Redirect -> GET
 示例位置：
 
 - `examples/web_ui_gallery`：专门用于查看和验收 Web UI baseline 的页面能力与样式，覆盖状态、统计、分页记录、配置、命令、分步操作、维护、访问控制、确认、空状态和多字段表单。
-- `examples/full_demo`
+- `examples/local_web_app`：演示业务页面/API 与 App Config、自定义首页导航在 LOCAL Profile 下的集成写法。
 
 `examples/web_ui_gallery/README.md` 记录了本地构建和烧录查看方式。
 
@@ -499,7 +499,7 @@ POST -> 303 Redirect -> GET
 - 其次改 helper 输出结构。
 - 不在业务页面堆局部 CSS。
 - 不为了单个项目加入业务组件。
-- 页面能力或公共样式变化应能在 `examples/web_ui_gallery` 中看到效果；影响完整集成时同步 `examples/full_demo`。
+- 页面能力或公共样式变化应能在 `examples/web_ui_gallery` 中看到效果；影响完整集成时同步 `examples/local_web_app`。
 
 影响判断：
 

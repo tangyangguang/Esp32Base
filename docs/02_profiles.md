@@ -144,13 +144,13 @@ build_flags =
 
 ## 8. 验证矩阵
 
-`examples/basic` 是四Profile的构建与裁剪基线，覆盖ESP32、ESP32-S3、ESP32-C3，并对代表性ESP32环境覆盖Arduino Core 2.x/3.x。
+`examples/profile_baseline` 是四Profile的构建与裁剪基线，覆盖ESP32、ESP32-S3、ESP32-C3，并对代表性ESP32环境覆盖Arduino Core 2.x/3.x。
 
 至少运行：
 
 ```sh
 python3 scripts/ensure_arduino_platformio.py
-python3 scripts/pio_arduino.py 2 run -d examples/basic \
+python3 scripts/pio_arduino.py 2 run -d examples/profile_baseline \
   -e esp32_minimal -e esp32_offline -e esp32_local -e esp32_iot
 python3 scripts/check_trim_symbols.py
 ```

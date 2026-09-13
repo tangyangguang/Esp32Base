@@ -28,7 +28,7 @@ FORBIDDEN = {
 }
 
 REQUIRED = {
-    # MINIMAL/OFFLINE defaults are asserted at compile time in examples/basic;
+    # MINIMAL/OFFLINE defaults are asserted at compile time in examples/profile_baseline;
     # LTO may inline their small facade methods and remove class-name symbols.
     "esp32_local": ("Esp32BaseWeb", "Esp32BaseOta", "UpdateClass"),
     "esp32_iot": ("Esp32BaseWeb", "Esp32BaseOta", "Esp32BaseMqtt", "esp_mqtt_client_"),
@@ -62,7 +62,7 @@ def read_symbols(nm: str, elf: Path) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--build-dir", default="examples/basic/.pio/build/arduino2")
+    parser.add_argument("--build-dir", default="examples/profile_baseline/.pio/build/arduino2")
     parser.add_argument("--nm", default=None)
     parser.add_argument("--elf", default=None, help="check one explicit ELF instead of build-dir/envs")
     parser.add_argument("--forbid", nargs="*", default=None, help="symbol substrings that must be absent")

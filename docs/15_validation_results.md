@@ -1,6 +1,8 @@
 # 基础能力验证结果
 
-验证日期：2026-09-08 至 2026-09-09。以下为本次 Esp32Base 代码与示例的验证范围，不代表 ESP8266、平台 SDK 或真实设备验收完成。
+验证日期：2026-09-08 至 2026-09-13。以下为本次 Esp32Base 代码与示例的验证范围，不代表 ESP8266、平台 SDK 或真实设备验收完成。
+
+> 注：示例目录在后续重构中重命名（历史记录中的旧名保留为当时事实）：`basic`→`profile_baseline`、`full_demo`→`local_web_app`、`mqtt_tls`→`mqtt_client`、`net_runtime`→`network_only`、`record_store_demo`→`record_store`、`rs485_port`→`rs485`、`rtc_time_source`→`rtc`；与 LOCAL 基线重复的 `web_logs_ota` 已删除。
 
 ## 已验证行为
 
@@ -18,6 +20,50 @@ Record Store 的 31 项原生测试通过：未释放数据在容量满、缩预
 ## 实际构建与静态体积
 
 Core 2 为 2.0.16，Core 3 为 3.3.8；均通过仓库隔离的 PlatformIO home。以下是实际 ELF 的静态 RAM 和固件 Flash 字节数，不是运行堆、任务栈峰值或 TLS 握手峰值。各行对应实际执行的验证批次，后续局部改动只更新重测组合。
+
+## 2026-09-13 examples 重构后全矩阵（HEAD d2555ea 之后）
+
+样例目录重构为 `profile_baseline`（四 Profile 裁剪基线）、`local_web_app`、`mqtt_client`、`network_only`、`record_store`、`rtc`、`rs485`、`web_ui_gallery`；重复的 `web_logs_ota` 删除。以下 22 个构建全部通过，env 名统一为芯片名，均为实际 ELF 的静态 RAM / Flash（PIO 口径），不是运行堆、任务栈或 TLS 握手峰值。Core 2 = 2.0.16，Core 3 = 3.3.8 官方包（非受控 TLS 产物）。
+
+`profile_baseline`（无业务，只 `begin()/handle()` + 四 Profile 契约断言）：
+
+| 芯片 / Core | MINIMAL | OFFLINE | LOCAL | IOT |
+| --- | --- | --- | --- | --- |
+| ESP32 / Core 2 | 22,224 / 273,617 | 23,560 / 325,069 | 57,068 / 967,189 | 59,152 / 979,985 |
+| ESP32-S3 / Core 2 | 19,180 / 269,205 | 20,516 / 319,333 | 55,856 / 923,877 | 57,964 / 936,417 |
+| ESP32-C3 / Core 2 | 14,528 / 255,428 | 15,840 / 304,342 | 49,812 / 974,614 | 51,908 / 989,024 |
+| ESP32 / Core 3 | 22,428 / 289,368 | 23,884 / 332,408 | 59,180 / 1,164,285 | 59,316 / 1,164,889 |
+
+表内格式为 RAM / Flash，单位字节。MQTT 净增量（IOT − LOCAL）：ESP32/Core2 **+2,084 RAM / +12,796 Flash**；S3 +2,108 / +12,540；C3 +2,096 / +14,410；ESP32/Core3 +136 / +604。Core3 官方包把 ESP-MQTT 拆为 IDF 组件，baseline 不调用 MQTT API 时 LTO 回收大部分 wrapper，故净增量远小于 Core2；两代 Core 的最终 ELF 符号裁剪检查均通过（LOCAL 无 `Esp32BaseMqtt`/`mqtt_task`，IOT 有），不能据差值推断 MQTT 免费。
+
+能力样例（静态 RAM / Flash，字节）：
+
+| 样例 / env | 芯片 / Core | 静态 RAM | Flash |
+| --- | --- | ---: | ---: |
+| local_web_app / esp32 | ESP32 / Core 2 | 58,148 | 994,265 |
+| local_web_app / esp32s3 | S3 / Core 2 | 57,012 | 952,613 |
+| local_web_app / esp32c3 | C3 / Core 2 | 50,916 | 1,003,532 |
+| mqtt_client / esp32 | ESP32 / Core 2 | 59,924 | 1,112,697 |
+| mqtt_client / esp32s3 | S3 / Core 2 | 58,728 | 1,066,813 |
+| mqtt_client / esp32c3 | C3 / Core 2 | 52,684 | 1,128,542 |
+| mqtt_client / esp32_arduino3 | ESP32 / Core 3 | 60,844 | 1,169,333 |
+| network_only / esp32 | ESP32 / Core 2 | 50,768 | 836,141 |
+| network_only / esp32s3 | S3 / Core 2 | 49,124 | 785,117 |
+| network_only / esp32c3 | C3 / Core 2 | 43,556 | 824,628 |
+| record_store / esp32 | ESP32 / Core 2 | 25,648 | 337,185 |
+| record_store / esp32s3 | S3 / Core 2 | 22,620 | 331,557 |
+| record_store / esp32c3 | C3 / Core 2 | 17,936 | 316,368 |
+| record_store / esp32_arduino3 | ESP32 / Core 3 | 25,996 | 347,376 |
+| web_ui_gallery / esp32 | ESP32 / Core 2 | 57,388 | 998,301 |
+| web_ui_gallery / esp32s3 | S3 / Core 2 | 56,176 | 954,589 |
+| web_ui_gallery / esp32c3 | C3 / Core 2 | 50,132 | 1,008,016 |
+| rtc / esp32_ds3231 | ESP32 / Core 2 | 23,888 | 311,157 |
+| rtc / esp32_pcf8563 | ESP32 / Core 2 | 23,888 | 311,013 |
+| rs485 / esp32 | ESP32 / Core 2 | 22,264 | 277,101 |
+
+同批 `check_trim_symbols.py`（Core2/Core3 四 Profile）、`check_release_hygiene.py`、`check_profile_contract.py` 均通过。未烧录，未做实机 heap/TLS 测量；mqtt_client Core3 使用官方包，运行时 TLS 仍按 README 需受控产物。
+
+## 2026-09-08/09 历史记录（旧样例名）
 
 | 示例 / 芯片 / Core | Profile | 静态 RAM | Flash |
 | --- | --- | ---: | ---: |

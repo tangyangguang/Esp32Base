@@ -28,7 +28,7 @@ python3 scripts/pio_arduino.py 2 test -e native_config_harness
 python3 scripts/pio_arduino.py 2 test -e native_web_harness
 python3 scripts/pio_arduino.py 2 test -e native_time_harness
 python3 scripts/pio_arduino.py 2 test -e native_time_pcf8563_harness
-python3 scripts/pio_arduino.py 2 run -d examples/basic -e esp32_minimal -e esp32_offline -e esp32_local -e esp32_iot
+python3 scripts/pio_arduino.py 2 run -d examples/profile_baseline -e esp32_minimal -e esp32_offline -e esp32_local -e esp32_iot
 python3 scripts/check_trim_symbols.py
 
 # 可选：读取 Git 忽略的本机配置，对真实 MQTTS Broker 验证

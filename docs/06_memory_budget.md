@@ -125,7 +125,7 @@ MQTT（仅 `ESP32BASE_ENABLE_MQTT=1`）：
 
 MQTT在IOT Profile中默认开启，在其他Profile中默认关闭。开启后 Arduino Core 预编译 ESP-MQTT 基本同时带入 TLS transport，因此“只配置明文”不能作为显著裁剪 TLS Flash 的手段。发布测量必须分别记录 MQTT 关闭、MQTT 开启但未配置、真实 MQTTS 配置的 `firmware.elf/bin`，并在实机记录初始化、TCP、TLS 握手峰值和稳定连接后的 free/min heap。
 
-Profile重构后的Flash和静态RAM以 `examples/basic` 当前四Profile构建结果为准，不沿用旧Profile的历史数值。`examples/mqtt_tls` 使用不可工作的短CA占位文本，只证明链接和wrapper固定容量，不代表真实CA体积、TLS握手或运行时heap；产品验收不得把构建数值外推为实机资源结论。
+Profile重构后的Flash和静态RAM以 `examples/profile_baseline` 当前四Profile构建结果为准，不沿用旧Profile的历史数值。`examples/mqtt_client` 使用不可工作的短CA占位文本，只证明链接和wrapper固定容量，不代表真实CA体积、TLS握手或运行时heap；产品验收不得把构建数值外推为实机资源结论。
 
 人性化容量显示：
 

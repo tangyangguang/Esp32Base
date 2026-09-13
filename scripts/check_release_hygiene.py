@@ -64,7 +64,7 @@ for ini in sorted((ROOT / "examples").glob("*/platformio.ini")):
     if "symlink://../.." not in content:
         errors.append(f"{ini.relative_to(ROOT)}: missing explicit Base dependency")
 
-mqtt_ini = read("examples/mqtt_tls/platformio.ini")
+mqtt_ini = read("examples/mqtt_client/platformio.ini")
 for dependency in (
     "Preferences",
     "WiFi",
@@ -80,12 +80,12 @@ for dependency in (
 ):
     if f"\n  {dependency}\n" not in mqtt_ini:
         errors.append(
-            f"examples/mqtt_tls/platformio.ini: external IOT build must declare built-in {dependency}"
+            f"examples/mqtt_client/platformio.ini: external IOT build must declare built-in {dependency}"
         )
 if "-D ESP32BASE_MQTT_ALLOW_UNCHECKED_CERTIFICATE_DATES=1" in mqtt_ini:
-    errors.append("examples/mqtt_tls/platformio.ini: secure example must not bypass certificate date checks")
+    errors.append("examples/mqtt_client/platformio.ini: secure example must not bypass certificate date checks")
 if "lib_ldf_mode = deep+" in mqtt_ini:
-    errors.append("examples/mqtt_tls/platformio.ini: external build must work with default chain LDF")
+    errors.append("examples/mqtt_client/platformio.ini: external build must work with default chain LDF")
 
 for framework_library in (
     "AsyncUDP",

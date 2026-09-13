@@ -916,7 +916,7 @@ typedef void (*MessageCallback)(const MessageView& message, void* context);
 
 OTA 校验参数并取得存储/长操作资源后，在 `Update.begin()` 前通过内部 hook 调用 facade 已注册的 `BeforeNetworkStopCallback`，再异步请求 MQTT DISCONNECT 并拒绝新 publish。该 hook 不派发积压的 MQTT 业务 callback，不依赖外层 `handle()` 再次观察到上传状态；LOCAL 未启用 MQTT 时仍可独立上传。上传失败且设备继续运行时，下次 facade `handle()` 恢复 MQTT 前置条件和连接流程。运行期不调用可能无限等待的 `esp_mqtt_client_stop()`；MQTT task 保留到重启，避免阻塞 loop/watchdog。restart/deep sleep 同样先调用该应用回调。已发起的受控退出按上面的确认/失败契约处理；没有受控退出时仍只尽力异步请求DISCONNECT，不承诺最后publish或PUBACK已抵达。基础库不等待task停止。异常掉电的 LWT 行为由 Broker 和 MQTT 契约决定。WiFi safe boot/AP 配网时不连接 Broker；modem sleep 下 Keepalive 和重连需要产品实机验证。
 
-容量宏及默认值见 [内存与容量预算](06_memory_budget.md)。最小安全接入见 `examples/mqtt_tls`。Topic 版本、命令去重/过期/授权、JSON、设备影子、业务状态同步和离线业务数据属于应用层。
+容量宏及默认值见 [内存与容量预算](06_memory_budget.md)。最小安全接入见 `examples/mqtt_client`。Topic 版本、命令去重/过期/授权、JSON、设备影子、业务状态同步和离线业务数据属于应用层。
 
 ## 8. Esp32BaseTime / Rtc / Dns / Ntp / Mdns
 

@@ -37,13 +37,13 @@ def main():
     if (probe / "local_secrets.h").exists():
         raise RuntimeError("Probe must not contain a private local_secrets.h")
     for source, destination in (
-        (ROOT / "examples/mqtt_tls/src/main.cpp", probe / "src/main.cpp"),
-        (ROOT / "examples/mqtt_tls/local_secrets.example.h", probe / "local_secrets.example.h"),
+        (ROOT / "examples/mqtt_client/src/main.cpp", probe / "src/main.cpp"),
+        (ROOT / "examples/mqtt_client/local_secrets.example.h", probe / "local_secrets.example.h"),
     ):
         write_if_changed(destination, source.read_bytes())
-    for source in (ROOT / "examples/basic/src").glob("deps_*.cpp"):
+    for source in (ROOT / "examples/profile_baseline/src").glob("deps_*.cpp"):
         write_if_changed(probe / "src" / source.name, source.read_bytes())
-    config = (ROOT / "examples/basic/platformio.ini").read_text()
+    config = (ROOT / "examples/profile_baseline/platformio.ini").read_text()
     original_url = f"https://github.com/espressif/arduino-esp32/releases/download/{LOCK['arduino_core']}/esp32-core-{LOCK['arduino_core']}-libs.tar.xz"
     guard = "${esp32base_size_flags.build_flags}\n  -D ESP32BASE_PROFILE=ESP32BASE_PROFILE_IOT"
     if config.count(original_url) != 1 or config.count(guard) != 1:

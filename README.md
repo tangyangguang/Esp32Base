@@ -24,7 +24,7 @@
 业务记录的职责边界、磁盘格式、容量规划、断电恢复和经典 ESP32 实机性能基线详见 [Record Store 设计、接入与实机基准](docs/12_record_store.md)。
 
 Web 页面结构、样式基线、业务页面模式和换肤策略详见 [Web UI 页面结构与样式基线](docs/11_web_ui_baseline.md)。本项目采用 [MIT License](LICENSE)。
-业务项目接入前，建议先用 `examples/web_ui_gallery` 统一查看和验证状态、记录、配置、命令、分步操作、确认和空状态等页面样式；`examples/full_demo` 侧重完整功能集成。
+业务项目接入前，建议先用 `examples/web_ui_gallery` 统一查看和验证状态、记录、配置、命令、分步操作、确认和空状态等页面样式；`examples/local_web_app` 演示 LOCAL Profile 下业务页面、API 与 App Config 的标准集成写法。四个 Profile 的无业务裁剪基线见 `examples/profile_baseline`。
 基础 Web CSS 由 `/esp32base/ui.css` 以预生成 gzip 统一输出并允许浏览器缓存，业务页面通过 `sendHeader()` 自动引用，不需要复制样式；按钮按轻量设备控制台风格收敛，明确保存/执行动作和普通入口保持清楚层级；原生 `<dialog>` 可复用基础弹层、表单和按钮样式。
 
 ## 快速开始
@@ -101,7 +101,7 @@ build_flags =
 | `Esp32BaseConditions` | 少量持续异常的当前活动状态和确认状态机 |
 | `Esp32BaseStorage` | 统一LittleFS访问、容量、受管路径和维护生命周期 |
 
-同一Store的操作需要串行，推荐实时任务只投递轻量消息，由loop/system task完成持久化。关键业务事实应逐条完成追加、flush/close和读回验证；不要用批量缓存扩大掉电丢失窗口。示例见 `examples/record_store_demo`。
+同一Store的操作需要串行，推荐实时任务只投递轻量消息，由loop/system task完成持久化。关键业务事实应逐条完成追加、flush/close和读回验证；不要用批量缓存扩大掉电丢失窗口。示例见 `examples/record_store`。
 
 需要业务持久化参数配置页时，可启用 App Config。业务显式声明容量并在 `Esp32Base::begin()` 前注册分组和字段，基础库会在 System 页首位提供 `App Config` 入口：
 
@@ -118,11 +118,11 @@ Web 页面可优先使用 Esp32Base 的 UI baseline、helper 和页面能力；�
 
 需要真实时间时，业务项目应优先通过 `Esp32BaseTime::snapshot()` 获取统一时间快照。NTP 是最高优先级时间源；启用 RTC 时，DS3231 或 PCF8563 可在离线启动时提供真实时间。断网启动时业务仍能记录当前 `bootId + uptimeSec`；本次 boot 后续由 RTC 或 NTP 建立可信时间后，可用 `Esp32BaseTime::resolveCurrentBootEvent()` 只回填同一 boot 的相对时间事件，历史未知时间不会被伪造为日期。旧的 `Esp32BaseNtp::snapshot()` 仍表示 NTP 自身状态，不作为 RTC-only 设备的业务时间入口。
 
-外部 RTC 通过 `ESP32BASE_ENABLE_RTC=1` 显式启用，当前支持 `ESP32BASE_RTC_DRIVER_DS3231` 和 `ESP32BASE_RTC_DRIVER_PCF8563`。同一个应用固件只选择一个驱动，不做运行时自动识别；硬件板确定后在 `platformio.ini` 中设置 `ESP32BASE_RTC_DRIVER`。默认 I2C 地址可用 `ESP32BASE_RTC_I2C_ADDR=0` 交给驱动选择：DS3231 为 `0x68`，PCF8563 为 `0x51`。基础库默认不调用 `Wire.begin()`，推荐业务在 `Esp32Base::begin()` 前初始化自己的 I2C 总线并调用 `Esp32BaseRtc::configure(Wire)`；如果希望基础库初始化 RTC I2C，可设置 `ESP32BASE_RTC_AUTO_WIRE_BEGIN=1`，并按需配置 `ESP32BASE_RTC_SDA`、`ESP32BASE_RTC_SCL` 和 `ESP32BASE_RTC_I2C_CLOCK_HZ`。RTC 芯片寄存器按 UTC 日历字段存储；显示和日志按 `ESP32BASE_NTP_GMT_OFFSET_SEC` / `ESP32BASE_NTP_DAYLIGHT_OFFSET_SEC` 固定偏移格式化，默认 UTC+8。RTC 中断、闹钟、方波、温度等芯片扩展能力不由基础库占用，业务项目可在同一 I2C 总线上自行访问；基础库只做低频读写时间、状态展示和 NTP 成功后的可选写回。示例见 `examples/rtc_time_source`。
+外部 RTC 通过 `ESP32BASE_ENABLE_RTC=1` 显式启用，当前支持 `ESP32BASE_RTC_DRIVER_DS3231` 和 `ESP32BASE_RTC_DRIVER_PCF8563`。同一个应用固件只选择一个驱动，不做运行时自动识别；硬件板确定后在 `platformio.ini` 中设置 `ESP32BASE_RTC_DRIVER`。默认 I2C 地址可用 `ESP32BASE_RTC_I2C_ADDR=0` 交给驱动选择：DS3231 为 `0x68`，PCF8563 为 `0x51`。基础库默认不调用 `Wire.begin()`，推荐业务在 `Esp32Base::begin()` 前初始化自己的 I2C 总线并调用 `Esp32BaseRtc::configure(Wire)`；如果希望基础库初始化 RTC I2C，可设置 `ESP32BASE_RTC_AUTO_WIRE_BEGIN=1`，并按需配置 `ESP32BASE_RTC_SDA`、`ESP32BASE_RTC_SCL` 和 `ESP32BASE_RTC_I2C_CLOCK_HZ`。RTC 芯片寄存器按 UTC 日历字段存储；显示和日志按 `ESP32BASE_NTP_GMT_OFFSET_SEC` / `ESP32BASE_NTP_DAYLIGHT_OFFSET_SEC` 固定偏移格式化，默认 UTC+8。RTC 中断、闹钟、方波、温度等芯片扩展能力不由基础库占用，业务项目可在同一 I2C 总线上自行访问；基础库只做低频读写时间、状态展示和 NTP 成功后的可选写回。示例见 `examples/rtc`。
 
-RS485 半双工基础串口通过 `ESP32BASE_ENABLE_RS485_PORT=1` 显式启用。`Esp32BaseRs485Port` 只封装 ESP32 `HardwareSerial`、RX/TX/DE 引脚、baud、串口配置、发送前后 DE 方向切换、`flush()` 等待和轮询读取；它不包含 Modbus/RTU、CRC、地址、重试、超时帧解析或任何应用协议。业务协议应在应用层基于 `writeBytes()`、`readable()` 和 `readByte()` 自行实现。示例见 `examples/rs485_port`。
+RS485 半双工基础串口通过 `ESP32BASE_ENABLE_RS485_PORT=1` 显式启用。`Esp32BaseRs485Port` 只封装 ESP32 `HardwareSerial`、RX/TX/DE 引脚、baud、串口配置、发送前后 DE 方向切换、`flush()` 等待和轮询读取；它不包含 Modbus/RTU、CRC、地址、重试、超时帧解析或任何应用协议。业务协议应在应用层基于 `writeBytes()`、`readable()` 和 `readByte()` 自行实现。示例见 `examples/rs485`。
 
-标准 MQTT 3.1.1 Client 在 `IOT` Profile 中默认启用，其他 Profile 也可通过 `ESP32BASE_ENABLE_MQTT=1` 显式开启。它基于 Arduino ESP32 Core 内置 ESP-MQTT，提供单 Broker、MQTTS、QoS 0/1、retain、LWT、每次 CONNECT 前更新应用借用的连接周期数据、固定容量订阅、重连重新订阅、退避抖动、独立收发容量、分片消息安全组装和结构化诊断。默认必须提供 Broker CA，TLS 在 NTP 成功前保持 `WAITING_FOR_TIME`；RTC 可供离线业务记时，但不能单独放行公网 TLS。明文 MQTT 需要额外设置 `ESP32BASE_MQTT_ALLOW_PLAINTEXT=1` 并在运行配置中选择 `EXPLICIT_PLAINTEXT`。用户名、密码、证书、私钥、LWT 和订阅字符串由应用持有到设备重启，不写入 App Config、NVS、Web 或日志。示例见 `examples/mqtt_tls`。
+标准 MQTT 3.1.1 Client 在 `IOT` Profile 中默认启用，其他 Profile 也可通过 `ESP32BASE_ENABLE_MQTT=1` 显式开启。它基于 Arduino ESP32 Core 内置 ESP-MQTT，提供单 Broker、MQTTS、QoS 0/1、retain、LWT、每次 CONNECT 前更新应用借用的连接周期数据、固定容量订阅、重连重新订阅、退避抖动、独立收发容量、分片消息安全组装和结构化诊断。默认必须提供 Broker CA，TLS 在 NTP 成功前保持 `WAITING_FOR_TIME`；RTC 可供离线业务记时，但不能单独放行公网 TLS。明文 MQTT 需要额外设置 `ESP32BASE_MQTT_ALLOW_PLAINTEXT=1` 并在运行配置中选择 `EXPLICIT_PLAINTEXT`。用户名、密码、证书、私钥、LWT 和订阅字符串由应用持有到设备重启，不写入 App Config、NVS、Web 或日志。示例见 `examples/mqtt_client`。
 
 MQTT 只负责连接机制。Topic 版本、命令授权、去重、过期、JSON、业务状态同步、离线业务数据和重连后的当前状态重发仍由应用负责。基础库没有第二套离线发送队列；`publish()` 成功只表示报文已被非阻塞发送队列接受，QoS 1 必须等待 `EVENT_PUBLISH_ACKNOWLEDGED` 才表示 Broker ACK，断线前未 ACK 的报文会报告“送达状态不确定”且可能由底层有界 outbox 重传；QoS 0 不提供无法证明的送达承诺。
 
@@ -149,8 +149,8 @@ WiFi 默认关闭 modem sleep，让 Web 首屏和 OTA 不被 Arduino ESP32 默�
 
 ```sh
 python3 scripts/ensure_arduino_platformio.py
-python3 scripts/pio_arduino.py 2 run -d examples/basic -e esp32_local
-python3 scripts/pio_arduino.py 3 run -d examples/basic -e esp32_local_arduino3
+python3 scripts/pio_arduino.py 2 run -d examples/profile_baseline -e esp32_local
+python3 scripts/pio_arduino.py 3 run -d examples/profile_baseline -e esp32_local_arduino3
 ```
 
 不支持：
