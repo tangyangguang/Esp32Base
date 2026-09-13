@@ -164,7 +164,7 @@
 - restart 前全部落盘。
 - NVS 写满返回 false。
 - App Config group/field 注册失败输出 ERROR，日志包含明确 `reason`、对象标识、当前计数和编译容量；调用方仍通过 bool 决定业务启动策略。
-- `factoryReset()` 清理 `eb_wifi`、`eb_wifi_rcv`、`eb_web`、`eb_log`、`eb_ui`、`eb_sys.hostname`，并在Conditions启用时清理 `eb_conditions`。
+- `factoryReset()` 清理 `eb_wifi`、`eb_wifi_rcv`、`eb_web`、`eb_log`、`eb_ui`、`eb_sys.hostname`。
 - `factoryReset()` 保留 `eb_sys` 中的 boot/restart/watchdog 统计诊断 key。
 - 单项清理 API 只影响对应配置范围；`clearSystemConfig()` 只清 hostname，不清统计诊断 key。
 - namespace 不存在时出厂重置返回成功，不创建空 namespace。
@@ -335,7 +335,7 @@
 - Web上传/删除不得进入 `/esp32base/**`、FileLog轮转文件或已登记Store路径；上传容量不得侵占Store剩余配额和安全余量。
 - 格式化必须在独占维护区间完成flush、format、mount、FileLog恢复和全部已登记Store reload；任一层失败不得提示整体成功。
 - OTA开始前必须flush FileLog并暂停FS写入，成功、失败和中止路径都必须恢复。
-- Conditions必须覆盖激活/恢复确认、Unknown取消、millis回绕、重启恢复、重复ID、NVS读写失败及forget；它不得隐式建立LittleFS历史。
+- Conditions必须覆盖激活/恢复确认、Unknown取消、millis回绕、重启后未知、重复ID、无 NVS 依赖及 forget；它不得隐式建立LittleFS历史。
 - RecordStore必须覆盖多Store登记、预算边界、受管路径、统一清空、格式化恢复、尾部损坏和常见64/128/256/384/512 KiB分段。
 
 本轮网络/LOCAL 协作改动的定向验证入口：`python3 scripts/test_ota_lifecycle.py`、`python3 scripts/test_web_write.py`、`python3 scripts/test_watchdog.py`；时间使用 `native_time_harness`，MQTT 使用 `native_mqtt_harness`、`native_mqtt_secure_default_harness` 和 `native_mqtt_large_tx_harness`。这些测试使用假的 SDK/网络/时钟验证生产代码边界，不代替真实握手、OTA 或卡死复位。

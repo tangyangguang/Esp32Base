@@ -92,9 +92,9 @@
 
 Conditions与多Store边界：
 
-- Conditions只保存当前活动位图，不是历史数据库；需要发生/恢复历史时由应用在成功转换后写入独立审计Store。
-- `conditionId` 是保留 `eb_conditions` NVS时必须稳定的schema；改变映射前应显式清理或迁移。
-- 确认依赖应用持续调用 `observe()`，基础库不调度硬件访问。NVS提交失败时RAM状态不变，调用方不得记录成功转换。
+- Conditions 只维护本次运行的观察、确认与已知状态；重启后未知，不读写 NVS。需要发生/恢复历史时由应用按产品语义写入审计 Store。
+- `conditionId` 必须在同一运行期唯一，未知状态不得显示成已恢复。
+- 确认依赖应用持续调用 `observe()`，基础库不调度硬件访问；跨重启的控制状态仍应由应用显式持久化。
 - 每种主要业务事实使用独立固定payload Store；基础库不提供跨Store事务、字段查询、持久全局索引或自动K路合并。
 - Store通过 `Esp32BaseStorage::registerRecordStore()` 登记；未登记历史版本不参与统一维护。
 

@@ -1164,8 +1164,14 @@ bool Esp32BaseRecordStore::createSegmentWithRecord(const uint8_t* metadata,
 }
 
 bool Esp32BaseRecordStore::appendWithDuration(uint32_t durationSec,
-                                              const uint8_t* payload,
-                                              size_t payloadSizeBytes) {
+                                              const uint8_t* payload, size_t payloadSizeBytes) {
+    const auto now = Esp32BaseTime::snapshot();
+    RecordTiming timing{now.synced ? now.epochSec : 0, now.bootId, now.uptimeSec, durationSec};
+    return appendRecorded(timing, payload, payloadSizeBytes);
+}
+
+bool Esp32BaseRecordStore::appendRecorded(const RecordTiming& timing,
+                                          const uint8_t* payload, size_t payloadSizeBytes) {
     if (!isWritable() || !payload || payloadSizeBytes != payloadSizeBytes_) {
         if (!payload || payloadSizeBytes != payloadSizeBytes_) error_ = StoreError::InvalidPayload;
         return false;
@@ -1174,8 +1180,8 @@ bool Esp32BaseRecordStore::appendWithDuration(uint32_t durationSec,
         setError(StoreError::IdExhausted, StoreState::WriteFault);
         return false;
     }
-    const Esp32BaseTime::Snapshot now = Esp32BaseTime::snapshot();
-    if (now.bootId == 0 || durationSec > now.uptimeSec) {
+    if (!timing.completedBootId || timing.durationSec > timing.completedUptimeSec ||
+        (timing.completedEpochSec && timing.durationSec > timing.completedEpochSec)) {
         error_ = StoreError::InvalidStartTime;
         return false;
     }
@@ -1195,10 +1201,10 @@ bool Esp32BaseRecordStore::appendWithDuration(uint32_t durationSec,
     }
     uint8_t metadata[kRecordMetadataBytes];
     recordStoreWriteU32(metadata, nextRecordId_);
-    recordStoreWriteU32(metadata + 4, now.synced ? now.epochSec : 0);
-    recordStoreWriteU32(metadata + 8, now.bootId);
-    recordStoreWriteU32(metadata + 12, now.uptimeSec);
-    recordStoreWriteU32(metadata + 16, durationSec);
+    recordStoreWriteU32(metadata + 4, timing.completedEpochSec);
+    recordStoreWriteU32(metadata + 8, timing.completedBootId);
+    recordStoreWriteU32(metadata + 12, timing.completedUptimeSec);
+    recordStoreWriteU32(metadata + 16, timing.durationSec);
     uint32_t crc = recordStoreCrcUpdate(0xFFFFFFFFUL, metadata, sizeof(metadata));
     crc = ~recordStoreCrcUpdate(crc, payload, payloadSizeBytes);
     uint8_t crcBytes[kRecordCrcBytes];

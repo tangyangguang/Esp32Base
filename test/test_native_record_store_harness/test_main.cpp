@@ -719,6 +719,22 @@ void test_product_store_budgets_choose_bounded_segments() {
     TEST_ASSERT_TRUE(singleLargeStatus.capacity >= 688);
 }
 
+void test_append_recorded_preserves_captured_time() {
+    Esp32BaseRecordStore store;
+    TEST_ASSERT_TRUE(store.begin(definition()));
+    uint8_t bytes[8]{};
+    Esp32BaseRecordStore::RecordTiming timing{1800000000, 1, 50, 40};
+    g_time = {true, Esp32BaseTime::SOURCE_UPTIME, 1800000100, 150, 1, 0};
+    TEST_ASSERT_TRUE(store.appendRecorded(timing, bytes, sizeof(bytes)));
+    Esp32BaseRecordStore::RecordMetadata metadata{};
+    TEST_ASSERT_EQUAL(Esp32BaseRecordStore::RecordReadResult::Found,
+                     store.readById(1, bytes, sizeof(bytes), metadata));
+    TEST_ASSERT_EQUAL_UINT32(1800000000, metadata.timing.completedEpochSec);
+    TEST_ASSERT_EQUAL_UINT32(40, metadata.timing.durationSec);
+    timing.completedBootId = 0;
+    TEST_ASSERT_FALSE(store.appendRecorded(timing, bytes, sizeof(bytes)));
+}
+
 void test_condition_activation_recovery_and_reactivation_are_debounced() {
     TEST_ASSERT_TRUE(Esp32BaseConditions::begin());
     Esp32BaseConditions::ConditionTracker tracker(1, 1000, 2000);
@@ -731,14 +747,14 @@ void test_condition_activation_recovery_and_reactivation_are_debounced() {
     nativeMillisValue() = 1000;
     TEST_ASSERT_EQUAL(Esp32BaseConditions::ObservationResult::Activated,
                       Esp32BaseConditions::observe(tracker, Esp32BaseConditions::ObservedState::Active));
-    TEST_ASSERT_EQUAL_UINT32(1, g_conditionStateWriteCount);
+    TEST_ASSERT_EQUAL_UINT32(0, g_conditionStateWriteCount);
 
     bool active = false;
     TEST_ASSERT_TRUE(Esp32BaseConditions::isActive(1, active));
     TEST_ASSERT_TRUE(active);
     TEST_ASSERT_EQUAL(Esp32BaseConditions::ObservationResult::ConditionUnchanged,
                       Esp32BaseConditions::observe(tracker, Esp32BaseConditions::ObservedState::Active));
-    TEST_ASSERT_EQUAL_UINT32(1, g_conditionStateWriteCount);
+    TEST_ASSERT_EQUAL_UINT32(0, g_conditionStateWriteCount);
 
     nativeMillisValue() = 3000;
     TEST_ASSERT_EQUAL(Esp32BaseConditions::ObservationResult::RecoveryConfirmationPending,
@@ -767,37 +783,31 @@ void test_unknown_condition_observation_cancels_confirmation() {
     TEST_ASSERT_EQUAL_UINT32(0, g_conditionStateWriteCount);
 }
 
-void test_condition_state_is_restored_without_history_dependency() {
+void test_condition_restart_requires_a_new_observation() {
     TEST_ASSERT_TRUE(Esp32BaseConditions::begin());
-    Esp32BaseConditions::ConditionTracker firstBoot(4, 0, 0);
+    Esp32BaseConditions::ConditionTracker tracker(4, 0, 0);
     TEST_ASSERT_EQUAL(Esp32BaseConditions::ObservationResult::Activated,
-                      Esp32BaseConditions::observe(firstBoot, Esp32BaseConditions::ObservedState::Active));
-    TEST_ASSERT_EQUAL_HEX32(1UL << 3U, g_persistedActiveConditionIdBits);
-
+        Esp32BaseConditions::observe(tracker, Esp32BaseConditions::ObservedState::Active));
     TEST_ASSERT_TRUE(Esp32BaseConditions::begin());
-    Esp32BaseConditions::ConditionTracker nextBoot(4, 0, 0);
-    TEST_ASSERT_EQUAL(Esp32BaseConditions::ObservationResult::ConditionUnchanged,
-                      Esp32BaseConditions::observe(nextBoot, Esp32BaseConditions::ObservedState::Active));
-    Esp32BaseConditions::ConditionsStatus status;
-    TEST_ASSERT_TRUE(Esp32BaseConditions::readStatus(status));
-    TEST_ASSERT_EQUAL_UINT8(1, status.activeConditionCount);
+    bool active = true;
+    TEST_ASSERT_FALSE(Esp32BaseConditions::isActive(4, active));
+    TEST_ASSERT_EQUAL(Esp32BaseConditions::ObservationResult::Activated,
+        Esp32BaseConditions::observe(tracker, Esp32BaseConditions::ObservedState::Active));
+    TEST_ASSERT_EQUAL_UINT32(0, g_conditionStateWriteCount);
 }
-
-void test_condition_write_failure_does_not_publish_transition_or_change_ram() {
+void test_condition_observations_do_not_depend_on_nvs() {
+    g_conditionStateReadFails = g_conditionStateWriteFails = true;
     TEST_ASSERT_TRUE(Esp32BaseConditions::begin());
     Esp32BaseConditions::ConditionTracker tracker(5, 0, 0);
-    g_conditionStateWriteFails = true;
-    TEST_ASSERT_EQUAL(Esp32BaseConditions::ObservationResult::StateWriteFailed,
-                      Esp32BaseConditions::observe(tracker, Esp32BaseConditions::ObservedState::Active));
-    bool active = true;
-    TEST_ASSERT_TRUE(Esp32BaseConditions::isActive(5, active));
-    TEST_ASSERT_FALSE(active);
-
-    g_conditionStateWriteFails = false;
     TEST_ASSERT_EQUAL(Esp32BaseConditions::ObservationResult::Activated,
-                      Esp32BaseConditions::observe(tracker, Esp32BaseConditions::ObservedState::Active));
+        Esp32BaseConditions::observe(tracker, Esp32BaseConditions::ObservedState::Active));
+    bool active = false;
     TEST_ASSERT_TRUE(Esp32BaseConditions::isActive(5, active));
     TEST_ASSERT_TRUE(active);
+    TEST_ASSERT_EQUAL(Esp32BaseConditions::ObservationResult::ObservationUnknown,
+        Esp32BaseConditions::observe(tracker, Esp32BaseConditions::ObservedState::Unknown));
+    TEST_ASSERT_FALSE(Esp32BaseConditions::isActive(5, active));
+    TEST_ASSERT_EQUAL_UINT32(0, g_conditionStateWriteCount);
 }
 
 void test_condition_arguments_duplicates_and_forget_are_bounded() {
@@ -1253,10 +1263,11 @@ int main(int argc, char** argv) {
     RUN_TEST(test_torn_clear_header_falls_back_to_pre_clear_state);
     RUN_TEST(test_clear_boundary_stays_effective_when_segment_cleanup_fails);
     RUN_TEST(test_product_store_budgets_choose_bounded_segments);
+    RUN_TEST(test_append_recorded_preserves_captured_time);
     RUN_TEST(test_condition_activation_recovery_and_reactivation_are_debounced);
     RUN_TEST(test_unknown_condition_observation_cancels_confirmation);
-    RUN_TEST(test_condition_state_is_restored_without_history_dependency);
-    RUN_TEST(test_condition_write_failure_does_not_publish_transition_or_change_ram);
+    RUN_TEST(test_condition_restart_requires_a_new_observation);
+    RUN_TEST(test_condition_observations_do_not_depend_on_nvs);
     RUN_TEST(test_condition_arguments_duplicates_and_forget_are_bounded);
     RUN_TEST(test_storage_coordinates_multiple_stores_capacity_paths_maintenance_and_format);
     return UNITY_END();

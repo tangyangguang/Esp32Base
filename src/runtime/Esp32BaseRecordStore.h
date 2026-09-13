@@ -127,6 +127,7 @@ public:
     bool appendCompleted(const RecordStartTime& startTime,
                          const uint8_t* payload,
                          size_t payloadSizeBytes);
+    bool appendRecorded(const RecordTiming& timing, const uint8_t* payload, size_t payloadSizeBytes);
     bool readLatest(uint32_t offset,
                     uint32_t limit,
                     uint8_t* scratchBuffer,

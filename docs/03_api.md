@@ -358,6 +358,8 @@ if (!storeReady) {
 
 详细磁盘格式、容量规划、失败矩阵和实机性能数据见 [Record Store 设计、接入与实机基准](12_record_store.md)。
 
+`RecordStore::appendRecorded(const RecordTiming&, const uint8_t*, size_t)` 接受调用方在事实发生时冻结的完成时间，适用于暂缓写入后的重试。它保留原始时间，不使用重试时间；boot ID 必须非零，duration 不得超过完成 uptime（有 epoch 时也不得超过 epoch）。写入格式、CRC、轮转及失败状态与普通 append 相同。业务不能把任意未知数据补造成精确事实。
+
 ### 3.6 Esp32BaseStorage
 
 仅在 `ESP32BASE_ENABLE_FS=1` 时可用。它是LittleFS协调层，不是新的文件格式或数据库。`Esp32Base::begin()` 在挂载FS后自动调用 `Esp32BaseStorage::begin()`；FileLog、RecordStore和普通业务文件仍各自维护数据格式。
@@ -409,8 +411,7 @@ public:
         Recovered,
         ObservationUnknown,
         InvalidArgument,
-        StateUnavailable,
-        StateWriteFailed
+        StateUnavailable
     };
 
     class ConditionTracker {
@@ -430,15 +431,17 @@ public:
 };
 ```
 
-`conditionId` 范围为1～32，是保留NVS升级时必须稳定的schema。活动集合保存在单个 `eb_conditions.active_bits` `uint32_t`；key不存在表示全部未活动，NVS读取错误返回不可用，不能按不存在处理。tracker必须由应用长期持有，不可复制；重复使用同一ID的不同tracker会返回 `InvalidArgument`。
+`conditionId` 范围为 1～32，只标识本次运行中的观察器。tracker 由应用长期持有，不可复制；同一运行期重复使用 ID 的不同 tracker 返回 `InvalidArgument`。
 
-第一次观察到相反状态时开始确认；持续观察达到配置时间才提交。确认时间为0表示立即确认，最大为 `INT32_MAX` ms；使用无符号 `millis()` 差值支持回绕。`Unknown` 取消未完成确认，但不改变已经确认的状态。状态不变、Unknown和确认等待不写NVS。
+Conditions 仅保存 RAM 中的已知/未知状态和确认计时，不读写 NVS、不写历史。`begin()` / `reload()` 后全部未知，必须重新观察。`isActive()` 返回 false 表示尚未知或不可用，不能当作已恢复；返回 true 时输出参数才有意义。`ConditionsStatus.stateLoaded` 表示运行态已初始化，不表示从持久存储恢复。
 
-转换时先成功提交NVS位图，再更新RAM并返回 `Activated` 或 `Recovered`；提交失败返回 `StateWriteFailed`，RAM状态保持不变，后续观察可重试。因此应用只能在收到成功转换结果后，按产品需要自行向某个紧凑审计RecordStore追加发生/恢复事实。Conditions本身不隐式写LittleFS，不创建通用Event模型。`forget()`/`forgetAll()` 是行政性清理，不生成恢复记录，并使对应tracker在下次观察时重新登记。
+持续观察达到激活或恢复确认时间才更新状态；确认时间为零立即确认，最大为 `INT32_MAX` ms，无符号 `millis()` 差值支持回绕。`Unknown` 取消确认并使当前状态未知。未知后的首次正常确认返回 `ConditionUnchanged`，不伪造恢复；首次异常确认返回 `Activated`。`forget()` / `forgetAll()` 清理观察状态，不产生恢复事实。跨重启历史由应用明确写入 RecordStore；需要持久化的业务控制状态由业务单独保存。
 
 ## 4. Esp32BaseConfig
 
 后端：ESP32 NVS。
+
+`readBlob(ns, key, out, len)` 返回 `BlobReadResult::{Found, NotFound, Error}`；缺失与访问错误、类型/长度错误明确区分。适用于持久任务标记等不能把读取失败当作不存在的场景。`getBlob()` 仍提供只关心读取成功与否的便利形式，两者使用同一读取实现。
 
 限制：
 
@@ -446,8 +449,8 @@ public:
 - key 长度 `1..15`。
 - string value 可见内容长度不超过 3999 字节。
 - blob value 长度为 `1..256` 字节，用于小型固定大小 POD 元数据，不用于日志、记录正文或大块业务数据。
-- 库内部 namespace 全部使用 `eb_` 前缀，例如 `eb_wifi`、`eb_sys`、`eb_log`、`eb_ui`、`eb_conditions`。
-- namespace 已表达库和模块归属，key 不重复模块前缀，例如 `eb_wifi.ssid`、`eb_wifi.pass`、`eb_sys.rst_cnt`、`eb_sys.wdt_cnt`、`eb_log.mode`、`eb_web.auth_user`、`eb_ui.footer_mode`、`eb_conditions.active_bits`。
+- 库内部 namespace 全部使用 `eb_` 前缀，例如 `eb_wifi`、`eb_sys`、`eb_log`、`eb_ui`。
+- namespace 已表达库和模块归属，key 不重复模块前缀，例如 `eb_wifi.ssid`、`eb_wifi.pass`、`eb_sys.rst_cnt`、`eb_sys.wdt_cnt`、`eb_log.mode`、`eb_web.auth_user`、`eb_ui.footer_mode`。
 - 应用不得使用 `eb_` 前缀，避免被库维护 API 清理。
 - `Esp32BaseConfig` 不是跨任务线程安全 API；推荐和 `Esp32Base::begin()` / `handle()`、Web、Bus 固定在同一个 loop/system task 中调用，其他任务通过队列投递配置变更。
 - 单个 NVS key 写入依赖 NVS 自身的断电保护；多个 key 组成的业务动作不是事务。App Config 多字段提交会逐字段写入，某字段失败后停止继续写后续字段并返回 partial；需要强一致的一组业务配置应合并为单个 POD/blob 或使用业务自定义提交模型。
@@ -527,13 +530,12 @@ deferred 语义：
 - `setXxxDeferred()` 如果 pending 中已有相同值，会返回 true 并保留原 pending/due 时间；如果 NVS 旧值已经相同，会返回 true、清除同 key pending 并跳过新的 NVS 写入。
 - deferred 到期判断使用 `millis()` 差值比较，覆盖正常延迟窗口内的 49 天回绕；不要把 deferred delay 设置为接近或超过 `INT32_MAX` ms 的长期定时任务。
 - OTA 上传期间只暂停 deferred flush；`getXxx()`、`pendingCount()`、`flushAll()` 和 `clearLibraryNamespaces()` 仍按各自语义工作。
-- `factoryReset()` 只清理当前已启用的基础库NVS配置（启用Conditions时包括 `eb_conditions`），不重启、不格式化LittleFS、不删除FileLog或业务RecordStore、不清理业务namespace，也不清理boot/restart/watchdog统计。namespace不存在按已清理处理；打开或清除失败必须返回false。它不直接修改Conditions运行态，完整出厂重置成功后应重启。
+- `factoryReset()` 只清理当前已启用的基础库NVS配置，不重启、不格式化LittleFS、不删除FileLog或业务RecordStore、不清理业务namespace，也不清理boot/restart/watchdog统计。namespace不存在按已清理处理；打开或清除失败必须返回false。它不直接修改Conditions运行态，完整出厂重置成功后应重启。
 - `clearWifiConfig()` 清理 `eb_wifi`，包含 WiFi SSID/password。
 - `clearWebAuthConfig()` 清理 `eb_web`，包含 Web Auth user/password。
 - `clearSystemConfig()` 只清理 `eb_sys.hostname`；`eb_sys.rst_cnt`、restart log、`boot_cnt`、`wdt_cnt`、`wdt_trip_base`、`wdt_trip_time` 等统计/诊断 key 必须保留。
 - `clearLogConfig()` 清理 `eb_log`，包含 FileLog 配置。
 - `clearUiConfig()` 清理 `eb_ui`，包含 Footer bar 显示模式。
-- 启用Conditions时，`factoryReset()` 和 `clearLibraryNamespaces()` 清理内部 `eb_conditions.active_bits`；能力关闭时不引用该namespace，也不提供业务直接写该key的公开API。
 - `clearLibraryNamespaces()` 是库级配置清理入口，当前语义等价于 `factoryReset()`：只清理基础库 NVS 配置，保留统计/诊断资产、业务 namespace 和 LittleFS 内容。
 - `clearNamespace()` 和各出厂重置 API 在 namespace 不存在时返回成功，不创建空 namespace，也不输出底层 `NOT_FOUND` 噪声。
 

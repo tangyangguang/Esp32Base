@@ -24,8 +24,7 @@ public:
         Recovered,
         ObservationUnknown,
         InvalidArgument,
-        StateUnavailable,
-        StateWriteFailed
+        StateUnavailable
     };
 
     struct ConditionsStatus {

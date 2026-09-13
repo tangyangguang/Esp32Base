@@ -36,6 +36,8 @@ public:
     static bool setStrDeferred(const char* ns, const char* key, const char* value, uint32_t delayMs = 1000);
 
     static bool setBlob(const char* ns, const char* key, const void* data, size_t len);
+    enum class BlobReadResult : uint8_t { Found, NotFound, Error };
+    static BlobReadResult readBlob(const char* ns, const char* key, void* out, size_t len);
     static bool getBlob(const char* ns, const char* key, void* out, size_t len);
     static bool setBlobDeferred(const char* ns, const char* key, const void* data, size_t len, uint32_t delayMs = 1000);
 

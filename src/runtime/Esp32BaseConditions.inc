@@ -3,17 +3,14 @@
 #if ESP32BASE_ENABLE_CONDITIONS
 
 #include "Esp32BaseConditions.h"
-#include "../core/internal/Esp32BaseConfigInternal.h"
 
 #include <string.h>
 
 namespace {
 
-constexpr const char* kConditionsNamespace = "eb_conditions";
-constexpr const char* kActiveConditionBitsKey = "active_bits";
-
 uint32_t g_activeConditionBits = 0;
 uint32_t g_registeredConditionBits = 0;
+uint32_t g_knownConditionBits = 0;
 uint32_t g_conditionStateRevision = 1;
 bool g_conditionStateLoaded = false;
 char g_conditionError[64] = "";
@@ -43,38 +40,6 @@ void advanceConditionRevision() {
     g_registeredConditionBits = 0;
 }
 
-bool loadConditionState() {
-    uint32_t storedBits = 0;
-    const esp32base_internal::ConfigUInt32ReadResult result =
-        esp32base_internal::readConfigUInt32(kConditionsNamespace,
-                                             kActiveConditionBitsKey,
-                                             storedBits);
-    if (result == esp32base_internal::ConfigUInt32ReadResult::Error) {
-        g_conditionStateLoaded = false;
-        setConditionError("condition_state_load_failed");
-        return false;
-    }
-    g_activeConditionBits = result == esp32base_internal::ConfigUInt32ReadResult::Found
-                                ? storedBits
-                                : 0;
-    g_conditionStateLoaded = true;
-    setConditionError("");
-    return true;
-}
-
-bool saveConditionBits(uint32_t bits) {
-    if (!esp32base_internal::writeConfigUInt32(kConditionsNamespace,
-                                                kActiveConditionBitsKey,
-                                                bits)) {
-        setConditionError("condition_state_save_failed");
-        return false;
-    }
-    g_activeConditionBits = bits;
-    g_conditionStateLoaded = true;
-    setConditionError("");
-    return true;
-}
-
 } // namespace
 
 Esp32BaseConditions::ConditionTracker::ConditionTracker(
@@ -95,14 +60,15 @@ uint8_t Esp32BaseConditions::ConditionTracker::conditionId() const {
 
 bool Esp32BaseConditions::begin() {
     g_activeConditionBits = 0;
-    g_conditionStateLoaded = false;
+    g_knownConditionBits = 0;
+    g_conditionStateLoaded = true;
+    setConditionError("");
     advanceConditionRevision();
-    return loadConditionState();
+    return true;
 }
 
 bool Esp32BaseConditions::reload() {
-    advanceConditionRevision();
-    return loadConditionState();
+    return begin();
 }
 
 Esp32BaseConditions::ObservationResult Esp32BaseConditions::observe(
@@ -134,6 +100,7 @@ Esp32BaseConditions::ObservationResult Esp32BaseConditions::observe(
         return ObservationResult::StateUnavailable;
     }
     if (observedState == ObservedState::Unknown) {
+        g_knownConditionBits &= ~conditionBit(tracker.conditionId_);
         tracker.pendingState_ = ObservedState::Unknown;
         tracker.pendingStartedMs_ = 0;
         return ObservationResult::ObservationUnknown;
@@ -142,7 +109,7 @@ Esp32BaseConditions::ObservationResult Esp32BaseConditions::observe(
     const uint32_t bit = conditionBit(tracker.conditionId_);
     const bool confirmedActive = (g_activeConditionBits & bit) != 0;
     const bool observedActive = observedState == ObservedState::Active;
-    if (confirmedActive == observedActive) {
+    if ((g_knownConditionBits & bit) && confirmedActive == observedActive) {
         tracker.pendingState_ = ObservedState::Unknown;
         tracker.pendingStartedMs_ = 0;
         return ObservationResult::ConditionUnchanged;
@@ -169,18 +136,19 @@ Esp32BaseConditions::ObservationResult Esp32BaseConditions::observe(
     const uint32_t nextBits = observedActive
                                   ? (g_activeConditionBits | bit)
                                   : (g_activeConditionBits & ~bit);
-    if (!saveConditionBits(nextBits)) {
-        return ObservationResult::StateWriteFailed;
-    }
+    const bool wasKnown = (g_knownConditionBits & bit) != 0;
+    g_activeConditionBits = nextBits;
+    g_knownConditionBits |= bit;
     tracker.pendingState_ = ObservedState::Unknown;
     tracker.pendingStartedMs_ = 0;
-    return observedActive ? ObservationResult::Activated : ObservationResult::Recovered;
+    return observedActive ? ObservationResult::Activated
+                          : wasKnown ? ObservationResult::Recovered : ObservationResult::ConditionUnchanged;
 }
 
 bool Esp32BaseConditions::isActive(uint8_t conditionId, bool& active) {
     active = false;
     if (!g_conditionStateLoaded || conditionId < MIN_CONDITION_ID ||
-        conditionId > MAX_CONDITION_ID) {
+        conditionId > MAX_CONDITION_ID || !(g_knownConditionBits & conditionBit(conditionId))) {
         return false;
     }
     active = (g_activeConditionBits & conditionBit(conditionId)) != 0;
@@ -193,9 +161,8 @@ bool Esp32BaseConditions::forget(uint8_t conditionId) {
         return false;
     }
     const uint32_t nextBits = g_activeConditionBits & ~conditionBit(conditionId);
-    if (nextBits != g_activeConditionBits && !saveConditionBits(nextBits)) {
-        return false;
-    }
+    g_activeConditionBits = nextBits;
+    g_knownConditionBits &= ~conditionBit(conditionId);
     advanceConditionRevision();
     return true;
 }
@@ -204,16 +171,15 @@ bool Esp32BaseConditions::forgetAll() {
     if (!g_conditionStateLoaded) {
         return false;
     }
-    if (g_activeConditionBits != 0 && !saveConditionBits(0)) {
-        return false;
-    }
+    g_activeConditionBits = 0;
+    g_knownConditionBits = 0;
     advanceConditionRevision();
     return true;
 }
 
 bool Esp32BaseConditions::readStatus(ConditionsStatus& status) {
     status.stateLoaded = g_conditionStateLoaded;
-    status.activeConditionCount = countConditionBits(g_activeConditionBits);
+    status.activeConditionCount = countConditionBits(g_activeConditionBits & g_knownConditionBits);
     status.errorReason = g_conditionError[0] ? g_conditionError : "none";
     return g_conditionStateLoaded;
 }

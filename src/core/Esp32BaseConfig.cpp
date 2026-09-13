@@ -857,17 +857,21 @@ bool Esp32BaseConfig::setBlob(const char* ns, const char* key, const void* data,
 }
 
 bool Esp32BaseConfig::getBlob(const char* ns, const char* key, void* out, size_t len) {
+    return readBlob(ns, key, out, len) == BlobReadResult::Found;
+}
+
+Esp32BaseConfig::BlobReadResult Esp32BaseConfig::readBlob(const char* ns, const char* key, void* out, size_t len) {
     if (!validName(ns) || !validName(key) || !out || len == 0 || len > CONFIG_BLOB_MAX_LEN) {
-        return false;
+        return BlobReadResult::Error;
     }
 
     const int pending = findPending(ns, key);
     if (pending >= 0 && g_pending[pending].type == PENDING_BLOB) {
         if (g_pending[pending].blobLen != len || !g_pending[pending].blobValue) {
-            return false;
+            return BlobReadResult::Error;
         }
         memcpy(out, g_pending[pending].blobValue, len);
-        return true;
+        return BlobReadResult::Found;
     }
 
     bool found = false;
@@ -879,7 +883,9 @@ bool Esp32BaseConfig::getBlob(const char* ns, const char* key, void* out, size_t
         ESP32BASE_LOG_D("config", "audit op=getBlob ns=%s key=%s found=%s len=%s",
                         ns, key, found ? "yes" : "no", lenBuf);
     }
-    return ok && found && actualLen == len;
+    if (!ok) return BlobReadResult::Error;
+    if (!found) return BlobReadResult::NotFound;
+    return actualLen == len ? BlobReadResult::Found : BlobReadResult::Error;
 }
 
 bool Esp32BaseConfig::setBlobDeferred(const char* ns, const char* key, const void* data, size_t len, uint32_t delayMs) {
@@ -1035,9 +1041,6 @@ bool Esp32BaseConfig::factoryReset() {
     ok = clearSystemConfig() && ok;
     ok = clearLogConfig() && ok;
     ok = clearUiConfig() && ok;
-#if ESP32BASE_ENABLE_CONDITIONS
-    ok = clearNamespace("eb_conditions") && ok;
-#endif
     return ok;
 }
 
